@@ -8,11 +8,16 @@ import { applyImport } from './applyImport';
 import { projectImpact, summarizeImport } from './summarize';
 import { IGNORE_COLUMN, type ImportSourceDescriptor, type StagingRow } from './types';
 import {
-  canonicalComponentToLegacy,
+  emptyArchitecturePrep,
+  emptyExternalMappings,
   emptyThermalSpec,
-  legacyComponentToCanonical,
   type Component,
 } from '@/domain/component';
+import { sourced } from '@/domain/sourcedValue';
+import {
+  canonicalComponentToLegacy,
+  legacyComponentToCanonical,
+} from '@/adapters/legacyComponentAdapter';
 
 const SOURCE: ImportSourceDescriptor = {
   source_type: 'CSV',
@@ -24,10 +29,12 @@ const SOURCE: ImportSourceDescriptor = {
 function component(overrides: Partial<Component> & Pick<Component, 'id' | 'name'>): Component {
   return {
     category: 'RF',
+    enabled: true,
     qty: 1,
-    power_W: 10,
+    power_W: sourced(10, 'Manual'),
     thermal_spec: emptyThermalSpec(),
-    thermal_profile: null,
+    architecture_prep: emptyArchitecturePrep(),
+    external_mappings: emptyExternalMappings(),
     provenance: {
       source_type: 'Manual',
       source_project_id: null,
@@ -146,10 +153,11 @@ describe('enum normalization', () => {
     expect(normalizeBoardType('Something Else')).toBe('Custom');
   });
 
-  it('maps legacy Solder to Custom rather than inventing a thermal edge', () => {
-    // 02 §16 — Screen 02 must not promote legacy solder into graph topology.
-    expect(normalizeTim('Solder')).toBe('Custom');
-    expect(normalizeTim('Gap Filler')).toBe('Putty');
+  it('keeps Solder and Gap Filler as first-class TIM types (04 §11)', () => {
+    // Naming a TIM still never promotes it into graph topology (02 §16).
+    expect(normalizeTim('Solder')).toBe('Solder');
+    expect(normalizeTim('Gap Filler')).toBe('Gap Filler');
+    expect(normalizeTim('PCM')).toBe('PCM');
   });
 });
 
@@ -211,8 +219,12 @@ describe('duplicate handling', () => {
       name: 'Final PA',
       category: 'RF',
       qty: 4,
-      power_W: 50,
-      thermal_spec: { ...emptyThermalSpec(), r_jc_C_per_W: 0.18, limit_C: 180 },
+      power_W: sourced(50, 'Manual'),
+      thermal_spec: {
+        ...emptyThermalSpec(),
+        r_jc_C_per_W: sourced(0.18, 'Datasheet'),
+        limit_C: sourced(180, 'Datasheet'),
+      },
       metadata: { supplier: 'ACME' },
     }),
   ];
@@ -236,7 +248,7 @@ describe('duplicate handling', () => {
       source: SOURCE,
     });
     expect(components).toHaveLength(1);
-    expect(components[0].power_W).toBe(50);
+    expect(components[0].power_W.value).toBe(50);
     expect(result.skipped).toBe(1);
   });
 
@@ -248,8 +260,8 @@ describe('duplicate handling', () => {
       source: SOURCE,
     });
     expect(result.updated).toBe(1);
-    expect(components[0].power_W).toBeCloseTo(52.13);
-    expect(components[0].thermal_spec.limit_C).toBe(175);
+    expect(components[0].power_W.value).toBeCloseTo(52.13);
+    expect(components[0].thermal_spec.limit_C?.value).toBe(175);
     // Imported Rjc was blank, and Replace does not carry the old one over.
     expect(components[0].thermal_spec.r_jc_C_per_W).toBeNull();
     // AC-02-14 — foreign metadata survives.
@@ -263,10 +275,10 @@ describe('duplicate handling', () => {
       sessionPolicy: 'MERGE_NON_EMPTY',
       source: SOURCE,
     });
-    expect(components[0].power_W).toBeCloseTo(52.13);
-    expect(components[0].thermal_spec.limit_C).toBe(175);
+    expect(components[0].power_W.value).toBeCloseTo(52.13);
+    expect(components[0].thermal_spec.limit_C?.value).toBe(175);
     // Blank in the import -> the existing Rjc is retained.
-    expect(components[0].thermal_spec.r_jc_C_per_W).toBe(0.18);
+    expect(components[0].thermal_spec.r_jc_C_per_W?.value).toBe(0.18);
   });
 
   it('NEW_VARIANT adds a separate component', () => {
@@ -290,7 +302,7 @@ describe('duplicate handling', () => {
       source: SOURCE,
     });
     expect(result.skipped).toBe(1);
-    expect(components[0].power_W).toBe(50);
+    expect(components[0].power_W.value).toBe(50);
   });
 });
 
@@ -325,7 +337,13 @@ describe('apply', () => {
       sessionPolicy: 'MERGE_NON_EMPTY',
       source: SOURCE,
     });
-    expect(components.every((c) => c.thermal_profile === null)).toBe(true);
+    // No topology, and no architecture preference invented by the importer.
+    expect(
+      components.every((c) => c.architecture_prep.template_preference === 'UNASSIGNED'),
+    ).toBe(true);
+    expect(
+      components.every((c) => c.architecture_prep.thermal_profile_status === 'Not Assigned'),
+    ).toBe(true);
   });
 
   it('records provenance on every imported component', () => {
@@ -369,12 +387,12 @@ describe('apply', () => {
         name: 'Final PA',
         category: 'RF',
         qty: 4,
-        power_W: 52.13,
+        power_W: sourced(52.13, 'Imported'),
         thermal_spec: {
           ...emptyThermalSpec(),
-          r_jc_C_per_W: 0.35,
-          limit_C: 180,
-          tim_type: 'Grease',
+          r_jc_C_per_W: sourced(0.35, 'Datasheet'),
+          limit_C: sourced(180, 'Datasheet'),
+          tim: { ...emptyThermalSpec().tim, type: 'Grease' },
         },
       }),
     ];
@@ -420,7 +438,15 @@ describe('summary and impact', () => {
   });
 
   it('projects the effect on the destination project', () => {
-    const existing = [component({ id: 'CMP_X', name: 'Existing', category: 'Other', qty: 1, power_W: 5 })];
+    const existing = [
+      component({
+        id: 'CMP_X',
+        name: 'Existing',
+        category: 'Other',
+        qty: 1,
+        power_W: sourced(5, 'Manual'),
+      }),
+    ];
     const impact = projectImpact(stage(csv, existing), existing, 'MERGE_NON_EMPTY');
     expect(impact.current_components).toBe(1);
     expect(impact.new_components).toBe(2);
@@ -460,8 +486,10 @@ describe('legacy adapter', () => {
 
     expect(canonical.name).toBe('Final PA');
     expect(canonical.category).toBe('RF');
-    expect(canonical.thermal_spec.r_jc_C_per_W).toBe(0.35);
-    expect(canonical.thermal_spec.board_type).toBe('Copper Coin');
+    expect(canonical.thermal_spec.r_jc_C_per_W?.value).toBe(0.35);
+    expect(canonical.thermal_spec.board_path.type).toBe('Copper Coin');
+    // 04 §30 — legacy geometry semantics must be confirmed, not assumed.
+    expect(canonical.thermal_spec.geometry.needs_review).toBeUndefined();
     expect(canonical.metadata?.customField).toBe('keep me');
 
     const back = canonicalComponentToLegacy(canonical);

@@ -44,17 +44,17 @@ export function UnsavedChangesModal() {
 
   return (
     <Modal
-      title="You have unsaved changes."
-      description="Leaving this screen now will discard the edits you have made to this project."
+      title="You have unsaved changes. / 尚有未儲存的變更"
+      description="Leaving this screen now will discard the edits you have made to this project. / 現在離開將捨棄此專案的編輯內容。"
       onClose={clear}
       footer={
         <>
-          <Button onClick={clear}>Stay</Button>
+          <Button onClick={clear}>Stay / 留下</Button>
           <Button variant="danger" onClick={handleDiscard}>
-            Discard
+            Discard / 捨棄
           </Button>
           <Button variant="primary" disabled={!canSave} onClick={handleSave}>
-            Save &amp; Continue
+            Save &amp; Continue / 儲存並繼續
           </Button>
         </>
       }

@@ -27,7 +27,7 @@ export function BaselineScenarioForm({
 
   if (!scenario) {
     return (
-      <SectionCard step={3} title="Default Scenario">
+      <SectionCard step={3} title="Default Scenario" subtitle="預設情境">
         <p className="text-[13px] text-ink-500">
           A Baseline scenario will be created automatically when this project is first saved.
         </p>
@@ -45,9 +45,9 @@ export function BaselineScenarioForm({
   const numeric = (value: string) => (value === '' ? Number.NaN : Number(value));
 
   return (
-    <SectionCard step={3} title="Default Scenario" subtitle={scenario.id}>
+    <SectionCard step={3} title="Default Scenario" subtitle={`預設情境 — ${scenario.id}`}>
       <div className="grid grid-cols-2 gap-x-6 gap-y-4 lg:grid-cols-5">
-        <Field label="Scenario Name" htmlFor="scenario_name" error={visibleError('scenario_name')}>
+        <Field label="Scenario Name" zh="情境名稱" htmlFor="scenario_name" error={visibleError('scenario_name')}>
           <TextInput
             id="scenario_name"
             value={scenario.name}
@@ -60,6 +60,7 @@ export function BaselineScenarioForm({
 
         <Field
           label="Ambient Temperature"
+          zh="環境溫度"
           htmlFor="ambient_C"
           suffix="°C"
           error={visibleError('ambient_C')}
@@ -77,7 +78,7 @@ export function BaselineScenarioForm({
           />
         </Field>
 
-        <Field label="Wind Speed" htmlFor="wind_mps" suffix="m/s" error={visibleError('wind_mps')}>
+        <Field label="Wind Speed" zh="風速" htmlFor="wind_mps" suffix="m/s" error={visibleError('wind_mps')}>
           <NumberInput
             id="wind_mps"
             value={Number.isNaN(scenario.wind_mps) ? '' : scenario.wind_mps}
@@ -91,7 +92,7 @@ export function BaselineScenarioForm({
           />
         </Field>
 
-        <Field label="Solar Load" htmlFor="solar_W_m2" suffix="W/m²" error={visibleError('solar_W_m2')}>
+        <Field label="Solar Load" zh="日照負荷" htmlFor="solar_W_m2" suffix="W/m²" error={visibleError('solar_W_m2')}>
           <NumberInput
             id="solar_W_m2"
             value={Number.isNaN(scenario.solar_W_m2) ? '' : scenario.solar_W_m2}
@@ -107,9 +108,10 @@ export function BaselineScenarioForm({
 
         <Field
           label="Power Scale"
+          zh="功耗倍率"
           htmlFor="power_scale"
           error={visibleError('power_scale')}
-          tip="Multiplier applied to component power for this scenario."
+          tip="此情境套用於所有元件功耗的倍率。"
         >
           <NumberInput
             id="power_scale"

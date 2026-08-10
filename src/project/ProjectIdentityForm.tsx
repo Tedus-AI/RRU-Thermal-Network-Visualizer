@@ -42,10 +42,11 @@ export function ProjectIdentityForm({
   };
 
   return (
-    <SectionCard step={1} title="Project Identity">
+    <SectionCard step={1} title="Project Identity" subtitle="專案識別">
       <div className="grid grid-cols-1 gap-x-6 gap-y-4 lg:grid-cols-2">
         <Field
           label="Project Name"
+          zh="專案名稱"
           htmlFor="project_name"
           required
           error={visibleError('project_name')}
@@ -62,7 +63,7 @@ export function ProjectIdentityForm({
           />
         </Field>
 
-        <Field label="Project Owner" htmlFor="owner">
+        <Field label="Project Owner" zh="專案負責人" htmlFor="owner">
           <TextInput
             id="owner"
             value={draft.project_context.owner}
@@ -74,6 +75,7 @@ export function ProjectIdentityForm({
 
         <Field
           label="Project ID"
+          zh="專案代號"
           htmlFor="project_id"
           required
           error={visibleError('project_id')}
@@ -81,6 +83,11 @@ export function ProjectIdentityForm({
             idLocked && !readOnly
               ? 'Locked after the first save. Use Duplicate Project to create a new ID.'
               : 'Database key: letters, digits, underscore or hyphen, 3–64 characters.'
+          }
+          hintZh={
+            idLocked && !readOnly
+              ? '首次儲存後鎖定；如需新代號請使用「複製專案」。'
+              : '資料庫鍵值：英數字、底線或連字號，3–64 字元。'
           }
         >
           <div className="relative">
@@ -107,7 +114,7 @@ export function ProjectIdentityForm({
           </div>
         </Field>
 
-        <Field label="Project Stage" htmlFor="project_stage">
+        <Field label="Project Stage" zh="專案階段" htmlFor="project_stage">
           <Select
             id="project_stage"
             options={PROJECT_STAGES}
@@ -119,7 +126,7 @@ export function ProjectIdentityForm({
           />
         </Field>
 
-        <Field label="Customer / Program" htmlFor="customer">
+        <Field label="Customer / Program" zh="客戶／專案代號" htmlFor="customer">
           <TextInput
             id="customer"
             value={draft.project_context.customer}
@@ -129,7 +136,7 @@ export function ProjectIdentityForm({
           />
         </Field>
 
-        <Field label="Description" htmlFor="description">
+        <Field label="Description" zh="專案說明" htmlFor="description">
           <TextArea
             id="description"
             rows={3}

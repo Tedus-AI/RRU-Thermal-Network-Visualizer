@@ -28,7 +28,10 @@ export function RecommendedNextStep({ loading }: { loading?: boolean }) {
     <section className="rounded-lg border border-accent-600/30 bg-accent-50">
       <header className="flex items-center gap-2 px-3.5 py-2.5 text-ink-700">
         <Lightbulb size={15} className="text-accent-600" />
-        <h3 className="text-[13px] font-bold">Recommended Next Step</h3>
+        <h3 className="text-[13px] font-bold">
+          Recommended Next Step
+          <span className="ml-1 font-normal text-ink-400">/ 建議下一步</span>
+        </h3>
       </header>
       <div className="mx-2.5 mb-2.5 rounded-md border border-accent-600/25 bg-surface p-3.5">
         <h4 className="text-[15px] font-bold text-accent-700">{step.label}</h4>
@@ -44,11 +47,13 @@ export function RecommendedNextStep({ loading }: { loading?: boolean }) {
         </Button>
         {step.blockedHere && (
           <p className="mt-2 text-[12px] text-warn-600">
-            Fill in Project Name and Project ID to continue.
+            Fill in Project Name and Project ID to continue. / 請先填寫專案名稱與代號。
           </p>
         )}
         {!step.blockedHere && projectId === 'new' && (
-          <p className="mt-2 text-[12px] text-ink-400">Save the project first to continue.</p>
+          <p className="mt-2 text-[12px] text-ink-400">
+            Save the project first to continue. / 請先儲存專案。
+          </p>
         )}
       </div>
     </section>

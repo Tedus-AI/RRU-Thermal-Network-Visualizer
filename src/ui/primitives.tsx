@@ -134,18 +134,24 @@ export function InfoTip({ text }: { text: string }) {
 
 export function Field({
   label,
+  zh,
   htmlFor,
   required,
   hint,
+  hintZh,
   error,
   tip,
   suffix,
   children,
 }: {
+  /** English label — always primary (02 §3, docs/APP_SHELL_CONTRACT.md). */
   label: string;
+  /** Traditional Chinese name, shown inline beside the English one. */
+  zh?: string;
   htmlFor?: string;
   required?: boolean;
   hint?: string;
+  hintZh?: string;
   error?: string;
   tip?: string;
   suffix?: string;
@@ -158,6 +164,7 @@ export function Field({
         className="flex items-center gap-1 text-[12px] font-semibold text-ink-700"
       >
         {label}
+        {zh && <span className="font-normal text-ink-400">/ {zh}</span>}
         {required && (
           <span className="text-danger-500" aria-hidden>
             *
@@ -180,7 +187,10 @@ export function Field({
           <span>{error}</span>
         </p>
       ) : hint ? (
-        <p className="text-[12px] text-ink-400">{hint}</p>
+        <p className="text-[12px] text-ink-400">
+          {hint}
+          {hintZh && <span className="block">{hintZh}</span>}
+        </p>
       ) : null}
     </div>
   );

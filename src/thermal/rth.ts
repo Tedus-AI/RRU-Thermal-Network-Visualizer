@@ -23,6 +23,7 @@ export function createRth(
     analytical: null,
     flotherm: null,
     measurement: null,
+    manual: null,
     active_source: source,
     provenance: {
       [source]: {
@@ -38,15 +39,19 @@ export function createRth(
 }
 
 /** Which storage slot a given source writes into. */
-function slotFor(source: DataSource): keyof Pick<RthValue, 'analytical' | 'flotherm' | 'measurement'> {
+function slotFor(
+  source: DataSource,
+): keyof Pick<RthValue, 'analytical' | 'flotherm' | 'measurement' | 'manual'> {
   switch (source) {
     case 'FloTHERM':
       return 'flotherm';
     case 'Measurement':
       return 'measurement';
+    case 'Manual':
+      return 'manual';
     default:
-      // Analytical / Datasheet / Vendor / Manual / Assumed all describe a
-      // pre-CFD hand-calculated or quoted number.
+      // Analytical / Datasheet / Vendor / Assumed all describe a pre-CFD
+      // hand-calculated or quoted number.
       return 'analytical';
   }
 }

@@ -26,11 +26,11 @@ export interface DuplicateOptions {
 }
 
 const COPY_ITEMS: Array<{ key: keyof DuplicateOptions; label: string; note?: string }> = [
-  { key: 'components', label: 'Components' },
-  { key: 'network', label: 'Thermal Network' },
-  { key: 'scenarios', label: 'Scenarios' },
-  { key: 'flothermMapping', label: 'FloTHERM Mapping', note: 'tied to a CFD run' },
-  { key: 'solverResults', label: 'Solver Results', note: 'tied to a geometry version' },
+  { key: 'components', label: 'Components / 元件' },
+  { key: 'network', label: 'Thermal Network / 熱網路' },
+  { key: 'scenarios', label: 'Scenarios / 情境' },
+  { key: 'flothermMapping', label: 'FloTHERM Mapping / FloTHERM 映射', note: '與特定 CFD 分析綁定' },
+  { key: 'solverResults', label: 'Solver Results / 求解結果', note: '與特定幾何版本綁定' },
 ];
 
 export function DuplicateProjectModal({
@@ -89,23 +89,23 @@ export function DuplicateProjectModal({
 
   return (
     <Modal
-      title="Duplicate Project"
-      description="Creates an independent copy. The source project is left untouched."
+      title="Duplicate Project / 複製專案"
+      description="Creates an independent copy. The source project is left untouched. / 建立獨立副本，來源專案不受影響。"
       onClose={onClose}
       footer={
         <>
-          <Button onClick={onClose}>Cancel</Button>
+          <Button onClick={onClose}>Cancel / 取消</Button>
           <Button variant="primary" disabled={Boolean(error)} onClick={handleDuplicate}>
-            Duplicate Project
+            Duplicate Project / 複製
           </Button>
         </>
       }
     >
       <div className="flex flex-col gap-4">
-        <Field label="New Project Name" htmlFor="dup_name" required>
+        <Field label="New Project Name" zh="新專案名稱" htmlFor="dup_name" required>
           <TextInput id="dup_name" value={name} onChange={(e) => setName(e.target.value)} />
         </Field>
-        <Field label="New Project ID" htmlFor="dup_id" required error={error ?? undefined}>
+        <Field label="New Project ID" zh="新專案代號" htmlFor="dup_id" required error={error ?? undefined}>
           <TextInput
             id="dup_id"
             value={id}
@@ -116,7 +116,7 @@ export function DuplicateProjectModal({
         </Field>
 
         <fieldset>
-          <legend className="mb-2 text-[12px] font-semibold text-ink-700">Copy</legend>
+          <legend className="mb-2 text-[12px] font-semibold text-ink-700">Copy / 複製項目</legend>
           <div className="flex flex-col gap-1.5">
             {COPY_ITEMS.map((item) => (
               <label

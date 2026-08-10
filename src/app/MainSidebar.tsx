@@ -79,8 +79,15 @@ export function MainSidebar({
                           </span>
                         )}
                         {!collapsed && !screen.implemented && (
-                          <span className="shrink-0 rounded bg-white/10 px-1.5 py-0.5 text-[10px] font-medium whitespace-nowrap text-white/40">
-                            待開發
+                          <span
+                            className="shrink-0 rounded bg-white/10 px-1.5 py-0.5 text-[10px] font-medium whitespace-nowrap text-white/40"
+                            title={
+                              screen.deferred
+                                ? 'Deferred until the FloTHERM export schema is validated'
+                                : undefined
+                            }
+                          >
+                            {screen.deferred ? 'Deferred' : '待開發'}
                           </span>
                         )}
                       </button>

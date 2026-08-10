@@ -5,6 +5,7 @@ import { SCREENS } from '@/app/navigation';
 import { PlaceholderScreen } from '@/screens/PlaceholderScreen';
 import { EmptyProjectState, ProjectInfoView } from '@/project/ProjectInfoView';
 import { ImportComponentsView } from '@/screens/02-import-components/ImportComponentsView';
+import { ComponentManagerView } from '@/screens/04-component-manager/ComponentManagerView';
 import { useProjectStore } from '@/data/projectStore';
 
 /** Opens the most recently updated project, or shows the empty state (01 §20). */
@@ -36,6 +37,7 @@ export default function App() {
           path="/project/:projectId/import-components"
           element={<ImportComponentsView />}
         />
+        <Route path="/project/:projectId/components" element={<ComponentManagerView />} />
         {SCREENS.filter((screen) => !screen.implemented).map((screen) => (
           <Route
             key={screen.code}

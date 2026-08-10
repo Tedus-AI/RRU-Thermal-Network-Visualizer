@@ -5,7 +5,12 @@
  * is thermal edge heat flow Q.
  */
 
-import { COMPONENT_CATEGORIES, totalPowerW, type Component } from '@/domain/component';
+import {
+  COMPONENT_CATEGORIES,
+  componentTotalPowerW,
+  totalPowerW,
+  type Component,
+} from '@/domain/component';
 import { duplicateKey, effectiveDuplicateAction } from './buildStagingRows';
 import type {
   CategorySummary,
@@ -91,7 +96,7 @@ export function projectImpact(
     } else {
       replaced++;
       addedPower += power;
-      removedPower += target.qty * target.power_W;
+      removedPower += componentTotalPowerW(target);
     }
   }
 

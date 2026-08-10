@@ -9,7 +9,7 @@ export function ProjectNotes({ readOnly }: { readOnly: boolean }) {
   if (!draft) return null;
 
   return (
-    <SectionCard step={4} title="Project Notes / Thermal Assumptions">
+    <SectionCard step={4} title="Project Notes / Thermal Assumptions" subtitle="專案備註與熱設計假設">
       <TextArea
         aria-label="Project notes and thermal assumptions"
         rows={5}

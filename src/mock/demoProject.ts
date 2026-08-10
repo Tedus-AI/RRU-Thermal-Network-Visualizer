@@ -8,7 +8,16 @@
 
 import type { Project, Scenario } from '@/domain/project';
 import { SCHEMA_VERSION } from '@/domain/project';
-import { emptyThermalSpec, type Component, type ComponentProvenance } from '@/domain/component';
+import {
+  emptyArchitecturePrep,
+  emptyExternalMappings,
+  emptyThermalSpec,
+  type Component,
+  type ComponentProvenance,
+  type LimitType,
+  type PackageType,
+} from '@/domain/component';
+import { sourced, unknownValue } from '@/domain/sourcedValue';
 
 export const DEMO_PROJECT_ID = 'CBNG_FR1_RRU_EVT2';
 /** A second project so Screen 02's "Existing Project" source has something to read. */
@@ -91,27 +100,43 @@ interface Seed {
   power_W: number;
   r_jc?: number | null;
   limit_C?: number | null;
-  board_type?: Component['thermal_spec']['board_type'];
-  tim?: Component['thermal_spec']['tim_type'];
+  limit_type?: LimitType;
+  package_type?: PackageType;
+  board_type?: Component['thermal_spec']['board_path']['type'];
+  tim?: Component['thermal_spec']['tim']['type'];
+  pad?: [number, number];
 }
 
 function build(seeds: Seed[], sourceId: string, sourceName: string): Component[] {
-  return seeds.map((seed) => ({
-    id: seed.id,
-    name: seed.name,
-    category: seed.category,
-    qty: seed.qty,
-    power_W: seed.power_W,
-    thermal_spec: {
-      ...emptyThermalSpec(),
-      r_jc_C_per_W: seed.r_jc ?? null,
-      limit_C: seed.limit_C ?? null,
-      board_type: seed.board_type ?? null,
-      tim_type: seed.tim ?? null,
-    },
-    thermal_profile: null,
-    provenance: provenance(sourceId, sourceName),
-  }));
+  return seeds.map((seed) => {
+    const spec = emptyThermalSpec();
+    return {
+      id: seed.id,
+      name: seed.name,
+      category: seed.category,
+      enabled: true,
+      qty: seed.qty,
+      power_W: sourced(seed.power_W, 'Imported', { confidence: 'medium' }),
+      thermal_spec: {
+        ...spec,
+        limit_type: seed.limit_type ?? 'Unknown',
+        limit_C: seed.limit_C == null ? null : sourced(seed.limit_C, 'Datasheet'),
+        r_jc_C_per_W:
+          seed.r_jc == null ? unknownValue<number>('Imported') : sourced(seed.r_jc, 'Datasheet'),
+        package_type: seed.package_type ?? null,
+        geometry: {
+          ...spec.geometry,
+          pad_L_mm: seed.pad?.[0] ?? null,
+          pad_W_mm: seed.pad?.[1] ?? null,
+        },
+        board_path: { type: seed.board_type ?? 'None', parameters: {} },
+        tim: { ...spec.tim, type: seed.tim ?? 'None', inheritance: 'project' },
+      },
+      architecture_prep: emptyArchitecturePrep(),
+      provenance: provenance(sourceId, sourceName),
+      external_mappings: emptyExternalMappings(),
+    };
+  });
 }
 
 /** 9 dissipating units + 9 passive units = 18 components, 412.3 W total. */
@@ -126,6 +151,9 @@ export function demoComponents(): Component[] {
         power_W: 52.13,
         r_jc: 0.18,
         limit_C: 180,
+        limit_type: 'Tj',
+        package_type: 'QFN',
+        pad: [20, 10],
         board_type: 'Copper Coin',
         tim: 'Grease',
       },
@@ -137,6 +165,9 @@ export function demoComponents(): Component[] {
         power_W: 18.0,
         r_jc: 0.45,
         limit_C: 150,
+        limit_type: 'Tj',
+        package_type: 'QFN',
+        pad: [5, 5],
         board_type: 'Copper Coin',
         tim: 'Grease',
       },
@@ -159,6 +190,9 @@ export function demoComponents(): Component[] {
         power_W: 85.0,
         r_jc: 0.12,
         limit_C: 100,
+        limit_type: 'Tj',
+        package_type: 'BGA',
+        pad: [35, 35],
         board_type: 'Thermal Via',
         tim: 'Pad',
       },

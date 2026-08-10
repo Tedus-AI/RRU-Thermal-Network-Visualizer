@@ -52,35 +52,35 @@ export function BottomStatusBar() {
     <footer className="flex h-14 shrink-0 items-center bg-shell-900 text-white">
       <StatusItem
         icon={<FileText size={16} />}
-        label="Project ID"
+        label="Project ID / 專案代號"
         value={draft?.project_id || (isNew ? '— New —' : '—')}
       />
       <StatusItem
         icon={<Share2 size={16} />}
-        label="Active Scenario"
+        label="Active Scenario / 使用情境"
         value={activeScenario?.name ?? '—'}
       />
       <StatusItem
         icon={<PencilLine size={16} />}
-        label="Dirty State"
-        value={dirty ? 'Unsaved Changes' : 'Clean'}
+        label="Dirty State / 編輯狀態"
+        value={dirty ? 'Unsaved / 未儲存' : 'Clean / 無變更'}
         tone={dirty ? 'text-warn-500' : 'text-white/80'}
       />
       <StatusItem
         icon={<CloudUpload size={16} />}
-        label="Save Status"
-        value={readOnly ? 'Read Only' : isNew || dirty ? 'Not Saved' : 'Saved'}
+        label="Save Status / 儲存狀態"
+        value={readOnly ? 'Read Only / 唯讀' : isNew || dirty ? 'Not Saved / 未儲存' : 'Saved / 已儲存'}
         tone={readOnly ? 'text-accent-500' : isNew || dirty ? 'text-warn-500' : 'text-ok-500'}
       />
       <StatusItem
         icon={<Boxes size={16} />}
-        label="Component Count"
+        label="Component Count / 元件數"
         value={String(componentCount)}
       />
-      <StatusItem icon={<Share2 size={16} />} label="Node Count" value={String(nodeCount)} />
+      <StatusItem icon={<Share2 size={16} />} label="Node Count / 節點數" value={String(nodeCount)} />
       <StatusItem
         icon={<CircleCheck size={16} />}
-        label="Solver"
+        label="Solver / 求解器"
         value={solverState}
         tone={
           solverState === 'DIRTY' || solverState === 'WARNING'
@@ -95,12 +95,12 @@ export function BottomStatusBar() {
         {health.projectIdentity ? (
           <>
             <CircleCheck size={17} className="text-ok-500" />
-            <span className="text-ok-500">Ready for next step</span>
+            <span className="text-ok-500">Ready for next step / 可進入下一步</span>
           </>
         ) : (
           <>
             <TriangleAlert size={17} className="text-warn-500" />
-            <span className="text-warn-500">Complete project information</span>
+            <span className="text-warn-500">Complete project info / 請補齊專案資料</span>
           </>
         )}
       </div>
