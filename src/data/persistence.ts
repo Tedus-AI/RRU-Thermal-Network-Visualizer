@@ -15,6 +15,7 @@
 import type { Project, ProjectContext, Scenario } from '@/domain/project';
 import { SCHEMA_VERSION, defaultProjectContext } from '@/domain/project';
 import type { Component } from '@/domain/component';
+import { migrateComponents } from './componentMigration';
 
 const PROJECTS_KEY = 'tnv.projects';
 const SCENARIOS_KEY = 'tnv.scenarios';
@@ -145,8 +146,9 @@ export function saveScenarios(projectId: string, scenarios: Scenario[]): void {
 
 export function loadComponents(projectId: string): Component[] {
   const all = readCollection(COMPONENTS_KEY);
-  const bucket = all[projectId];
-  return Array.isArray(bucket) ? (bucket as Component[]) : [];
+  // Records written by earlier versions are upgraded here, so no screen ever
+  // sees a stale component shape.
+  return migrateComponents(all[projectId]);
 }
 
 export function saveComponents(projectId: string, components: Component[]): void {
