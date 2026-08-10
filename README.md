@@ -32,6 +32,17 @@ Data Provenance / Physics Correctness 原則為準。
 React 18 + TypeScript + Vite + Zustand + Tailwind CSS v4。
 Screen 07 之後會依 00 §39 引入 Cytoscape.js（網路圖）與 Plotly.js（工程圖表）。
 
+## 線上版本
+
+推上 `main` 後由 GitHub Actions 自動 build 並發布到 GitHub Pages：
+
+<https://tedus-ai.github.io/RRU-Thermal-Network-Visualizer/>
+
+首次開啟時可在空狀態頁按「載入示範專案」，載入 `01/01_Project_Info_mock.json`
+對應的示範資料（18 components / 9 heat sources / 412.3 W）以檢視已填值的畫面狀態。
+
+> 專案資料目前存在瀏覽器的 localStorage，不會上傳，也不會在不同裝置之間同步。
+
 ## 開發指令
 
 ```bash
@@ -41,8 +52,19 @@ npm run build      # tsc -b && vite build
 npm test           # vitest — solver / validation / Rule 4 / Rule 9
 ```
 
-首次開啟時可在空狀態頁按「載入示範專案」，載入 `01/01_Project_Info_mock.json`
-對應的示範資料（18 components / 9 heat sources / 412.3 W）以檢視已填值的畫面狀態。
+## 部署
+
+`.github/workflows/deploy.yml`：
+
+- Pull request → 只跑 test 與 build，不發布。
+- Push 到 `main` → build 後發布到 GitHub Pages。
+- Pages 專案站台掛在 `/<repo>/` 底下，所以 CI build 會帶 `VITE_BASE_PATH`，
+  前端則以 `basename={import.meta.env.BASE_URL}` 對應。
+- Pages 沒有 rewrite 規則，直接開啟 `/project/<id>/info` 這類深層網址會落到
+  `404.html`；build 後會把 `index.html` 複製成 `404.html`，讓 router 自行解析路徑。
+
+首次啟用需要在 repo 的 **Settings → Pages → Build and deployment → Source**
+選擇 **GitHub Actions**。
 
 ## 專案結構
 
