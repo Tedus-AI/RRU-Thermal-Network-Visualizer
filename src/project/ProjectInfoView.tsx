@@ -1,0 +1,307 @@
+/**
+ * Screen 01 — Project Info.
+ * Specification: 01_Project_Info.md. Mockup: 01/01.png.
+ *
+ * Establishes the shared project + thermal-design context every later screen
+ * reads. It deliberately creates NO thermal nodes, edges or resistances (01 §45).
+ */
+
+import { useEffect, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { AlertTriangle, FilePlus2, RefreshCw } from 'lucide-react';
+
+import { Button, Skeleton } from '@/ui/primitives';
+import { useProjectStore } from '@/data/projectStore';
+import { useScenarioStore } from '@/data/scenarioStore';
+import { useComponentStore } from '@/data/componentStore';
+import { useNetworkStore } from '@/data/networkStore';
+import { useSolverStore } from '@/data/solverStore';
+import { useShellActions } from '@/app/shellActions';
+import { projectPath } from '@/app/navigation';
+import { useGuardedNavigate } from '@/app/useGuardedNavigate';
+import { toast } from '@/ui/toast';
+
+import { ProjectIdentityForm } from './ProjectIdentityForm';
+import { ProductThermalContextForm } from './ProductThermalContextForm';
+import { BaselineScenarioForm } from './BaselineScenarioForm';
+import { ProjectNotes } from './ProjectNotes';
+import { ProjectOverviewPanel } from './ProjectOverviewPanel';
+import { ProjectHealthPanel } from './ProjectHealthPanel';
+import { RecommendedNextStep } from './RecommendedNextStep';
+import { ProjectActionBar } from './ProjectActionBar';
+import { DuplicateProjectModal } from './modals/DuplicateProjectModal';
+import { ArchiveProjectModal } from './modals/ArchiveProjectModal';
+import { useProjectSave } from './useProjectSave';
+import { nextStepFor, useProjectHealth } from './projectHealth';
+import { useFormTouch } from './formTouch';
+import { seedDemoProject } from '@/mock/seed';
+
+function PageHeader({ subtitle }: { subtitle?: string }) {
+  return (
+    <div className="flex items-baseline gap-3 px-6 pt-5 pb-4">
+      <h1 className="text-[22px] font-bold text-ink-900">
+        專案資訊 <span className="text-ink-500">(Project Info)</span>
+      </h1>
+      {subtitle && <span className="text-[13px] text-ink-400">{subtitle}</span>}
+    </div>
+  );
+}
+
+/** 01 §21 — form + KPI skeletons, Save disabled, no stale project data shown. */
+function LoadingState() {
+  return (
+    <div className="flex h-full flex-col">
+      <PageHeader subtitle="Loading…" />
+      <div className="flex min-h-0 flex-1 gap-4 px-6 pb-6">
+        <div className="flex flex-1 flex-col gap-4">
+          {Array.from({ length: 3 }).map((_, index) => (
+            <Skeleton key={index} className="h-40" />
+          ))}
+        </div>
+        <div className="flex w-80 flex-col gap-4">
+          <Skeleton className="h-64" />
+          <Skeleton className="h-48" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** 01 §22 */
+function ErrorState({ message, onRetry }: { message: string; onRetry: () => void }) {
+  const [showDetail, setShowDetail] = useState(false);
+  const navigate = useNavigate();
+  return (
+    <div className="flex h-full items-center justify-center p-8">
+      <div className="max-w-md rounded-lg border border-danger-500/30 bg-surface p-7 text-center">
+        <div className="mx-auto mb-4 flex size-11 items-center justify-center rounded-lg bg-danger-100 text-danger-600">
+          <AlertTriangle size={20} />
+        </div>
+        <h1 className="text-[16px] font-bold text-ink-900">Unable to load project.</h1>
+        <div className="mt-5 flex justify-center gap-2">
+          <Button variant="primary" icon={<RefreshCw size={15} />} onClick={onRetry}>
+            Retry
+          </Button>
+          <Button onClick={() => navigate('/')}>Return to Project List</Button>
+        </div>
+        <button
+          type="button"
+          className="mt-4 text-[12px] text-ink-400 underline"
+          onClick={() => setShowDetail((v) => !v)}
+        >
+          {showDetail ? 'Hide technical details' : 'Show technical details'}
+        </button>
+        {showDetail && (
+          <pre className="mt-2 overflow-x-auto rounded bg-surface-muted p-3 text-left font-mono text-[11px] text-ink-700">
+            {message}
+          </pre>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** 01 §20 */
+export function EmptyProjectState() {
+  const navigate = useNavigate();
+  return (
+    <div className="flex h-full items-center justify-center p-8">
+      <div className="max-w-md text-center">
+        <div className="mx-auto mb-4 flex size-12 items-center justify-center rounded-lg border border-line bg-surface text-accent-600">
+          <FilePlus2 size={22} />
+        </div>
+        <h1 className="text-[18px] font-bold text-ink-900">
+          Create your first thermal network project
+        </h1>
+        <p className="mx-auto mt-2 max-w-sm text-[13px] leading-relaxed text-ink-500">
+          A project holds the product context, scenarios and the thermal network for one
+          5G FR1 radio.
+        </p>
+        <div className="mt-5 flex justify-center gap-2">
+          <Button
+            variant="primary"
+            icon={<FilePlus2 size={15} />}
+            onClick={() => navigate('/project/new/info')}
+          >
+            + New Project
+          </Button>
+          <Button
+            onClick={() => {
+              const id = seedDemoProject();
+              useProjectStore.getState().refreshProjects();
+              navigate(projectPath(id, 'info'));
+            }}
+          >
+            載入示範專案
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function ProjectInfoView() {
+  const { projectId } = useParams();
+  const navigate = useNavigate();
+  const guardedNavigate = useGuardedNavigate();
+
+  const status = useProjectStore((s) => s.status);
+  const error = useProjectStore((s) => s.error);
+  const draft = useProjectStore((s) => s.draft);
+  const dirty = useProjectStore((s) => s.dirty);
+  const readOnly = useProjectStore((s) => s.isReadOnly());
+  const isNew = useProjectStore((s) => s.isNew);
+
+  const [showDuplicate, setShowDuplicate] = useState(false);
+  const [showArchive, setShowArchive] = useState(false);
+
+  const scenarios = useScenarioStore((s) => s.scenarios);
+  const health = useProjectHealth();
+  const { save, canSave, errors, warnings, scenario } = useProjectSave();
+
+  // Load the project (or start a new one) whenever the route target changes.
+  useEffect(() => {
+    if (!projectId) return;
+
+    const projectStore = useProjectStore.getState();
+    const scenarioStore = useScenarioStore.getState();
+
+    projectStore.refreshProjects();
+    useFormTouch.getState().reset();
+    useSolverStore.getState().reset();
+    useComponentStore.getState().loadFor(projectId);
+    useNetworkStore.getState().loadFor(projectId);
+
+    if (projectId === 'new') {
+      projectStore.startNewProject();
+      scenarioStore.clear();
+      // 01 §8: a new project starts with an editable Baseline; it is persisted on
+      // the first save (AC-03).
+      scenarioStore.createDefaultScenario('');
+      return;
+    }
+
+    projectStore.openProject(projectId);
+    const loaded = scenarioStore.loadFor(projectId);
+    if (loaded.length === 0) scenarioStore.createDefaultScenario(projectId);
+  }, [projectId]);
+
+  // Expose Save to the shared header.
+  const setSaveHandler = useShellActions((s) => s.setSaveHandler);
+  useEffect(() => {
+    setSaveHandler(handleSave);
+    return () => setSaveHandler(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canSave, readOnly, errors, scenario]);
+
+  const handleSave = (): boolean => {
+    useFormTouch.getState().markSubmitAttempted();
+    const savedId = useProjectStore.getState().draft?.project_id.trim();
+    if (!save()) return false;
+    // A new project moves from /project/new/info onto its real key.
+    if (isNew && savedId && savedId !== projectId) {
+      navigate(projectPath(savedId, 'info'), { replace: true });
+    }
+    return true;
+  };
+
+  const handleSaveAndContinue = () => {
+    const savedId = useProjectStore.getState().draft?.project_id.trim();
+    const wasNew = isNew;
+    // Already clean? Then Save & Continue is just Continue.
+    if (dirty && !handleSave()) return;
+    const step = nextStepFor(health);
+    const target = savedId ?? projectId!;
+    // 01 §15: new projects go to Import Components; existing ones follow readiness.
+    navigate(projectPath(target, wasNew ? 'import-components' : step.screenPath));
+  };
+
+  if (!projectId) return <EmptyProjectState />;
+  if (status === 'loading' || (status === 'idle' && !draft)) return <LoadingState />;
+  if (status === 'error') {
+    return (
+      <ErrorState
+        message={error ?? 'Unknown error'}
+        onRetry={() => useProjectStore.getState().openProject(projectId)}
+      />
+    );
+  }
+  if (!draft) return <EmptyProjectState />;
+
+  return (
+    <div className="flex h-full flex-col">
+      <PageHeader
+        subtitle={
+          readOnly
+            ? 'This project is archived and read-only.'
+            : isNew
+              ? 'New project — not yet saved.'
+              : undefined
+        }
+      />
+
+      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-6 pb-4 xl:flex-row">
+        <div className="flex min-w-0 flex-1 flex-col gap-4">
+          <ProjectIdentityForm errors={errors} readOnly={readOnly} />
+          <ProductThermalContextForm readOnly={readOnly} />
+          <BaselineScenarioForm scenario={scenario} errors={errors} readOnly={readOnly} />
+          <ProjectNotes readOnly={readOnly} />
+        </div>
+
+        <aside className="flex w-full shrink-0 flex-col gap-4 xl:w-[22rem] 2xl:w-[24rem]">
+          <ProjectOverviewPanel />
+          <ProjectHealthPanel />
+          <RecommendedNextStep />
+        </aside>
+      </div>
+
+      <ProjectActionBar
+        dirty={dirty}
+        readOnly={readOnly}
+        canSave={canSave && dirty}
+        canContinue={canSave}
+        archived={draft.status === 'archived'}
+        warningCount={warnings.length}
+        onCancel={() => {
+          useProjectStore.getState().revert();
+          toast.warning('Changes discarded');
+        }}
+        onDuplicate={() => setShowDuplicate(true)}
+        onArchive={() => setShowArchive(true)}
+        onSave={handleSave}
+        onSaveAndContinue={handleSaveAndContinue}
+      />
+
+      {showDuplicate && (
+        <DuplicateProjectModal
+          source={draft}
+          scenarios={scenarios}
+          onClose={() => setShowDuplicate(false)}
+          onDuplicated={(newId) => {
+            setShowDuplicate(false);
+            useProjectStore.getState().refreshProjects();
+            guardedNavigate(projectPath(newId, 'info'));
+          }}
+        />
+      )}
+
+      {showArchive && (
+        <ArchiveProjectModal
+          archived={draft.status === 'archived'}
+          onClose={() => setShowArchive(false)}
+          onConfirm={() => {
+            const nextStatus = draft.status === 'archived' ? 'active' : 'archived';
+            if (isNew) {
+              toast.error('Save the project before archiving it.');
+              setShowArchive(false);
+              return;
+            }
+            useProjectStore.getState().setStatus(nextStatus);
+            setShowArchive(false);
+            toast.success(nextStatus === 'archived' ? 'Project archived' : 'Project restored');
+          }}
+        />
+      )}
+    </div>
+  );
+}
