@@ -14,7 +14,7 @@
 
 import type { Project, ProjectContext, Scenario } from '@/domain/project';
 import { SCHEMA_VERSION, defaultProjectContext } from '@/domain/project';
-import type { ComponentRecord } from '@/domain/component';
+import type { Component } from '@/domain/component';
 
 const PROJECTS_KEY = 'tnv.projects';
 const SCENARIOS_KEY = 'tnv.scenarios';
@@ -143,13 +143,13 @@ export function saveScenarios(projectId: string, scenarios: Scenario[]): void {
 // --- Components ------------------------------------------------------------
 // Screen 02 owns the import flow; this is the storage contract it will write to.
 
-export function loadComponents(projectId: string): ComponentRecord[] {
+export function loadComponents(projectId: string): Component[] {
   const all = readCollection(COMPONENTS_KEY);
   const bucket = all[projectId];
-  return Array.isArray(bucket) ? (bucket as ComponentRecord[]) : [];
+  return Array.isArray(bucket) ? (bucket as Component[]) : [];
 }
 
-export function saveComponents(projectId: string, components: ComponentRecord[]): void {
+export function saveComponents(projectId: string, components: Component[]): void {
   const all = readCollection(COMPONENTS_KEY);
   all[projectId] = components as unknown as RawDoc;
   writeCollection(COMPONENTS_KEY, all);

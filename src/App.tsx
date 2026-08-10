@@ -4,6 +4,7 @@ import { AppShell } from '@/app/AppShell';
 import { SCREENS } from '@/app/navigation';
 import { PlaceholderScreen } from '@/screens/PlaceholderScreen';
 import { EmptyProjectState, ProjectInfoView } from '@/project/ProjectInfoView';
+import { ImportComponentsView } from '@/screens/02-import-components/ImportComponentsView';
 import { useProjectStore } from '@/data/projectStore';
 
 /** Opens the most recently updated project, or shows the empty state (01 §20). */
@@ -31,6 +32,10 @@ export default function App() {
       <Route element={<AppShell />}>
         <Route path="/" element={<Landing />} />
         <Route path="/project/:projectId/info" element={<ProjectInfoView />} />
+        <Route
+          path="/project/:projectId/import-components"
+          element={<ImportComponentsView />}
+        />
         {SCREENS.filter((screen) => !screen.implemented).map((screen) => (
           <Route
             key={screen.code}

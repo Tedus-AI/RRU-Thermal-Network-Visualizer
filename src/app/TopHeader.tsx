@@ -5,7 +5,7 @@
 
 import { useLocation } from 'react-router-dom';
 import { Download, HelpCircle, Save, Settings, Upload } from 'lucide-react';
-import { SCREENS, projectPath } from './navigation';
+import { GROUP_LABELS_EN, SCREENS, projectPath } from './navigation';
 import { useProjectStore } from '@/data/projectStore';
 import { useScenarioStore } from '@/data/scenarioStore';
 import { useSolverStore } from '@/data/solverStore';
@@ -58,7 +58,7 @@ function HeaderAction({
 const HEADER_SELECT_CLASS =
   "h-9 w-full appearance-none rounded-md border border-shell-600 bg-shell-700 bg-[url('data:image/svg+xml;utf8,<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"12\" height=\"12\" viewBox=\"0 0 12 12\"><path d=\"M2 4.5L6 8.5L10 4.5\" stroke=\"white\" stroke-width=\"1.5\" fill=\"none\" stroke-linecap=\"round\"/></svg>')] bg-[right_0.6rem_center] bg-no-repeat px-2.5 pr-7 text-[13px] font-medium text-white focus:border-accent-500 focus:outline-none disabled:opacity-50";
 
-export function Header({ onSave }: { onSave?: () => void }) {
+export function TopHeader({ onSave }: { onSave?: () => void }) {
   const location = useLocation();
   const navigate = useGuardedNavigate();
 
@@ -164,7 +164,10 @@ export function Header({ onSave }: { onSave?: () => void }) {
       <div className="ml-2 flex flex-col items-end gap-1 border-l border-shell-line pl-4">
         <div className="text-[13px] font-bold text-accent-500">
           {currentScreen.code} {currentScreen.labelEn}
-          <span className="font-normal text-white/50"> / Project Setup</span>
+          <span className="font-normal text-white/50">
+            {' / '}
+            {GROUP_LABELS_EN[currentScreen.group] ?? currentScreen.group}
+          </span>
         </div>
         <div className={`flex items-center gap-1.5 text-[12px] ${tone.text}`}>
           <span aria-hidden className={`size-2 rounded-full ${tone.dot}`} />

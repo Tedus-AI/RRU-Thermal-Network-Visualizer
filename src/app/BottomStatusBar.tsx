@@ -35,7 +35,7 @@ function StatusItem({
   );
 }
 
-export function StatusBar() {
+export function BottomStatusBar() {
   const draft = useProjectStore((s) => s.draft);
   const dirty = useProjectStore((s) => s.dirty);
   const isNew = useProjectStore((s) => s.isNew);

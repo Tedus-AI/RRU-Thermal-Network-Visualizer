@@ -29,9 +29,15 @@ function emptyNetwork(projectId: string): ThermalNetwork {
 
 interface NetworkStoreState {
   network: ThermalNetwork | null;
+  /**
+   * Set when components changed under an existing graph — 02 §24. The topology
+   * must be reviewed before the next solve is trusted.
+   */
+  requiresReview: boolean;
 
   loadFor: (projectId: string) => void;
   clear: () => void;
+  setRequiresReview: (value: boolean) => void;
 
   upsertNode: (node: ThermalNode) => void;
   removeNode: (nodeId: string) => void;
@@ -46,9 +52,11 @@ interface NetworkStoreState {
 
 export const useNetworkStore = create<NetworkStoreState>((set, get) => ({
   network: null,
+  requiresReview: false,
 
-  loadFor: (projectId) => set({ network: emptyNetwork(projectId) }),
-  clear: () => set({ network: null }),
+  loadFor: (projectId) => set({ network: emptyNetwork(projectId), requiresReview: false }),
+  clear: () => set({ network: null, requiresReview: false }),
+  setRequiresReview: (requiresReview) => set({ requiresReview }),
 
   upsertNode: (node) => {
     const network = get().network;

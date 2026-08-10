@@ -10,7 +10,8 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { AlertTriangle, FilePlus2, RefreshCw } from 'lucide-react';
 
-import { Button, Skeleton } from '@/ui/primitives';
+import { Badge, Button, Skeleton } from '@/ui/primitives';
+import { ScreenWorkspace } from '@/app/ScreenWorkspace';
 import { useProjectStore } from '@/data/projectStore';
 import { useScenarioStore } from '@/data/scenarioStore';
 import { useComponentStore } from '@/data/componentStore';
@@ -39,8 +40,8 @@ import { seedDemoProject } from '@/mock/seed';
 function PageHeader({ subtitle }: { subtitle?: string }) {
   return (
     <div className="flex items-baseline gap-3 px-6 pt-5 pb-4">
-      <h1 className="text-[22px] font-bold text-ink-900">
-        專案資訊 <span className="text-ink-500">(Project Info)</span>
+      <h1 className="text-[21px] font-bold text-ink-900">
+        Project Info <span className="font-semibold text-ink-500">/ 專案資訊</span>
       </h1>
       {subtitle && <span className="text-[13px] text-ink-400">{subtitle}</span>}
     </div>
@@ -229,48 +230,46 @@ export function ProjectInfoView() {
   if (!draft) return <EmptyProjectState />;
 
   return (
-    <div className="flex h-full flex-col">
-      <PageHeader
-        subtitle={
-          readOnly
-            ? 'This project is archived and read-only.'
-            : isNew
-              ? 'New project — not yet saved.'
-              : undefined
-        }
-      />
-
-      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-6 pb-4 xl:flex-row">
-        <div className="flex min-w-0 flex-1 flex-col gap-4">
-          <ProjectIdentityForm errors={errors} readOnly={readOnly} />
-          <ProductThermalContextForm readOnly={readOnly} />
-          <BaselineScenarioForm scenario={scenario} errors={errors} readOnly={readOnly} />
-          <ProjectNotes readOnly={readOnly} />
-        </div>
-
-        <aside className="flex w-full shrink-0 flex-col gap-4 xl:w-[22rem] 2xl:w-[24rem]">
+    <ScreenWorkspace
+      title="Project Info"
+      titleZh="專案資訊"
+      badge={
+        readOnly ? (
+          <Badge tone="accent">READ ONLY / 唯讀</Badge>
+        ) : isNew ? (
+          <Badge tone="warn">New project — not yet saved / 尚未儲存</Badge>
+        ) : undefined
+      }
+      rightPanel={
+        <>
           <ProjectOverviewPanel />
           <ProjectHealthPanel />
           <RecommendedNextStep />
-        </aside>
-      </div>
-
-      <ProjectActionBar
-        dirty={dirty}
-        readOnly={readOnly}
-        canSave={canSave && dirty}
-        canContinue={canSave}
-        archived={draft.status === 'archived'}
-        warningCount={warnings.length}
-        onCancel={() => {
-          useProjectStore.getState().revert();
-          toast.warning('Changes discarded');
-        }}
-        onDuplicate={() => setShowDuplicate(true)}
-        onArchive={() => setShowArchive(true)}
-        onSave={handleSave}
-        onSaveAndContinue={handleSaveAndContinue}
-      />
+        </>
+      }
+      actionBar={
+        <ProjectActionBar
+          dirty={dirty}
+          readOnly={readOnly}
+          canSave={canSave && dirty}
+          canContinue={canSave}
+          archived={draft.status === 'archived'}
+          warningCount={warnings.length}
+          onCancel={() => {
+            useProjectStore.getState().revert();
+            toast.warning('Changes discarded');
+          }}
+          onDuplicate={() => setShowDuplicate(true)}
+          onArchive={() => setShowArchive(true)}
+          onSave={handleSave}
+          onSaveAndContinue={handleSaveAndContinue}
+        />
+      }
+    >
+      <ProjectIdentityForm errors={errors} readOnly={readOnly} />
+      <ProductThermalContextForm readOnly={readOnly} />
+      <BaselineScenarioForm scenario={scenario} errors={errors} readOnly={readOnly} />
+      <ProjectNotes readOnly={readOnly} />
 
       {showDuplicate && (
         <DuplicateProjectModal
@@ -302,6 +301,6 @@ export function ProjectInfoView() {
           }}
         />
       )}
-    </div>
+    </ScreenWorkspace>
   );
 }
