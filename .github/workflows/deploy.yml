@@ -1,0 +1,68 @@
+name: Build and deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# Allow the deploy job to publish to Pages.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deployment at a time; don't cancel a run that is already publishing.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Test
+        run: npm test
+
+      # `npm run build` runs `tsc -b` first, so this step also typechecks.
+      - name: Build
+        env:
+          # GitHub Pages serves project sites from /<repo>/.
+          VITE_BASE_PATH: /${{ github.event.repository.name }}/
+        run: npm run build
+
+      - name: Add SPA fallback and disable Jekyll
+        run: |
+          # Pages has no rewrite rules, so a deep link like /project/X/info would
+          # 404. Serving the same document from 404.html lets the router boot and
+          # resolve the path client-side.
+          cp dist/index.html dist/404.html
+          touch dist/.nojekyll
+
+      - name: Upload Pages artifact
+        if: github.ref == 'refs/heads/main'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    # Only publish from main; pull requests just build and test.
+    if: github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
