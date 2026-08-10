@@ -1,0 +1,892 @@
+/**
+ * Screen 06 — Boundary Conditions.
+ * Specification: 06_Boundary_Conditions.md (source of truth), laid out after
+ * 06.png.
+ *
+ * What this screen does: attaches SCENARIO-SPECIFIC ambient, convection,
+ * radiation, solar, fixed-temperature and adiabatic conditions to the boundary
+ * ports Screen 05 left open, and says whether the result is ready to solve.
+ *
+ * What it never does (06 §3.2, §3.3): create or delete a node or an edge, run
+ * the solver, or display a solved temperature, an edge heat flow, a ΔT or a
+ * bottleneck rank. Every number here is an input.
+ */
+
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import {
+  ArrowLeft,
+  ArrowRight,
+  CircleCheck,
+  Copy,
+  Maximize,
+  Save,
+  Sparkles,
+  Sun,
+  Thermometer,
+  TriangleAlert,
+  Waves,
+  Wind,
+  XCircle,
+} from 'lucide-react';
+
+import { ScreenWorkspace } from '@/app/ScreenWorkspace';
+import { projectPath } from '@/app/navigation';
+import { useGuardedNavigate } from '@/app/useGuardedNavigate';
+import { useShellActions } from '@/app/shellActions';
+import { Badge, Button, Modal, Skeleton } from '@/ui/primitives';
+import { Bi, biTitle } from '@/ui/FieldLabel';
+import { toast } from '@/ui/toast';
+
+import { useProjectStore } from '@/data/projectStore';
+import { useNetworkStore } from '@/data/networkStore';
+import { useScenarioStore } from '@/data/scenarioStore';
+import { useSolverStore } from '@/data/solverStore';
+import { useBoundaryStore } from '@/data/boundaryStore';
+import { createScenario } from '@/domain/project';
+
+import { surfaceGroupsOf } from '@/thermal/boundary/boundaryPorts';
+import {
+  BOUNDARY_TYPE_LABELS,
+  type BoundaryConditionProfile,
+  type BoundaryConditionType,
+} from '@/thermal/boundary/types';
+
+import { BOUNDARY_STEPS, BoundaryStepper, type BoundaryStep } from './BoundaryStepper';
+import { ScenarioEnvironmentPanel } from './ScenarioEnvironmentPanel';
+import { SurfacePropertiesPanel } from './SurfacePropertiesPanel';
+import { BoundaryMappingCanvas, type BoundaryCanvasHandle } from './BoundaryMappingCanvas';
+import { BoundaryInspector, BoundaryInspectorEmpty } from './BoundaryInspector';
+import { BoundarySummaryCard } from './BoundarySummaryCard';
+import { FixedTemperaturePanel, type FixedTemperatureRow } from './FixedTemperaturePanel';
+import { ScenarioManagementPanel } from './ScenarioManagementPanel';
+import { BoundaryValidationPanel, type ReadinessCheck } from './BoundaryValidationPanel';
+import {
+  PORT_STATUS_LABELS,
+  REPRESENTATION_FOR,
+  formatNumber,
+  portStatus,
+  profilesForPort,
+  summarize,
+} from './boundaryViewModel';
+import { T06 } from './tooltips';
+
+// --- small building blocks -------------------------------------------------
+
+function KpiTile({
+  icon,
+  label,
+  zh,
+  value,
+  status,
+  tone = 'text-ink-900',
+  tooltip,
+}: {
+  icon: ReactNode;
+  label: string;
+  zh: string;
+  value: string;
+  status?: string;
+  tone?: string;
+  tooltip: string;
+}) {
+  return (
+    <div
+      className="flex items-center gap-2.5 rounded-lg border border-line bg-surface px-3 py-2.5"
+      title={`${label} / ${zh} — ${tooltip}`}
+    >
+      <span className="shrink-0 text-ink-400">{icon}</span>
+      <span className="min-w-0">
+        <span className="block truncate text-[11px] font-semibold text-ink-700">{label}</span>
+        <span className="block truncate text-[10px] text-ink-400">{zh}</span>
+        <span className={`block truncate text-[15px] leading-tight font-bold tabular ${tone}`}>
+          {value}
+        </span>
+        {status && <span className="block truncate text-[10px] text-ink-400">{status}</span>}
+      </span>
+    </div>
+  );
+}
+
+function Section({
+  index,
+  title,
+  zh,
+  actions,
+  className = '',
+  children,
+}: {
+  index: number;
+  title: string;
+  zh: string;
+  actions?: ReactNode;
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <section className={`flex min-h-0 flex-col rounded-lg border border-line bg-surface ${className}`}>
+      <header className="flex shrink-0 items-center gap-2 border-b border-line px-3.5 py-2.5">
+        <span className="flex size-5 shrink-0 items-center justify-center rounded bg-accent-600 text-[11px] font-bold text-white tabular">
+          {index}
+        </span>
+        <h2 className="text-[13px] font-bold text-ink-900">
+          {title} <span className="font-semibold text-ink-400">/ {zh}</span>
+        </h2>
+        <div className="ml-auto flex items-center gap-1.5">{actions}</div>
+      </header>
+      <div className="min-h-0 flex-1 overflow-auto p-3">{children}</div>
+    </section>
+  );
+}
+
+function LoadingState() {
+  return (
+    <div className="flex flex-col gap-4 p-6">
+      <div className="grid grid-cols-6 gap-3">
+        {Array.from({ length: 6 }).map((_, index) => (
+          <Skeleton key={index} className="h-16" />
+        ))}
+      </div>
+      <Skeleton className="h-96" />
+    </div>
+  );
+}
+
+// --- screen ----------------------------------------------------------------
+
+export function BoundaryConditionsView() {
+  const { projectId } = useParams();
+  const navigate = useNavigate();
+  const guardedNavigate = useGuardedNavigate();
+
+  const draft = useProjectStore((s) => s.draft);
+  const projectStatus = useProjectStore((s) => s.status);
+  const readOnly = useProjectStore((s) => s.isReadOnly());
+
+  const network = useNetworkStore((s) => s.network);
+  const scenarios = useScenarioStore((s) => s.scenarios);
+  const activeScenarioId = useScenarioStore((s) => s.activeScenarioId);
+  const solverState = useSolverStore((s) => s.state);
+
+  const sets = useBoundaryStore((s) => s.sets);
+  const activeKey = useBoundaryStore((s) => s.activeKey);
+  const ports = useBoundaryStore((s) => s.ports);
+  const dirty = useBoundaryStore((s) => s.dirty);
+
+  const [step, setStep] = useState<BoundaryStep>('scenario');
+  const [selectedPortId, setSelectedPortId] = useState<string | null>(null);
+  const [warningConfirm, setWarningConfirm] = useState<number | null>(null);
+  const canvasRef = useRef<BoundaryCanvasHandle | null>(null);
+
+  const set = activeKey ? (sets[activeKey] ?? null) : null;
+
+  useEffect(() => {
+    if (!projectId) return;
+    const projectStore = useProjectStore.getState();
+    projectStore.refreshProjects();
+    if (projectStore.draft?.project_id !== projectId) {
+      projectStore.openProject(projectId);
+      useSolverStore.getState().reset();
+    }
+    useScenarioStore.getState().loadFor(projectId);
+    useNetworkStore.getState().loadFor(projectId);
+    useBoundaryStore
+      .getState()
+      .loadFor(projectId, useScenarioStore.getState().activeScenarioId);
+  }, [projectId]);
+
+  // Switching scenario loads that scenario's own boundary set (06 §5 step 1).
+  useEffect(() => {
+    if (!projectId) return;
+    useBoundaryStore.getState().loadFor(projectId, activeScenarioId);
+    setSelectedPortId(null);
+  }, [projectId, activeScenarioId]);
+
+  const handleSave = () => {
+    if (!projectId || readOnly || !set) return;
+    useBoundaryStore.getState().save(projectId);
+    useScenarioStore.getState().persist(projectId);
+    toast.success('Boundary set saved / 邊界條件已儲存');
+  };
+
+  const setSaveHandler = useShellActions((s) => s.setSaveHandler);
+  useEffect(() => {
+    setSaveHandler(handleSave);
+    return () => setSaveHandler(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId, readOnly, activeKey]);
+
+  const summary = useMemo(() => summarize(set, ports), [set, ports]);
+  const surfaceGroups = useMemo(() => surfaceGroupsOf(ports), [ports]);
+  const selectedPort = ports.find((port) => port.id === selectedPortId) ?? null;
+  const validation = set?.validation ?? { status: 'blocked' as const, errors: [], warnings: [], infos: [] };
+
+  const solarPortIds = useMemo(() => {
+    if (!set) return new Set<string>();
+    return new Set(
+      set.assignments
+        .filter((assignment) =>
+          assignment.profile_ids.some(
+            (id) => set.profiles.find((profile) => profile.id === id)?.type === 'solar_load',
+          ),
+        )
+        .map((assignment) => assignment.boundary_port_id),
+    );
+  }, [set]);
+
+  const fixedPortIds = useMemo(() => {
+    if (!set) return new Set<string>();
+    return new Set(
+      set.assignments
+        .filter((assignment) =>
+          assignment.profile_ids.some(
+            (id) =>
+              set.profiles.find((profile) => profile.id === id)?.type ===
+              'fixed_temperature_boundary',
+          ),
+        )
+        .map((assignment) => assignment.boundary_port_id),
+    );
+  }, [set]);
+
+  const fixedRows: FixedTemperatureRow[] = useMemo(() => {
+    if (!set) return [];
+    return set.assignments.flatMap((assignment) => {
+      const port = ports.find((entry) => entry.id === assignment.boundary_port_id);
+      if (!port) return [];
+      return assignment.profile_ids.flatMap((id) => {
+        const profile = set.profiles.find((entry) => entry.id === id);
+        return profile?.type === 'fixed_temperature_boundary' ? [{ port, profile }] : [];
+      });
+    });
+  }, [set, ports]);
+
+  const fixedCandidates = useMemo(
+    () =>
+      ports.filter(
+        (port) =>
+          port.allowed_boundary_types.includes('fixed_temperature_boundary') &&
+          !fixedPortIds.has(port.id),
+      ),
+    [ports, fixedPortIds],
+  );
+
+  // --- actions -----------------------------------------------------------
+
+  /** Adds a profile of `type` to the selected port and assigns it. */
+  const addProfileToPort = (portId: string, type: BoundaryConditionType) => {
+    const port = ports.find((entry) => entry.id === portId);
+    if (!port || !set) return;
+
+    const surface = set.surface_properties.find(
+      (entry) => entry.surface_group_id === port.surface_group_id,
+    );
+
+    const id = `BCP_${portId}_${type.toUpperCase()}`;
+    const parameters: BoundaryConditionProfile['parameters'] = {};
+    if (type === 'convection_to_ambient' || type === 'combined_convection_radiation') {
+      parameters.area_m2 = port.area_m2;
+    }
+    if (
+      type === 'radiation_to_surroundings' ||
+      type === 'combined_convection_radiation'
+    ) {
+      parameters.emissivity = surface?.emissivity ?? null;
+      parameters.area_m2 = port.area_m2;
+      parameters.radiationTemperature_C =
+        set.ambient.radiation_surrounding_C ?? set.ambient.external_ambient_C;
+    }
+    if (type === 'solar_load') {
+      parameters.irradiance_W_m2 = set.site.solar_irradiance_W_m2;
+      parameters.absorptivity = surface?.absorptivity ?? null;
+      parameters.receivingArea_m2 = port.area_m2;
+    }
+    if (type === 'ambient_reservoir') {
+      parameters.temperature_C = set.ambient.external_ambient_C;
+    }
+
+    const profile: BoundaryConditionProfile = {
+      id,
+      name: `${port.name} — ${BOUNDARY_TYPE_LABELS[type].label}`,
+      type,
+      representation: REPRESENTATION_FOR[type],
+      parameters,
+      source: 'manual',
+      confidence: 'medium',
+      provenance: { source_label: 'Screen 06 boundary input' },
+      external_mappings: { import_status: 'deferred' },
+    };
+
+    const store = useBoundaryStore.getState();
+    store.upsertProfile(profile);
+    const existing = profilesForPort(store.current(), portId).map((entry) => entry.id);
+    store.assignProfiles(portId, [...new Set([...existing, id])]);
+    toast.success(`${BOUNDARY_TYPE_LABELS[type].label} added / 已新增邊界條件`);
+  };
+
+  const removeProfile = (profileId: string) => {
+    useBoundaryStore.getState().removeProfile(profileId);
+  };
+
+  /** 06 §16 — copies the selected port's profiles onto every similar surface. */
+  const applyToSimilar = () => {
+    if (!selectedPort || !set) return;
+    const source = profilesForPort(set, selectedPort.id);
+    if (source.length === 0) return;
+
+    const store = useBoundaryStore.getState();
+    let applied = 0;
+    for (const port of ports) {
+      if (port.id === selectedPort.id) continue;
+      if (port.orientation !== selectedPort.orientation) continue;
+
+      const copies = source.map((profile) => ({
+        ...profile,
+        id: `${profile.id}_FOR_${port.id}`,
+        name: `${port.name} — ${BOUNDARY_TYPE_LABELS[profile.type].label}`,
+        parameters: { ...profile.parameters, area_m2: port.area_m2 },
+      }));
+      copies.forEach((copy) => store.upsertProfile(copy));
+      store.assignProfiles(
+        port.id,
+        copies.map((copy) => copy.id),
+      );
+      applied++;
+    }
+
+    toast[applied > 0 ? 'success' : 'warning'](
+      applied > 0
+        ? `Applied to ${applied} similar surface(s) / 已套用至相似表面`
+        : 'No similar surface found / 沒有相似的表面',
+    );
+  };
+
+  // --- guards ------------------------------------------------------------
+
+  if (!projectId || projectStatus === 'error') {
+    return (
+      <div className="flex h-full items-center justify-center p-8">
+        <div className="max-w-md rounded-lg border border-danger-500/30 bg-surface p-7 text-center">
+          <XCircle size={22} className="mx-auto mb-3 text-danger-600" />
+          <h1 className="text-[15px] font-bold text-ink-900">
+            Unable to load boundary conditions.
+          </h1>
+          <p className="mt-1 text-[13px] text-ink-500">無法載入邊界條件。</p>
+          <Button variant="primary" className="mt-4" onClick={() => navigate('/')}>
+            Return to Project Info
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  if (projectStatus === 'loading' || !draft) return <LoadingState />;
+
+  const hasTopology = Boolean(network && Object.keys(network.nodes).length > 0);
+  const blockingErrors = validation.errors.length;
+
+  const completedSteps: BoundaryStep[] = [];
+  if (activeScenarioId) completedSteps.push('scenario');
+  if (set?.ambient.external_ambient_C != null) completedSteps.push('ambient');
+  if (summary.portsAssigned > 0) completedSteps.push('surfaces');
+  if (summary.convectionProfiles > 0) completedSteps.push('convection');
+  if (summary.radiationProfiles > 0 || summary.solarLoads > 0) completedSteps.push('radiation');
+  if (blockingErrors === 0 && hasTopology) completedSteps.push('validate');
+
+  const checks: ReadinessCheck[] = [
+    {
+      label: 'Environment parameters are valid.',
+      zh: '環境參數有效。',
+      passed: set?.ambient.external_ambient_C != null,
+    },
+    {
+      label: 'At least one convection path to ambient exists.',
+      zh: '存在至少一條通往環境的對流路徑。',
+      passed: summary.convectionProfiles > 0,
+    },
+    {
+      label: 'Surface properties are assigned.',
+      zh: '已指派表面性質。',
+      passed: (set?.surface_properties.length ?? 0) > 0,
+    },
+    {
+      label: 'Every boundary port has a condition.',
+      zh: '所有邊界端口皆已指定條件。',
+      passed: summary.portsTotal > 0 && summary.portsAssigned === summary.portsTotal,
+    },
+    {
+      label: 'No invalid numeric values detected.',
+      zh: '未偵測到無效數值。',
+      passed: blockingErrors === 0,
+    },
+  ];
+
+  const handleContinue = () => {
+    if (blockingErrors > 0 || !set) return;
+    handleSave();
+    if (validation.warnings.length > 0) {
+      setWarningConfirm(validation.warnings.length);
+      return;
+    }
+    navigate(projectPath(projectId, 'network'));
+  };
+
+  // --- blocked state: no topology from Screen 05 (06 §15.3) ---------------
+
+  if (!hasTopology) {
+    return (
+      <ScreenWorkspace
+        title="Boundary Conditions"
+        titleZh="邊界條件"
+        description="Define scenario-specific ambient, convection, radiation, solar and fixed-temperature boundaries for the saved thermal graph."
+        descriptionZh="為已儲存的熱網路設定此情境的環境溫度、對流、輻射、太陽負載與固定溫度邊界。"
+      >
+        <div className="flex h-full items-center justify-center">
+          <div className="max-w-md rounded-lg border border-dashed border-line-strong bg-surface px-6 py-10 text-center">
+            <Waves size={24} className="mx-auto mb-3 text-ink-400" />
+            <p className="text-[14px] font-semibold text-ink-700">
+              Boundary Conditions require a saved thermal graph topology.
+            </p>
+            <p className="mt-1 text-[12px] text-ink-400">
+              邊界條件需要 05 已儲存的熱網路拓樸。
+            </p>
+            <Button
+              variant="primary"
+              className="mt-4"
+              onClick={() => guardedNavigate(projectPath(projectId, 'thermal-path'))}
+            >
+              Open 05 Thermal Path Builder / 前往 05
+            </Button>
+          </div>
+        </div>
+      </ScreenWorkspace>
+    );
+  }
+
+  return (
+    <ScreenWorkspace
+      title="Boundary Conditions"
+      titleZh="邊界條件"
+      description="Define scenario-specific ambient, convection, radiation, solar and fixed-temperature boundaries for the saved thermal graph. Topology stays read-only and no solve happens here."
+      descriptionZh="為已儲存的熱網路設定此情境的邊界條件。拓樸在此唯讀，本畫面不進行求解。"
+      badge={
+        <div className="flex flex-wrap items-center gap-2">
+          {readOnly && <Badge tone="accent">READ ONLY / 唯讀</Badge>}
+          {!readOnly && dirty && <Badge tone="warn">● Unsaved / 未儲存</Badge>}
+          <Badge tone={set?.status === 'ready_for_solve' ? 'ok' : 'warn'}>
+            {(set?.status ?? 'draft').replace(/_/g, ' ').toUpperCase()}
+          </Badge>
+          <Badge tone={solverState === 'DIRTY' ? 'warn' : 'neutral'}>Solver {solverState}</Badge>
+        </div>
+      }
+      metrics={
+        <div className="grid grid-cols-2 gap-2.5 md:grid-cols-3 xl:grid-cols-6">
+          <KpiTile
+            icon={<Sparkles size={18} />}
+            label="Scenario Boundary Set"
+            zh="情境邊界集"
+            tooltip={T06.kpi.boundarySet}
+            value={(set?.status ?? 'draft').replace(/_/g, ' ')}
+            tone={set?.status === 'ready_for_solve' ? 'text-ok-600' : 'text-warn-600'}
+          />
+          <KpiTile
+            icon={<Waves size={18} />}
+            label="Boundary Ports"
+            zh="邊界端口"
+            tooltip={T06.kpi.boundaryPorts}
+            value={`${summary.portsAssigned} / ${summary.portsTotal}`}
+            status="assigned / 已指定"
+            tone={
+              summary.portsAssigned === summary.portsTotal ? 'text-ok-600' : 'text-warn-600'
+            }
+          />
+          <KpiTile
+            icon={<Thermometer size={18} />}
+            label="Ambient"
+            zh="環境溫度"
+            tooltip={T06.kpi.ambient}
+            value={formatNumber(set?.ambient.external_ambient_C, 1, '°C')}
+            status="external / 外部"
+          />
+          <KpiTile
+            icon={<Wind size={18} />}
+            label="Convection"
+            zh="對流"
+            tooltip={T06.kpi.convection}
+            value={`${summary.convectionProfiles} profiles`}
+            status={`${summary.convectionMissingInputs} missing input`}
+            tone={summary.convectionMissingInputs > 0 ? 'text-warn-600' : 'text-ink-900'}
+          />
+          <KpiTile
+            icon={<Sun size={18} />}
+            label="Radiation / Solar"
+            zh="輻射 / 太陽"
+            tooltip={T06.kpi.radiationSolar}
+            value={`${summary.radiationProfiles} / ${summary.solarLoads}`}
+            status="radiation / solar loads"
+          />
+          <KpiTile
+            icon={<CircleCheck size={18} />}
+            label="Solve Readiness"
+            zh="求解就緒度"
+            tooltip={T06.kpi.solveReadiness}
+            value={
+              blockingErrors > 0
+                ? 'Blocked'
+                : validation.warnings.length > 0
+                  ? 'Warnings'
+                  : 'Ready for 07'
+            }
+            status={`${summary.readinessPct}% complete`}
+            tone={
+              blockingErrors > 0
+                ? 'text-danger-600'
+                : validation.warnings.length > 0
+                  ? 'text-warn-600'
+                  : 'text-ok-600'
+            }
+          />
+        </div>
+      }
+      stepper={
+        <BoundaryStepper current={step} completed={completedSteps} onSelect={setStep} />
+      }
+      actionBar={
+        <div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-line bg-surface px-6 py-3">
+          <Button
+            icon={<ArrowLeft size={15} />}
+            title={biTitle('Back to 05 Thermal Path Builder', '回到 05 熱路徑設定')}
+            onClick={() => guardedNavigate(projectPath(projectId, 'thermal-path'))}
+          >
+            Back to 05
+          </Button>
+          <Button
+            icon={<Sparkles size={15} />}
+            disabled={readOnly}
+            title={biTitle('Generate default profiles', '依專案預設產生邊界條件')}
+            onClick={() => {
+              const { created } = useBoundaryStore.getState().generateDefaults();
+              toast[created > 0 ? 'success' : 'warning'](
+                created > 0
+                  ? `${created} default profile(s) created — review them / 已產生預設條件，請檢查`
+                  : 'Every port already has a condition / 所有端口皆已設定',
+              );
+            }}
+          >
+            Generate Defaults
+          </Button>
+          <Button
+            disabled={readOnly || !selectedPort}
+            title={biTitle('Apply to similar surfaces', '套用到方位相同的表面')}
+            onClick={applyToSimilar}
+          >
+            Apply to Similar
+          </Button>
+
+          {blockingErrors > 0 && (
+            <span className="text-[12px] font-medium text-danger-600">
+              {blockingErrors} blocking error{blockingErrors > 1 ? 's' : ''} must be fixed before
+              Screen 07 / 需先修正錯誤
+            </span>
+          )}
+
+          <div className="ml-auto flex gap-2">
+            <Button
+              icon={<CircleCheck size={15} />}
+              title={biTitle('Validate boundary conditions', T06.step.validate)}
+              onClick={() => {
+                useBoundaryStore.getState().revalidate();
+                setStep('validate');
+                const state = useBoundaryStore.getState().current()?.validation;
+                if (!state) return;
+                if (state.errors.length > 0) toast.error(`${state.errors.length} error(s) / 有錯誤`);
+                else if (state.warnings.length > 0)
+                  toast.warning(`${state.warnings.length} warning(s) / 有警告`);
+                else toast.success('Boundary conditions are ready for 07 / 可交付 07');
+              }}
+            >
+              Validate
+            </Button>
+            <Button
+              icon={<Save size={15} />}
+              disabled={readOnly || !dirty}
+              title={biTitle('Save boundary set', '儲存邊界條件')}
+              onClick={handleSave}
+            >
+              Save Boundary Set
+            </Button>
+            <Button
+              variant="primary"
+              trailingIcon={<ArrowRight size={15} />}
+              disabled={blockingErrors > 0}
+              title={biTitle('Continue to 07 Thermal Network', '前往 07 熱網路求解')}
+              onClick={handleContinue}
+            >
+              Continue to 07
+            </Button>
+          </div>
+        </div>
+      }
+    >
+      {/* Row 1 — environment, read-only graph, boundary inspector */}
+      <div className="flex h-[calc(100vh-32rem)] min-h-[20rem] flex-col gap-3 lg:flex-row">
+        <div className="flex w-full shrink-0 flex-col gap-3 overflow-y-auto pr-1 lg:h-full lg:w-[21rem]">
+          <Section index={1} title="Scenario Environment" zh="情境環境">
+            {set ? (
+              <ScenarioEnvironmentPanel
+                ambient={set.ambient}
+                site={set.site}
+                readOnly={readOnly}
+                onAmbient={(patch) => useBoundaryStore.getState().setAmbient(patch)}
+                onSite={(patch) => useBoundaryStore.getState().setSite(patch)}
+              />
+            ) : (
+              <p className="text-[11px] text-ink-400">
+                <Bi en="Select a scenario first." zh="請先選擇情境。" inline />
+              </p>
+            )}
+          </Section>
+
+          <Section index={2} title="Surface Properties" zh="表面性質">
+            <SurfacePropertiesPanel
+              groups={surfaceGroups}
+              properties={set?.surface_properties ?? []}
+              readOnly={readOnly}
+              onChange={(property) => useBoundaryStore.getState().setSurfaceProperty(property)}
+            />
+          </Section>
+        </div>
+
+        <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-line bg-surface">
+          <header className="flex shrink-0 items-center gap-2 border-b border-line px-3.5 py-2.5">
+            <h2 className="text-[13px] font-bold text-ink-900">
+              Thermal Network (from 05){' '}
+              <span className="font-semibold text-ink-400">/ 熱網路（來自 05）</span>
+            </h2>
+            <Badge tone="neutral">
+              <span title={T06.readOnlyTopology}>Read-only topology</span>
+            </Badge>
+            <span className="ml-auto flex items-center gap-1">
+              <button
+                type="button"
+                title={biTitle('Zoom out', '縮小')}
+                aria-label={biTitle('Zoom out', '縮小')}
+                onClick={() => canvasRef.current?.zoomBy(-0.15)}
+                className="flex size-6 items-center justify-center rounded border border-line-strong text-[13px] leading-none text-ink-500 hover:bg-surface-muted"
+              >
+                −
+              </button>
+              <button
+                type="button"
+                title={biTitle('Zoom in', '放大')}
+                aria-label={biTitle('Zoom in', '放大')}
+                onClick={() => canvasRef.current?.zoomBy(0.15)}
+                className="flex size-6 items-center justify-center rounded border border-line-strong text-[13px] leading-none text-ink-500 hover:bg-surface-muted"
+              >
+                +
+              </button>
+              <button
+                type="button"
+                title={biTitle('Fit graph', '全覽')}
+                aria-label={biTitle('Fit graph', '全覽')}
+                onClick={() => canvasRef.current?.fit()}
+                className="flex size-6 items-center justify-center rounded border border-line-strong text-ink-500 hover:bg-surface-muted"
+              >
+                <Maximize size={12} />
+              </button>
+            </span>
+          </header>
+
+          <div className="relative min-h-0 flex-1">
+            {network && (
+              <BoundaryMappingCanvas
+                ref={canvasRef}
+                network={network}
+                ports={ports}
+                statusOf={(port) => portStatus(set, port)}
+                solarPortIds={solarPortIds}
+                fixedPortIds={fixedPortIds}
+                selectedPortId={selectedPortId}
+                onSelectPort={setSelectedPortId}
+              />
+            )}
+
+            {ports.length === 0 && (
+              <div className="absolute inset-0 flex items-center justify-center bg-surface/80 p-6 text-center">
+                <div>
+                  <p className="text-[13px] font-semibold text-ink-700">
+                    The current topology has no boundary ports.
+                  </p>
+                  <p className="mt-1 text-[12px] text-ink-400">
+                    此拓樸沒有邊界端口，請先於 05 建立外部邊界。
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Port list — the canvas is a picture, this is the accessible way in. */}
+            <div className="absolute top-3 left-3 z-10 max-h-[calc(100%-1.5rem)] w-52 overflow-auto rounded-md border border-line bg-surface/95 p-2 shadow-sm">
+              <p className="mb-1 text-[10px] font-bold text-ink-700">
+                Boundary Ports <span className="font-normal text-ink-400">/ 邊界端口</span>
+              </p>
+              <ul className="flex flex-col gap-0.5">
+                {ports.map((port) => {
+                  const status = portStatus(set, port);
+                  const label = PORT_STATUS_LABELS[status];
+                  return (
+                    <li key={port.id}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedPortId(port.id);
+                          canvasRef.current?.center(port.connected_node_id);
+                        }}
+                        title={biTitle(port.name, label.zh)}
+                        className={`flex w-full items-center gap-1.5 rounded px-1.5 py-1 text-left text-[10px] ${
+                          selectedPortId === port.id
+                            ? 'bg-accent-100 font-semibold text-accent-700'
+                            : 'text-ink-700 hover:bg-surface-muted'
+                        }`}
+                      >
+                        <span className="min-w-0 flex-1 truncate">{port.name}</span>
+                        <Badge tone={label.tone as 'ok'}>{label.label}</Badge>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        <div className="flex w-full shrink-0 flex-col gap-3 overflow-y-auto pr-1 lg:h-full lg:w-[22rem]">
+          <Section index={3} title="Boundary Conditions" zh="邊界條件" className="min-h-[17rem] flex-1">
+            {selectedPort && set ? (
+              <BoundaryInspector
+                port={selectedPort}
+                status={portStatus(set, selectedPort)}
+                profiles={profilesForPort(set, selectedPort.id)}
+                preview={set.derived_preview.find(
+                  (entry) => entry.boundary_port_id === selectedPort.id,
+                )}
+                validation={validation}
+                readOnly={readOnly}
+                onUpsertProfile={(profile) =>
+                  useBoundaryStore.getState().upsertProfile(profile)
+                }
+                onRemoveProfile={removeProfile}
+                onAddProfile={(type) => addProfileToPort(selectedPort.id, type)}
+              />
+            ) : (
+              <BoundaryInspectorEmpty />
+            )}
+          </Section>
+
+          {set && (
+            <Section index={3} title="Boundary Summary" zh="邊界條件摘要" className="max-h-56 shrink-0">
+              <BoundarySummaryCard set={set} summary={summary} />
+            </Section>
+          )}
+        </div>
+      </div>
+
+      {/* Row 2 — fixed temperature, scenario management, validation */}
+      <div className="grid gap-3 xl:grid-cols-3">
+        <Section index={4} title="Fixed Temperature (optional)" zh="固定溫度（選填）">
+          <FixedTemperaturePanel
+            rows={fixedRows}
+            candidatePorts={fixedCandidates}
+            readOnly={readOnly}
+            onAdd={(portId) => addProfileToPort(portId, 'fixed_temperature_boundary')}
+            onPatch={(profile) => useBoundaryStore.getState().upsertProfile(profile)}
+            onRemove={removeProfile}
+          />
+        </Section>
+
+        <Section index={5} title="Scenario Management" zh="情境管理">
+          <ScenarioManagementPanel
+            scenarios={scenarios}
+            activeScenarioId={activeScenarioId}
+            readOnly={readOnly}
+            onSelect={(scenarioId) => useScenarioStore.getState().setActiveScenario(scenarioId)}
+            onCreate={() => {
+              const scenario = createScenario(projectId, `Scenario ${scenarios.length + 1}`);
+              useScenarioStore.getState().replaceAll([...scenarios, scenario]);
+              useScenarioStore.getState().setActiveScenario(scenario.id);
+              useScenarioStore.getState().persist(projectId);
+              toast.success('Scenario created / 已建立情境');
+            }}
+            onCopyFrom={(scenarioId) => {
+              const copied = useBoundaryStore.getState().copyFromScenario(scenarioId);
+              toast[copied ? 'success' : 'warning'](
+                copied
+                  ? 'Boundary conditions copied — review them / 已複製，請檢查'
+                  : 'That scenario has no saved boundary set / 該情境尚無邊界條件',
+              );
+            }}
+            onDelete={(scenarioId) => {
+              useScenarioStore
+                .getState()
+                .replaceAll(scenarios.filter((entry) => entry.id !== scenarioId));
+              useScenarioStore.getState().persist(projectId);
+              toast.success('Scenario deleted / 已刪除情境');
+            }}
+          />
+        </Section>
+
+        <Section
+          index={6}
+          title="Validation"
+          zh="驗證檢查"
+          actions={
+            <Badge
+              tone={
+                blockingErrors > 0
+                  ? 'danger'
+                  : validation.warnings.length > 0
+                    ? 'warn'
+                    : 'ok'
+              }
+            >
+              {validation.status.replace(/_/g, ' ')}
+            </Badge>
+          }
+        >
+          <BoundaryValidationPanel
+            validation={validation}
+            checks={checks}
+            onFocus={(message) => {
+              if (message.boundary_port_id) setSelectedPortId(message.boundary_port_id);
+            }}
+          />
+        </Section>
+      </div>
+
+      {warningConfirm != null && (
+        <Modal
+          title="Continue with warnings? / 有警告，仍要繼續？"
+          description={`${warningConfirm} boundary assumption(s) remain. Screen 07 will solve with them as entered. / 尚有 ${warningConfirm} 項假設，07 會依現有設定求解。`}
+          onClose={() => setWarningConfirm(null)}
+          footer={
+            <>
+              <Button onClick={() => setWarningConfirm(null)}>Stay / 留在本頁</Button>
+              <Button
+                variant="primary"
+                onClick={() => {
+                  setWarningConfirm(null);
+                  navigate(projectPath(projectId, 'network'));
+                }}
+              >
+                Continue / 繼續
+              </Button>
+            </>
+          }
+        />
+      )}
+    </ScreenWorkspace>
+  );
+}
+
+/** Steps whose panel the workspace scrolls to — kept for the stepper contract. */
+export const BOUNDARY_STEP_IDS = BOUNDARY_STEPS.map((step) => step.id);
+export { Copy as CopyIcon, TriangleAlert as WarnIcon };

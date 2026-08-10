@@ -16,12 +16,14 @@ import type { Project, ProjectContext, Scenario } from '@/domain/project';
 import { SCHEMA_VERSION, defaultProjectContext } from '@/domain/project';
 import type { Component } from '@/domain/component';
 import { DEFAULT_SOLVER_SETTINGS, type ThermalNetwork } from '@/thermal/types';
+import type { ScenarioBoundaryConditionSet } from '@/thermal/boundary/types';
 import { migrateComponents } from './componentMigration';
 
 const PROJECTS_KEY = 'tnv.projects';
 const SCENARIOS_KEY = 'tnv.scenarios';
 const COMPONENTS_KEY = 'tnv.components';
 const NETWORKS_KEY = 'tnv.thermal_networks';
+const BOUNDARY_KEY = 'tnv.boundary_sets';
 
 /** Keys on a project document that belong to this tool. Everything else is foreign. */
 const OWNED_PROJECT_KEYS = [
@@ -191,4 +193,41 @@ export function saveNetwork(projectId: string, network: ThermalNetwork): void {
   const existing = (all[projectId] ?? {}) as Record<string, unknown>;
   all[projectId] = { ...existing, ...network } as unknown as RawDoc;
   writeCollection(NETWORKS_KEY, all);
+}
+
+// --- Scenario boundary conditions ------------------------------------------
+// 06 §14.1 — keyed by project + network + scenario, and stored apart from the
+// base topology so saving Screen 06 can never rewrite Screen 05's graph.
+
+function boundaryKey(networkId: string, scenarioId: string): string {
+  return `${networkId}::${scenarioId}`;
+}
+
+export function loadBoundarySets(projectId: string): ScenarioBoundaryConditionSet[] {
+  const all = readCollection(BOUNDARY_KEY);
+  const bucket = (all[projectId] ?? {}) as Record<string, ScenarioBoundaryConditionSet>;
+  return Object.values(bucket).filter((set) => set && typeof set === 'object');
+}
+
+export function saveBoundarySet(
+  projectId: string,
+  set: ScenarioBoundaryConditionSet,
+): void {
+  const all = readCollection(BOUNDARY_KEY);
+  const bucket = (all[projectId] ?? {}) as Record<string, unknown>;
+  bucket[boundaryKey(set.network_id, set.scenario_id)] = set;
+  all[projectId] = bucket as RawDoc;
+  writeCollection(BOUNDARY_KEY, all);
+}
+
+export function deleteBoundarySet(
+  projectId: string,
+  networkId: string,
+  scenarioId: string,
+): void {
+  const all = readCollection(BOUNDARY_KEY);
+  const bucket = (all[projectId] ?? {}) as Record<string, unknown>;
+  delete bucket[boundaryKey(networkId, scenarioId)];
+  all[projectId] = bucket as RawDoc;
+  writeCollection(BOUNDARY_KEY, all);
 }

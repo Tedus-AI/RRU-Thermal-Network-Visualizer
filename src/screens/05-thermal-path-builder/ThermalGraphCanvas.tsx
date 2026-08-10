@@ -19,7 +19,14 @@ import dagre from 'cytoscape-dagre';
 
 import { activeRth } from '@/thermal/rth';
 import type { ThermalNetwork } from '@/thermal/types';
-import { GROUP_COLORS, cytoscapeStylesheet, edgeColor, edgeLineStyle, nodeGroup } from './graphStyles';
+import {
+  GROUP_COLORS,
+  cytoscapeStylesheet,
+  edgeColor,
+  edgeLineStyle,
+  labelBox,
+  nodeGroup,
+} from '@/ui/graphStyles';
 
 cytoscape.use(dagre);
 
@@ -64,16 +71,6 @@ function layoutOptions(mode: string) {
     default:
       return { name: 'dagre', rankDir: 'LR', nodeSep: 26, rankSep: 80, animate: false };
   }
-}
-
-/** Deterministic node box, so nothing depends on asynchronous text measurement. */
-function labelBox(label: string): { w: number; h: number } {
-  const lines = label.split('\n');
-  const longest = lines.reduce((max, line) => Math.max(max, line.length), 0);
-  return {
-    w: Math.min(180, Math.max(64, Math.round(longest * 5.6) + 18)),
-    h: lines.length * 14 + 12,
-  };
 }
 
 function buildElements(

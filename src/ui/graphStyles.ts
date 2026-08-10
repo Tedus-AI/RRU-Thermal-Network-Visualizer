@@ -98,6 +98,20 @@ export function edgeColor(edge: ThermalEdge): string {
   return EDGE_COLORS[edge.type] ?? '#64748b';
 }
 
+/**
+ * Deterministic node box, so nothing depends on asynchronous text measurement.
+ * Cytoscape's `width: label` is measured late; a node measured as 0x0 is cached
+ * as "takes up no space" and then never painted.
+ */
+export function labelBox(label: string): { w: number; h: number } {
+  const lines = label.split('\n');
+  const longest = lines.reduce((max, line) => Math.max(max, line.length), 0);
+  return {
+    w: Math.min(180, Math.max(64, Math.round(longest * 5.6) + 18)),
+    h: lines.length * 14 + 12,
+  };
+}
+
 export function cytoscapeStylesheet(): StylesheetCSS[] {
   return [
     {

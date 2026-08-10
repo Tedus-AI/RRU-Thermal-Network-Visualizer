@@ -180,6 +180,29 @@ export function createBaselineScenario(projectId: string): Scenario {
   };
 }
 
+/**
+ * An additional scenario, authored in Screen 06 (00 §34).
+ * It inherits the baseline environment so a new scenario starts from something
+ * real rather than from zeros, and the engineer edits from there.
+ */
+export function createScenario(
+  projectId: string,
+  name: string,
+  base?: Partial<Scenario>,
+): Scenario {
+  return {
+    id: `SCN_${Date.now().toString(36).toUpperCase()}`,
+    project_id: projectId,
+    name,
+    ambient_C: base?.ambient_C ?? 55,
+    wind_mps: base?.wind_mps ?? 0,
+    solar_W_m2: base?.solar_W_m2 ?? 0,
+    power_scale: base?.power_scale ?? 1,
+    notes: '',
+    is_default: false,
+  };
+}
+
 /** Derive a database-key-safe Project ID from a display name. */
 export function suggestProjectId(name: string): string {
   const cleaned = name
