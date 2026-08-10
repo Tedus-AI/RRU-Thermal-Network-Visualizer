@@ -1,0 +1,166 @@
+{
+  "project": {
+    "id": "CBNG_FR1_RRU_EVT2",
+    "name": "CBNG FR1 RRU EVT2"
+  },
+  "scenario": {
+    "id": "SCN_55C_0",
+    "name": "Baseline 55C / 0 m/s",
+    "ambientC": 55,
+    "windMps": 0,
+    "solarWm2": 0,
+    "powerScale": 1.0
+  },
+  "solver": {
+    "status": "SOLVED",
+    "solverVersion": "v1.0",
+    "solvedAt": "2026-08-10T22:10:00+08:00",
+    "generatedW": 412.3,
+    "rejectedW": 412.1,
+    "residualW": 0.2,
+    "errorPercent": 0.05,
+    "solvedNodes": 42,
+    "solvedEdges": 47
+  },
+  "display": {
+    "mode": "Temperature",
+    "showLabels": true,
+    "showPower": true,
+    "showLimits": true,
+    "showBoundary": true
+  },
+  "nodes": [
+    {
+      "id": "NODE_PA1_JUNCTION",
+      "name": "PA1 Junction",
+      "type": "Junction",
+      "temperatureC": 103.4,
+      "powerW": 52.13,
+      "limitType": "Tj",
+      "limitC": 180,
+      "marginC": 76.6
+    },
+    {
+      "id": "NODE_PA1_CASE",
+      "name": "PA1 Case",
+      "type": "Case",
+      "temperatureC": 85.2
+    },
+    {
+      "id": "NODE_PA1_COIN",
+      "name": "PA1 Copper Coin",
+      "type": "Copper Coin",
+      "temperatureC": 83.1
+    },
+    {
+      "id": "NODE_ZONE_RF_LEFT",
+      "name": "RF Left Base",
+      "type": "Base Zone",
+      "temperatureC": 78.7
+    },
+    {
+      "id": "NODE_FPGA_JUNCTION",
+      "name": "FPGA Junction",
+      "type": "Junction",
+      "temperatureC": 96.8,
+      "powerW": 35.0,
+      "limitType": "Tj",
+      "limitC": 110,
+      "marginC": 13.2
+    },
+    {
+      "id": "NODE_ZONE_DIGITAL",
+      "name": "Digital Base",
+      "type": "Base Zone",
+      "temperatureC": 74.9
+    },
+    {
+      "id": "NODE_HSK_BASE",
+      "name": "HSK Base",
+      "type": "Heat Sink Base",
+      "temperatureC": 68.3
+    },
+    {
+      "id": "NODE_FIN_SURFACE",
+      "name": "Fin Surface",
+      "type": "Fin Surface",
+      "temperatureC": 64.6
+    },
+    {
+      "id": "NODE_AMBIENT",
+      "name": "Ambient",
+      "type": "Boundary",
+      "temperatureC": 55.0,
+      "fixed": true
+    }
+  ],
+  "edges": [
+    {
+      "id": "EDGE_PA1_RJC",
+      "from": "NODE_PA1_JUNCTION",
+      "to": "NODE_PA1_CASE",
+      "rthCPerW": 0.35,
+      "rthSource": "analytical",
+      "heatFlowW": 52.0,
+      "deltaTC": 18.2,
+      "actualDirection": "forward"
+    },
+    {
+      "id": "EDGE_PA1_COIN",
+      "from": "NODE_PA1_CASE",
+      "to": "NODE_PA1_COIN",
+      "rthCPerW": 0.041,
+      "rthSource": "analytical",
+      "heatFlowW": 51.2,
+      "deltaTC": 2.1,
+      "actualDirection": "forward"
+    },
+    {
+      "id": "EDGE_RF_HSK",
+      "from": "NODE_ZONE_RF_LEFT",
+      "to": "NODE_HSK_BASE",
+      "rthCPerW": 0.055,
+      "rthSource": "manual",
+      "heatFlowW": 189.1,
+      "deltaTC": 10.4,
+      "actualDirection": "forward"
+    },
+    {
+      "id": "EDGE_DIG_HSK",
+      "from": "NODE_ZONE_DIGITAL",
+      "to": "NODE_HSK_BASE",
+      "rthCPerW": 0.062,
+      "rthSource": "manual",
+      "heatFlowW": 106.5,
+      "deltaTC": 6.6,
+      "actualDirection": "forward"
+    },
+    {
+      "id": "EDGE_HSK_FIN",
+      "from": "NODE_HSK_BASE",
+      "to": "NODE_FIN_SURFACE",
+      "rthCPerW": 0.025,
+      "rthSource": "analytical",
+      "heatFlowW": 148.0,
+      "deltaTC": 3.7,
+      "actualDirection": "forward"
+    },
+    {
+      "id": "EDGE_FIN_AMB_EQ",
+      "from": "NODE_FIN_SURFACE",
+      "to": "NODE_AMBIENT",
+      "rthCPerW": 0.0233,
+      "rthSource": "analytical",
+      "heatFlowW": 412.1,
+      "deltaTC": 9.6,
+      "actualDirection": "forward"
+    }
+  ],
+  "validation": {
+    "preSolve": "PASS",
+    "matrix": "PASS",
+    "boundary": "PASS",
+    "resultIntegrity": "PASS",
+    "energyBalance": "PASS"
+  }
+}

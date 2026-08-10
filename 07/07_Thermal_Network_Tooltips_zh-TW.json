@@ -1,0 +1,12 @@
+{
+  "Solver Status": "顯示 Thermal Network 求解器目前狀態：READY、DIRTY、SOLVING、SOLVED、WARNING 或 FAILED。",
+  "Generated Heat": "目前 Scenario 中所有 active heat source 經 Power Scale 後的總發熱。",
+  "Rejected Heat": "經固定溫度或外部 Boundary sink 排出的淨熱量；不重複計算 internal edge heat flow。",
+  "Energy Residual": "Generated Heat 與 Rejected Heat 的差值比例，用來檢查數值與能量守恆。",
+  "Heat Flow": "由 solved node temperatures 與 active edge Rth 回算的 Q，允許為負值表示實際流向與 nominal direction 相反。",
+  "Delta T": "Edge 兩端 solved temperature difference；不等於 Bottleneck score。",
+  "Active Rth Source": "Solver 實際採用的 Rth 來源。Analytical、FloTHERM、Measurement、Manual 仍各自保存。",
+  "Stale Results": "Topology、Rth、Power 或 Boundary 改變後，舊 solution 失效，必須重新 Solve。",
+  "Energy Balance": "建議 <0.5% 綠色、0.5–2% Warning、>2% Error。",
+  "Rule 4": "不可用某段 ΔT 除以元件總功耗來反推 segment Rth，除非該段實際 Heat Flow Q 已知。"
+}
