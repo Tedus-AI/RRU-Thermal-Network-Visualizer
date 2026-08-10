@@ -1,0 +1,22 @@
+# 01 Project Info — Acceptance Checklist
+
+- [ ] AC-01 New project can be created and saved.
+- [ ] AC-02 Duplicate Project ID blocks save.
+- [ ] AC-03 First save creates Baseline Scenario.
+- [ ] AC-04 Editing fields marks project dirty.
+- [ ] AC-05 Route/project change warns on unsaved data.
+- [ ] AC-06 Overview KPIs are derived from shared stores.
+- [ ] AC-07 Project Health reflects components/network/scenario/solve state.
+- [ ] AC-08 Recommended Next Step updates automatically.
+- [ ] AC-09 Save preserves unknown shared project fields.
+- [ ] AC-10 Archived/locked project supports read-only state.
+- [ ] AC-11 Save & Continue routes to Screen 02.
+- [ ] AC-12 Missing FloTHERM is optional, not blocking.
+- [ ] Loading state exists.
+- [ ] Empty state exists.
+- [ ] Error state exists.
+- [ ] Read-only state exists.
+- [ ] Dirty state exists.
+- [ ] Project ID becomes read-only after first save.
+- [ ] Cooling architecture does not create graph topology.
+- [ ] No thermal solver logic is implemented in this screen.

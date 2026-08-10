@@ -1,0 +1,58 @@
+{
+  "project": {
+    "project_id": "CBNG_FR1_RRU_EVT2",
+    "project_name": "CBNG FR1 RRU EVT2",
+    "customer": "CBNG / Verizon",
+    "owner": "Tedus",
+    "description": "FR1 outdoor RRU thermal network development",
+    "product_type": "RRU",
+    "frequency_range": "FR1",
+    "project_stage": "EVT",
+    "cooling_architecture": "Natural Convection",
+    "enclosure_type": "Outdoor Sealed",
+    "main_heat_rejection": [
+      "Rear Heat Sink"
+    ],
+    "base_architecture": "Small Base + Main Base",
+    "active_scenario_id": "SCN_001",
+    "status": "active",
+    "meta": {
+      "created_at": "2026-08-10T10:00:00+08:00",
+      "updated_at": "2026-08-10T10:00:00+08:00",
+      "schema_version": "1.0"
+    }
+  },
+  "scenario": {
+    "id": "SCN_001",
+    "project_id": "CBNG_FR1_RRU_EVT2",
+    "name": "55C_0mps",
+    "ambient_C": 55,
+    "wind_mps": 0,
+    "solar_W_m2": 0,
+    "power_scale": 1.0,
+    "notes": "Baseline natural convection scenario",
+    "is_default": true
+  },
+  "derived_overview": {
+    "component_count": 18,
+    "heat_source_count": 9,
+    "total_power_W": 412.3,
+    "thermal_node_count": 0,
+    "thermal_edge_count": 0,
+    "scenario_count": 1,
+    "flotherm_mapping_count": 0,
+    "last_solve_status": "NOT_SOLVED"
+  },
+  "project_health": {
+    "project_identity": true,
+    "components": true,
+    "thermal_network": false,
+    "baseline_scenario": true,
+    "flotherm": false,
+    "solved": false
+  },
+  "recommended_next_step": {
+    "screen": "05_Thermal_Path_Builder",
+    "label": "Assign Thermal Architecture"
+  }
+}
