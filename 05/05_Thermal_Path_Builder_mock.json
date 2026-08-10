@@ -1,0 +1,298 @@
+{
+  "project": {
+    "project_id": "CBNG_FR1_RRU_EVT2",
+    "project_name": "CBNG FR1 RRU EVT2",
+    "network_status": "DRAFT",
+    "solver_status": "DIRTY",
+    "screen_03": "DEFERRED"
+  },
+  "builder_summary": {
+    "components_total": 18,
+    "components_modeled": 15,
+    "nodes": 42,
+    "edges": 47,
+    "unconnected_ports": 3,
+    "unresolved_rth": 5,
+    "blocking_errors": 0,
+    "warnings": 8
+  },
+  "components": [
+    {
+      "id": "CMP_FINAL_PA",
+      "name": "Final PA",
+      "category": "RF",
+      "qty": 4,
+      "power_W_each": 52.13,
+      "qty_model": "INDIVIDUAL",
+      "template": "BOTTOM_COOL_COIN",
+      "preferred_base_zone": "RF_LEFT",
+      "status": "READY"
+    },
+    {
+      "id": "CMP_FPGA",
+      "name": "FPGA",
+      "category": "Digital",
+      "qty": 1,
+      "power_W_each": 35.0,
+      "qty_model": "AGGREGATE",
+      "template": "TOP_COOL_LID",
+      "preferred_base_zone": "DIGITAL",
+      "status": "READY"
+    },
+    {
+      "id": "CMP_DDR",
+      "name": "DDR4",
+      "category": "Digital",
+      "qty": 4,
+      "power_W_each": 2.5,
+      "qty_model": "GROUPED",
+      "template": "BOTTOM_COOL_VIA",
+      "preferred_base_zone": "DIGITAL",
+      "status": "WARNING"
+    }
+  ],
+  "shared_structure": {
+    "preset": "FUNCTIONAL_ZONES",
+    "zones": [
+      {
+        "id": "NODE_ZONE_RF_LEFT",
+        "name": "RF Left",
+        "type": "Base Zone"
+      },
+      {
+        "id": "NODE_ZONE_RF_RIGHT",
+        "name": "RF Right",
+        "type": "Base Zone"
+      },
+      {
+        "id": "NODE_ZONE_DIGITAL",
+        "name": "Digital",
+        "type": "Base Zone"
+      },
+      {
+        "id": "NODE_HSK_BASE",
+        "name": "HSK Base",
+        "type": "Heat Sink Base"
+      },
+      {
+        "id": "NODE_FIN_SURFACE",
+        "name": "Fin Surface",
+        "type": "Fin Surface"
+      },
+      {
+        "id": "NODE_AMBIENT_PLACEHOLDER",
+        "name": "Ambient",
+        "type": "Ambient Placeholder"
+      }
+    ]
+  },
+  "sample_nodes": [
+    {
+      "id": "NODE_PA1_JUNCTION",
+      "name": "PA1 Junction",
+      "type": "Junction",
+      "power_W": 52.13,
+      "component_id": "CMP_FINAL_PA",
+      "x": 120,
+      "y": 120
+    },
+    {
+      "id": "NODE_PA1_CASE",
+      "name": "PA1 Case",
+      "type": "Case",
+      "component_id": "CMP_FINAL_PA",
+      "x": 270,
+      "y": 120
+    },
+    {
+      "id": "NODE_PA1_COIN",
+      "name": "PA1 Copper Coin",
+      "type": "Copper Coin",
+      "component_id": "CMP_FINAL_PA",
+      "x": 420,
+      "y": 120
+    },
+    {
+      "id": "NODE_PA1_TIM",
+      "name": "PA1 TIM",
+      "type": "TIM Interface",
+      "component_id": "CMP_FINAL_PA",
+      "x": 570,
+      "y": 120
+    },
+    {
+      "id": "NODE_ZONE_RF_LEFT",
+      "name": "RF Left Base",
+      "type": "Base Zone",
+      "x": 760,
+      "y": 170
+    },
+    {
+      "id": "NODE_FPGA_JUNCTION",
+      "name": "FPGA Junction",
+      "type": "Junction",
+      "power_W": 35.0,
+      "component_id": "CMP_FPGA",
+      "x": 120,
+      "y": 340
+    },
+    {
+      "id": "NODE_FPGA_LID",
+      "name": "FPGA Lid",
+      "type": "Lid",
+      "component_id": "CMP_FPGA",
+      "x": 270,
+      "y": 340
+    },
+    {
+      "id": "NODE_FPGA_TIM",
+      "name": "FPGA TIM",
+      "type": "TIM Interface",
+      "component_id": "CMP_FPGA",
+      "x": 420,
+      "y": 340
+    },
+    {
+      "id": "NODE_ZONE_DIGITAL",
+      "name": "Digital Base",
+      "type": "Base Zone",
+      "x": 760,
+      "y": 340
+    },
+    {
+      "id": "NODE_HSK_BASE",
+      "name": "HSK Base",
+      "type": "Heat Sink Base",
+      "x": 980,
+      "y": 250
+    },
+    {
+      "id": "NODE_FIN_SURFACE",
+      "name": "Fin Surface",
+      "type": "Fin Surface",
+      "x": 1150,
+      "y": 250
+    },
+    {
+      "id": "NODE_AMBIENT_PLACEHOLDER",
+      "name": "Ambient",
+      "type": "Ambient Placeholder",
+      "x": 1330,
+      "y": 250
+    }
+  ],
+  "sample_edges": [
+    {
+      "id": "EDGE_PA1_RJC",
+      "from": "NODE_PA1_JUNCTION",
+      "to": "NODE_PA1_CASE",
+      "type": "Package Rjc",
+      "method": "Package Rjc",
+      "rth_analytical": 0.35,
+      "status": "RESOLVED"
+    },
+    {
+      "id": "EDGE_PA1_COIN",
+      "from": "NODE_PA1_CASE",
+      "to": "NODE_PA1_COIN",
+      "type": "Solid Conduction",
+      "method": "L/kA",
+      "rth_analytical": 0.041,
+      "status": "RESOLVED"
+    },
+    {
+      "id": "EDGE_PA1_TIM",
+      "from": "NODE_PA1_COIN",
+      "to": "NODE_PA1_TIM",
+      "type": "TIM",
+      "method": "TIM t/kA",
+      "rth_analytical": 0.083,
+      "status": "RESOLVED"
+    },
+    {
+      "id": "EDGE_PA1_TO_RF",
+      "from": "NODE_PA1_TIM",
+      "to": "NODE_ZONE_RF_LEFT",
+      "type": "Contact",
+      "method": "Direct Rth",
+      "rth_manual": 0.025,
+      "status": "RESOLVED"
+    },
+    {
+      "id": "EDGE_FPGA_RJC",
+      "from": "NODE_FPGA_JUNCTION",
+      "to": "NODE_FPGA_LID",
+      "type": "Package Rjc",
+      "method": "Package Rjc",
+      "rth_analytical": 0.16,
+      "status": "RESOLVED"
+    },
+    {
+      "id": "EDGE_FPGA_TIM",
+      "from": "NODE_FPGA_LID",
+      "to": "NODE_FPGA_TIM",
+      "type": "TIM",
+      "method": "TIM t/kA",
+      "rth_analytical": 0.079,
+      "status": "RESOLVED"
+    },
+    {
+      "id": "EDGE_FPGA_TO_DIG",
+      "from": "NODE_FPGA_TIM",
+      "to": "NODE_ZONE_DIGITAL",
+      "type": "Contact",
+      "method": "Unresolved",
+      "status": "UNRESOLVED"
+    },
+    {
+      "id": "EDGE_RF_TO_HSK",
+      "from": "NODE_ZONE_RF_LEFT",
+      "to": "NODE_HSK_BASE",
+      "type": "Spreading",
+      "method": "Unresolved",
+      "status": "UNRESOLVED"
+    },
+    {
+      "id": "EDGE_DIG_TO_HSK",
+      "from": "NODE_ZONE_DIGITAL",
+      "to": "NODE_HSK_BASE",
+      "type": "Spreading",
+      "method": "Unresolved",
+      "status": "UNRESOLVED"
+    },
+    {
+      "id": "EDGE_HSK_TO_FIN",
+      "from": "NODE_HSK_BASE",
+      "to": "NODE_FIN_SURFACE",
+      "type": "Solid Conduction",
+      "method": "L/kA",
+      "rth_analytical": 0.025,
+      "status": "RESOLVED"
+    },
+    {
+      "id": "EDGE_FIN_AMB",
+      "from": "NODE_FIN_SURFACE",
+      "to": "NODE_AMBIENT_PLACEHOLDER",
+      "type": "Combined Boundary",
+      "method": "Boundary Derived",
+      "status": "BOUNDARY_REQUIRED"
+    }
+  ],
+  "validation": [
+    {
+      "severity": "WARNING",
+      "code": "BOUNDARY_NOT_CONFIGURED",
+      "message": "Fin Surface → Ambient requires Screen 06 boundary conditions."
+    },
+    {
+      "severity": "WARNING",
+      "code": "UNRESOLVED_RTH",
+      "message": "RF Left Base → HSK Base spreading Rth is unresolved."
+    },
+    {
+      "severity": "WARNING",
+      "code": "UNRESOLVED_RTH",
+      "message": "Digital Base → HSK Base spreading Rth is unresolved."
+    }
+  ]
+}
