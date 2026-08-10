@@ -12,7 +12,7 @@
  */
 
 import { useState } from 'react';
-import { Outlet } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
 import { TopHeader } from './TopHeader';
 import { MainSidebar } from './MainSidebar';
 import { BottomStatusBar } from './BottomStatusBar';
@@ -20,10 +20,12 @@ import { BreadcrumbBar } from './BreadcrumbBar';
 import { ToastViewport } from '@/ui/toast';
 import { UnsavedChangesModal } from '@/project/modals/UnsavedChangesModal';
 import { useShellActions } from './shellActions';
+import { ScreenErrorBoundary } from './ErrorBoundary';
 
 export function AppShell() {
   const [collapsed, setCollapsed] = useState(false);
   const saveHandler = useShellActions((s) => s.saveHandler);
+  const location = useLocation();
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -33,7 +35,10 @@ export function AppShell() {
         <main className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-canvas">
           <BreadcrumbBar />
           <div className="min-h-0 flex-1">
-            <Outlet />
+            {/* A screen crash must never blank the whole app. */}
+            <ScreenErrorBoundary resetKey={location.pathname}>
+              <Outlet />
+            </ScreenErrorBoundary>
           </div>
         </main>
       </div>
