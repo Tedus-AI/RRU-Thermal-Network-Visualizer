@@ -1,0 +1,128 @@
+/**
+ * Section C — Default Scenario (01 §8).
+ *
+ * Screen 01 only authors the Baseline scenario. The full scenario matrix
+ * (55°C / Pi mode / Fan off …) belongs to Screen 06 (00 §34).
+ */
+
+import { Field, NumberInput, SectionCard, TextInput } from '@/ui/primitives';
+import { SCENARIO_LIMITS, type Scenario } from '@/domain/project';
+import { useScenarioStore } from '@/data/scenarioStore';
+import { useProjectStore } from '@/data/projectStore';
+import { useFormTouch, useVisibleError } from './formTouch';
+
+export function BaselineScenarioForm({
+  scenario,
+  errors,
+  readOnly,
+}: {
+  scenario: Scenario | null;
+  errors: Record<string, string>;
+  readOnly: boolean;
+}) {
+  const updateScenario = useScenarioStore((s) => s.updateScenario);
+  const markDirty = useProjectStore((s) => s.markDirty);
+  const touch = useFormTouch((s) => s.touch);
+  const visibleError = useVisibleError(errors);
+
+  if (!scenario) {
+    return (
+      <SectionCard step={3} title="Default Scenario">
+        <p className="text-[13px] text-ink-500">
+          A Baseline scenario will be created automatically when this project is first saved.
+        </p>
+      </SectionCard>
+    );
+  }
+
+  const patch = (values: Partial<Scenario>) => {
+    for (const field of Object.keys(values)) touch(field === 'name' ? 'scenario_name' : field);
+    updateScenario(scenario.id, values);
+    markDirty();
+  };
+
+  // Empty input must not silently become 0 — keep NaN so validation can report it.
+  const numeric = (value: string) => (value === '' ? Number.NaN : Number(value));
+
+  return (
+    <SectionCard step={3} title="Default Scenario" subtitle={scenario.id}>
+      <div className="grid grid-cols-2 gap-x-6 gap-y-4 lg:grid-cols-5">
+        <Field label="Scenario Name" htmlFor="scenario_name" error={visibleError('scenario_name')}>
+          <TextInput
+            id="scenario_name"
+            value={scenario.name}
+            disabled={readOnly}
+            invalid={Boolean(visibleError('scenario_name'))}
+            placeholder="55C_0mps"
+            onChange={(event) => patch({ name: event.target.value })}
+          />
+        </Field>
+
+        <Field
+          label="Ambient Temperature"
+          htmlFor="ambient_C"
+          suffix="°C"
+          error={visibleError('ambient_C')}
+        >
+          <NumberInput
+            id="ambient_C"
+            value={Number.isNaN(scenario.ambient_C) ? '' : scenario.ambient_C}
+            min={SCENARIO_LIMITS.ambient_C.min}
+            max={SCENARIO_LIMITS.ambient_C.max}
+            step={0.1}
+            disabled={readOnly}
+            invalid={Boolean(visibleError('ambient_C'))}
+            className="pr-10"
+            onChange={(event) => patch({ ambient_C: numeric(event.target.value) })}
+          />
+        </Field>
+
+        <Field label="Wind Speed" htmlFor="wind_mps" suffix="m/s" error={visibleError('wind_mps')}>
+          <NumberInput
+            id="wind_mps"
+            value={Number.isNaN(scenario.wind_mps) ? '' : scenario.wind_mps}
+            min={SCENARIO_LIMITS.wind_mps.min}
+            max={SCENARIO_LIMITS.wind_mps.max}
+            step={0.1}
+            disabled={readOnly}
+            invalid={Boolean(visibleError('wind_mps'))}
+            className="pr-12"
+            onChange={(event) => patch({ wind_mps: numeric(event.target.value) })}
+          />
+        </Field>
+
+        <Field label="Solar Load" htmlFor="solar_W_m2" suffix="W/m²" error={visibleError('solar_W_m2')}>
+          <NumberInput
+            id="solar_W_m2"
+            value={Number.isNaN(scenario.solar_W_m2) ? '' : scenario.solar_W_m2}
+            min={SCENARIO_LIMITS.solar_W_m2.min}
+            max={SCENARIO_LIMITS.solar_W_m2.max}
+            step={10}
+            disabled={readOnly}
+            invalid={Boolean(visibleError('solar_W_m2'))}
+            className="pr-14"
+            onChange={(event) => patch({ solar_W_m2: numeric(event.target.value) })}
+          />
+        </Field>
+
+        <Field
+          label="Power Scale"
+          htmlFor="power_scale"
+          error={visibleError('power_scale')}
+          tip="Multiplier applied to component power for this scenario."
+        >
+          <NumberInput
+            id="power_scale"
+            value={Number.isNaN(scenario.power_scale) ? '' : scenario.power_scale}
+            min={SCENARIO_LIMITS.power_scale.min}
+            max={SCENARIO_LIMITS.power_scale.max}
+            step={0.05}
+            disabled={readOnly}
+            invalid={Boolean(visibleError('power_scale'))}
+            onChange={(event) => patch({ power_scale: numeric(event.target.value) })}
+          />
+        </Field>
+      </div>
+    </SectionCard>
+  );
+}
