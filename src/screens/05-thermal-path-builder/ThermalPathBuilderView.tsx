@@ -217,8 +217,8 @@ export function ThermalPathBuilderView() {
   const [step, setStep] = useState<BuilderStep>('components');
   const [openPanel, setOpenPanel] = useState<Record<string, boolean>>({
     components: true,
-    templates: true,
-    structure: true,
+    templates: false,
+    structure: false,
   });
   const [prefs, setPrefs] = useState<Record<string, BuilderPref>>({});
   const [selectedComponentId, setSelectedComponentId] = useState<string | null>(null);
@@ -255,6 +255,17 @@ export function ThermalPathBuilderView() {
     useComponentStore.getState().loadFor(projectId);
     useNetworkStore.getState().loadFor(projectId);
   }, [projectId]);
+
+  // One section at a time, matching the step. Three open panels in a 300 px
+  // column is what made this side of the screen feel cramped; the engineer can
+  // still open any of them by hand afterwards.
+  useEffect(() => {
+    setOpenPanel({
+      components: step === 'components' || step === 'connections' || step === 'validate',
+      templates: step === 'templates',
+      structure: step === 'structure',
+    });
+  }, [step]);
 
   // Screen 04's preferences seed the builder; the engineer can override them.
   useEffect(() => {
@@ -811,9 +822,10 @@ export function ThermalPathBuilderView() {
               prefs={prefs}
               modeledIds={modeledIds}
               selectedId={selectedComponentId}
-              readOnly={readOnly}
-              onSelect={setSelectedComponentId}
-              onPrefChange={handlePrefChange}
+              onSelect={(componentId) => {
+                setSelectedComponentId(componentId);
+                setOpenPanel((panels) => ({ ...panels, templates: true }));
+              }}
             />
           </Collapsible>
 
@@ -824,16 +836,13 @@ export function ThermalPathBuilderView() {
             onToggle={() => setOpenPanel({ ...openPanel, templates: !openPanel.templates })}
           >
             <TemplatePalette
-              selectedTemplateId={selectedPref?.templateId ?? 'BOTTOM_COOL_COIN'}
               component={selectedComponent}
+              pref={selectedPref}
               hasSubgraph={Boolean(selectedComponent && modeledIds.has(selectedComponent.id))}
               readOnly={readOnly}
-              onSelectTemplate={(templateId) => {
-                if (!selectedComponent || !selectedPref) return;
-                setPrefs({
-                  ...prefs,
-                  [selectedComponent.id]: { ...selectedPref, templateId },
-                });
+              onPrefChange={(next) => {
+                if (!selectedComponent) return;
+                handlePrefChange(selectedComponent.id, next);
               }}
               onApply={handleApplyTemplate}
             />

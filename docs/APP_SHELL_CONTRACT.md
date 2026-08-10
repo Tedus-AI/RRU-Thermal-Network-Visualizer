@@ -72,6 +72,27 @@ AppShell
 
 English first, from Screen 02 onward.
 
+**Every piece of UI text is bilingual.** English and Traditional Chinese sit side
+by side wherever both fit. Where they do not, English stays visible and the
+Chinese moves onto hover and keyboard focus — it is relocated, never dropped.
+
+Use the shared helpers rather than hand-writing `"English / 中文"`:
+
+| Situation | Helper |
+| --- | --- |
+| Any text, inline or tooltip | `<Bi en="Add Zone" zh="新增區域" inline />` — omit `inline` for the tooltip form |
+| Form field label | `<FieldLabel label="Zone Name" zh="區域名稱" tooltip="…" />` |
+| Table column header | `<ColumnLabel label="Power" zh="每顆功耗" unit="W" />` |
+| Longer explanation on static text | `<BilingualTooltip zh="…">…</BilingualTooltip>` |
+| Buttons, icon buttons, selects | `title={biTitle('Apply', '套用')}` plus a matching `aria-label` |
+
+A control already owns focus and a click target, so a focusable tooltip must not
+be nested inside it: interactive elements carry the Chinese on the native
+tooltip and the accessible name instead.
+
+A native `<select>` truncates rather than wraps. When its options are long, the
+option text is English and the Chinese goes on the control's `title`.
+
 - Space permitting, show both: `Import Source / 匯入來源`.
 - Where space is tight, show English and expose the Traditional Chinese through an
   accessible tooltip — use `FieldLabel` / `BilingualTooltip`

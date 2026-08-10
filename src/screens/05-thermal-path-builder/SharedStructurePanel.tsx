@@ -10,7 +10,7 @@ import { useState } from 'react';
 import { Crosshair, Plus, Waypoints } from 'lucide-react';
 
 import { Badge, Button, NumberInput, Select, TextInput } from '@/ui/primitives';
-import { BilingualTooltip, FieldLabel } from '@/ui/FieldLabel';
+import { Bi, BilingualTooltip, FieldLabel, biTitle } from '@/ui/FieldLabel';
 import { TOOLTIPS_ZH } from './tooltips';
 
 import type { Confidence, NodeType, ThermalNetwork } from '@/thermal/types';
@@ -98,40 +98,44 @@ export function SharedStructurePanel({
 
   return (
     <div className="flex flex-col gap-2.5">
-      <div className="flex items-end gap-2">
-        <div className="min-w-0 flex-1">
-          <FieldLabel
-            label="Preset"
-            zh="預設結構"
-            htmlFor="structure-preset"
-            tooltip={TOOLTIPS_ZH.sharedStructure}
-          />
+      <div>
+        <FieldLabel
+          label="Preset"
+          zh="預設結構"
+          htmlFor="structure-preset"
+          tooltip={TOOLTIPS_ZH.sharedStructure}
+        />
+        <div className="mt-1 flex gap-2">
           <Select
             id="structure-preset"
-            className="mt-1 h-8 !text-[12px]"
+            className="h-8 min-w-0 flex-1 !text-[12px]"
             value={preset}
             disabled={readOnly}
+            // A native select truncates rather than wraps, so the option text is
+            // English and the Chinese rides on the control's tooltip.
+            title={biTitle(PRESET_LABELS[preset].label, PRESET_LABELS[preset].zh)}
             items={STRUCTURE_PRESETS.map((entry) => ({
               value: entry,
-              label: `${PRESET_LABELS[entry].label} / ${PRESET_LABELS[entry].zh}`,
+              label: PRESET_LABELS[entry].label,
             }))}
             onChange={(event) => onPresetChange(event.target.value as StructurePreset)}
           />
+          <Button
+            className="h-8 shrink-0"
+            disabled={readOnly || preset === 'CUSTOM'}
+            title={biTitle('Apply preset', '套用預設結構')}
+            onClick={onApplyPreset}
+            icon={<Waypoints size={13} />}
+          >
+            Apply
+          </Button>
         </div>
-        <Button
-          className="h-8"
-          disabled={readOnly || preset === 'CUSTOM'}
-          onClick={onApplyPreset}
-          icon={<Waypoints size={13} />}
-        >
-          Apply / 套用
-        </Button>
       </div>
 
       <ul className="max-h-40 overflow-auto rounded-md border border-line">
         {structureNodes.length === 0 && (
           <li className="px-2.5 py-3 text-center text-[11px] text-ink-400">
-            No shared structure yet. / 尚未建立共用結構。
+            <Bi en="No shared structure yet." zh="尚未建立共用結構。" inline />
           </li>
         )}
         {structureNodes.map((node) => (
@@ -149,9 +153,10 @@ export function SharedStructurePanel({
             )}
             <button
               type="button"
-              aria-label={`Center ${node.name} on the canvas`}
+              title={biTitle(`Center "${node.name}"`, '在畫布上置中')}
+              aria-label={biTitle(`Center "${node.name}" on the canvas`, '在畫布上置中')}
               onClick={() => onFocusNode(node.id)}
-              className="text-ink-400 hover:text-accent-600"
+              className="shrink-0 text-ink-400 hover:text-accent-600"
             >
               <Crosshair size={13} />
             </button>
@@ -164,22 +169,24 @@ export function SharedStructurePanel({
           className="h-8 flex-1"
           disabled={readOnly}
           icon={<Plus size={13} />}
+          title={biTitle('Add Zone', '新增基座區域')}
           onClick={() => setZoneOpen((open) => !open)}
         >
-          Add Zone / 新增區域
+          Add Zone
         </Button>
         <Button
           className="h-8 flex-1"
           disabled={readOnly}
           icon={<Plus size={13} />}
+          title={biTitle('Add Spreading Edge', TOOLTIPS_ZH.spreadingResistance)}
           onClick={() => setSpreadOpen((open) => !open)}
         >
-          Spreading Edge / 擴散熱阻
+          Spreading
         </Button>
       </div>
 
       {zoneOpen && (
-        <div className="grid gap-2 rounded-md border border-line bg-surface-muted p-2.5 sm:grid-cols-2">
+        <div className="grid gap-2 rounded-md border border-line bg-surface-muted p-2.5">
           <div>
             <FieldLabel label="Zone Name" zh="區域名稱" htmlFor="zone-name" required />
             <TextInput
@@ -221,25 +228,26 @@ export function SharedStructurePanel({
               onChange={(event) => setZone({ ...zone, notes: event.target.value })}
             />
           </div>
-          <div className="sm:col-span-2">
+          <div>
             <Button
               variant="primary"
               className="h-8"
               disabled={!zone.name.trim()}
+              title={biTitle('Create Zone', '建立區域')}
               onClick={() => {
                 onAddZone(zone);
                 setZone({ name: '', type: 'base_zone', linkedHsk: '', notes: '' });
                 setZoneOpen(false);
               }}
             >
-              Create Zone / 建立區域
+              Create Zone
             </Button>
           </div>
         </div>
       )}
 
       {spreadOpen && (
-        <div className="grid gap-2 rounded-md border border-line bg-surface-muted p-2.5 sm:grid-cols-2">
+        <div className="grid gap-2 rounded-md border border-line bg-surface-muted p-2.5">
           <div>
             <FieldLabel label="From Zone" zh="起始區域" htmlFor="spread-from" required />
             <Select
@@ -317,11 +325,12 @@ export function SharedStructurePanel({
               }
             />
           </div>
-          <div className="sm:col-span-2">
+          <div>
             <Button
               variant="primary"
               className="h-8"
               disabled={!spreading.from || !spreading.to || spreading.from === spreading.to}
+              title={biTitle('Create Edge', '建立連線')}
               onClick={() => {
                 onAddSpreading(spreading);
                 setSpreading({
@@ -335,7 +344,7 @@ export function SharedStructurePanel({
                 setSpreadOpen(false);
               }}
             >
-              Create Edge / 建立連線
+              Create Edge
             </Button>
             <p className="mt-1 text-[10px] text-ink-400">
               A zone-to-zone coupling cycle is legal physics and is not treated as an error

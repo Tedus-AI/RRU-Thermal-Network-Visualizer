@@ -9,6 +9,51 @@
 import { useId, useState, type ReactNode } from 'react';
 import { Info } from 'lucide-react';
 
+/**
+ * Any piece of UI text, bilingual.
+ *
+ * The project-wide rule: English and Traditional Chinese side by side wherever
+ * they fit; where they do not, English stays and the Chinese moves onto hover /
+ * keyboard focus. Nothing is ever dropped — it is only relocated.
+ *
+ *   <Bi en="Add Zone" zh="新增區域" inline />   → "Add Zone / 新增區域"
+ *   <Bi en="Add Zone" zh="新增區域" />          → "Add Zone" + tooltip
+ */
+export function Bi({
+  en,
+  zh,
+  inline = false,
+  className = '',
+}: {
+  en: string;
+  zh: string;
+  /** true when there is room for both languages on the same line. */
+  inline?: boolean;
+  className?: string;
+}) {
+  if (inline) {
+    return (
+      <span className={className}>
+        {en} <span className="font-normal text-ink-400">/ {zh}</span>
+      </span>
+    );
+  }
+  return (
+    <BilingualTooltip zh={zh}>
+      <span className={className}>{en}</span>
+    </BilingualTooltip>
+  );
+}
+
+/**
+ * The same rule for interactive controls. A button already owns focus and a
+ * click target, so nesting a focusable tooltip inside it would be wrong — the
+ * Chinese rides on the native tooltip and the accessible name instead.
+ */
+export function biTitle(en: string, zh: string): string {
+  return `${en} / ${zh}`;
+}
+
 export function BilingualTooltip({
   zh,
   children,
