@@ -64,6 +64,10 @@ AppShell
    Source → Mapping → Validate → Duplicates → Apply
    ```
 
+5. A readiness KPI row goes in `ScreenWorkspace`'s `metrics` slot, which renders it
+   between the page title and the stepper — the order every mockup from 05 onward
+   uses. The cards themselves are screen-specific; only their placement is shell.
+
 ## Language rule (from 02 §3)
 
 English first, from Screen 02 onward.

@@ -1,18 +1,23 @@
 /**
  * Step 5 — Validation (05 §33, §34, §35).
  *
+ * Rendered as a floating card over the canvas, as in `05.png`: the graph is the
+ * subject of this screen, so the issue list overlays a corner of it and can be
+ * collapsed, rather than taking a full-width block of the page.
+ *
  * ERROR blocks Continue; WARNING and INFO do not. A coupling cycle is legal
  * physics and never appears here as an error (05 §34).
  */
 
-import { AlertTriangle, CircleAlert, Info } from 'lucide-react';
+import { useState } from 'react';
+import { AlertTriangle, ChevronDown, CircleAlert, Info } from 'lucide-react';
 
 import type { GraphIssue, GraphValidationResult } from '@/thermal/graph/graphValidation';
 
 const ICONS = {
-  error: <CircleAlert size={13} className="shrink-0 text-danger-600" />,
-  warning: <AlertTriangle size={13} className="shrink-0 text-warn-600" />,
-  info: <Info size={13} className="shrink-0 text-accent-600" />,
+  error: <CircleAlert size={12} className="mt-px shrink-0 text-danger-600" />,
+  warning: <AlertTriangle size={12} className="mt-px shrink-0 text-warn-600" />,
+  info: <Info size={12} className="mt-px shrink-0 text-accent-600" />,
 };
 
 const ROW_STYLES = {
@@ -21,6 +26,9 @@ const ROW_STYLES = {
   info: 'border-line bg-surface-muted',
 };
 
+/** Errors first, then warnings, then info — the blocking work comes first. */
+const ORDER = { error: 0, warning: 1, info: 2 } as const;
+
 export function NetworkValidationPanel({
   validation,
   onFocus,
@@ -28,58 +36,67 @@ export function NetworkValidationPanel({
   validation: GraphValidationResult | null;
   onFocus: (issue: GraphIssue) => void;
 }) {
+  const [open, setOpen] = useState(true);
   if (!validation) return null;
 
-  const total = validation.issues.length;
+  const issues = [...validation.issues].sort(
+    (a, b) => ORDER[a.severity] - ORDER[b.severity],
+  );
 
   return (
-    <section className="rounded-lg border border-line bg-surface">
-      <header className="flex items-center gap-2 border-b border-line px-3.5 py-2.5">
-        <h3 className="text-[13px] font-bold text-ink-700">Validation / 驗證提示</h3>
-        <span className="ml-auto rounded bg-surface-muted px-2 py-0.5 text-[11px] font-semibold text-ink-500">
-          {total} issue{total === 1 ? '' : 's'}
+    <div className="absolute right-3 bottom-3 z-10 w-[22rem] max-w-[calc(100%-1.5rem)] rounded-md border border-line bg-surface/95 shadow-md">
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        aria-expanded={open}
+        className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left"
+      >
+        <span className="text-[11px] font-bold text-ink-700">Validation / 驗證提示</span>
+        <span className="ml-auto flex items-center gap-2 text-[10px] font-bold">
+          <span className="flex items-center gap-1 text-danger-600">
+            {ICONS.error} {validation.errors}
+          </span>
+          <span className="flex items-center gap-1 text-warn-600">
+            {ICONS.warning} {validation.warnings}
+          </span>
+          <span className="flex items-center gap-1 text-accent-600">
+            {ICONS.info} {validation.info}
+          </span>
         </span>
-      </header>
+        <ChevronDown size={13} className={`text-ink-400 ${open ? '' : '-rotate-90'}`} />
+      </button>
 
-      <div className="max-h-56 overflow-auto p-2.5">
-        {total === 0 && (
-          <p className="py-4 text-center text-[12px] text-ok-600">
-            No issues found. The topology is ready for Screen 06. / 未發現問題，可進入邊界條件設定。
-          </p>
-        )}
-
-        <ul className="flex flex-col gap-1.5">
-          {validation.issues.map((issue, index) => (
-            <li key={`${issue.code}-${issue.nodeId ?? issue.edgeId ?? index}`}>
-              <button
-                type="button"
-                onClick={() => onFocus(issue)}
-                className={`flex w-full items-start gap-2 rounded-md border px-2.5 py-1.5 text-left ${ROW_STYLES[issue.severity]}`}
-              >
-                {ICONS[issue.severity]}
-                <span className="min-w-0">
-                  <span className="block text-[11px] font-semibold text-ink-900">
-                    {issue.message}
-                  </span>
-                  <span className="block text-[10px] text-ink-500">{issue.messageZh}</span>
-                </span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      </div>
-
-      <footer className="flex items-center gap-3 border-t border-line px-3.5 py-2 text-[11px] font-semibold">
-        <span className="flex items-center gap-1 text-danger-600">
-          {ICONS.error} {validation.errors} Blocking Errors
-        </span>
-        <span className="flex items-center gap-1 text-warn-600">
-          {ICONS.warning} {validation.warnings} Warnings
-        </span>
-        <span className="flex items-center gap-1 text-accent-600">
-          {ICONS.info} {validation.info} Info
-        </span>
-      </footer>
-    </section>
+      {open && (
+        <div className="max-h-[8.5rem] overflow-auto border-t border-line px-2 py-1.5">
+          {issues.length === 0 ? (
+            <p className="py-3 text-center text-[11px] text-ok-600">
+              No issues found. Ready for Screen 06. / 未發現問題，可進入邊界條件設定。
+            </p>
+          ) : (
+            <ul className="flex flex-col gap-1">
+              {issues.map((issue, index) => (
+                <li key={`${issue.code}-${issue.nodeId ?? issue.edgeId ?? index}`}>
+                  <button
+                    type="button"
+                    onClick={() => onFocus(issue)}
+                    className={`flex w-full items-start gap-1.5 rounded border px-2 py-1 text-left ${ROW_STYLES[issue.severity]}`}
+                  >
+                    {ICONS[issue.severity]}
+                    <span className="min-w-0">
+                      <span className="block text-[10px] leading-snug font-semibold text-ink-900">
+                        {issue.message}
+                      </span>
+                      <span className="block text-[9px] leading-snug text-ink-500">
+                        {issue.messageZh}
+                      </span>
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </div>
   );
 }

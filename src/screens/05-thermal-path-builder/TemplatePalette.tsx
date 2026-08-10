@@ -171,9 +171,9 @@ export function TemplatePalette({
             variant="primary"
             disabled={readOnly || !component}
             onClick={onApply}
-            className="h-8"
+            className="h-8 whitespace-nowrap"
           >
-            Apply Template / 套用模板
+            Apply / 套用模板
           </Button>
           {hasSubgraph && <Badge tone="warn">Existing subgraph / 已有子圖</Badge>}
         </div>
