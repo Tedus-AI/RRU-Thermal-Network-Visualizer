@@ -1,0 +1,180 @@
+{
+  "project": {
+    "project_id": "CBNG_FR1_RRU_EVT2",
+    "project_name": "CBNG FR1 RRU EVT2",
+    "active_scenario_id": "SCN_001"
+  },
+  "development_status": {
+    "screen_03": "DEFERRED",
+    "reason": "FloTHERM export schema not yet validated",
+    "required_compatibility": [
+      "externalMappings hooks",
+      "multi-source Node temperature results",
+      "multi-source Edge Rth results",
+      "result provenance"
+    ]
+  },
+  "summary": {
+    "component_count": 18,
+    "heat_source_count": 15,
+    "total_power_W": 412.3,
+    "ready": 13,
+    "warning": 4,
+    "error": 1
+  },
+  "components": [
+    {
+      "id": "CMP_FINAL_PA",
+      "name": "Final PA",
+      "category": "RF",
+      "enabled": true,
+      "qty": 4,
+      "powerW": {
+        "value": 52.13,
+        "source": "ExistingProject",
+        "confidence": "high"
+      },
+      "thermalSpec": {
+        "limitType": "Tj",
+        "limitC": {
+          "value": 180,
+          "source": "Datasheet",
+          "confidence": "high"
+        },
+        "rjcCPerW": {
+          "value": 0.35,
+          "source": "Datasheet",
+          "confidence": "high"
+        },
+        "packageType": "QFN",
+        "geometry": {
+          "padLmm": 20,
+          "padWmm": 10,
+          "contactLmm": 20,
+          "contactWmm": 10
+        },
+        "boardPath": {
+          "type": "Copper Coin",
+          "parameters": {
+            "coinLmm": 55,
+            "coinWmm": 35,
+            "coinThicknessMm": 2.5
+          }
+        },
+        "tim": {
+          "type": "Grease",
+          "inheritance": "project"
+        }
+      },
+      "architecturePrep": {
+        "templatePreference": "BOTTOM_COOL_COIN",
+        "preferredBaseZone": "RF_LEFT",
+        "qtyModelPreference": "INDIVIDUAL"
+      },
+      "externalMappings": {
+        "flotherm": {
+          "objectAliases": [],
+          "mappingStatus": "unmapped"
+        }
+      },
+      "status": "READY",
+      "completeness": "9/9"
+    },
+    {
+      "id": "CMP_FPGA",
+      "name": "FPGA",
+      "category": "Digital",
+      "enabled": true,
+      "qty": 1,
+      "powerW": {
+        "value": 35,
+        "source": "ExistingProject",
+        "confidence": "high"
+      },
+      "thermalSpec": {
+        "limitType": "Tj",
+        "limitC": {
+          "value": 110,
+          "source": "Datasheet",
+          "confidence": "high"
+        },
+        "rjcCPerW": {
+          "value": 0.16,
+          "source": "Datasheet",
+          "confidence": "high"
+        },
+        "packageType": "BGA",
+        "boardPath": {
+          "type": "Thermal Via",
+          "parameters": {
+            "pcbThicknessMm": 2.2,
+            "effectiveK": 30,
+            "viaEfficiency": 0.9
+          }
+        },
+        "tim": {
+          "type": "Putty",
+          "inheritance": "project"
+        }
+      },
+      "architecturePrep": {
+        "templatePreference": "TOP_COOL_LID",
+        "preferredBaseZone": "DIGITAL",
+        "qtyModelPreference": "AGGREGATE"
+      },
+      "externalMappings": {
+        "flotherm": {
+          "objectAliases": [
+            "Digital_Board/FPGA/Package"
+          ],
+          "mappingStatus": "partial"
+        }
+      },
+      "status": "READY",
+      "completeness": "8/9"
+    },
+    {
+      "id": "CMP_DDR",
+      "name": "DDR4",
+      "category": "Digital",
+      "enabled": true,
+      "qty": 4,
+      "powerW": {
+        "value": 2.5,
+        "source": "ExistingProject",
+        "confidence": "medium"
+      },
+      "thermalSpec": {
+        "limitType": "Tc",
+        "limitC": {
+          "value": 95,
+          "source": "Datasheet",
+          "confidence": "high"
+        },
+        "rjcCPerW": null,
+        "packageType": "BGA",
+        "boardPath": {
+          "type": "PCB Only",
+          "parameters": {}
+        },
+        "tim": {
+          "type": "None",
+          "inheritance": "component"
+        }
+      },
+      "architecturePrep": {
+        "templatePreference": "UNASSIGNED",
+        "preferredBaseZone": "DIGITAL",
+        "qtyModelPreference": "GROUPED"
+      },
+      "externalMappings": {
+        "flotherm": {
+          "objectAliases": [],
+          "mappingStatus": "unmapped"
+        }
+      },
+      "status": "WARNING",
+      "completeness": "6/9"
+    }
+  ]
+}

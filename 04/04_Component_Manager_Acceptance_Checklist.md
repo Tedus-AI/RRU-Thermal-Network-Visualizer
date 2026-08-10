@@ -1,0 +1,28 @@
+# 04 Component Manager — Acceptance Checklist
+
+- [ ] All/Category tabs work.
+- [ ] Search/filter work.
+- [ ] Inline edits work.
+- [ ] Inspector edits Thermal Spec/Geometry/Architecture Prep.
+- [ ] Limit Type supports Tj/Tc/Ts/Custom/Unknown.
+- [ ] Unknown Rjc remains null/N/A, not zero.
+- [ ] Project Default vs Component Override is visible.
+- [ ] Thermal completeness updates.
+- [ ] Add/Duplicate/Disable/Delete/Bulk Edit work.
+- [ ] Save to Library excludes project-specific graph/FloTHERM/solver data.
+- [ ] Template/Base-zone/Qty preferences do not create Nodes/Edges.
+- [ ] Provenance is traceable.
+- [ ] Legacy unknown fields are preserved.
+- [ ] `externalMappings.flotherm` hook exists.
+- [ ] No FloTHERM parser exists yet.
+- [ ] No FloTHERM CSV headers are hard-coded.
+- [ ] `ResultValue<T>` supports source/scenario/reference/confidence.
+- [ ] Node types reserve analytical/flotherm/measurement temperatures.
+- [ ] Edge types reserve analytical/flotherm/measurement/manual Rth.
+- [ ] External results do not overwrite analytical values.
+- [ ] Thermal changes mark solver DIRTY / network review as appropriate.
+- [ ] Total Power is never Edge Q.
+- [ ] Fixed shared App Shell is used.
+- [ ] English-primary + zh-TW tooltip/bilingual support.
+- [ ] Empty/loading/error/read-only/dirty states exist.
+- [ ] Save & Continue routes to Screen 05.

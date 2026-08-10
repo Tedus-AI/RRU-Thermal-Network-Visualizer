@@ -1,0 +1,12 @@
+{
+  "Rjc": "接面到外殼熱阻；若封裝模型適用，後續可成為 package thermal edge。",
+  "Limit Type": "指定 thermal limit 是 Tj、Tc、Ts 或自訂參考溫度。",
+  "Thermal Profile": "供 Screen 05 建立熱網路使用的準備資料；本頁不建立 Node/Edge。",
+  "Preferred Base Zone": "Network Builder 的區域提示，不等於已建立 Base thermal node。",
+  "Qty Modeling": "多顆同型元件在 Screen 05 中偏好的 Aggregate / Individual / Grouped 表示方式。",
+  "External Mapping": "預留給 FloTHERM 等外部模擬物件的 mapping；03 目前延後，本頁不解析 FloTHERM 格式。",
+  "Total Power": "Qty × Power 的元件功耗摘要，不是 Thermal Edge 的 Heat Flow Q。",
+  "Project Default": "此元件繼承 Project 共用材料或 thermal parameter。",
+  "Component Override": "此元件改用自己的 thermal parameter。",
+  "Architecture Template Preference": "只保存建模偏好；真正 Thermal Nodes / Edges 由 Screen 05 建立。"
+}
