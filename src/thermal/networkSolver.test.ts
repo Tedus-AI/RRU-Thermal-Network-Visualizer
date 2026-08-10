@@ -39,8 +39,12 @@ function network(nodes: ThermalNode[], edges: ThermalEdge[]): ThermalNetwork {
     project_id: 'TEST',
     network_name: 'test',
     mode: 'analytical',
+    status: 'DRAFT',
     nodes: Object.fromEntries(nodes.map((n) => [n.id, n])),
     edges: Object.fromEntries(edges.map((e) => [e.id, e])),
+    templates: {},
+    zones: {},
+    layout: { mode: 'Auto', positions: {} },
     flotherm_mappings: {},
     solver_settings: { ...DEFAULT_SOLVER_SETTINGS },
   };

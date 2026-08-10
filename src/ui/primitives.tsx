@@ -230,22 +230,28 @@ export function NumberInput({
 
 export function Select({
   options,
+  items,
   invalid,
   className = '',
   ...props
 }: React.SelectHTMLAttributes<HTMLSelectElement> & {
-  options: readonly string[];
+  /** Options whose stored value and visible label are the same. */
+  options?: readonly string[];
+  /** Options whose stored value differs from the label, e.g. an enum key. */
+  items?: ReadonlyArray<{ value: string; label: string }>;
   invalid?: boolean;
 }) {
+  const entries = items ?? (options ?? []).map((option) => ({ value: option, label: option }));
+
   return (
     <select
       {...props}
       aria-invalid={invalid || undefined}
       className={`${CONTROL_BASE} h-9 appearance-none bg-[url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 12 12"><path d="M2 4.5L6 8.5L10 4.5" stroke="%235c6981" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>')] bg-[right_0.75rem_center] bg-no-repeat pr-8 ${invalid ? 'border-danger-500' : 'border-line-strong'} ${className}`}
     >
-      {options.map((option) => (
-        <option key={option} value={option}>
-          {option}
+      {entries.map((entry) => (
+        <option key={entry.value} value={entry.value}>
+          {entry.label}
         </option>
       ))}
     </select>
