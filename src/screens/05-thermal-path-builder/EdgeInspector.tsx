@@ -100,6 +100,7 @@ export function EdgeInspector({
   edge,
   network,
   readOnly,
+  readiness,
   onPatch,
   onDelete,
   onReverse,
@@ -107,6 +108,8 @@ export function EdgeInspector({
   edge: ThermalEdge;
   network: ThermalNetwork;
   readOnly: boolean;
+  /** Whole-network validation counts, shown as the Readiness footer (05.png). */
+  readiness: { errors: number; warnings: number; info: number };
   onPatch: (patch: Partial<ThermalEdge>) => void;
   onDelete: () => void;
   onReverse: () => void;
@@ -170,12 +173,12 @@ export function EdgeInspector({
             <Row label="Method" zh="方法">
               {METHODS.find((method) => method.value === edge.method)?.label ?? edge.method}
             </Row>
-            <Row label="Active Rth" zh="使用中熱阻">
+            <Row label="Active Rth Source" zh="使用中熱阻來源">
               {R != null ? (
-                `${R.toFixed(4)} °C/W`
+                `${edge.rth.active_source} · ${R.toFixed(4)} °C/W`
               ) : (
                 <BilingualTooltip zh={TOOLTIPS_ZH.unresolvedRth}>
-                  <span className="text-warn-600">N/A</span>
+                  <span className="text-warn-600">Unresolved</span>
                 </BilingualTooltip>
               )}
             </Row>
@@ -199,6 +202,78 @@ export function EdgeInspector({
               Heat flow Q and ΔT are not shown here: Screen 05 has no boundary conditions, so no
               solve has run (05 §22). / 05 尚未有邊界條件，因此不顯示 Q 與 ΔT。
             </p>
+
+            {(edge.method === 'convection_hA' || edge.method === 'radiation_hA') && (
+              <section className="mt-3 rounded-md border border-line bg-surface-muted p-2.5">
+                <p className="flex items-center gap-1 text-[11px] font-bold text-ink-700">
+                  Boundary Parameters
+                  <span className="font-semibold text-ink-400">(Defined in Screen 06)</span>
+                </p>
+                <Row label="Convection h" zh="對流係數">
+                  <span className="text-ink-400">— W/m²·K</span>
+                </Row>
+                <Row label="Radiation ε" zh="輻射率">
+                  <span className="text-ink-400">—</span>
+                </Row>
+                <Row label="Ambient Temperature" zh="環境溫度">
+                  <span className="text-ink-400">— °C</span>
+                </Row>
+                <p className="mt-1.5 text-[10px] leading-relaxed text-ink-400">
+                  Parameters must be configured in Screen 06 (Boundary Conditions). /
+                  須於 Screen 06 邊界條件設定。
+                </p>
+              </section>
+            )}
+
+            <section className="mt-3 rounded-md border border-line p-2.5">
+              <p className="text-[11px] font-bold text-ink-700">
+                Source <span className="font-semibold text-ink-400">/ 來源 (Provenance)</span>
+              </p>
+              <Row label="Analytical (Rth / Model)">
+                {edge.rth.analytical != null ? (
+                  `${edge.rth.analytical.toFixed(4)} °C/W`
+                ) : (
+                  <span className="text-ink-400">Not Defined</span>
+                )}
+              </Row>
+              <Row label="Manual / Override">
+                {edge.rth.manual != null ? (
+                  `${edge.rth.manual.toFixed(4)} °C/W`
+                ) : (
+                  <span className="text-ink-400">None</span>
+                )}
+              </Row>
+              <Row label="Future / Measurement">
+                <span className="text-ink-400">Reserved</span>
+              </Row>
+              <Row label="FloTHERM (Deferred)">
+                <span className="text-ink-400">Not Imported (Screen 03)</span>
+              </Row>
+            </section>
+
+            <section className="mt-3 rounded-md border border-line p-2.5">
+              <p className="text-[11px] font-bold text-ink-700">
+                External Mapping <span className="font-semibold text-ink-400">/ 外部對照</span>
+              </p>
+              <Row label="FloTHERM">
+                {edge.external_mappings?.flotherm?.object_aliases?.length ? (
+                  edge.external_mappings.flotherm.object_aliases.join(', ')
+                ) : (
+                  <span className="text-ink-400">Not Mapped</span>
+                )}
+              </Row>
+            </section>
+
+            <section className="mt-3 rounded-md border border-line p-2.5">
+              <p className="text-[11px] font-bold text-ink-700">
+                Readiness <span className="font-semibold text-ink-400">/ 驗證狀態</span>
+              </p>
+              <div className="mt-1 flex flex-wrap items-center gap-3 text-[11px] font-semibold">
+                <span className="text-danger-600">{readiness.errors} Blocking Errors</span>
+                <span className="text-warn-600">{readiness.warnings} Warnings</span>
+                <span className="text-accent-600">{readiness.info} Info</span>
+              </div>
+            </section>
 
             <div className="mt-3 flex flex-wrap gap-2">
               <Button

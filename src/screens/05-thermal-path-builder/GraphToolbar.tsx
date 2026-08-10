@@ -1,6 +1,9 @@
 /**
  * Graph toolbar — 05 §29, §30.
  *
+ * One row, as in `05.png`: tools, history, layout, zoom, then the view toggles.
+ * The shared App Shell sidebar leaves the canvas narrower than the mockup's, so
+ * the buttons are icon-only with bilingual tooltips instead of stacked labels.
  * Tools are modes on the canvas, not state of their own: the canvas asks this
  * component which mode is active and reports interactions back to the view,
  * which is the only thing allowed to mutate `networkStore` (05 §46).
@@ -17,6 +20,7 @@ import {
   Spline,
   Tags,
   Undo2,
+  Waypoints,
   Workflow,
   ZoomIn,
   ZoomOut,
@@ -24,8 +28,6 @@ import {
 import type { ReactNode } from 'react';
 
 import { Select } from '@/ui/primitives';
-import { BilingualTooltip } from '@/ui/FieldLabel';
-import { TOOLTIPS_ZH } from './tooltips';
 
 export type CanvasTool = 'select' | 'pan' | 'connect' | 'add-node' | 'add-edge';
 
@@ -58,20 +60,20 @@ function ToolButton({
       onClick={onClick}
       disabled={disabled}
       aria-pressed={active}
+      aria-label={`${label} / ${zh}`}
       title={`${label} / ${zh}`}
-      className={`flex h-11 w-14 shrink-0 flex-col items-center justify-center gap-0.5 rounded-md border text-[10px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+      className={`flex size-8 shrink-0 items-center justify-center rounded-md border transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
         active
           ? 'border-accent-500 bg-accent-100 text-accent-700'
           : 'border-transparent text-ink-500 hover:bg-surface-muted hover:text-ink-900'
       }`}
     >
       {icon}
-      <span className="leading-none">{label}</span>
     </button>
   );
 }
 
-const Divider = () => <span aria-hidden className="mx-0.5 h-8 w-px shrink-0 bg-line" />;
+const Divider = () => <span aria-hidden className="mx-1 h-6 w-px shrink-0 bg-line" />;
 
 export function GraphToolbar({
   tool,
@@ -85,6 +87,7 @@ export function GraphToolbar({
   onTool,
   onLayoutMode,
   onAutoLayout,
+  onAutoConnect,
   onFit,
   onZoom,
   onUndo,
@@ -104,6 +107,7 @@ export function GraphToolbar({
   onTool: (tool: CanvasTool) => void;
   onLayoutMode: (mode: string) => void;
   onAutoLayout: () => void;
+  onAutoConnect: () => void;
   onFit: () => void;
   onZoom: (delta: number) => void;
   onUndo: () => void;
@@ -113,19 +117,19 @@ export function GraphToolbar({
   onToggleLabels: () => void;
 }) {
   return (
-    <div className="flex flex-wrap items-center gap-0.5 border-b border-line bg-surface px-2 py-1.5">
+    <div className="flex items-center gap-0.5 overflow-x-auto border-b border-line bg-surface px-2 py-1.5">
       <ToolButton
         active={tool === 'select'}
         label="Select"
         zh="選取"
-        icon={<MousePointer2 size={15} />}
+        icon={<MousePointer2 size={14} />}
         onClick={() => onTool('select')}
       />
       <ToolButton
         active={tool === 'pan'}
         label="Pan"
         zh="平移"
-        icon={<Hand size={15} />}
+        icon={<Hand size={14} />}
         onClick={() => onTool('pan')}
       />
       <ToolButton
@@ -133,7 +137,7 @@ export function GraphToolbar({
         disabled={readOnly}
         label="Connect"
         zh="連接埠"
-        icon={<Share2 size={15} />}
+        icon={<Share2 size={14} />}
         onClick={() => onTool('connect')}
       />
       <ToolButton
@@ -141,7 +145,7 @@ export function GraphToolbar({
         disabled={readOnly}
         label="Add Node"
         zh="新增節點"
-        icon={<Plus size={15} />}
+        icon={<Plus size={14} />}
         onClick={() => onTool('add-node')}
       />
       <ToolButton
@@ -149,8 +153,15 @@ export function GraphToolbar({
         disabled={readOnly}
         label="Add Edge"
         zh="新增連線"
-        icon={<Spline size={15} />}
+        icon={<Spline size={14} />}
         onClick={() => onTool('add-edge')}
+      />
+      <ToolButton
+        disabled={readOnly}
+        label="Auto Connect"
+        zh="依建議連接"
+        icon={<Waypoints size={14} />}
+        onClick={onAutoConnect}
       />
 
       <Divider />
@@ -159,35 +170,35 @@ export function GraphToolbar({
         label="Undo"
         zh="復原"
         disabled={!canUndo || readOnly}
-        icon={<Undo2 size={15} />}
+        icon={<Undo2 size={14} />}
         onClick={onUndo}
       />
       <ToolButton
         label="Redo"
         zh="重做"
         disabled={!canRedo || readOnly}
-        icon={<Redo2 size={15} />}
+        icon={<Redo2 size={14} />}
         onClick={onRedo}
       />
 
       <Divider />
 
       <ToolButton
-        label="Layout"
+        label="Auto Layout"
         zh="自動排列"
-        icon={<Workflow size={15} />}
+        icon={<Workflow size={14} />}
         onClick={onAutoLayout}
       />
       <Select
         aria-label="Layout mode / 版面模式"
-        className="h-8 w-32 !text-[11px]"
+        className="h-8 w-[5.75rem] shrink-0 !text-[11px]"
         value={layoutMode}
         items={LAYOUT_MODES}
         onChange={(event) => onLayoutMode(event.target.value)}
       />
-      <ToolButton label="Fit" zh="全覽" icon={<Maximize size={15} />} onClick={onFit} />
+      <ToolButton label="Fit" zh="全覽" icon={<Maximize size={14} />} onClick={onFit} />
 
-      <div className="ml-1 flex items-center gap-1">
+      <div className="ml-1 flex shrink-0 items-center gap-1">
         <button
           type="button"
           aria-label="Zoom out / 縮小"
@@ -196,7 +207,7 @@ export function GraphToolbar({
         >
           <ZoomOut size={13} />
         </button>
-        <span className="w-12 text-center text-[11px] font-semibold tabular text-ink-700">
+        <span className="w-10 text-center text-[11px] font-semibold tabular text-ink-700">
           {Math.round(zoom * 100)}%
         </span>
         <button
@@ -211,26 +222,24 @@ export function GraphToolbar({
 
       <Divider />
 
-      <BilingualTooltip zh={TOOLTIPS_ZH.validate}>
-        <ToolButton
-          label="Validate"
-          zh="驗證"
-          icon={<CircleCheck size={15} />}
-          onClick={onValidate}
-        />
-      </BilingualTooltip>
+      <ToolButton
+        label="Validate"
+        zh="驗證"
+        icon={<CircleCheck size={14} />}
+        onClick={onValidate}
+      />
       <ToolButton
         active={showPorts}
-        label="Ports"
-        zh="連接埠"
-        icon={<Share2 size={15} />}
+        label="Show Ports"
+        zh="顯示連接埠"
+        icon={<Share2 size={14} />}
         onClick={onTogglePorts}
       />
       <ToolButton
         active={showLabels}
-        label="Labels"
-        zh="標籤"
-        icon={<Tags size={15} />}
+        label="Show Labels"
+        zh="顯示標籤"
+        icon={<Tags size={14} />}
         onClick={onToggleLabels}
       />
     </div>

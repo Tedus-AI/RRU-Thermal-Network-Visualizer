@@ -9,16 +9,21 @@
  * `networkStore` is the single source of truth; Cytoscape is only a view (05 §46).
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
   ArrowRight,
+  Boxes,
   ChevronDown,
   CircleCheck,
+  CircleSlash,
+  Link2,
+  Octagon,
   RotateCcw,
   Save,
   Share2,
+  TriangleAlert,
   XCircle,
 } from 'lucide-react';
 
@@ -68,21 +73,28 @@ import { LEGEND } from './graphStyles';
 // --- Small building blocks -------------------------------------------------
 
 function KpiCard({
+  icon,
   value,
   label,
   zh,
   tone = 'text-ink-900',
+  iconTone = 'text-ink-400',
 }: {
+  icon: ReactNode;
   value: number | string;
   label: string;
   zh: string;
   tone?: string;
+  iconTone?: string;
 }) {
   return (
-    <div className="rounded-lg border border-line bg-surface px-3.5 py-2.5">
-      <p className="text-[11px] font-semibold text-ink-700">{label}</p>
-      <p className="text-[10px] text-ink-400">{zh}</p>
-      <p className={`mt-0.5 text-[20px] leading-tight font-bold tabular ${tone}`}>{value}</p>
+    <div className="flex items-center gap-2.5 rounded-lg border border-line bg-surface px-3 py-2.5">
+      <span className={`shrink-0 ${iconTone}`}>{icon}</span>
+      <span className="min-w-0">
+        <span className="block truncate text-[11px] font-semibold text-ink-700">{label}</span>
+        <span className="block truncate text-[10px] text-ink-400">{zh}</span>
+        <span className={`block text-[19px] leading-tight font-bold tabular ${tone}`}>{value}</span>
+      </span>
     </div>
   );
 }
@@ -122,7 +134,10 @@ function Collapsible({
 }
 
 function Legend() {
-  const [open, setOpen] = useState(true);
+  // Collapsed by default: on the canvas widths this shell leaves, an open legend
+  // and the validation card would fight for the same corner. The validation list
+  // is the actionable one, so the legend starts as a chip.
+  const [open, setOpen] = useState(false);
 
   return (
     <div className="absolute bottom-3 left-3 z-10 rounded-md border border-line bg-surface/95 px-2.5 py-2 shadow-sm">
@@ -606,6 +621,42 @@ export function ThermalPathBuilderView() {
           )}
         </div>
       }
+      metrics={
+        <div className="grid grid-cols-2 gap-2.5 md:grid-cols-3 xl:grid-cols-6">
+          <KpiCard
+            icon={<Boxes size={18} />}
+            value={`${kpis.componentsModeled} / ${kpis.componentsTotal}`}
+            label="Components Modeled"
+            zh="建模元件"
+          />
+          <KpiCard icon={<Share2 size={18} />} value={kpis.nodes} label="Nodes" zh="節點" />
+          <KpiCard icon={<Link2 size={18} />} value={kpis.edges} label="Edges" zh="連線" />
+          <KpiCard
+            icon={<CircleSlash size={18} />}
+            iconTone={kpis.unconnectedPorts > 0 ? 'text-warn-600' : 'text-ink-400'}
+            value={kpis.unconnectedPorts}
+            label="Unconnected Ports"
+            zh="未連接埠"
+            tone={kpis.unconnectedPorts > 0 ? 'text-warn-600' : 'text-ink-900'}
+          />
+          <KpiCard
+            icon={<TriangleAlert size={18} />}
+            iconTone={kpis.unresolvedRth > 0 ? 'text-warn-600' : 'text-ink-400'}
+            value={kpis.unresolvedRth}
+            label="Unresolved Rth"
+            zh="未解析熱阻"
+            tone={kpis.unresolvedRth > 0 ? 'text-warn-600' : 'text-ink-900'}
+          />
+          <KpiCard
+            icon={<Octagon size={18} />}
+            iconTone={blockingErrors > 0 ? 'text-danger-600' : 'text-ok-600'}
+            value={blockingErrors}
+            label="Blocking Errors"
+            zh="阻擋錯誤"
+            tone={blockingErrors > 0 ? 'text-danger-600' : 'text-ok-600'}
+          />
+        </div>
+      }
       stepper={<BuilderStepper current={step} onSelect={setStep} completed={completedSteps} />}
       rightPanel={
         <div className="flex min-h-0 flex-col overflow-hidden rounded-lg border border-line bg-surface">
@@ -651,6 +702,11 @@ export function ThermalPathBuilderView() {
               edge={selectedEdge}
               network={network}
               readOnly={readOnly}
+              readiness={{
+                errors: validation?.errors ?? 0,
+                warnings: validation?.warnings ?? 0,
+                info: validation?.info ?? 0,
+              }}
               onPatch={(patch) =>
                 useNetworkStore.getState().upsertEdge({ ...selectedEdge, ...patch })
               }
@@ -737,37 +793,10 @@ export function ThermalPathBuilderView() {
         </div>
       }
     >
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-        <KpiCard
-          value={`${kpis.componentsModeled} / ${kpis.componentsTotal}`}
-          label="Components Modeled"
-          zh="建模元件"
-        />
-        <KpiCard value={kpis.nodes} label="Nodes" zh="節點" />
-        <KpiCard value={kpis.edges} label="Edges" zh="連線" />
-        <KpiCard
-          value={kpis.unconnectedPorts}
-          label="Unconnected Ports"
-          zh="未連接埠"
-          tone={kpis.unconnectedPorts > 0 ? 'text-warn-600' : 'text-ink-900'}
-        />
-        <KpiCard
-          value={kpis.unresolvedRth}
-          label="Unresolved Rth"
-          zh="未解析熱阻"
-          tone={kpis.unresolvedRth > 0 ? 'text-warn-600' : 'text-ink-900'}
-        />
-        <KpiCard
-          value={blockingErrors}
-          label="Blocking Errors"
-          zh="阻擋錯誤"
-          tone={blockingErrors > 0 ? 'text-danger-600' : 'text-ok-600'}
-        />
-      </div>
-
-      {/* A graph editor needs a deterministic viewport, so the builder body has
-          a fixed height and each pane scrolls inside itself. */}
-      <div className="flex h-[26rem] flex-col gap-3 lg:h-[30rem] lg:flex-row 2xl:h-[34rem]">
+      {/* A graph editor needs a deterministic viewport: the body claims the space
+          the shell leaves and each pane scrolls inside itself, so the page as a
+          whole does not scroll. */}
+      <div className="flex h-[calc(100vh-27rem)] min-h-[22rem] flex-col gap-3 lg:flex-row">
         {/* The palettes scroll inside their own column so the canvas keeps a
             stable viewport — a graph editor cannot live in a page that scrolls. */}
         <div className="flex w-full shrink-0 flex-col gap-3 overflow-y-auto pr-1 lg:h-full lg:w-[19rem]">
@@ -831,8 +860,9 @@ export function ThermalPathBuilderView() {
             />
           </Collapsible>
 
-          <div className="flex gap-2">
+          <div className="flex shrink-0 gap-2">
             <Button
+              variant="primary"
               className="h-8 flex-1"
               disabled={readOnly || enabledComponents.length === 0}
               onClick={() => setShowGenerate(true)}
@@ -842,9 +872,12 @@ export function ThermalPathBuilderView() {
             <Button
               className="h-8 flex-1"
               disabled={readOnly}
-              onClick={autoConnectSuggested}
+              onClick={() => {
+                handleApplyPreset();
+                setStep('structure');
+              }}
             >
-              Auto Connect Suggested
+              Start Blank
             </Button>
           </div>
         </div>
@@ -868,6 +901,7 @@ export function ThermalPathBuilderView() {
               canvasRef.current?.runLayout(mode);
             }}
             onAutoLayout={() => canvasRef.current?.runLayout(layoutMode)}
+            onAutoConnect={autoConnectSuggested}
             onFit={() => canvasRef.current?.fit()}
             onZoom={(delta) => canvasRef.current?.zoomBy(delta)}
             onUndo={() => useNetworkStore.getState().undo()}
@@ -924,6 +958,7 @@ export function ThermalPathBuilderView() {
                   pendingSourceRef={pendingSourceRef}
                 />
                 <Legend />
+                <NetworkValidationPanel validation={validation} onFocus={focusIssue} />
                 {(tool === 'connect' || tool === 'add-edge') && (
                   <p className="absolute top-3 left-3 z-10 rounded-md border border-accent-500 bg-accent-100 px-2.5 py-1.5 text-[11px] font-semibold text-accent-700">
                     Click the source node, then the target. / 先點起點節點，再點終點。
@@ -1046,8 +1081,6 @@ export function ThermalPathBuilderView() {
           </div>
         </div>
       </div>
-
-      <NetworkValidationPanel validation={validation} onFocus={focusIssue} />
 
       {/* --- Modals --- */}
 

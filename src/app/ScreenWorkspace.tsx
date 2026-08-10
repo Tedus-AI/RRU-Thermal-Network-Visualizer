@@ -17,6 +17,7 @@ export function ScreenWorkspace({
   description,
   descriptionZh,
   badge,
+  metrics,
   stepper,
   rightPanel,
   actionBar,
@@ -29,6 +30,8 @@ export function ScreenWorkspace({
   description?: string;
   descriptionZh?: string;
   badge?: ReactNode;
+  /** Readiness KPI row. Sits between the title and the stepper (05 §36). */
+  metrics?: ReactNode;
   stepper?: ReactNode;
   rightPanel?: ReactNode;
   actionBar?: ReactNode;
@@ -50,11 +53,12 @@ export function ScreenWorkspace({
             {descriptionZh && <span className="block text-ink-400">{descriptionZh}</span>}
           </p>
         )}
+        {metrics && <div className="mt-3.5">{metrics}</div>}
         {stepper && <div className="mt-4">{stepper}</div>}
       </header>
 
       <div className="relative flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-6 pb-4 xl:flex-row">
-        <div className="flex min-w-0 flex-1 flex-col gap-4">{children}</div>
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4">{children}</div>
         {rightPanel && (
           <aside className="flex w-full shrink-0 flex-col gap-4 xl:w-[22rem] 2xl:w-[24rem]">
             {rightPanel}
