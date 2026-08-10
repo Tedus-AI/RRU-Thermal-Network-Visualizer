@@ -18,7 +18,7 @@ Data Provenance / Physics Correctness 原則為準。
 | 02 | Import Components | ✅ |
 | 03 | FloTHERM Import | ⏸ 刻意延後（見下） |
 | 04 | Component Manager | ✅ |
-| 05 | Thermal Path Builder | ⏳ 待規格 |
+| 05 | Thermal Path Builder | ✅ |
 | 06 | Boundary Conditions | ⏳ 待規格 |
 | 07 | Thermal Network | ⏳ 待規格 |
 | 08 | Bottleneck Analysis | ⏳ 待規格 |
@@ -29,8 +29,12 @@ Data Provenance / Physics Correctness 原則為準。
 
 ## 技術堆疊
 
-React 18 + TypeScript + Vite + Zustand + Tailwind CSS v4，Excel 解析使用 read-excel-file。
-Screen 07 之後會依 00 §39 引入 Cytoscape.js（網路圖）與 Plotly.js（工程圖表）。
+React 18 + TypeScript + Vite + Zustand + Tailwind CSS v4，Excel 解析使用 read-excel-file，
+熱網路畫布使用 Cytoscape.js + dagre（05 §56）。Screen 07 之後會依 00 §39 再引入
+Plotly.js（工程圖表）。
+
+Cytoscape 只是 view / interaction layer：Graph 的唯一真實來源是 `networkStore`，
+畫布上的任何操作都回寫 store，再由 store 重新渲染畫布。
 
 ## Screen 03 為何延後
 
@@ -43,6 +47,20 @@ Screen 07 之後會依 00 §39 引入 Cytoscape.js（網路圖）與 Plotly.js�
 - Edge 的 analytical / flotherm / measurement / manual 熱阻插槽與 active source
 
 程式碼中**沒有**任何 FloTHERM parser 或 CSV 欄位假設。回補 03 時不需重構 04～10。
+
+## Screen 05 的物理界線
+
+05 只描述「熱可以怎麼走」，不假裝知道「每條路實際走多少 W」或「每個節點最後幾 °C」：
+
+- 不做 solve，不顯示 Node Temperature、Edge Heat Flow Q、ΔT 或 Thermal Margin。
+- `Qty × Power` 只用於 source node 的功耗聚合，永遠不是任何 Edge 的 Heat Flow Q。
+- 參數不足的 Rth 維持 `unresolved`（`null`），不會被填成 0。
+- `FIN_SURFACE → AMBIENT_PLACEHOLDER` 只是結構終點；Ambient、h_conv、h_rad、
+  wind、solar 全部屬於 Screen 06。
+- 模板結束於 PORT（`HEAT_OUT` / `BOARD_OUT` / `TOP_OUT` / `HEAT_PIPE_OUT` /
+  `DIRECT_BASE_OUT`），不硬綁 Main Base；Step 4 才把 port 接到共用結構。
+- Graph 不限制為 Tree：series / parallel / branch / merge / shared node / coupling cycle
+  都合法，區域間的耦合迴圈不會被判為錯誤。
 
 ## App Shell 規則
 

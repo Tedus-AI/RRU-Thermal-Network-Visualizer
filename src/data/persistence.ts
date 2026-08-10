@@ -15,11 +15,13 @@
 import type { Project, ProjectContext, Scenario } from '@/domain/project';
 import { SCHEMA_VERSION, defaultProjectContext } from '@/domain/project';
 import type { Component } from '@/domain/component';
+import { DEFAULT_SOLVER_SETTINGS, type ThermalNetwork } from '@/thermal/types';
 import { migrateComponents } from './componentMigration';
 
 const PROJECTS_KEY = 'tnv.projects';
 const SCENARIOS_KEY = 'tnv.scenarios';
 const COMPONENTS_KEY = 'tnv.components';
+const NETWORKS_KEY = 'tnv.thermal_networks';
 
 /** Keys on a project document that belong to this tool. Everything else is foreign. */
 const OWNED_PROJECT_KEYS = [
@@ -155,4 +157,38 @@ export function saveComponents(projectId: string, components: Component[]): void
   const all = readCollection(COMPONENTS_KEY);
   all[projectId] = components as unknown as RawDoc;
   writeCollection(COMPONENTS_KEY, all);
+}
+
+// --- Thermal network -------------------------------------------------------
+// The graph lives in its own collection, never inside the shared project
+// document — it is far too large and changes on a different cadence (00 §35.2).
+
+export function loadNetwork(projectId: string): ThermalNetwork | null {
+  const all = readCollection(NETWORKS_KEY);
+  const stored = all[projectId];
+  if (!stored || typeof stored !== 'object') return null;
+  const network = stored as unknown as ThermalNetwork;
+  // Tolerate networks written before a field existed.
+  return {
+    ...network,
+    nodes: network.nodes ?? {},
+    edges: network.edges ?? {},
+    status: network.status ?? 'DRAFT',
+    templates: network.templates ?? {},
+    zones: network.zones ?? {},
+    layout: {
+      mode: network.layout?.mode ?? 'Auto',
+      positions: network.layout?.positions ?? {},
+    },
+    flotherm_mappings: network.flotherm_mappings ?? {},
+    solver_settings: network.solver_settings ?? { ...DEFAULT_SOLVER_SETTINGS },
+  };
+}
+
+export function saveNetwork(projectId: string, network: ThermalNetwork): void {
+  const all = readCollection(NETWORKS_KEY);
+  // 05 §53 — unknown metadata written by other tools survives a save.
+  const existing = (all[projectId] ?? {}) as Record<string, unknown>;
+  all[projectId] = { ...existing, ...network } as unknown as RawDoc;
+  writeCollection(NETWORKS_KEY, all);
 }

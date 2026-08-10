@@ -95,7 +95,7 @@ export const SCREENS: ScreenDef[] = [
     labelEn: 'Thermal Path Builder',
     icon: Share2,
     group: '熱網路建立',
-    implemented: false,
+    implemented: true,
   },
   {
     code: '06',

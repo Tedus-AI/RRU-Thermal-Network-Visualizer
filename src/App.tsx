@@ -6,6 +6,7 @@ import { PlaceholderScreen } from '@/screens/PlaceholderScreen';
 import { EmptyProjectState, ProjectInfoView } from '@/project/ProjectInfoView';
 import { ImportComponentsView } from '@/screens/02-import-components/ImportComponentsView';
 import { ComponentManagerView } from '@/screens/04-component-manager/ComponentManagerView';
+import { ThermalPathBuilderView } from '@/screens/05-thermal-path-builder/ThermalPathBuilderView';
 import { useProjectStore } from '@/data/projectStore';
 
 /** Opens the most recently updated project, or shows the empty state (01 §20). */
@@ -38,6 +39,7 @@ export default function App() {
           element={<ImportComponentsView />}
         />
         <Route path="/project/:projectId/components" element={<ComponentManagerView />} />
+        <Route path="/project/:projectId/thermal-path" element={<ThermalPathBuilderView />} />
         {SCREENS.filter((screen) => !screen.implemented).map((screen) => (
           <Route
             key={screen.code}
