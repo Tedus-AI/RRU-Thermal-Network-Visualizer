@@ -1,5 +1,5 @@
 /**
- * Apply step — 02 §17, §23, §24, §27.
+ * Apply step — 02 §17, §23, §24, §27; component model per 04 §29.
  *
  * Pure function: takes the existing component list plus reviewed staging rows and
  * returns the next component list. Persisting and store invalidation happen in the
@@ -7,23 +7,75 @@
  */
 
 import {
-  emptyThermalSpec,
+  emptyArchitecturePrep,
+  emptyExternalMappings,
+  emptyGeometry,
+  emptyTim,
   type Component,
   type ComponentProvenance,
   type ThermalSpec,
 } from '@/domain/component';
+import { sourced, unknownValue, type SourcedValue } from '@/domain/sourcedValue';
 import { duplicateKey, effectiveDuplicateAction } from './buildStagingRows';
 import type { ApplyResult, DuplicatePolicy, ImportSourceDescriptor, StagingRow } from './types';
 
-/** Fields whose change invalidates a previous solve — 02 §24. */
-const SOLVER_RELEVANT: Array<keyof ThermalSpec | 'power_W' | 'qty'> = [
-  'power_W',
-  'qty',
-  'r_jc_C_per_W',
-  'limit_C',
-  'tim_type',
-  'board_type',
-];
+function specFromRow(row: StagingRow): ThermalSpec {
+  return {
+    limit_type: 'Unknown',
+    limit_C: row.limit_C == null ? null : sourced(row.limit_C, 'Imported', { confidence: 'medium' }),
+    r_jc_C_per_W:
+      row.r_jc_C_per_W == null
+        ? null
+        : sourced(row.r_jc_C_per_W, 'Imported', { confidence: 'medium' }),
+    package_type: null,
+    geometry: {
+      ...emptyGeometry(),
+      pad_L_mm: row.pad_L_mm,
+      pad_W_mm: row.pad_W_mm,
+      board_thickness_mm: row.thickness_mm,
+      legacy_height_mm: row.height_mm,
+      // 04 §30 — legacy geometry semantics must be confirmed, not assumed.
+      needs_review:
+        row.height_mm != null || row.thickness_mm != null || row.pad_L_mm != null || undefined,
+    },
+    board_path: { type: row.board_type ?? 'None', parameters: {} },
+    tim: { ...emptyTim(), type: row.tim_type ?? 'None', inheritance: 'component' },
+  };
+}
+
+function provenanceFor(source: ImportSourceDescriptor, row: StagingRow): ComponentProvenance {
+  const now = new Date().toISOString();
+  return {
+    source_type: source.source_type,
+    source_project_id: source.source_project_id,
+    source_project_name: source.source_project_name,
+    source_file: source.source_file,
+    imported_at: now,
+    last_modified_at: now,
+    ref_origin_project: (row.extra._ref_origin_project as string) ?? null,
+    ref_origin_id: (row.extra._ref_origin_id as string) ?? null,
+    ref_locked: row.extra._ref_locked === 'true' ? true : null,
+  };
+}
+
+/** Imported non-empty replaces; imported empty keeps the existing value (02 §17). */
+function mergeNonEmpty<T>(incoming: T | null, existing: T | null): T | null {
+  return incoming == null || incoming === ('' as unknown as T) ? existing : incoming;
+}
+
+function mergeSourced(
+  incoming: SourcedValue<number> | null,
+  existing: SourcedValue<number> | null,
+): SourcedValue<number> | null {
+  return incoming?.value == null ? existing : incoming;
+}
+
+export interface ApplyOptions {
+  existing: Component[];
+  rows: StagingRow[];
+  sessionPolicy: DuplicatePolicy;
+  source: ImportSourceDescriptor;
+}
 
 function slugId(name: string, taken: Set<string>): string {
   const base =
@@ -39,45 +91,6 @@ function slugId(name: string, taken: Set<string>): string {
   let suffix = 2;
   while (taken.has(`${base}_${suffix}`)) suffix++;
   return `${base}_${suffix}`;
-}
-
-function specFromRow(row: StagingRow): ThermalSpec {
-  return {
-    ...emptyThermalSpec(),
-    r_jc_C_per_W: row.r_jc_C_per_W,
-    limit_C: row.limit_C,
-    height_mm: row.height_mm,
-    pad_L_mm: row.pad_L_mm,
-    pad_W_mm: row.pad_W_mm,
-    thickness_mm: row.thickness_mm,
-    board_type: row.board_type,
-    tim_type: row.tim_type,
-  };
-}
-
-function provenanceFor(source: ImportSourceDescriptor, row: StagingRow): ComponentProvenance {
-  return {
-    source_type: source.source_type,
-    source_project_id: source.source_project_id,
-    source_project_name: source.source_project_name,
-    source_file: source.source_file,
-    imported_at: new Date().toISOString(),
-    ref_origin_project: (row.extra._ref_origin_project as string) ?? null,
-    ref_origin_id: (row.extra._ref_origin_id as string) ?? null,
-    ref_locked: row.extra._ref_locked === 'true' ? true : null,
-  };
-}
-
-/** Imported non-empty replaces; imported empty keeps the existing value (02 §17). */
-function mergeNonEmpty<T>(incoming: T | null, existing: T | null): T | null {
-  return incoming == null || incoming === ('' as unknown as T) ? existing : incoming;
-}
-
-export interface ApplyOptions {
-  existing: Component[];
-  rows: StagingRow[];
-  sessionPolicy: DuplicatePolicy;
-  source: ImportSourceDescriptor;
 }
 
 export function applyImport({ existing, rows, sessionPolicy, source }: ApplyOptions): {
@@ -125,38 +138,57 @@ export function applyImport({ existing, rows, sessionPolicy, source }: ApplyOpti
 
       const nextSpec: ThermalSpec =
         action === 'REPLACE'
-          ? spec
+          ? { ...spec, limit_type: target.thermal_spec.limit_type, package_type: target.thermal_spec.package_type }
           : {
               ...target.thermal_spec,
-              r_jc_C_per_W: mergeNonEmpty(spec.r_jc_C_per_W, target.thermal_spec.r_jc_C_per_W),
-              limit_C: mergeNonEmpty(spec.limit_C, target.thermal_spec.limit_C),
-              height_mm: mergeNonEmpty(spec.height_mm, target.thermal_spec.height_mm),
-              pad_L_mm: mergeNonEmpty(spec.pad_L_mm, target.thermal_spec.pad_L_mm),
-              pad_W_mm: mergeNonEmpty(spec.pad_W_mm, target.thermal_spec.pad_W_mm),
-              thickness_mm: mergeNonEmpty(spec.thickness_mm, target.thermal_spec.thickness_mm),
-              board_type: mergeNonEmpty(spec.board_type, target.thermal_spec.board_type),
-              tim_type: mergeNonEmpty(spec.tim_type, target.thermal_spec.tim_type),
+              limit_C: mergeSourced(spec.limit_C, target.thermal_spec.limit_C),
+              r_jc_C_per_W: mergeSourced(spec.r_jc_C_per_W, target.thermal_spec.r_jc_C_per_W),
+              geometry: {
+                ...target.thermal_spec.geometry,
+                pad_L_mm: mergeNonEmpty(spec.geometry.pad_L_mm, target.thermal_spec.geometry.pad_L_mm),
+                pad_W_mm: mergeNonEmpty(spec.geometry.pad_W_mm, target.thermal_spec.geometry.pad_W_mm),
+                board_thickness_mm: mergeNonEmpty(
+                  spec.geometry.board_thickness_mm,
+                  target.thermal_spec.geometry.board_thickness_mm,
+                ),
+                legacy_height_mm: mergeNonEmpty(
+                  spec.geometry.legacy_height_mm ?? null,
+                  target.thermal_spec.geometry.legacy_height_mm ?? null,
+                ),
+              },
+              board_path:
+                spec.board_path.type === 'None'
+                  ? target.thermal_spec.board_path
+                  : spec.board_path,
+              tim: spec.tim.type === 'None' ? target.thermal_spec.tim : spec.tim,
             };
 
-      const nextQty = action === 'REPLACE' ? (row.qty ?? target.qty) : (row.qty ?? target.qty);
+      const nextQty = row.qty ?? target.qty;
       const nextPower =
-        action === 'REPLACE' ? (row.power_W ?? target.power_W) : (row.power_W ?? target.power_W);
+        row.power_W == null ? target.power_W : sourced(row.power_W, 'Imported');
 
-      // Did anything the solver depends on actually move?
-      const before: Record<string, unknown> = {
-        power_W: target.power_W,
-        qty: target.qty,
-        ...target.thermal_spec,
-      };
-      const after: Record<string, unknown> = {
-        power_W: nextPower,
-        qty: nextQty,
-        ...nextSpec,
-      };
-      if (SOLVER_RELEVANT.some((field) => before[field] !== after[field])) {
+      // 02 §24 / 04 §32 — did anything the solver depends on actually move?
+      const before = [
+        target.power_W.value,
+        target.qty,
+        target.thermal_spec.r_jc_C_per_W?.value ?? null,
+        target.thermal_spec.limit_C?.value ?? null,
+        target.thermal_spec.tim.type,
+        target.thermal_spec.board_path.type,
+      ];
+      const after = [
+        nextPower.value,
+        nextQty,
+        nextSpec.r_jc_C_per_W?.value ?? null,
+        nextSpec.limit_C?.value ?? null,
+        nextSpec.tim.type,
+        nextSpec.board_path.type,
+      ];
+      if (before.some((value, index) => value !== after[index])) {
         invalidatedSolver = true;
-        // A changed component that already sits in the graph must be re-reviewed.
-        if (target.thermal_profile) requiresNetworkReview = true;
+        if (target.architecture_prep.thermal_profile_status !== 'Not Assigned') {
+          requiresNetworkReview = true;
+        }
       }
 
       components[existingIndex] = {
@@ -167,9 +199,10 @@ export function applyImport({ existing, rows, sessionPolicy, source }: ApplyOpti
         // 02 §17: Replace only overwrites component-owned fields; unknown
         // metadata written by other tools survives either way.
         metadata: { ...(target.metadata ?? {}), ...row.extra },
-        provenance: provenanceFor(source, row),
-        // thermal_profile is graph data and is never touched by an import.
-        thermal_profile: target.thermal_profile,
+        provenance: { ...provenanceFor(source, row), last_modified_at: new Date().toISOString() },
+        // Architecture prep is Screen 04/05 data and is never touched by an import.
+        architecture_prep: target.architecture_prep,
+        external_mappings: target.external_mappings,
       };
       updated++;
       continue;
@@ -185,12 +218,15 @@ export function applyImport({ existing, rows, sessionPolicy, source }: ApplyOpti
       id,
       name,
       category,
+      enabled: true,
       qty: row.qty ?? 0,
-      power_W: row.power_W ?? 0,
+      power_W:
+        row.power_W == null ? unknownValue<number>('Imported') : sourced(row.power_W, 'Imported'),
       thermal_spec: specFromRow(row),
-      // 02 §34 — importing never creates graph topology.
-      thermal_profile: null,
+      // 02 §34 / 04 §40 — importing never creates graph topology or preferences.
+      architecture_prep: emptyArchitecturePrep(),
       provenance: provenanceFor(source, row),
+      external_mappings: emptyExternalMappings(),
       metadata: Object.keys(row.extra).length > 0 ? { ...row.extra } : undefined,
     };
 

@@ -32,9 +32,9 @@ export function ProductThermalContextForm({ readOnly }: { readOnly: boolean }) {
   const context = draft.project_context;
 
   return (
-    <SectionCard step={2} title="Product & Thermal Context">
+    <SectionCard step={2} title="Product & Thermal Context" subtitle="產品與熱設計背景">
       <div className="grid grid-cols-1 gap-x-6 gap-y-4 lg:grid-cols-3">
-        <Field label="Product Type" htmlFor="product_type">
+        <Field label="Product Type" zh="產品類型" htmlFor="product_type">
           <Select
             id="product_type"
             options={PRODUCT_TYPES}
@@ -46,8 +46,10 @@ export function ProductThermalContextForm({ readOnly }: { readOnly: boolean }) {
 
         <Field
           label="Frequency Range"
+          zh="頻段範圍"
           htmlFor="frequency_range"
           hint="V1 targets FR1 only."
+          hintZh="V1 僅支援 FR1。"
         >
           <Select
             id="frequency_range"
@@ -59,8 +61,9 @@ export function ProductThermalContextForm({ readOnly }: { readOnly: boolean }) {
 
         <Field
           label="Cooling Architecture"
+          zh="散熱架構"
           htmlFor="cooling_architecture"
-          tip="Project-level cooling strategy. Actual thermal paths are defined later in Thermal Path Builder."
+          tip="專案層級的散熱策略摘要。實際熱路徑於 Screen 05 熱路徑建立中定義，本頁不建立任何 Node/Edge。"
         >
           <Select
             id="cooling_architecture"
@@ -73,7 +76,7 @@ export function ProductThermalContextForm({ readOnly }: { readOnly: boolean }) {
           />
         </Field>
 
-        <Field label="Enclosure Type" htmlFor="enclosure_type">
+        <Field label="Enclosure Type" zh="機殼型式" htmlFor="enclosure_type">
           <Select
             id="enclosure_type"
             options={ENCLOSURE_TYPES}
@@ -87,8 +90,9 @@ export function ProductThermalContextForm({ readOnly }: { readOnly: boolean }) {
 
         <Field
           label="Base Architecture"
+          zh="基座架構"
           htmlFor="base_architecture"
-          tip="High-level mechanical base structure. This does not create graph topology by itself."
+          tip="機構基座的高階結構摘要，本身不會產生任何熱網路拓樸。"
         >
           <Select
             id="base_architecture"
@@ -104,7 +108,9 @@ export function ProductThermalContextForm({ readOnly }: { readOnly: boolean }) {
         <div className="lg:col-span-3">
           <Field
             label="Main Heat Rejection"
+            zh="主要散熱路徑"
             hint="Select every path this product uses to reject heat."
+            hintZh="請勾選此產品所有的散熱途徑。"
           >
             <ChipMultiSelect
               label="Main Heat Rejection"

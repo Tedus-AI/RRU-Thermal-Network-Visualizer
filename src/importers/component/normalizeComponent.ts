@@ -102,6 +102,12 @@ const BOARD_TYPE_ALIASES: Record<string, BoardType> = {
   'copper coin': 'Copper Coin',
   'copper slug': 'Copper Coin',
   coin: 'Copper Coin',
+  'direct metal': 'Direct Metal',
+  'metal mount': 'Direct Metal',
+  'main base': 'Direct Metal',
+  'small base': 'Direct Metal',
+  'pcb only': 'PCB Only',
+  pcb: 'PCB Only',
   none: 'None',
   'no board path': 'None',
   na: 'None',
@@ -120,9 +126,9 @@ export function normalizeBoardType(raw: unknown): BoardType | null {
 }
 
 /**
- * 02 §16 — V1 TIM vocabulary. Legacy "Solder" from the Volume Tool is mapped to
- * Custom and must NOT be turned into a separate thermal edge here; that decision
- * belongs to Screen 05.
+ * TIM vocabulary — widened by 04 §11 to include PCM, Gap Filler and Solder as
+ * first-class types. Naming a TIM still does NOT create a thermal edge; that
+ * decision belongs to Screen 05 (02 §16, 04 §11).
  */
 const TIM_ALIASES: Record<string, TimType> = {
   grease: 'Grease',
@@ -135,8 +141,13 @@ const TIM_ALIASES: Record<string, TimType> = {
   pad2: 'Pad2',
   'pad 2': 'Pad2',
   putty: 'Putty',
-  'gap filler': 'Putty',
-  gapfiller: 'Putty',
+  'gap filler': 'Gap Filler',
+  gapfiller: 'Gap Filler',
+  gap: 'Gap Filler',
+  pcm: 'PCM',
+  'phase change': 'PCM',
+  solder: 'Solder',
+  'die attach': 'Solder',
   none: 'None',
   na: 'None',
   '-': 'None',

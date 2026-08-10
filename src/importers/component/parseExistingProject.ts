@@ -75,6 +75,8 @@ export function parseExistingProject(
 ): ParsedTable {
   const components = loadComponents(projectId).filter((component) => {
     if (!scope.categories.includes(component.category)) return false;
+    // Disabled components are the tool's own "hidden / excluded" set (02 §6).
+    if (!scope.includeHidden && !component.enabled) return false;
     if (!scope.includeHidden && component.metadata?._hidden === 'true') return false;
     return true;
   });
@@ -83,15 +85,15 @@ export function parseExistingProject(
     component.name,
     component.category,
     text(component.qty),
-    text(component.power_W),
-    text(component.thermal_spec.r_jc_C_per_W),
-    text(component.thermal_spec.limit_C),
-    text(component.thermal_spec.board_type),
-    text(component.thermal_spec.tim_type),
-    text(component.thermal_spec.height_mm),
-    text(component.thermal_spec.pad_L_mm),
-    text(component.thermal_spec.pad_W_mm),
-    text(component.thermal_spec.thickness_mm),
+    text(component.power_W.value),
+    text(component.thermal_spec.r_jc_C_per_W?.value),
+    text(component.thermal_spec.limit_C?.value),
+    text(component.thermal_spec.board_path.type),
+    text(component.thermal_spec.tim.type),
+    text(component.thermal_spec.geometry.legacy_height_mm),
+    text(component.thermal_spec.geometry.pad_L_mm),
+    text(component.thermal_spec.geometry.pad_W_mm),
+    text(component.thermal_spec.geometry.board_thickness_mm),
     // Keep the original lineage if the source already had one, else point here.
     text(component.provenance.ref_origin_project ?? projectId),
     text(component.provenance.ref_origin_id ?? component.id),

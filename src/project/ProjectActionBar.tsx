@@ -31,28 +31,28 @@ export function ProjectActionBar({
   return (
     <div className="flex shrink-0 items-center gap-2 border-t border-line bg-surface px-6 py-3">
       <Button onClick={onCancel} disabled={!dirty}>
-        Cancel
+        Cancel / 取消
       </Button>
       <Button icon={<Copy size={15} />} onClick={onDuplicate}>
-        Duplicate Project
+        Duplicate Project / 複製專案
       </Button>
       <Button icon={<Archive size={15} />} onClick={onArchive}>
-        {archived ? 'Restore' : 'Archive'}
+        {archived ? 'Restore / 還原' : 'Archive / 封存'}
       </Button>
 
       <div className="ml-4 flex items-center gap-2">
-        {readOnly && <Badge tone="accent">READ ONLY</Badge>}
-        {!readOnly && dirty && <Badge tone="warn">● Unsaved</Badge>}
+        {readOnly && <Badge tone="accent">READ ONLY / 唯讀</Badge>}
+        {!readOnly && dirty && <Badge tone="warn">● Unsaved / 未儲存</Badge>}
         {!readOnly && warningCount > 0 && (
           <span className="text-[12px] text-ink-400">
-            {warningCount} warning{warningCount > 1 ? 's' : ''} — save is still allowed
+            {warningCount} warning{warningCount > 1 ? 's' : ''} — save is still allowed / 仍可儲存
           </span>
         )}
       </div>
 
       <div className="ml-auto flex items-center gap-2">
         <Button icon={<Save size={15} />} disabled={!canSave} onClick={onSave}>
-          Save Project
+          Save Project / 儲存專案
         </Button>
         <Button
           variant="primary"
@@ -60,7 +60,7 @@ export function ProjectActionBar({
           disabled={!canContinue}
           onClick={onSaveAndContinue}
         >
-          Save &amp; Continue
+          Save &amp; Continue / 儲存並繼續
         </Button>
       </div>
     </div>

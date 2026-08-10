@@ -1,3 +1,5 @@
+import type { EdgeRthSet, ExternalMappings, TemperatureResultSet } from './resultValue';
+
 /**
  * Thermal Graph data model.
  *
@@ -22,6 +24,10 @@ export const DATA_SOURCES = [
   'Vendor',
   'Manual',
   'Assumed',
+  /** Carried in from another project or file whose upstream source is unstated. */
+  'Imported',
+  /** Default carried from the reusable component library. */
+  'Library',
 ] as const;
 export type DataSource = (typeof DATA_SOURCES)[number];
 
@@ -92,6 +98,12 @@ export interface ThermalNode {
   /** Solver output — never authored by hand, cleared whenever results go DIRTY. */
   temperature_C: number | null;
   temperature_source: DataSource | null;
+  /**
+   * Analytical / FloTHERM / measured temperatures side by side (04 §28.3).
+   * Reserved now so Screen 03 needs no refactor; an imported result must never
+   * overwrite the analytical one (04 §28.5).
+   */
+  temperature_results?: TemperatureResultSet;
 
   limit_C?: number | null;
   limit_type?: 'Tj' | 'Tc' | 'Ts' | null;
@@ -101,6 +113,8 @@ export interface ThermalNode {
 
   /** FloTHERM object path this node maps to — 00 §20. */
   simulation_alias?: string | null;
+  /** External simulation mapping hooks carried over from the component (04 §28.1). */
+  external_mappings?: ExternalMappings;
 
   position?: { x: number; y: number };
   metadata?: Record<string, unknown>;
@@ -150,10 +164,18 @@ export interface RthValue {
   analytical: number | null;
   flotherm: number | null;
   measurement: number | null;
+  /** Hand-entered override, kept separate from every derived value (04 §28.4). */
+  manual: number | null;
   /** Which slot the solver reads. */
   active_source: DataSource;
   /** Provenance per slot, keyed by the source that produced it. */
   provenance: Partial<Record<DataSource, Provenance>>;
+  /**
+   * Richer per-source results reserved for Screen 03 (04 §28.4). The scalar
+   * slots above stay the solver's fast path; this carries scenario, reference
+   * and confidence for each source once CFD data arrives.
+   */
+  results?: EdgeRthSet;
 }
 
 /**

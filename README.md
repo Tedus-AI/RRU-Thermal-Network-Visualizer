@@ -16,8 +16,8 @@ Data Provenance / Physics Correctness 原則為準。
 | — | Phase 0 Foundation（App Shell、Routing、Thermal Graph 資料模型、Solver、Validation、Shared Stores、Persistence） | ✅ |
 | 01 | Project Info | ✅ |
 | 02 | Import Components | ✅ |
-| 03 | Import FloTHERM | ⏳ 待規格 |
-| 04 | Component Manager | ⏳ 待規格 |
+| 03 | FloTHERM Import | ⏸ 刻意延後（見下） |
+| 04 | Component Manager | ✅ |
 | 05 | Thermal Path Builder | ⏳ 待規格 |
 | 06 | Boundary Conditions | ⏳ 待規格 |
 | 07 | Thermal Network | ⏳ 待規格 |
@@ -31,6 +31,18 @@ Data Provenance / Physics Correctness 原則為準。
 
 React 18 + TypeScript + Vite + Zustand + Tailwind CSS v4，Excel 解析使用 read-excel-file。
 Screen 07 之後會依 00 §39 引入 Cytoscape.js（網路圖）與 Plotly.js（工程圖表）。
+
+## Screen 03 為何延後
+
+`03_FloTHERM_Import` 目前**刻意延後，不是取消**：FloTHERM 實際 export schema 尚未用真實輸出檔
+驗證，猜格式的成本遠高於等待。因此 04 起的資料模型已預留完整整合介面：
+
+- `externalMappings.flotherm`（物件別名、偏好 junction/case 物件、映射狀態）
+- `ResultValue<T>`：source / scenario / reference / confidence
+- Node 的 analytical / flotherm / measurement 溫度插槽
+- Edge 的 analytical / flotherm / measurement / manual 熱阻插槽與 active source
+
+程式碼中**沒有**任何 FloTHERM parser 或 CSV 欄位假設。回補 03 時不需重構 04～10。
 
 ## App Shell 規則
 
@@ -78,6 +90,7 @@ npm test           # vitest — solver / validation / Rule 4 / Rule 9
 src/
   app/            Master App Shell：Header / Sidebar / StatusBar / 導覽與 route guard
   domain/         Project、Scenario、Component 的領域模型與列舉
+  adapters/       Legacy 元件資料雙向轉換
   importers/      匯入管線：解析、欄位對應、正規化、驗證、重複處理、Apply
   thermal/        Thermal Graph 核心
     types.ts          Node / Edge / RthValue / Provenance / SolverState schema
@@ -87,7 +100,7 @@ src/
   data/           Shared stores：project / scenario / component / network / solver
     persistence.ts    localStorage adapter，merge 寫入並保留他工具的欄位
   project/        Screen 01 Project Info
-  screens/        Screen 02 Import Components、以及 03–12 佔位頁
+  screens/        Screen 02 Import Components、04 Component Manager，以及其餘佔位頁
   ui/             共用 UI primitives 與 toast
   mock/           01 規格附帶的示範資料
 ```
@@ -105,3 +118,5 @@ src/
 5. **Rule 6** — 任何 topology / power / Rth / boundary / scenario 變動都會呼叫
    `solverStore.invalidate()`，舊結果轉為 `DIRTY`，不得繼續當成有效值顯示。
 6. **Shared DB 安全** — 專案寫入採 merge 語意，未知的 sibling 欄位原樣保留。
+7. **未知不等於零** — 未知的 Rjc、功耗、溫度上限一律以 `null` 保存並顯示 N/A，絕不以 0 代替。
+8. **Total Power ≠ Edge Q** — `Qty × Power` 只是元件功耗摘要，不可作為熱網路邊的熱流依據。

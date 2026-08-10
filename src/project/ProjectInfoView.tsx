@@ -78,19 +78,22 @@ function ErrorState({ message, onRetry }: { message: string; onRetry: () => void
         <div className="mx-auto mb-4 flex size-11 items-center justify-center rounded-lg bg-danger-100 text-danger-600">
           <AlertTriangle size={20} />
         </div>
-        <h1 className="text-[16px] font-bold text-ink-900">Unable to load project.</h1>
+        <h1 className="text-[16px] font-bold text-ink-900">
+          Unable to load project.
+          <span className="mt-0.5 block text-[13px] font-normal text-ink-500">無法載入專案。</span>
+        </h1>
         <div className="mt-5 flex justify-center gap-2">
           <Button variant="primary" icon={<RefreshCw size={15} />} onClick={onRetry}>
-            Retry
+            Retry / 重試
           </Button>
-          <Button onClick={() => navigate('/')}>Return to Project List</Button>
+          <Button onClick={() => navigate('/')}>Return to Project List / 回專案清單</Button>
         </div>
         <button
           type="button"
           className="mt-4 text-[12px] text-ink-400 underline"
           onClick={() => setShowDetail((v) => !v)}
         >
-          {showDetail ? 'Hide technical details' : 'Show technical details'}
+          {showDetail ? 'Hide technical details / 隱藏技術細節' : 'Show technical details / 顯示技術細節'}
         </button>
         {showDetail && (
           <pre className="mt-2 overflow-x-auto rounded bg-surface-muted p-3 text-left font-mono text-[11px] text-ink-700">
@@ -113,10 +116,16 @@ export function EmptyProjectState() {
         </div>
         <h1 className="text-[18px] font-bold text-ink-900">
           Create your first thermal network project
+          <span className="mt-1 block text-[14px] font-semibold text-ink-500">
+            建立你的第一個熱網路專案
+          </span>
         </h1>
         <p className="mx-auto mt-2 max-w-sm text-[13px] leading-relaxed text-ink-500">
           A project holds the product context, scenarios and the thermal network for one
           5G FR1 radio.
+          <span className="mt-1 block">
+            一個專案包含單一 5G FR1 無線電的產品背景、情境設定與熱網路。
+          </span>
         </p>
         <div className="mt-5 flex justify-center gap-2">
           <Button
@@ -124,7 +133,7 @@ export function EmptyProjectState() {
             icon={<FilePlus2 size={15} />}
             onClick={() => navigate('/project/new/info')}
           >
-            + New Project
+            + New Project / 新增專案
           </Button>
           <Button
             onClick={() => {
@@ -133,7 +142,7 @@ export function EmptyProjectState() {
               navigate(projectPath(id, 'info'));
             }}
           >
-            載入示範專案
+            Load Demo Project / 載入示範專案
           </Button>
         </div>
       </div>
@@ -257,7 +266,7 @@ export function ProjectInfoView() {
           warningCount={warnings.length}
           onCancel={() => {
             useProjectStore.getState().revert();
-            toast.warning('Changes discarded');
+            toast.warning('Changes discarded / 已捨棄變更');
           }}
           onDuplicate={() => setShowDuplicate(true)}
           onArchive={() => setShowArchive(true)}

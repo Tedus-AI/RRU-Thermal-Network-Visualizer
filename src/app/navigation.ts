@@ -32,6 +32,8 @@ export interface ScreenDef {
   icon: LucideIcon;
   group: string;
   implemented: boolean;
+  /** 04 §0 — Screen 03 is deferred until the real FloTHERM schema is validated. */
+  deferred?: boolean;
 }
 
 export interface ScreenGroup {
@@ -75,6 +77,7 @@ export const SCREENS: ScreenDef[] = [
     icon: Upload,
     group: '專案與匯入',
     implemented: false,
+    deferred: true,
   },
   {
     code: '04',
@@ -83,7 +86,7 @@ export const SCREENS: ScreenDef[] = [
     labelEn: 'Component Manager',
     icon: Boxes,
     group: '熱網路建立',
-    implemented: false,
+    implemented: true,
   },
   {
     code: '05',

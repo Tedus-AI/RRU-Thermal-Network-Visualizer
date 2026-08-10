@@ -72,7 +72,7 @@ export function ProjectHealthPanel({ loading }: { loading?: boolean }) {
 
   if (loading) {
     return (
-      <PanelCard title="Project Health" icon={<ShieldCheck size={15} />}>
+      <PanelCard title="Project Health / 專案健檢" icon={<ShieldCheck size={15} />}>
         <div className="flex flex-col gap-2.5">
           {Array.from({ length: 6 }).map((_, index) => (
             <Skeleton key={index} className="h-4" />
@@ -83,37 +83,57 @@ export function ProjectHealthPanel({ loading }: { loading?: boolean }) {
   }
 
   return (
-    <PanelCard title="Project Health" icon={<ShieldCheck size={15} />}>
+    <PanelCard title="Project Health / 專案健檢" icon={<ShieldCheck size={15} />}>
       <HealthRow
         state={health.projectIdentity ? 'done' : 'todo'}
-        label={health.projectIdentity ? 'Project metadata complete' : 'Missing project identity'}
+        label={
+          health.projectIdentity
+            ? 'Project metadata complete / 專案基本資料完整'
+            : 'Missing project identity / 缺少專案識別資料'
+        }
       />
       <HealthRow
         state={health.components ? 'done' : 'todo'}
-        label={health.components ? 'Hardware components imported' : 'Components not imported'}
+        label={
+          health.components
+            ? 'Hardware components imported / 已匯入硬體元件'
+            : 'Components not imported / 尚未匯入元件'
+        }
         targetPath="import-components"
       />
       <HealthRow
         state={health.thermalNetwork ? 'done' : 'todo'}
-        label={health.thermalNetwork ? 'Thermal network created' : 'Thermal network not created'}
+        label={
+          health.thermalNetwork
+            ? 'Thermal network created / 熱網路已建立'
+            : 'Thermal network not created / 熱網路尚未建立'
+        }
         targetPath="thermal-path"
       />
       <HealthRow
         state={health.baselineScenario ? 'done' : 'todo'}
         label={
-          health.baselineScenario ? 'Baseline scenario created' : 'Missing boundary condition'
+          health.baselineScenario
+            ? 'Baseline scenario created / 已建立基準情境'
+            : 'Missing boundary condition / 缺少邊界條件'
         }
         targetPath="boundary"
       />
       {/* Optional — grey, never a warning. */}
       <HealthRow
         state={health.flotherm ? 'done' : 'optional'}
-        label={health.flotherm ? 'FloTHERM data imported' : 'FloTHERM data not imported (optional)'}
+        label={
+          health.flotherm
+            ? 'FloTHERM data imported / 已匯入 FloTHERM 資料'
+            : 'FloTHERM data not imported (optional) / 尚未匯入 FloTHERM（選用）'
+        }
         targetPath="import-flotherm"
       />
       <HealthRow
         state={health.solved ? 'done' : 'todo'}
-        label={health.solved ? 'Network solved' : 'Network not solved'}
+        label={
+          health.solved ? 'Network solved / 已完成求解' : 'Network not solved / 尚未求解'
+        }
         targetPath="network"
       />
     </PanelCard>
