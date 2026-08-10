@@ -1,0 +1,535 @@
+{
+  "schemaVersion": "06-boundary-conditions.v1",
+  "screen": "06_Boundary_Conditions",
+  "generatedFor": "5G FR1 Thermal Network Visualizer",
+  "sourceOfTruth": "06_Boundary_Conditions.md",
+  "appShell": {
+    "activeSidebarItem": "06 Boundary Conditions / 邊界條件",
+    "breadcrumb": [
+      "Project & Import",
+      "Thermal Network Setup",
+      "Boundary Conditions"
+    ],
+    "workflowStepper": [
+      "Scenario",
+      "Ambient & Site",
+      "Surface Mapping",
+      "Convection",
+      "Radiation & Solar",
+      "Validate"
+    ]
+  },
+  "project": {
+    "projectId": "RRU_FR1_ALPHA",
+    "projectName": "FR1 Outdoor RRU Thermal Network",
+    "activeScenarioId": "SCN_HOT_DAY_55C",
+    "unitSystem": "metric",
+    "createdFromVolumeToolProjectId": "VOL_RRU_ALPHA_2026"
+  },
+  "scenarios": [
+    {
+      "scenarioId": "SCN_HOT_DAY_55C",
+      "name": "Baseline Hot Day 55C",
+      "description": "Outdoor high ambient baseline with external wind and solar surface tagging.",
+      "status": "active"
+    },
+    {
+      "scenarioId": "SCN_LAB_CHAMBER_55C",
+      "name": "Lab Chamber 55C",
+      "description": "Fixed chamber ambient, no solar load, manually entered convection coefficients.",
+      "status": "available"
+    }
+  ],
+  "componentSummaryFrom04": {
+    "componentCount": 5,
+    "totalComponentPower_W": 143.6,
+    "qtyModel": "expanded_instances",
+    "architectureTemplatePreference": "shared_base_functional_zones",
+    "preferredBaseZones": [
+      "RF_LEFT",
+      "DIGITAL_CENTER",
+      "POWER_RIGHT"
+    ]
+  },
+  "thermalNetworkTopologyFrom05": {
+    "networkId": "TN_RRU_ALPHA_GENERAL_GRAPH",
+    "networkTopologyVersion": 4,
+    "topologyStatus": "saved",
+    "screen05Rule": "topology_only_no_scenario_boundary_values",
+    "nodes": [
+      {
+        "id": "NODE_PA1_JUNCTION",
+        "name": "PA1 Junction",
+        "type": "junction",
+        "category": "RF",
+        "componentRef": "COMP_PA_01",
+        "powerInputRef": "COMP_PA_01.power_W",
+        "zone": "RF_LEFT",
+        "externalMappings": {
+          "flothermObjectAlias": "RF_Board/PA_01/Die",
+          "importStatus": "mapped_metadata_only"
+        }
+      },
+      {
+        "id": "NODE_PA1_CASE",
+        "name": "PA1 Case",
+        "type": "case",
+        "category": "RF",
+        "componentRef": "COMP_PA_01",
+        "zone": "RF_LEFT",
+        "externalMappings": {
+          "flothermObjectAlias": "RF_Board/PA_01/Package",
+          "importStatus": "mapped_metadata_only"
+        }
+      },
+      {
+        "id": "NODE_PA1_COPPER_COIN",
+        "name": "PA1 Copper Coin",
+        "type": "copper_coin",
+        "category": "mechanical",
+        "zone": "RF_LEFT"
+      },
+      {
+        "id": "NODE_RF_BASE_ZONE",
+        "name": "RF Main Base Zone",
+        "type": "main_base_zone",
+        "category": "mechanical",
+        "zone": "RF_LEFT"
+      },
+      {
+        "id": "NODE_FIN_RF_SURFACE",
+        "name": "RF Fin External Surface",
+        "type": "fin_surface",
+        "category": "cooling_surface",
+        "zone": "RF_LEFT"
+      },
+      {
+        "id": "NODE_AMBIENT_PLACEHOLDER",
+        "name": "Ambient Placeholder",
+        "type": "ambient_placeholder",
+        "category": "boundary",
+        "zone": "external",
+        "temperature_C": null,
+        "note": "Temperature is intentionally undefined in Screen 05 and assigned by Screen 06 per scenario."
+      }
+    ],
+    "edges": [
+      {
+        "id": "EDGE_PA1_RJC",
+        "from": "NODE_PA1_JUNCTION",
+        "to": "NODE_PA1_CASE",
+        "type": "package_rjc",
+        "rthValues": {
+          "datasheet_C_per_W": 0.18,
+          "activeSource": "datasheet"
+        },
+        "heatFlow_W": null,
+        "deltaT_C": null,
+        "source": "datasheet",
+        "confidence": "high"
+      },
+      {
+        "id": "EDGE_PA1_CASE_TO_COIN",
+        "from": "NODE_PA1_CASE",
+        "to": "NODE_PA1_COPPER_COIN",
+        "type": "interface_conduction",
+        "rthValues": {
+          "analytical_C_per_W": 0.064,
+          "activeSource": "analytical"
+        },
+        "heatFlow_W": null,
+        "deltaT_C": null,
+        "source": "analytical",
+        "confidence": "medium"
+      },
+      {
+        "id": "EDGE_COIN_TO_RF_BASE",
+        "from": "NODE_PA1_COPPER_COIN",
+        "to": "NODE_RF_BASE_ZONE",
+        "type": "tim_interface",
+        "rthValues": {
+          "analytical_C_per_W": 0.21,
+          "activeSource": "analytical"
+        },
+        "heatFlow_W": null,
+        "deltaT_C": null,
+        "source": "analytical",
+        "confidence": "medium"
+      },
+      {
+        "id": "EDGE_RF_BASE_TO_FIN_SURFACE",
+        "from": "NODE_RF_BASE_ZONE",
+        "to": "NODE_FIN_RF_SURFACE",
+        "type": "spreading_conduction",
+        "rthValues": {
+          "analytical_C_per_W": 0.075,
+          "activeSource": "analytical"
+        },
+        "heatFlow_W": null,
+        "deltaT_C": null,
+        "source": "analytical",
+        "confidence": "low"
+      },
+      {
+        "id": "EDGE_FIN_SURFACE_TO_AMBIENT",
+        "from": "NODE_FIN_RF_SURFACE",
+        "to": "NODE_AMBIENT_PLACEHOLDER",
+        "type": "boundary_to_ambient",
+        "rthValues": {
+          "boundaryDerived_C_per_W": null,
+          "activeSource": "unresolved_boundary"
+        },
+        "heatFlow_W": null,
+        "deltaT_C": null,
+        "source": "pending_screen06",
+        "confidence": "low",
+        "boundaryStatus": "requires_screen06_conditions"
+      }
+    ],
+    "boundaryPorts": [
+      {
+        "id": "BP_FIN_RF_EXTERNAL_AIR",
+        "name": "RF Fin External Air Boundary",
+        "connectedNodeId": "NODE_FIN_RF_SURFACE",
+        "boundaryEdgeId": "EDGE_FIN_SURFACE_TO_AMBIENT",
+        "surfaceGroupId": "SG_RF_FIN_OUTER",
+        "area_m2": 0.42,
+        "orientation": "vertical_fins",
+        "allowedBoundaryTypes": [
+          "convection_to_ambient",
+          "radiation_to_surroundings",
+          "combined_convection_radiation",
+          "external_cfd_placeholder"
+        ],
+        "externalMappings": {
+          "flothermSurfaceAlias": "RRU_Housing/RF_Fin_Outer_Surface",
+          "importStatus": "mapped_metadata_only"
+        }
+      },
+      {
+        "id": "BP_HOUSING_SUN_FACE",
+        "name": "Housing Sun Exposed Face",
+        "connectedNodeId": "NODE_RF_BASE_ZONE",
+        "surfaceGroupId": "SG_HOUSING_SUN_FACE",
+        "area_m2": 0.38,
+        "orientation": "sun_exposed_vertical_wall",
+        "allowedBoundaryTypes": [
+          "solar_load",
+          "radiation_to_surroundings",
+          "external_cfd_placeholder"
+        ],
+        "externalMappings": {
+          "flothermSurfaceAlias": "RRU_Housing/Sun_Face",
+          "importStatus": "mapped_metadata_only"
+        }
+      },
+      {
+        "id": "BP_CHAMBER_BASE_PLATE",
+        "name": "Lab Base Plate Boundary",
+        "connectedNodeId": "NODE_RF_BASE_ZONE",
+        "surfaceGroupId": "SG_BASE_PLATE_CONTACT",
+        "area_m2": 0.12,
+        "orientation": "bottom_plate",
+        "allowedBoundaryTypes": [
+          "fixed_temperature_boundary",
+          "adiabatic_symmetry"
+        ],
+        "externalMappings": {
+          "measurementPointAlias": "LAB_BASE_PLATE_TC_01",
+          "importStatus": "mapped_metadata_only"
+        }
+      }
+    ]
+  },
+  "scenarioBoundaryConditionSet": {
+    "id": "BCS_RRU_ALPHA_HOT_DAY_55C",
+    "projectId": "RRU_FR1_ALPHA",
+    "networkId": "TN_RRU_ALPHA_GENERAL_GRAPH",
+    "networkTopologyVersion": 4,
+    "scenarioId": "SCN_HOT_DAY_55C",
+    "status": "warnings",
+    "ambientDefinition": {
+      "externalAmbient_C": 55,
+      "internalAir_C": null,
+      "radiationSurrounding_C": 55,
+      "source": "manual",
+      "confidence": "medium",
+      "provenance": {
+        "sourceLabel": "Project requirement",
+        "reference": "Outdoor hot day design assumption",
+        "author": "Thermal Engineer",
+        "createdAt": "2026-08-10T12:00:00+08:00",
+        "changeReason": "Initial Screen 06 boundary setup"
+      }
+    },
+    "siteConditions": {
+      "altitude_m": 50,
+      "windSpeed_m_s": 2,
+      "windDirection_deg": 270,
+      "airflowMode": "external_wind",
+      "convectionMethod": "manual_h",
+      "solarEnabled": true,
+      "solarIrradiance_W_m2": 800,
+      "notes": "Manual convection coefficients for V1. Correlation engine is deferred."
+    },
+    "profiles": [
+      {
+        "id": "BCP_EXTERNAL_AMBIENT_55C",
+        "name": "External Ambient 55C",
+        "type": "ambient_reservoir",
+        "representation": "fixed_temperature_reservoir",
+        "parameters": {
+          "temperature_C": 55
+        },
+        "source": "manual",
+        "confidence": "medium",
+        "provenance": {
+          "sourceLabel": "Design scenario input",
+          "reference": "Baseline Hot Day 55C"
+        },
+        "externalMappings": {
+          "flothermObjectAlias": "Ambient",
+          "flothermResultTableAlias": null,
+          "importStatus": "mapped_metadata_only"
+        }
+      },
+      {
+        "id": "BCP_RF_FIN_FORCED_CONVECTION",
+        "name": "RF Fin Forced Convection",
+        "type": "convection_to_ambient",
+        "representation": "parallel_boundary_edges",
+        "parameters": {
+          "h_W_m2K": 18,
+          "area_m2": 0.42,
+          "ambientProfileId": "BCP_EXTERNAL_AMBIENT_55C",
+          "method": "manual_h",
+          "windSpeed_m_s": 2
+        },
+        "source": "manual",
+        "confidence": "medium",
+        "provenance": {
+          "sourceLabel": "Thermal engineer estimate",
+          "reference": "V1 manual h input"
+        },
+        "externalMappings": {
+          "flothermSurfaceAlias": "RRU_Housing/RF_Fin_Outer_Surface",
+          "flothermResultTableAlias": null,
+          "importStatus": "mapped_metadata_only"
+        }
+      },
+      {
+        "id": "BCP_RF_FIN_RADIATION",
+        "name": "RF Fin Radiation",
+        "type": "radiation_to_surroundings",
+        "representation": "parallel_boundary_edges",
+        "parameters": {
+          "emissivity": 0.86,
+          "viewFactor": 0.9,
+          "area_m2": 0.42,
+          "radiationTemperature_C": 55,
+          "surfaceReferenceTemperatureGuess_C": 90,
+          "linearizationMode": "pre_solve_guess"
+        },
+        "source": "assumed",
+        "confidence": "low",
+        "provenance": {
+          "sourceLabel": "Default black anodized aluminum assumption",
+          "reference": "Replace with measured coating emissivity if available"
+        },
+        "externalMappings": {
+          "flothermSurfaceAlias": "RRU_Housing/RF_Fin_Outer_Surface",
+          "flothermResultTableAlias": null,
+          "importStatus": "mapped_metadata_only"
+        }
+      },
+      {
+        "id": "BCP_HOUSING_SOLAR_GAIN",
+        "name": "Housing Solar Gain",
+        "type": "solar_load",
+        "representation": "external_load_only",
+        "parameters": {
+          "irradiance_W_m2": 800,
+          "receivingArea_m2": 0.38,
+          "absorptivity": 0.72,
+          "projectedAreaFactor": 0.55,
+          "shadingFactor": 0.8
+        },
+        "source": "assumed",
+        "confidence": "low",
+        "provenance": {
+          "sourceLabel": "Outdoor solar exposure assumption",
+          "reference": "Confirm enclosure color and installation angle"
+        },
+        "externalMappings": {
+          "flothermSurfaceAlias": "RRU_Housing/Sun_Face",
+          "flothermResultTableAlias": null,
+          "importStatus": "mapped_metadata_only"
+        }
+      },
+      {
+        "id": "BCP_LAB_BASE_PLATE_UNUSED",
+        "name": "Lab Base Plate Fixed Temperature",
+        "type": "fixed_temperature_boundary",
+        "representation": "fixed_temperature_reservoir",
+        "parameters": {
+          "fixedTemperature_C": null,
+          "reason": "Available only for lab chamber scenario, not active in outdoor hot day scenario"
+        },
+        "source": "manual",
+        "confidence": "low",
+        "provenance": {
+          "sourceLabel": "Placeholder for lab scenario"
+        },
+        "externalMappings": {
+          "measurementPointAlias": "LAB_BASE_PLATE_TC_01",
+          "importStatus": "mapped_metadata_only"
+        }
+      }
+    ],
+    "assignments": [
+      {
+        "id": "BCA_RF_FIN_CONV_RAD",
+        "boundaryPortId": "BP_FIN_RF_EXTERNAL_AIR",
+        "boundaryEdgeId": "EDGE_FIN_SURFACE_TO_AMBIENT",
+        "profileIds": [
+          "BCP_RF_FIN_FORCED_CONVECTION",
+          "BCP_RF_FIN_RADIATION"
+        ],
+        "surfaceGroupId": "SG_RF_FIN_OUTER",
+        "assignmentMode": "manual",
+        "enabled": true
+      },
+      {
+        "id": "BCA_HOUSING_SOLAR",
+        "boundaryPortId": "BP_HOUSING_SUN_FACE",
+        "profileIds": [
+          "BCP_HOUSING_SOLAR_GAIN"
+        ],
+        "surfaceGroupId": "SG_HOUSING_SUN_FACE",
+        "assignmentMode": "manual",
+        "enabled": true
+      },
+      {
+        "id": "BCA_BASE_PLATE_ADIABATIC_REVIEW",
+        "boundaryPortId": "BP_CHAMBER_BASE_PLATE",
+        "profileIds": [],
+        "surfaceGroupId": "SG_BASE_PLATE_CONTACT",
+        "assignmentMode": "manual",
+        "enabled": false
+      }
+    ],
+    "externalLoads": [
+      {
+        "id": "LOAD_SOLAR_HOUSING_SUN_FACE",
+        "type": "solar",
+        "targetBoundaryPortId": "BP_HOUSING_SUN_FACE",
+        "targetNodeId": "NODE_RF_BASE_ZONE",
+        "q_W": 96.31,
+        "sourceProfileId": "BCP_HOUSING_SOLAR_GAIN",
+        "injectInScreen07": true,
+        "note": "Solar heat load is stored separately from component power."
+      }
+    ],
+    "derivedPreview": [
+      {
+        "boundaryPortId": "BP_FIN_RF_EXTERNAL_AIR",
+        "profileIds": [
+          "BCP_RF_FIN_FORCED_CONVECTION",
+          "BCP_RF_FIN_RADIATION"
+        ],
+        "rconv_C_per_W": 0.132,
+        "hrad_W_m2K": 5.2,
+        "rrad_C_per_W": 0.458,
+        "rcombined_C_per_W": 0.103,
+        "completeness": "complete",
+        "disclaimer": "pre_solve_boundary_input_only"
+      },
+      {
+        "boundaryPortId": "BP_HOUSING_SUN_FACE",
+        "profileIds": [
+          "BCP_HOUSING_SOLAR_GAIN"
+        ],
+        "qsolar_W": 96.31,
+        "completeness": "warning",
+        "disclaimer": "pre_solve_boundary_input_only"
+      },
+      {
+        "boundaryPortId": "BP_CHAMBER_BASE_PLATE",
+        "profileIds": [],
+        "completeness": "blocked",
+        "disclaimer": "pre_solve_boundary_input_only"
+      }
+    ],
+    "validationState": {
+      "status": "warnings",
+      "errors": [
+        {
+          "id": "ERR_BASE_PLATE_UNASSIGNED",
+          "severity": "error",
+          "boundaryPortId": "BP_CHAMBER_BASE_PLATE",
+          "message": "Lab base plate boundary is present in topology but has no active scenario assignment.",
+          "suggestedAction": "Assign fixed temperature, mark as adiabatic with reason, or return to Screen 05 and remove this boundary port from the active topology."
+        }
+      ],
+      "warnings": [
+        {
+          "id": "WARN_RAD_PRE_SOLVE_GUESS",
+          "severity": "warning",
+          "profileId": "BCP_RF_FIN_RADIATION",
+          "message": "Radiation coefficient uses a pre-solve surface temperature guess.",
+          "suggestedAction": "Review after Screen 07 solve or replace with measured/FloTHERM-calibrated value later."
+        },
+        {
+          "id": "WARN_SOLAR_ASSUMED",
+          "severity": "warning",
+          "profileId": "BCP_HOUSING_SOLAR_GAIN",
+          "message": "Solar absorptivity and shading factor are assumed.",
+          "suggestedAction": "Confirm enclosure color, coating, and installation angle."
+        }
+      ],
+      "infos": [
+        {
+          "id": "INFO_FLOTHERM_DEFERRED",
+          "severity": "info",
+          "message": "FloTHERM aliases are stored as metadata only. Screen 03 parser is deferred."
+        },
+        {
+          "id": "INFO_NO_SOLVED_RESULTS",
+          "severity": "info",
+          "message": "No solved node temperatures or edge heat flows are stored in Screen 06."
+        }
+      ]
+    },
+    "updatedAt": "2026-08-10T12:00:00+08:00",
+    "updatedBy": "Thermal Engineer"
+  },
+  "uiState": {
+    "selectedBoundaryPortId": "BP_FIN_RF_EXTERNAL_AIR",
+    "activeLeftTab": "Ambient",
+    "activeInspectorTab": "Derived Preview",
+    "showReadOnlyTopologyMode": true,
+    "continueTo07Enabled": false,
+    "disabledReason": "Blocking validation error exists for BP_CHAMBER_BASE_PLATE."
+  },
+  "forbiddenScreen06Results": {
+    "nodeTemperatureResults": null,
+    "edgeHeatFlowResults": null,
+    "bottleneckRanking": null,
+    "solverResidual": null
+  },
+  "floThermDeferredCompatibility": {
+    "screen03Status": "deferred",
+    "parserImplemented": false,
+    "allowedInScreen06": [
+      "boundary surface aliases",
+      "future result table aliases",
+      "measurement point aliases",
+      "metadata-only import status"
+    ],
+    "notAllowedInScreen06": [
+      "guessing FloTHERM CSV headers",
+      "calculating effective segment Rth from unknown heat flow",
+      "overwriting manual boundary values with fake imported values"
+    ]
+  }
+}
