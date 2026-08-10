@@ -7,7 +7,7 @@ import { ChevronsLeft } from 'lucide-react';
 import { GROUP_ICONS, SCREEN_GROUPS, projectPath } from './navigation';
 import { useGuardedNavigate } from './useGuardedNavigate';
 
-export function Sidebar({
+export function MainSidebar({
   collapsed,
   onToggle,
 }: {
@@ -22,7 +22,7 @@ export function Sidebar({
     <nav
       aria-label="主要導覽"
       className={`flex shrink-0 flex-col border-r border-shell-line bg-shell-800 transition-[width] duration-200 ${
-        collapsed ? 'w-16' : 'w-64'
+        collapsed ? 'w-16' : 'w-72'
       }`}
     >
       <div className="scrollbar-thin flex-1 overflow-y-auto py-3">
@@ -36,7 +36,12 @@ export function Sidebar({
                 }`}
               >
                 {GroupIcon && <GroupIcon size={15} />}
-                {!collapsed && <span>{group.label}</span>}
+                {!collapsed && (
+                  <span>
+                    {group.labelEn}
+                    <span className="ml-1 font-normal text-white/35">/ {group.label}</span>
+                  </span>
+                )}
               </div>
 
               <ul>
@@ -49,7 +54,7 @@ export function Sidebar({
                       <button
                         type="button"
                         disabled={!to}
-                        title={collapsed ? `${screen.code} ${screen.label}` : undefined}
+                        title={collapsed ? `${screen.code} ${screen.labelEn} / ${screen.label}` : undefined}
                         aria-current={active ? 'page' : undefined}
                         onClick={() => to && navigate(to)}
                         className={`flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13px] transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
@@ -62,9 +67,15 @@ export function Sidebar({
                       >
                         <Icon size={16} className="shrink-0" />
                         {!collapsed && (
-                          <span className="min-w-0 flex-1 truncate">
-                            <span className="tabular mr-1.5 text-white/50">{screen.code}</span>
-                            {screen.label}
+                          /* English primary, Traditional Chinese beneath — 02 §3. */
+                          <span className="min-w-0 flex-1 leading-tight">
+                            <span className="block truncate">
+                              <span className="tabular mr-1.5 text-white/50">{screen.code}</span>
+                              {screen.labelEn}
+                            </span>
+                            <span className="block truncate text-[11px] text-white/45">
+                              {screen.label}
+                            </span>
                           </span>
                         )}
                         {!collapsed && !screen.implemented && (
@@ -89,7 +100,7 @@ export function Sidebar({
         className="flex items-center justify-center gap-2 border-t border-shell-line py-3 text-[12px] text-white/55 hover:bg-shell-700 hover:text-white"
       >
         <ChevronsLeft size={15} className={collapsed ? 'rotate-180' : ''} />
-        {!collapsed && <span>收合選單</span>}
+        {!collapsed && <span>Collapse / 收合選單</span>}
       </button>
     </nav>
   );

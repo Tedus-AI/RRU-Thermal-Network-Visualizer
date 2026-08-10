@@ -15,7 +15,7 @@ Data Provenance / Physics Correctness 原則為準。
 | --- | --- | --- |
 | — | Phase 0 Foundation（App Shell、Routing、Thermal Graph 資料模型、Solver、Validation、Shared Stores、Persistence） | ✅ |
 | 01 | Project Info | ✅ |
-| 02 | Import Components | ⏳ 待規格 |
+| 02 | Import Components | ✅ |
 | 03 | Import FloTHERM | ⏳ 待規格 |
 | 04 | Component Manager | ⏳ 待規格 |
 | 05 | Thermal Path Builder | ⏳ 待規格 |
@@ -29,8 +29,14 @@ Data Provenance / Physics Correctness 原則為準。
 
 ## 技術堆疊
 
-React 18 + TypeScript + Vite + Zustand + Tailwind CSS v4。
+React 18 + TypeScript + Vite + Zustand + Tailwind CSS v4，Excel 解析使用 read-excel-file。
 Screen 07 之後會依 00 §39 引入 Cytoscape.js（網路圖）與 Plotly.js（工程圖表）。
+
+## App Shell 規則
+
+Header / Sidebar / Breadcrumb / Status Bar 為全專案共用且集中維護，個別 Screen 不得自行
+更改或重新設計。完整規則見 [`docs/APP_SHELL_CONTRACT.md`](docs/APP_SHELL_CONTRACT.md)。
+自 Screen 02 起 UI 以英文為主、中英並列，空間不足時以繁體中文 tooltip 補足。
 
 ## 線上版本
 
@@ -72,6 +78,7 @@ npm test           # vitest — solver / validation / Rule 4 / Rule 9
 src/
   app/            Master App Shell：Header / Sidebar / StatusBar / 導覽與 route guard
   domain/         Project、Scenario、Component 的領域模型與列舉
+  importers/      匯入管線：解析、欄位對應、正規化、驗證、重複處理、Apply
   thermal/        Thermal Graph 核心
     types.ts          Node / Edge / RthValue / Provenance / SolverState schema
     rth.ts            Rth 多來源值物件；Rule 4 與 Rule 9 的程式碼層防護
@@ -80,7 +87,7 @@ src/
   data/           Shared stores：project / scenario / component / network / solver
     persistence.ts    localStorage adapter，merge 寫入並保留他工具的欄位
   project/        Screen 01 Project Info
-  screens/        Screen 02–12 佔位頁
+  screens/        Screen 02 Import Components、以及 03–12 佔位頁
   ui/             共用 UI primitives 與 toast
   mock/           01 規格附帶的示範資料
 ```

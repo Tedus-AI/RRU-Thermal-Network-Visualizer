@@ -36,8 +36,17 @@ export interface ScreenDef {
 
 export interface ScreenGroup {
   label: string;
+  labelEn: string;
   screens: ScreenDef[];
 }
+
+/** English name for each sidebar group — English primary per 02 §3. */
+export const GROUP_LABELS_EN: Record<string, string> = {
+  專案與匯入: 'Project & Import',
+  熱網路建立: 'Network Setup',
+  熱網路視覺化: 'Analysis',
+  報告與匯出: 'Report & Export',
+};
 
 export const SCREENS: ScreenDef[] = [
   {
@@ -56,13 +65,13 @@ export const SCREENS: ScreenDef[] = [
     labelEn: 'Import Components',
     icon: FolderInput,
     group: '專案與匯入',
-    implemented: false,
+    implemented: true,
   },
   {
     code: '03',
     path: 'import-flotherm',
-    label: '匯入 FloTHERM 結果',
-    labelEn: 'Import FloTHERM',
+    label: 'FloTHERM 匯入',
+    labelEn: 'FloTHERM Import',
     icon: Upload,
     group: '專案與匯入',
     implemented: false,
@@ -79,7 +88,7 @@ export const SCREENS: ScreenDef[] = [
   {
     code: '05',
     path: 'thermal-path',
-    label: '熱路徑設定',
+    label: '熱路徑建立',
     labelEn: 'Thermal Path Builder',
     icon: Share2,
     group: '熱網路建立',
@@ -88,7 +97,7 @@ export const SCREENS: ScreenDef[] = [
   {
     code: '06',
     path: 'boundary',
-    label: '邊界條件設定',
+    label: '邊界條件',
     labelEn: 'Boundary Conditions',
     icon: Thermometer,
     group: '熱網路建立',
@@ -142,7 +151,7 @@ export const SCREENS: ScreenDef[] = [
   {
     code: '12',
     path: 'export',
-    label: '匯出圖檔 / 報告',
+    label: '匯出中心',
     labelEn: 'Export Center',
     icon: FileDown,
     group: '報告與匯出',
@@ -150,9 +159,16 @@ export const SCREENS: ScreenDef[] = [
   },
 ];
 
-export const SCREEN_GROUPS: ScreenGroup[] = ['專案與匯入', '熱網路建立', '熱網路視覺化', '報告與匯出'].map(
-  (label) => ({ label, screens: SCREENS.filter((s) => s.group === label) }),
-);
+export const SCREEN_GROUPS: ScreenGroup[] = [
+  '專案與匯入',
+  '熱網路建立',
+  '熱網路視覺化',
+  '報告與匯出',
+].map((label) => ({
+  label,
+  labelEn: GROUP_LABELS_EN[label],
+  screens: SCREENS.filter((s) => s.group === label),
+}));
 
 export const GROUP_ICONS: Record<string, LucideIcon> = {
   專案與匯入: FolderInput,
