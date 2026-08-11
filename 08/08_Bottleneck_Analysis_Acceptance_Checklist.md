@@ -1,0 +1,23 @@
+# 08 Acceptance Checklist
+- [ ] Valid 07 prerequisite
+- [ ] Not maximum-Rth-only
+- [ ] Candidate scope/filter
+- [ ] Full-network re-solve sensitivity
+- [ ] Baseline Q not reused
+- [ ] Shared/parallel redistribution captured
+- [ ] 35/45/20 score
+- [ ] Temperature/margin improvement
+- [ ] Affected component count
+- [ ] Classification/confidence
+- [ ] Candidate failure isolated
+- [ ] Baseline never overwritten
+- [ ] Proposal does not mutate official Rth
+- [ ] Ranking table matches MD
+- [ ] Graph overlay/path focus
+- [ ] Inspector tabs match MD
+- [ ] Deterministic recommendation
+- [ ] Dirty/cancel states
+- [ ] No 09/10 features
+- [ ] No FloTHERM parser
+- [ ] Fixed App Shell + exact 01–12 Sidebar
+- [ ] Continue → 09

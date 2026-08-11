@@ -1,0 +1,9 @@
+{
+  "Bottleneck Score":"由 Edge ΔT、full-network sensitivity、thermal margin impact 組合，不是單純依 Rth 排序。",
+  "Sensitivity":"降低 candidate edge Rth 後重新求解完整 General Thermal Graph。",
+  "Rth Reduction":"V1 預設 20%，只做假設分析，不直接修改正式 network。",
+  "Affected Components":"re-solve 後溫度改善達 threshold 的元件數。",
+  "Margin Impact":"改善 candidate edge 後 Worst Thermal Margin 的改善量。",
+  "Rth":"工程 context；不是排名唯一或主要依據。",
+  "Improvement Proposal":"保存改善假設與 projected benefit，不直接修改 network。"
+}
