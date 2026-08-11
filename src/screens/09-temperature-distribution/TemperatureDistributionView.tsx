@@ -55,6 +55,7 @@ import {
   groupRows,
   rankRows,
   temperatureCsv,
+  WARNING_TEMPERATURE_C,
   type DistributionFilters,
   type DistributionScope,
   type GroupBy,
@@ -198,7 +199,7 @@ export function TemperatureDistributionView() {
   const [view, setView] = useState<DistributionView>('histogram');
   const [binMode, setBinMode] = useState<BinMode>('5');
   const [customBin, setCustomBin] = useState(5);
-  const [warningThreshold, setWarningThreshold] = useState(90);
+  const [warningThreshold, setWarningThreshold] = useState(WARNING_TEMPERATURE_C);
   const [barSort, setBarSort] = useState<BarSort>('temperature_desc');
   const [rankMode, setRankMode] = useState<RankMode>('temperature');
   const [topN, setTopN] = useState<number>(10);

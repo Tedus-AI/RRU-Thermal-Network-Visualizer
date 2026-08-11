@@ -140,7 +140,7 @@ export const SCREENS: ScreenDef[] = [
     labelEn: 'Results Overview',
     icon: BarChart3,
     group: '熱網路視覺化',
-    implemented: false,
+    implemented: true,
   },
   {
     code: '11',
