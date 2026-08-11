@@ -131,7 +131,7 @@ export const SCREENS: ScreenDef[] = [
     labelEn: 'Temperature Distribution',
     icon: CircleGauge,
     group: '熱網路視覺化',
-    implemented: false,
+    implemented: true,
   },
   {
     code: '10',
