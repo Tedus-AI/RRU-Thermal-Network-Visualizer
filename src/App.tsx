@@ -8,6 +8,7 @@ import { ImportComponentsView } from '@/screens/02-import-components/ImportCompo
 import { ComponentManagerView } from '@/screens/04-component-manager/ComponentManagerView';
 import { ThermalPathBuilderView } from '@/screens/05-thermal-path-builder/ThermalPathBuilderView';
 import { BoundaryConditionsView } from '@/screens/06-boundary-conditions/BoundaryConditionsView';
+import { ThermalNetworkView } from '@/screens/07-thermal-network/ThermalNetworkView';
 import { useProjectStore } from '@/data/projectStore';
 
 /** Opens the most recently updated project, or shows the empty state (01 §20). */
@@ -42,6 +43,7 @@ export default function App() {
         <Route path="/project/:projectId/components" element={<ComponentManagerView />} />
         <Route path="/project/:projectId/thermal-path" element={<ThermalPathBuilderView />} />
         <Route path="/project/:projectId/boundary" element={<BoundaryConditionsView />} />
+        <Route path="/project/:projectId/network" element={<ThermalNetworkView />} />
         {SCREENS.filter((screen) => !screen.implemented).map((screen) => (
           <Route
             key={screen.code}

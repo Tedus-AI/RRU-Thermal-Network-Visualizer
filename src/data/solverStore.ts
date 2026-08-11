@@ -22,6 +22,12 @@ interface SolverStoreState {
   invalidate: (reason: DirtyReason) => void;
   setSolving: () => void;
   setResult: (result: SolveResult, issues: ValidationIssue[]) => void;
+  /**
+   * Lifecycle update from Screen 07's per-scenario solution (07 §2, §40).
+   * The full result lives in `solutionStore`; this store stays the one place
+   * the shell, the status bar and Screen 01 read the solver STATE from.
+   */
+  setSolutionState: (status: 'SOLVED' | 'WARNING' | 'FAILED', solvedAt: string | null) => void;
   setFailed: (issues: ValidationIssue[]) => void;
   reset: () => void;
 }
@@ -57,6 +63,9 @@ export const useSolverStore = create<SolverStoreState>((set, get) => ({
       lastSolvedAt: new Date().toISOString(),
       dirtyReasons: [],
     }),
+
+  setSolutionState: (status, solvedAt) =>
+    set({ state: status, lastSolvedAt: solvedAt, dirtyReasons: [] }),
 
   setFailed: (issues) => set({ state: 'FAILED', issues, result: null }),
 

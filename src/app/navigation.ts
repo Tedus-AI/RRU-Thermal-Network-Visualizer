@@ -113,7 +113,7 @@ export const SCREENS: ScreenDef[] = [
     labelEn: 'Thermal Network',
     icon: Network,
     group: '熱網路視覺化',
-    implemented: false,
+    implemented: true,
   },
   {
     code: '08',

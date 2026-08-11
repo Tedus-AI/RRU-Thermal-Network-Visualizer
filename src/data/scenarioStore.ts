@@ -8,7 +8,7 @@
 
 import { create } from 'zustand';
 import { createBaselineScenario, type Scenario } from '@/domain/project';
-import { loadScenarios, saveScenarios } from './persistence';
+import { loadProject, loadScenarios, saveProject, saveScenarios } from './persistence';
 import { useSolverStore } from './solverStore';
 
 interface ScenarioStoreState {
@@ -20,7 +20,8 @@ interface ScenarioStoreState {
 
   createDefaultScenario: (projectId: string) => Scenario;
   updateScenario: (id: string, patch: Partial<Scenario>) => void;
-  setActiveScenario: (id: string | null) => void;
+  /** `projectId` persists the choice onto the project record (01 §35). */
+  setActiveScenario: (id: string | null, projectId?: string) => void;
   persist: (projectId: string) => void;
   replaceAll: (scenarios: Scenario[]) => void;
 
@@ -34,7 +35,19 @@ export const useScenarioStore = create<ScenarioStoreState>((set, get) => ({
 
   loadFor: (projectId) => {
     const scenarios = loadScenarios(projectId);
-    const active = scenarios.find((s) => s.is_default) ?? scenarios[0] ?? null;
+    // The scenario the engineer picked survives a screen change and a reload.
+    // Reloading the list must not silently drag them back to Baseline: Screens
+    // 06 and 07 are both per-scenario, so that would pair one screen's boundary
+    // set with another screen's solution. In memory first, then the project
+    // record, then the default; a scenario that no longer exists falls through.
+    const current = get().activeScenarioId;
+    const stored = loadProject(projectId)?.active_scenario_id ?? null;
+    const active =
+      scenarios.find((s) => s.id === current) ??
+      scenarios.find((s) => s.id === stored) ??
+      scenarios.find((s) => s.is_default) ??
+      scenarios[0] ??
+      null;
     set({ scenarios, activeScenarioId: active?.id ?? null });
     return scenarios;
   },
@@ -59,8 +72,17 @@ export const useScenarioStore = create<ScenarioStoreState>((set, get) => ({
     useSolverStore.getState().invalidate('boundary_changed');
   },
 
-  setActiveScenario: (id) => {
+  setActiveScenario: (id, projectId) => {
     set({ activeScenarioId: id });
+    // Merge-saved onto the project document so the choice outlives a reload.
+    // `active_scenario_id` is a field this tool owns (01 §35); everything else
+    // on the document is preserved by `saveProject`.
+    if (projectId) {
+      const project = loadProject(projectId);
+      if (project && project.active_scenario_id !== id) {
+        saveProject({ ...project, active_scenario_id: id });
+      }
+    }
     useSolverStore.getState().invalidate('scenario_changed');
   },
 
