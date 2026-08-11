@@ -808,11 +808,13 @@ export function BoundaryConditionsView() {
             scenarios={scenarios}
             activeScenarioId={activeScenarioId}
             readOnly={readOnly}
-            onSelect={(scenarioId) => useScenarioStore.getState().setActiveScenario(scenarioId)}
+            onSelect={(scenarioId) =>
+              useScenarioStore.getState().setActiveScenario(scenarioId, projectId)
+            }
             onCreate={() => {
               const scenario = createScenario(projectId, `Scenario ${scenarios.length + 1}`);
               useScenarioStore.getState().replaceAll([...scenarios, scenario]);
-              useScenarioStore.getState().setActiveScenario(scenario.id);
+              useScenarioStore.getState().setActiveScenario(scenario.id, projectId);
               useScenarioStore.getState().persist(projectId);
               toast.success('Scenario created / 已建立情境');
             }}

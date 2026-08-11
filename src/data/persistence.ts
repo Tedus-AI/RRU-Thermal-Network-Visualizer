@@ -17,6 +17,7 @@ import { SCHEMA_VERSION, defaultProjectContext } from '@/domain/project';
 import type { Component } from '@/domain/component';
 import { DEFAULT_SOLVER_SETTINGS, type ThermalNetwork } from '@/thermal/types';
 import type { ScenarioBoundaryConditionSet } from '@/thermal/boundary/types';
+import type { ThermalSolution } from '@/thermal/solver/solverTypes';
 import { migrateComponents } from './componentMigration';
 
 const PROJECTS_KEY = 'tnv.projects';
@@ -24,6 +25,7 @@ const SCENARIOS_KEY = 'tnv.scenarios';
 const COMPONENTS_KEY = 'tnv.components';
 const NETWORKS_KEY = 'tnv.thermal_networks';
 const BOUNDARY_KEY = 'tnv.boundary_sets';
+const SOLUTIONS_KEY = 'tnv.thermal_solutions';
 
 /** Keys on a project document that belong to this tool. Everything else is foreign. */
 const OWNED_PROJECT_KEYS = [
@@ -230,4 +232,37 @@ export function deleteBoundarySet(
   delete bucket[boundaryKey(networkId, scenarioId)];
   all[projectId] = bucket as RawDoc;
   writeCollection(BOUNDARY_KEY, all);
+}
+
+// --- Thermal solutions ------------------------------------------------------
+// 07 §40, §41 — one analytical solution per scenario, stored apart from both the
+// topology and the boundary set. A solver result is never written back into
+// component master data or into the graph (07 §53).
+
+export function loadSolutions(projectId: string): ThermalSolution[] {
+  const all = readCollection(SOLUTIONS_KEY);
+  const bucket = (all[projectId] ?? {}) as Record<string, ThermalSolution>;
+  return Object.values(bucket).filter(
+    (solution) => solution && typeof solution === 'object' && solution.scenario_id,
+  );
+}
+
+export function saveSolution(projectId: string, solution: ThermalSolution): void {
+  const all = readCollection(SOLUTIONS_KEY);
+  const bucket = (all[projectId] ?? {}) as Record<string, unknown>;
+  bucket[boundaryKey(solution.network_id, solution.scenario_id)] = solution;
+  all[projectId] = bucket as RawDoc;
+  writeCollection(SOLUTIONS_KEY, all);
+}
+
+export function deleteSolution(
+  projectId: string,
+  networkId: string,
+  scenarioId: string,
+): void {
+  const all = readCollection(SOLUTIONS_KEY);
+  const bucket = (all[projectId] ?? {}) as Record<string, unknown>;
+  delete bucket[boundaryKey(networkId, scenarioId)];
+  all[projectId] = bucket as RawDoc;
+  writeCollection(SOLUTIONS_KEY, all);
 }

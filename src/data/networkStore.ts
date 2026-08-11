@@ -16,6 +16,7 @@ import type {
   BaseZone,
   ComponentTemplateBinding,
   NetworkStatus,
+  SolverSettings,
   ThermalEdge,
   ThermalNetwork,
   ThermalNode,
@@ -91,6 +92,8 @@ interface NetworkStoreState {
 
   revalidate: () => GraphValidationResult | null;
   setStatus: (status: NetworkStatus) => void;
+  /** Energy-balance thresholds and numerical limits — 07 §14, 00 Rule 6. */
+  updateSolverSettings: (patch: Partial<SolverSettings>) => void;
   save: (projectId: string) => void;
 
   nodeCount: () => number;
@@ -336,6 +339,18 @@ export const useNetworkStore = create<NetworkStoreState>((set, get) => ({
     set((state) =>
       state.network ? { network: { ...state.network, status } } : state,
     ),
+
+  updateSolverSettings: (patch) => {
+    const network = get().network;
+    if (!network) return;
+    set({
+      network: { ...network, solver_settings: { ...network.solver_settings, ...patch } },
+      dirty: true,
+    });
+    // The thresholds decide whether a result passes, so a previous solve is
+    // no longer authoritative (00 Rule 6).
+    useSolverStore.getState().invalidate('solver_settings_changed');
+  },
 
   save: (projectId) => {
     const network = get().network;

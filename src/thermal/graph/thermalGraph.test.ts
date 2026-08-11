@@ -310,8 +310,12 @@ describe('shared structure (05 §13, §14, §15)', () => {
     expect(boundaryEdge.resolution).toBe('unresolved');
     expect(boundaryEdge.resolution_note).toContain('Screen 06');
 
-    // No h, no wind, no solar anywhere in the generated structure.
-    const serialized = JSON.stringify(structure);
+    // No h, no wind, no solar anywhere in the generated structure. Provenance
+    // timestamps are dropped first: an ISO time can contain "55" as a minute or
+    // a second, which has nothing to do with a 55 °C ambient.
+    const serialized = JSON.stringify(structure, (key, value) =>
+      key === 'timestamp' ? undefined : value,
+    );
     expect(serialized).not.toMatch(/h_conv|wind|solar/i);
     expect(serialized).not.toContain('55');
   });
