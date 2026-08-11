@@ -18,6 +18,10 @@ import type { Component } from '@/domain/component';
 import { DEFAULT_SOLVER_SETTINGS, type ThermalNetwork } from '@/thermal/types';
 import type { ScenarioBoundaryConditionSet } from '@/thermal/boundary/types';
 import type { ThermalSolution } from '@/thermal/solver/solverTypes';
+import type {
+  BottleneckAnalysis,
+  BottleneckProposal,
+} from '@/thermal/analysis/analysisTypes';
 import { migrateComponents } from './componentMigration';
 
 const PROJECTS_KEY = 'tnv.projects';
@@ -26,6 +30,8 @@ const COMPONENTS_KEY = 'tnv.components';
 const NETWORKS_KEY = 'tnv.thermal_networks';
 const BOUNDARY_KEY = 'tnv.boundary_sets';
 const SOLUTIONS_KEY = 'tnv.thermal_solutions';
+const ANALYSES_KEY = 'tnv.bottleneck_analyses';
+const PROPOSALS_KEY = 'tnv.improvement_proposals';
 
 /** Keys on a project document that belong to this tool. Everything else is foreign. */
 const OWNED_PROJECT_KEYS = [
@@ -265,4 +271,55 @@ export function deleteSolution(
   delete bucket[boundaryKey(networkId, scenarioId)];
   all[projectId] = bucket as RawDoc;
   writeCollection(SOLUTIONS_KEY, all);
+}
+
+// --- Bottleneck analyses and improvement proposals --------------------------
+// 08 §23, §25 — one analysis per scenario, and proposals as a separate list.
+// A proposal is a record of an assumption: it never carries an applied Rth, and
+// nothing here writes back into the network or the component records.
+
+export function loadAnalyses(projectId: string): BottleneckAnalysis[] {
+  const all = readCollection(ANALYSES_KEY);
+  const bucket = (all[projectId] ?? {}) as Record<string, BottleneckAnalysis>;
+  return Object.values(bucket).filter(
+    (analysis) => analysis && typeof analysis === 'object' && analysis.scenario_id,
+  );
+}
+
+export function saveAnalysis(projectId: string, analysis: BottleneckAnalysis): void {
+  const all = readCollection(ANALYSES_KEY);
+  const bucket = (all[projectId] ?? {}) as Record<string, unknown>;
+  bucket[boundaryKey(analysis.network_id, analysis.scenario_id)] = analysis;
+  all[projectId] = bucket as RawDoc;
+  writeCollection(ANALYSES_KEY, all);
+}
+
+export function deleteAnalysis(projectId: string, networkId: string, scenarioId: string): void {
+  const all = readCollection(ANALYSES_KEY);
+  const bucket = (all[projectId] ?? {}) as Record<string, unknown>;
+  delete bucket[boundaryKey(networkId, scenarioId)];
+  all[projectId] = bucket as RawDoc;
+  writeCollection(ANALYSES_KEY, all);
+}
+
+export function loadProposals(projectId: string): BottleneckProposal[] {
+  const all = readCollection(PROPOSALS_KEY);
+  const bucket = (all[projectId] ?? {}) as Record<string, BottleneckProposal>;
+  return Object.values(bucket).filter((entry) => entry && typeof entry === 'object' && entry.edge_id);
+}
+
+export function saveProposal(projectId: string, proposal: BottleneckProposal): void {
+  const all = readCollection(PROPOSALS_KEY);
+  const bucket = (all[projectId] ?? {}) as Record<string, unknown>;
+  bucket[proposal.id] = proposal;
+  all[projectId] = bucket as RawDoc;
+  writeCollection(PROPOSALS_KEY, all);
+}
+
+export function deleteProposal(projectId: string, proposalId: string): void {
+  const all = readCollection(PROPOSALS_KEY);
+  const bucket = (all[projectId] ?? {}) as Record<string, unknown>;
+  delete bucket[proposalId];
+  all[projectId] = bucket as RawDoc;
+  writeCollection(PROPOSALS_KEY, all);
 }

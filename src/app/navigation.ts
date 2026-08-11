@@ -122,7 +122,7 @@ export const SCREENS: ScreenDef[] = [
     labelEn: 'Bottleneck Analysis',
     icon: TriangleAlert,
     group: '熱網路視覺化',
-    implemented: false,
+    implemented: true,
   },
   {
     code: '09',
