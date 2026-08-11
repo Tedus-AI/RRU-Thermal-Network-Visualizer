@@ -68,7 +68,7 @@ import { NodeInspector } from './NodeInspector';
 import { EdgeInspector } from './EdgeInspector';
 import { NetworkValidationPanel } from './NetworkValidationPanel';
 import { EmptyNetworkState, GenerateNetworkPreview } from './GenerateNetworkPreview';
-import { LEGEND } from './graphStyles';
+import { LEGEND } from '@/ui/graphStyles';
 
 // --- Small building blocks -------------------------------------------------
 

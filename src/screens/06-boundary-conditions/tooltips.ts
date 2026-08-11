@@ -1,0 +1,72 @@
+/**
+ * zh-TW tooltips — from `06_Boundary_Conditions_Tooltips_zh-TW.json`.
+ *
+ * Kept as data so every panel quotes the same wording, and so the project rule
+ * holds: English label visible, Traditional Chinese on hover when there is no
+ * room to show both (docs/APP_SHELL_CONTRACT.md).
+ */
+
+export const T06 = {
+  page: '設定此情境下的環境溫度、對流、輻射、太陽負載與固定溫度邊界。',
+  pageSubtitle: '這一頁只設定情境相關的邊界條件，不建立新的熱網路拓撲，也不執行求解。',
+
+  step: {
+    scenario: '選擇目前要設定邊界條件的情境。不同情境可以共用 05 的拓撲，但邊界條件彼此獨立。',
+    ambientSite: '設定外部環境溫度、風速、風向、高度與太陽條件。',
+    surfaceMapping: '將 05 建立的 boundary port 對應到此情境的對流、輻射、太陽或固定溫度條件。',
+    convection: '設定表面到空氣的對流係數 h 與有效面積，用於推導邊界熱阻。',
+    radiationSolar: '設定輻射參數與太陽熱輸入。太陽負載是外部熱源，不是熱阻。',
+    validate: '檢查所有必要邊界條件是否完整，確認可以交給 07 進行熱網路求解。',
+  },
+
+  kpi: {
+    boundarySet: '顯示目前情境的邊界條件集合狀態，例如草稿、需檢查或可求解。',
+    boundaryPorts: '顯示 05 拓撲中的邊界端口有多少已完成此情境的條件指定。',
+    ambient: '顯示此情境的環境溫度狀態。這不是求解後的節點溫度。',
+    convection: '顯示對流 profile 的數量與是否缺少 h 或面積資料。',
+    radiationSolar: '顯示輻射與太陽負載是否已設定完成。',
+    solveReadiness: '檢查此情境是否已具備交給 07 求解所需的邊界輸入。',
+  },
+
+  field: {
+    scenarioName: '情境名稱，例如 Baseline Hot Day、Solar Peak 或 Lab Chamber。',
+    copyFromScenario: '從另一個情境複製邊界條件，複製後會成為目前情境的獨立資料。',
+    externalAmbient: '外部環境溫度。05 只保留 Ambient Placeholder，實際溫度必須在 06 依情境設定。',
+    internalAir: '可選的內部空氣溫度，用於有外殼內部空氣節點的拓撲。',
+    radiationSurrounding: '輻射交換使用的周圍或天空等效溫度；若未確定，需標示為假設值。',
+    altitude: '安裝高度。V1 可先保存資料，未來可用於空氣密度或對流修正。',
+    windSpeed: '外部風速。若 V1 尚未實作自動相關式，仍需手動輸入 h 值。',
+    windDirection: '風向角度或方向描述，用於記錄此情境的安裝與環境條件。',
+    airflowMode: '選擇自然對流、強制對流、外部風或風扇/鼓風機條件。',
+    convectionMethod: 'V1 必須支援手動 h。自動對流相關式可在後續版本加入。',
+    solarEnabled: '啟用後，可對指定外殼或散熱表面加入太陽熱輸入。',
+    solarIrradiance: '太陽照射強度，單位 W/m²。此值會用來計算外部熱輸入。',
+    solarIncidence: '太陽入射角，用於記錄安裝方位與遮蔽假設。',
+    absorptivity: '表面吸收太陽能的比例，需介於 0 到 1。',
+    emissivity: '表面發射率，用於輻射熱交換計算，需介於 0 到 1。',
+    shadingFactor: '遮蔽係數，1 代表無遮蔽，0 代表完全遮蔽。',
+    projectedAreaFactor: '投影面積係數，代表實際承受日照的比例。',
+    viewFactor: '視角因子，代表表面與周圍環境之間的輻射交換比例。',
+    hConv: '對流熱傳係數 h，單位 W/m²K。V1 由工程師手動輸入。',
+    area: '參與此邊界條件的有效表面積，單位 m²。',
+    fixedTemperature: '固定溫度邊界的溫度值，例如恆溫槽或受控冷板。',
+    adiabaticReason: '絕熱邊界必須說明理由，否則驗證會視為未指定。',
+    boundaryType: '此邊界端口採用的邊界條件型別。',
+    representation: '此 profile 在 07 求解時的表示方式，例如並聯邊界或外部熱負載。',
+    dataSource: '資料來源：manual、analytical、datasheet、assumed、measurement、flotherm 或 vendor。',
+    confidence: '此邊界輸入的信心度。低信心度會在驗證中顯示警告。',
+  },
+
+  derived: {
+    disclaimer: '求解前的邊界輸入預覽。節點溫度與連線熱流由 07 計算。',
+    rconv: '對流邊界熱阻預覽 = 1 / (h × A)。',
+    rrad: '輻射邊界熱阻預覽 = 1 / (h_rad × A)，其中 h_rad 為線性化輻射係數。',
+    rcombined: '對流與輻射為並聯，因此以導熱率相加後取倒數，不是熱阻相加。',
+    qsolar: '太陽熱負載預覽，為外部熱輸入，與元件功耗分開儲存。',
+  },
+
+  mapping:
+    '預留給 FloTHERM 等外部模擬的對照別名；Screen 03 的解析功能尚未實作，此處僅儲存中繼資料。',
+  floThermDeferred: 'FloTHERM 匯入延後中，別名僅供未來對照使用。',
+  readOnlyTopology: '拓撲由 05 建立，於此畫面唯讀：06 不新增或刪除任何節點與連線。',
+} as const;

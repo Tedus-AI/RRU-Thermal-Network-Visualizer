@@ -19,7 +19,7 @@ Data Provenance / Physics Correctness 原則為準。
 | 03 | FloTHERM Import | ⏸ 刻意延後（見下） |
 | 04 | Component Manager | ✅ |
 | 05 | Thermal Path Builder | ✅ |
-| 06 | Boundary Conditions | ⏳ 待規格 |
+| 06 | Boundary Conditions | ✅ |
 | 07 | Thermal Network | ⏳ 待規格 |
 | 08 | Bottleneck Analysis | ⏳ 待規格 |
 | 09 | Temperature Distribution | ⏳ 待規格 |
@@ -61,6 +61,20 @@ Cytoscape 只是 view / interaction layer：Graph 的唯一真實來源是 `netw
   `DIRECT_BASE_OUT`），不硬綁 Main Base；Step 4 才把 port 接到共用結構。
 - Graph 不限制為 Tree：series / parallel / branch / merge / shared node / coupling cycle
   都合法，區域間的耦合迴圈不會被判為錯誤。
+
+## Screen 06 的物理界線
+
+06 是第一個設定「情境相關邊界條件」的畫面，接續 05 刻意留白的部分：
+
+- 05 的拓樸在此**唯讀**：06 不新增、不刪除任何節點或連線，也不會改寫 05 的存檔。
+- 環境溫度、對流 h、輻射參數、太陽負載、固定溫度**依情境儲存**，鍵值為
+  `projectId + networkId + scenarioId`，不寫進 base topology。
+- 06 **不求解**，也不顯示節點溫度、Edge Heat Flow Q、ΔT 或瓶頸排名。
+- 邊界熱阻只是**求解前的輸入預覽**，畫面上明確標示；
+  `Rconv = 1/(hA)`、`h_rad ≈ 4εσF·T³`、對流與輻射為**並聯（導熱率相加）**。
+- 太陽負載是**外部熱輸入**，與元件功耗分開儲存，由 07 決定如何注入求解。
+- 固定溫度是 Dirichlet 邊界，絕熱是「刻意不導熱」，兩者都不會被偽造成熱阻。
+- 參數不足一律維持 `null` 並在驗證中擋下，不會被填 0。
 
 ## App Shell 規則
 

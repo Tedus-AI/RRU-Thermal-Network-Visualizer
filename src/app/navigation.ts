@@ -104,7 +104,7 @@ export const SCREENS: ScreenDef[] = [
     labelEn: 'Boundary Conditions',
     icon: Thermometer,
     group: '熱網路建立',
-    implemented: false,
+    implemented: true,
   },
   {
     code: '07',
