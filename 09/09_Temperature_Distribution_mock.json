@@ -1,0 +1,166 @@
+{
+  "project": {
+    "id": "CBNG_FR1_RRU_EVT2",
+    "name": "CBNG FR1 RRU EVT2"
+  },
+  "activeScenario": {
+    "id": "SCN_55C_0",
+    "name": "Baseline 55C / 0 m/s"
+  },
+  "resultSource": "Analytical",
+  "status": "READY",
+  "kpis": {
+    "maxTemperatureC": 103.4,
+    "averageTemperatureC": 74.8,
+    "p95TemperatureC": 96.8,
+    "minThermalMarginC": 13.2,
+    "nodesAboveWarning": 3
+  },
+  "controls": {
+    "scope": "Components With Limits",
+    "groupBy": "Component",
+    "view": "Histogram",
+    "histogramBinC": 5,
+    "warningThresholdC": 90,
+    "sort": "Temperature High to Low"
+  },
+  "statistics": {
+    "count": 18,
+    "minC": 58.9,
+    "maxC": 103.4,
+    "meanC": 74.8,
+    "medianC": 72.6,
+    "p90C": 92.1,
+    "p95C": 96.8,
+    "stdDevC": 13.4
+  },
+  "histogram": [
+    {
+      "range": "55–60",
+      "count": 2
+    },
+    {
+      "range": "60–65",
+      "count": 3
+    },
+    {
+      "range": "65–70",
+      "count": 2
+    },
+    {
+      "range": "70–75",
+      "count": 3
+    },
+    {
+      "range": "75–80",
+      "count": 2
+    },
+    {
+      "range": "80–85",
+      "count": 1
+    },
+    {
+      "range": "85–90",
+      "count": 2
+    },
+    {
+      "range": "90–95",
+      "count": 1
+    },
+    {
+      "range": "95–100",
+      "count": 1
+    },
+    {
+      "range": "100–105",
+      "count": 1
+    }
+  ],
+  "hotNodes": [
+    {
+      "rank": 1,
+      "node": "PA1 Junction",
+      "component": "PA1",
+      "category": "RF",
+      "temperatureC": 103.4,
+      "limitType": "Tj",
+      "limitC": 180,
+      "marginC": 76.6,
+      "zone": "RF Left"
+    },
+    {
+      "rank": 2,
+      "node": "FPGA Junction",
+      "component": "FPGA",
+      "category": "Digital",
+      "temperatureC": 96.8,
+      "limitType": "Tj",
+      "limitC": 110,
+      "marginC": 13.2,
+      "zone": "Digital"
+    },
+    {
+      "rank": 3,
+      "node": "Power Module",
+      "component": "Power Module",
+      "category": "Power",
+      "temperatureC": 92.1,
+      "limitType": "Tc",
+      "limitC": 110,
+      "marginC": 17.9,
+      "zone": "Power"
+    },
+    {
+      "rank": 4,
+      "node": "Driver1 Junction",
+      "component": "Driver1",
+      "category": "RF",
+      "temperatureC": 91.2,
+      "limitType": "Tj",
+      "limitC": 150,
+      "marginC": 58.8,
+      "zone": "RF Left"
+    },
+    {
+      "rank": 5,
+      "node": "Filter1 Surface",
+      "component": "Filter1",
+      "category": "RF",
+      "temperatureC": 88.4,
+      "limitType": "Ts",
+      "limitC": 120,
+      "marginC": 31.6,
+      "zone": "RF Left"
+    }
+  ],
+  "selectedNode": {
+    "node": "FPGA Junction",
+    "component": "FPGA",
+    "nodeType": "Junction",
+    "category": "Digital",
+    "zone": "Digital",
+    "temperatureC": 96.8,
+    "temperatureRank": 2,
+    "percentilePosition": 95,
+    "distanceFromAverageC": 22.0,
+    "limitType": "Tj",
+    "limitC": 110,
+    "marginC": 13.2,
+    "status": "Within Limit",
+    "resultSource": "Analytical"
+  },
+  "scenarios": [
+    {
+      "id": "SCN_55C_0",
+      "name": "Baseline 55C / 0 m/s"
+    },
+    {
+      "id": "SCN_46_SOLAR",
+      "name": "46C + Solar"
+    },
+    {
+      "id": "SCN_25_LAB",
+      "name": "25C Lab"
+    }
+  ]
+}

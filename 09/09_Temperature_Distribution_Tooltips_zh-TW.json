@@ -1,0 +1,15 @@
+{
+  "P95 Temperature": "第 95 百分位溫度：95% 的納入節點溫度低於此值，用來觀察高溫尾端分佈。",
+  "Scope": "決定哪些 solved nodes 納入本頁的統計、圖表與排名。",
+  "Group By": "決定比較與彙整的分類方式，例如 Component、Category、Node Type 或 Base Zone。",
+  "Histogram Bin": "直方圖的溫度區間寬度；固定 bin 可確保不同次檢視結果一致。",
+  "Warning Threshold": "僅用於視覺標示高溫節點，不等同元件正式 thermal limit。",
+  "P90": "第 90 百分位溫度。",
+  "Standard Deviation": "目前篩選資料的溫度標準差，用來觀察溫度離散程度。",
+  "Temperature Rank": "依目前資料集溫度由高到低排序；不是 Screen 08 的 Bottleneck Rank。",
+  "Percentile Position": "所選節點在目前資料集中的溫度百分位位置。",
+  "Lock Temperature Scale": "跨 Scenario 比較時鎖定相同 Min/Max 色階，避免自動縮放造成視覺誤判。",
+  "Partial Match": "兩個 Scenario 的 network topology 不完全相同，只比較可用 stable node ID 對應的節點。",
+  "Result Source": "選擇可用的溫度結果來源。03 尚未完成時不可顯示假的 FloTHERM dataset。",
+  "Near Limit": "V1 顯示規則：thermal margin 小於等於 10°C 時標示為接近限制。"
+}

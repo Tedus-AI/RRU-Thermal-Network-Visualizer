@@ -1,0 +1,40 @@
+# 09 Temperature Distribution — Acceptance Checklist
+
+- [ ] Valid Screen 07 solution required
+- [ ] Max / Average / P95 / Min Margin / Warning Nodes / Scenario KPI
+- [ ] Scope
+- [ ] Group By
+- [ ] Filters
+- [ ] Histogram
+- [ ] Deterministic binning
+- [ ] Mean / median / P90 / P95 / std-dev
+- [ ] Component Bars
+- [ ] Limit markers
+- [ ] Margin Bars
+- [ ] Scenario Compare
+- [ ] Stable node ID matching
+- [ ] Partial Match
+- [ ] Network Temperature view
+- [ ] Temperature legend
+- [ ] Lock Temperature Scale
+- [ ] Hot Node Table
+- [ ] Temperature Rank wording
+- [ ] Node Inspector
+- [ ] Percentile Position
+- [ ] Near Limit classification
+- [ ] Only available Result Sources shown
+- [ ] No fake FloTHERM data
+- [ ] No solver mutation
+- [ ] Stale solution handling
+- [ ] Export Chart PNG
+- [ ] Export Temperature CSV
+- [ ] No Bottleneck sensitivity
+- [ ] No Bottleneck Score
+- [ ] No Executive Summary
+- [ ] Fixed App Shell
+- [ ] Exact 01–12 sidebar
+- [ ] English primary
+- [ ] English/zh-TW bilingual where space allows
+- [ ] Compact English-only labels have zh-TW engineering tooltips
+- [ ] Native title alone is not used as tooltip implementation
+- [ ] Continue → Screen 10
