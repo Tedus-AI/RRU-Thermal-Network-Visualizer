@@ -54,6 +54,61 @@ export function biTitle(en: string, zh: string): string {
   return `${en} / ${zh}`;
 }
 
+/**
+ * Engineering explanation for a compact English-only label — 09 §3.2, §3.3.
+ *
+ * From Screen 09 the rule tightens: a native `title` attribute is explicitly NOT
+ * sufficient for an engineering field (09 §3.3, AC-09-34), and the Traditional
+ * Chinese text must explain what the number MEANS rather than translate its
+ * name. This renders a visible, keyboard-focusable affordance so the explanation
+ * can be reached without a mouse.
+ *
+ *   <EngineeringInfo zh="第 95 百分位溫度：95% 的納入節點溫度低於此值…" />
+ */
+export function EngineeringInfo({
+  zh,
+  label,
+  align = 'center',
+}: {
+  /** Traditional Chinese engineering explanation. Not a literal translation. */
+  zh: string;
+  /** English label this explains, for the accessible name. */
+  label?: string;
+  align?: 'left' | 'center';
+}) {
+  const [open, setOpen] = useState(false);
+  const tooltipId = useId();
+
+  return (
+    <span className="relative inline-flex items-center">
+      <button
+        type="button"
+        aria-describedby={open ? tooltipId : undefined}
+        aria-label={label ? `${label} — engineering explanation / 工程說明` : '工程說明'}
+        className="inline-flex text-ink-400 transition-colors hover:text-accent-600 focus:text-accent-600 focus:outline-none"
+        onMouseEnter={() => setOpen(true)}
+        onMouseLeave={() => setOpen(false)}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setOpen(false)}
+        onClick={() => setOpen((value) => !value)}
+      >
+        <Info size={12} aria-hidden />
+      </button>
+      {open && (
+        <span
+          role="tooltip"
+          id={tooltipId}
+          className={`absolute bottom-full z-50 mb-1.5 w-64 rounded-md bg-shell-800 px-2.5 py-2 text-[12px] leading-relaxed font-normal text-white shadow-lg ${
+            align === 'left' ? 'left-0' : 'left-1/2 -translate-x-1/2'
+          }`}
+        >
+          {zh}
+        </span>
+      )}
+    </span>
+  );
+}
+
 export function BilingualTooltip({
   zh,
   children,

@@ -10,6 +10,7 @@ import { ThermalPathBuilderView } from '@/screens/05-thermal-path-builder/Therma
 import { BoundaryConditionsView } from '@/screens/06-boundary-conditions/BoundaryConditionsView';
 import { ThermalNetworkView } from '@/screens/07-thermal-network/ThermalNetworkView';
 import { BottleneckAnalysisView } from '@/screens/08-bottleneck-analysis/BottleneckAnalysisView';
+import { TemperatureDistributionView } from '@/screens/09-temperature-distribution/TemperatureDistributionView';
 import { useProjectStore } from '@/data/projectStore';
 
 /** Opens the most recently updated project, or shows the empty state (01 §20). */
@@ -46,6 +47,7 @@ export default function App() {
         <Route path="/project/:projectId/boundary" element={<BoundaryConditionsView />} />
         <Route path="/project/:projectId/network" element={<ThermalNetworkView />} />
         <Route path="/project/:projectId/bottleneck" element={<BottleneckAnalysisView />} />
+        <Route path="/project/:projectId/temperature" element={<TemperatureDistributionView />} />
         {SCREENS.filter((screen) => !screen.implemented).map((screen) => (
           <Route
             key={screen.code}
