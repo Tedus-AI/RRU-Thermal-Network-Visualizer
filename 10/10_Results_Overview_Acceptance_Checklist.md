@@ -1,0 +1,40 @@
+# 10 Results Overview — Acceptance Checklist
+
+- [ ] Current Screen 07 solution required
+- [ ] Overall Status enum works
+- [ ] Status priority works
+- [ ] Near-limit threshold reused
+- [ ] Six KPI cards
+- [ ] Critical Components lowest-margin sorting
+- [ ] Component PASS / NEAR LIMIT / FAIL / NO LIMIT
+- [ ] Top 3 Bottlenecks from 08 only
+- [ ] Dirty 08 not shown as current
+- [ ] Distribution summary from 09 only
+- [ ] Temperature Range Bar
+- [ ] Solver / energy quality
+- [ ] Energy thresholds match 07
+- [ ] Data completeness
+- [ ] Rth source counts
+- [ ] FloTHERM 0/Deferred when unavailable
+- [ ] Read-only Network Snapshot
+- [ ] Deterministic Engineering Action Summary
+- [ ] No fabricated recommendation
+- [ ] Recommended Next Action
+- [ ] Overall Readiness
+- [ ] Report Readiness
+- [ ] Prepare Report Snapshot
+- [ ] Snapshot invalidation
+- [ ] No sensitivity controls
+- [ ] No histogram controls
+- [ ] No report-layout controls
+- [ ] No export-format controls
+- [ ] Stale state
+- [ ] Partial 08/09 state
+- [ ] Analytical-only valid without FloTHERM
+- [ ] Fixed App Shell
+- [ ] Exact 01–12 sidebar
+- [ ] English primary
+- [ ] Bilingual where space allows
+- [ ] Compact English-only labels have zh-TW engineering tooltips
+- [ ] Native title alone is not used
+- [ ] Continue → Screen 11

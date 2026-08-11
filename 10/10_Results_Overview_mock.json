@@ -1,0 +1,149 @@
+{
+  "project": {
+    "id": "CBNG_FR1_RRU_EVT2",
+    "name": "CBNG FR1 RRU EVT2"
+  },
+  "scenario": {
+    "id": "SCN_55C_0",
+    "name": "Baseline 55C / 0 m/s",
+    "ambientC": 55,
+    "windMps": 0,
+    "solarWm2": 0,
+    "powerScale": 1.0
+  },
+  "overview": {
+    "overallStatus": "WARNING",
+    "resultMode": "Analytical",
+    "reportReadiness": "WARNING",
+    "maxTemperatureC": 103.4,
+    "worstMarginC": 13.2,
+    "topBottleneck": "RF Left Base → HSK Base",
+    "energyErrorPercent": 0.05,
+    "totalPowerW": 412.3
+  },
+  "solverQuality": {
+    "status": "SOLVED",
+    "solvedNodes": 42,
+    "solvedEdges": 47,
+    "generatedW": 412.3,
+    "rejectedW": 412.1,
+    "residualW": 0.2,
+    "energyErrorPercent": 0.05,
+    "quality": "GOOD"
+  },
+  "criticalComponents": [
+    {
+      "component": "FPGA",
+      "node": "FPGA Junction",
+      "temperatureC": 96.8,
+      "limitType": "Tj",
+      "limitC": 110,
+      "marginC": 13.2,
+      "status": "PASS"
+    },
+    {
+      "component": "Power Module",
+      "node": "Power Module",
+      "temperatureC": 92.1,
+      "limitType": "Tc",
+      "limitC": 110,
+      "marginC": 17.9,
+      "status": "PASS"
+    },
+    {
+      "component": "Filter1",
+      "node": "Filter1 Surface",
+      "temperatureC": 88.4,
+      "limitType": "Ts",
+      "limitC": 120,
+      "marginC": 31.6,
+      "status": "PASS"
+    },
+    {
+      "component": "Driver1",
+      "node": "Driver1 Junction",
+      "temperatureC": 91.2,
+      "limitType": "Tj",
+      "limitC": 150,
+      "marginC": 58.8,
+      "status": "PASS"
+    },
+    {
+      "component": "PA1",
+      "node": "PA1 Junction",
+      "temperatureC": 103.4,
+      "limitType": "Tj",
+      "limitC": 180,
+      "marginC": 76.6,
+      "status": "PASS"
+    }
+  ],
+  "bottlenecks": [
+    {
+      "rank": 1,
+      "edge": "RF Left Base → HSK Base",
+      "score": 92,
+      "classification": "Critical",
+      "sensitivityImprovementC": 6.8,
+      "affectedComponents": 6,
+      "confidence": "Medium"
+    },
+    {
+      "rank": 2,
+      "edge": "Fin Surface → Ambient",
+      "score": 86,
+      "classification": "Critical",
+      "sensitivityImprovementC": 5.1,
+      "affectedComponents": 11,
+      "confidence": "High"
+    },
+    {
+      "rank": 3,
+      "edge": "PA1 Junction → PA1 Case",
+      "score": 74,
+      "classification": "High",
+      "sensitivityImprovementC": 3.6,
+      "affectedComponents": 1,
+      "confidence": "High"
+    }
+  ],
+  "distribution": {
+    "averageTemperatureC": 74.8,
+    "p95TemperatureC": 96.8,
+    "nodesAboveWarning": 3,
+    "minTemperatureC": 58.9,
+    "maxTemperatureC": 103.4,
+    "rows": 18
+  },
+  "dataCompleteness": {
+    "componentsWithLimits": 15,
+    "componentsWithoutLimits": 3,
+    "lowConfidenceCriticalEdges": 2,
+    "externalCfdValidation": "Deferred",
+    "rthSourceCounts": {
+      "Analytical": 31,
+      "Manual": 16,
+      "Measurement": 0,
+      "FloTHERM": 0
+    }
+  },
+  "actionSummary": [
+    "FPGA is the lowest-margin monitored component (+13.2°C).",
+    "RF Left Base → HSK Base is the highest-value improvement candidate.",
+    "A 20% reduction of the top bottleneck Rth is projected by Screen 08 to improve the target temperature by 6.8°C.",
+    "Solver energy balance is good at 0.05%."
+  ],
+  "recommendedNextAction": "Review Bottleneck",
+  "readiness": {
+    "currentSolverResult": "READY",
+    "energyBalance": "READY",
+    "thermalLimitsCoverage": "WARNING",
+    "bottleneckAnalysis": "READY",
+    "temperatureDistribution": "READY",
+    "dataConfidence": "WARNING"
+  },
+  "reportReadinessReason": [
+    "3 components are missing thermal limits.",
+    "2 critical edges use low-confidence inputs."
+  ]
+}
