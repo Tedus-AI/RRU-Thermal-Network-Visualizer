@@ -1,0 +1,44 @@
+# 11 Report Preview — Acceptance Checklist
+
+- [ ] ResultsOverviewSnapshot required
+- [ ] Snapshot CURRENT / STALE / MISSING / WARNING
+- [ ] Stale snapshot warning
+- [ ] Fixed App Shell
+- [ ] Exact Sidebar 01–12
+- [ ] 03 Deferred
+- [ ] 11 active
+- [ ] Default report template
+- [ ] Section include/exclude
+- [ ] Section reorder
+- [ ] Cover fields
+- [ ] A4 / Letter
+- [ ] Portrait / Landscape
+- [ ] English / Bilingual report language
+- [ ] Header/Footer options
+- [ ] Page thumbnails
+- [ ] Zoom / Fit Width / Fit Page
+- [ ] Overall Status reads snapshot only
+- [ ] Critical Components reads snapshot only
+- [ ] Bottleneck reads snapshot only
+- [ ] Distribution reads snapshot only
+- [ ] Optional existing 09 histogram snapshot embed
+- [ ] Solver quality reads snapshot only
+- [ ] Data completeness reads snapshot only
+- [ ] Engineering Actions reads snapshot only
+- [ ] Engineer report-only notes
+- [ ] Source & Traceability appendix
+- [ ] Section Inspector
+- [ ] PREVIEW_READY / EXPORT_READY / WARNING / BLOCKED
+- [ ] FAIL thermal status does not automatically block report
+- [ ] Stale/missing snapshot blocks export preparation
+- [ ] Save Report Layout
+- [ ] Save As Template stores layout only
+- [ ] Prepare for Export creates metadata payload only
+- [ ] No actual export in 11
+- [ ] No thermal recalculation
+- [ ] No thermal input editing
+- [ ] English-primary UI
+- [ ] Bilingual where space allows
+- [ ] Compact English-only fields have zh-TW engineering tooltip
+- [ ] Native title alone is not used
+- [ ] Continue → Screen 12 when not BLOCKED

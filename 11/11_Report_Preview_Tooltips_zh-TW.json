@@ -1,0 +1,14 @@
+{
+  "Snapshot Status": "報告快照狀態：確認本報告引用的 Screen 10 結果是否仍與目前 Scenario、Solver、08/09 分析及 thermal limits 一致。",
+  "Report Readiness": "報告準備狀態：判斷目前報告內容是否可預覽、是否可準備匯出，以及是否仍存在資料或章節警告。",
+  "Section Order": "報告章節顯示順序；只影響報告版面，不會修改 thermal analysis data。",
+  "Page Break Before": "在此章節前強制換頁，用於控制正式報告的段落版面。",
+  "Keep Table Together": "盡可能避免表格被分割到兩頁，但不保證所有長表都能完全保持在單頁。",
+  "Snapshot Source": "此報告章節所引用的 Screen 10 snapshot 與來源分析版本。",
+  "Source Screen": "此章節數據最初來自哪個分析頁，例如 Screen 07、08、09 或 10。",
+  "Language Mode": "設定報告內容使用英文或中英雙語；不影響應用程式 UI 的語言規則。",
+  "Prepare for Export": "建立給 Screen 12 使用的 report export payload；本頁不會真正生成 PDF 或其他檔案。",
+  "Export Payload": "包含報告配置、snapshot ID、section order、page setting 等匯出必要 metadata，不包含實際檔案 bytes。",
+  "Analytical-only": "目前結果完全來自 analytical thermal network model，尚未由 FloTHERM 或 measurement 校正。",
+  "External CFD Validation": "外部 CFD 驗證狀態；03 尚未完成時可顯示 Deferred，但不應自動判定報告失效。"
+}

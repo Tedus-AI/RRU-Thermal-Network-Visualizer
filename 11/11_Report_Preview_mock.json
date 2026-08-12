@@ -1,0 +1,135 @@
+{
+  "project": {
+    "id": "CBNG_FR1_RRU_EVT2",
+    "name": "CBNG FR1 RRU EVT2",
+    "customerProgram": "CBNG / FR1 RRU",
+    "stage": "EVT2"
+  },
+  "scenario": {
+    "id": "SCN_55C_0",
+    "name": "Baseline 55C / 0 m/s",
+    "ambientC": 55,
+    "windMps": 0,
+    "solarWm2": 0,
+    "powerScale": 1.0
+  },
+  "snapshot": {
+    "id": "SNAP_10_20260812_1010",
+    "status": "CURRENT",
+    "createdAt": "2026-08-12T10:10:00+08:00",
+    "overallStatus": "WARNING",
+    "sourceReportReadiness": "WARNING",
+    "resultMode": "Analytical"
+  },
+  "report": {
+    "id": "RPT_CFG_001",
+    "template": "Thermal Engineering Summary",
+    "title": "5G FR1 RRU Thermal Engineering Report",
+    "subtitle": "Baseline 55C / 0 m/s",
+    "languageMode": "bilingual",
+    "pageSize": "A4",
+    "orientation": "portrait",
+    "estimatedPageCount": 8,
+    "readiness": "WARNING",
+    "zoom": "Fit Width"
+  },
+  "sections": [
+    {
+      "id": "cover",
+      "title": "Cover",
+      "included": true,
+      "required": true,
+      "order": 1
+    },
+    {
+      "id": "project",
+      "title": "Project & Scenario Summary",
+      "included": true,
+      "required": true,
+      "order": 2
+    },
+    {
+      "id": "overall",
+      "title": "Overall Thermal Status",
+      "included": true,
+      "required": true,
+      "order": 3
+    },
+    {
+      "id": "critical",
+      "title": "Critical Components",
+      "included": true,
+      "required": false,
+      "order": 4
+    },
+    {
+      "id": "network",
+      "title": "Thermal Network Summary",
+      "included": true,
+      "required": false,
+      "order": 5
+    },
+    {
+      "id": "bottleneck",
+      "title": "Bottleneck Analysis Summary",
+      "included": true,
+      "required": false,
+      "order": 6
+    },
+    {
+      "id": "distribution",
+      "title": "Temperature Distribution Summary",
+      "included": true,
+      "required": false,
+      "order": 7
+    },
+    {
+      "id": "quality",
+      "title": "Solver & Energy Quality",
+      "included": true,
+      "required": true,
+      "order": 8
+    },
+    {
+      "id": "confidence",
+      "title": "Data Completeness & Confidence",
+      "included": true,
+      "required": false,
+      "order": 9
+    },
+    {
+      "id": "actions",
+      "title": "Engineering Actions / Conclusions",
+      "included": true,
+      "required": false,
+      "order": 10
+    },
+    {
+      "id": "appendix",
+      "title": "Appendix: Source & Traceability",
+      "included": true,
+      "required": false,
+      "order": 11
+    }
+  ],
+  "preview": {
+    "currentPage": 2,
+    "pageCount": 8,
+    "currentPageTitle": "Overall Thermal Status",
+    "overallStatus": "WARNING",
+    "maxTemperatureC": 103.4,
+    "worstMarginC": 13.2,
+    "topBottleneck": "RF Left Base → HSK Base",
+    "energyErrorPercent": 0.05,
+    "totalPowerW": 412.3
+  },
+  "validation": {
+    "snapshot": "READY",
+    "requiredSections": "READY",
+    "projectMetadata": "READY",
+    "scenarioMetadata": "READY",
+    "solverSummary": "READY",
+    "reportNotes": "READY",
+    "exportPayload": "WARNING"
+  }
+}
