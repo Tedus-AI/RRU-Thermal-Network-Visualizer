@@ -1,0 +1,145 @@
+{
+  "project": {
+    "id": "CBNG_FR1_RRU_EVT2",
+    "name": "CBNG FR1 RRU EVT2"
+  },
+  "scenario": {
+    "id": "SCN_55C_0",
+    "name": "Baseline 55C / 0 m/s"
+  },
+  "status": {
+    "global": "READY",
+    "readyArtifacts": 7,
+    "warnings": 1,
+    "blocked": 0,
+    "packageSizeEstimateMB": 3.8,
+    "lastExport": "2026-08-12 12:40"
+  },
+  "preset": "Engineering Package",
+  "configuration": {
+    "baseFilename": "CBNG_FR1_RRU_EVT2_55C_0mps",
+    "includeProjectId": true,
+    "includeScenarioId": true,
+    "timestamp": true,
+    "overwriteHandling": "Auto Rename",
+    "csvEncoding": "UTF-8 with BOM",
+    "decimalPrecision": 3,
+    "jsonFormat": "Pretty",
+    "pngScale": "2x",
+    "destination": "Browser Download"
+  },
+  "artifacts": [
+    {
+      "type": "PDF Report",
+      "format": "PDF",
+      "selected": true,
+      "status": "WARNING",
+      "source": "11 Report Preview"
+    },
+    {
+      "type": "Temperature Results",
+      "format": "CSV",
+      "selected": true,
+      "status": "READY",
+      "source": "07 / 09"
+    },
+    {
+      "type": "Thermal Network",
+      "format": "JSON",
+      "selected": true,
+      "status": "READY",
+      "source": "05 / 07"
+    },
+    {
+      "type": "Thermal Network",
+      "format": "CSV",
+      "selected": true,
+      "status": "READY",
+      "source": "05 / 07"
+    },
+    {
+      "type": "Bottleneck Analysis",
+      "format": "CSV",
+      "selected": true,
+      "status": "READY",
+      "source": "08"
+    },
+    {
+      "type": "Scenario & Boundary",
+      "format": "JSON",
+      "selected": true,
+      "status": "READY",
+      "source": "06"
+    },
+    {
+      "type": "PNG Snapshots",
+      "format": "PNG",
+      "selected": true,
+      "status": "READY",
+      "source": "07 / 08 / 09 / 10"
+    },
+    {
+      "type": "Traceability Manifest",
+      "format": "JSON",
+      "selected": true,
+      "status": "READY",
+      "source": "12"
+    },
+    {
+      "type": "HTML Report",
+      "format": "HTML",
+      "selected": false,
+      "status": "NOT_AVAILABLE",
+      "source": "11"
+    }
+  ],
+  "readiness": {
+    "Report": "WARNING",
+    "Thermal Solution": "READY",
+    "Bottleneck Analysis": "READY",
+    "Temperature Distribution": "READY",
+    "Network Data": "READY",
+    "Scenario / Boundary": "READY",
+    "Snapshots": "READY"
+  },
+  "warnings": [
+    "Report Readiness is WARNING: some components are missing thermal limits.",
+    "External CFD validation is Deferred."
+  ],
+  "queue": [
+    {
+      "artifact": "Thermal Report",
+      "format": "PDF",
+      "status": "READY",
+      "filename": "CBNG_FR1_RRU_EVT2_55C_0mps_Thermal_Report_20260812_1250.pdf"
+    },
+    {
+      "artifact": "Temperature Results",
+      "format": "CSV",
+      "status": "READY",
+      "filename": "CBNG_FR1_RRU_EVT2_55C_0mps_Temperature_Results_20260812_1250.csv"
+    },
+    {
+      "artifact": "Engineering Package",
+      "format": "ZIP",
+      "status": "READY",
+      "filename": "CBNG_FR1_RRU_EVT2_55C_0mps_Engineering_Package_20260812_1250.zip"
+    }
+  ],
+  "history": [
+    {
+      "time": "2026-08-12 12:40",
+      "artifact": "Engineering Package",
+      "status": "EXPORTED",
+      "filename": "CBNG_FR1_RRU_EVT2_55C_0mps_Engineering_Package_20260812_1240.zip",
+      "size": "3.7 MB"
+    },
+    {
+      "time": "2026-08-12 11:58",
+      "artifact": "Thermal Report",
+      "status": "EXPORTED",
+      "filename": "CBNG_FR1_RRU_EVT2_55C_0mps_Thermal_Report_20260812_1158.pdf",
+      "size": "1.9 MB"
+    }
+  ]
+}

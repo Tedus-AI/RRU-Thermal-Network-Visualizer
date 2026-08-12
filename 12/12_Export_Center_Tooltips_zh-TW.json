@@ -1,0 +1,15 @@
+{
+  "Export Status": "目前 Export Center 的整體匯出狀態，綜合 selected artifacts 的 readiness、warning、blocked 與執行結果。",
+  "Artifact": "可匯出的工程產物，例如 PDF Report、Temperature CSV、Thermal Network JSON 或 PNG snapshot。",
+  "Package Preset": "預先定義的 artifact 選擇組合；只影響匯出內容，不會修改 thermal analysis data。",
+  "Report Readiness": "沿用 Screen 11 的報告準備狀態；WARNING 可確認後匯出，BLOCKED 則不可產生 PDF。",
+  "Traceability Manifest": "追溯資訊清單：記錄本次匯出所使用的 Project、Scenario、Solver、Snapshot、Artifact、版本與警告，便於後續工程驗證與版本追蹤。",
+  "Overwrite Handling": "當檔名重複時的處理方式；Browser Download 模式通常使用 Auto Rename 以避免覆寫。",
+  "Decimal Precision": "CSV 匯出時的數值小數位數；不會改變工具內部保存的原始精度。",
+  "UTF-8 BOM": "在 CSV 開頭加入 BOM，提升 Excel 開啟繁體中文欄位時的相容性。",
+  "Local Export": "匯出檔案在本機瀏覽器產生，不會自動上傳到外部服務。",
+  "Export Session": "一次匯出工作所凍結的 Project / Scenario / Solver / Report 版本集合，確保所有 artifacts 使用一致來源。",
+  "Package Warning": "選定 artifacts 中存在可接受但需要工程覆核的 warning；匯出前必須確認。",
+  "Checksum": "可選的 SHA-256 檔案摘要，用於驗證 artifact 在傳遞後是否被改動。",
+  "Partial Export": "部分 artifact 成功、部分失敗或不可用；成功檔案仍可交付，但 manifest 需記錄異常。"
+}

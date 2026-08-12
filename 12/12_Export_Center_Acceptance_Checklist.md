@@ -1,0 +1,47 @@
+# 12 Export Center — Acceptance Checklist
+
+- [ ] Fixed App Shell
+- [ ] Exact Sidebar 01–12
+- [ ] 03 Deferred
+- [ ] 12 active
+- [ ] Artifact catalog
+- [ ] Per-artifact readiness
+- [ ] Global export status
+- [ ] PDF uses Screen 11 config
+- [ ] PDF blocked only when source invalid/stale
+- [ ] WARNING report confirmation
+- [ ] FAIL thermal result still exportable
+- [ ] Temperature CSV
+- [ ] Network JSON
+- [ ] Network nodes/edges CSV
+- [ ] Bottleneck CSV
+- [ ] Scenario/Boundary JSON
+- [ ] PNG snapshots
+- [ ] Engineering ZIP
+- [ ] Traceability manifest
+- [ ] Filename convention
+- [ ] Filename sanitization
+- [ ] Browser Download
+- [ ] Folder API graceful fallback
+- [ ] Blocked/unavailable checkbox behavior
+- [ ] Export presets
+- [ ] Decimal precision
+- [ ] UTF-8 BOM
+- [ ] Export queue/progress
+- [ ] Cancel safely
+- [ ] Failure isolation
+- [ ] PARTIAL state
+- [ ] Validation panel
+- [ ] Session export history
+- [ ] Local-only export
+- [ ] Shared DB not mutated by file bytes
+- [ ] Consistent ExportSession snapshot
+- [ ] No fake FloTHERM data
+- [ ] No report layout editing
+- [ ] No solver/sensitivity/distribution recalculation
+- [ ] No thermal input editing
+- [ ] English primary
+- [ ] Bilingual where space allows
+- [ ] Compact English-only labels have zh-TW engineering tooltip
+- [ ] Native title alone is not used
+- [ ] Finish → Screen 10
