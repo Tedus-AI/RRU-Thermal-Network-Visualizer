@@ -25,6 +25,15 @@ export type LimitStatus = 'within_limit' | 'near_limit' | 'over_limit' | 'no_lim
 /** 09 §32 — V1 display rule. A project setting may override it in future. */
 export const NEAR_LIMIT_MARGIN_C = 10;
 
+/**
+ * Default "runs hot" threshold for the Nodes Above Warning count (09 §5).
+ *
+ * Screen 09 lets the engineer move it; Screen 10 has no controls at all
+ * (10 §24) and reads this default. Both take it from here so the two screens
+ * cannot quietly disagree about which nodes are above warning.
+ */
+export const WARNING_TEMPERATURE_C = 90;
+
 export interface TemperatureRow {
   node_id: string;
   node_name: string;

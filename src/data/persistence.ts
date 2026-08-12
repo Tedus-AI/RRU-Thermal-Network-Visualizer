@@ -22,6 +22,7 @@ import type {
   BottleneckAnalysis,
   BottleneckProposal,
 } from '@/thermal/analysis/analysisTypes';
+import type { ResultsOverviewSnapshot } from '@/thermal/overview/overviewTypes';
 import { migrateComponents } from './componentMigration';
 
 const PROJECTS_KEY = 'tnv.projects';
@@ -32,6 +33,7 @@ const BOUNDARY_KEY = 'tnv.boundary_sets';
 const SOLUTIONS_KEY = 'tnv.thermal_solutions';
 const ANALYSES_KEY = 'tnv.bottleneck_analyses';
 const PROPOSALS_KEY = 'tnv.improvement_proposals';
+const SNAPSHOTS_KEY = 'tnv.results_snapshots';
 
 /** Keys on a project document that belong to this tool. Everything else is foreign. */
 const OWNED_PROJECT_KEYS = [
@@ -322,4 +324,33 @@ export function deleteProposal(projectId: string, proposalId: string): void {
   delete bucket[proposalId];
   all[projectId] = bucket as RawDoc;
   writeCollection(PROPOSALS_KEY, all);
+}
+
+// --- Results Overview snapshots ---------------------------------------------
+// 10 §18, §19 — one frozen summary per scenario, kept apart from the solution it
+// froze. A snapshot is metadata for Screen 11; nothing here writes an overview
+// KPI back into component master data (10 §30).
+
+export function loadSnapshots(projectId: string): ResultsOverviewSnapshot[] {
+  const all = readCollection(SNAPSHOTS_KEY);
+  const bucket = (all[projectId] ?? {}) as Record<string, ResultsOverviewSnapshot>;
+  return Object.values(bucket).filter(
+    (snapshot) => snapshot && typeof snapshot === 'object' && snapshot.scenario_id,
+  );
+}
+
+export function saveSnapshot(projectId: string, snapshot: ResultsOverviewSnapshot): void {
+  const all = readCollection(SNAPSHOTS_KEY);
+  const bucket = (all[projectId] ?? {}) as Record<string, unknown>;
+  bucket[snapshot.scenario_id] = snapshot;
+  all[projectId] = bucket as RawDoc;
+  writeCollection(SNAPSHOTS_KEY, all);
+}
+
+export function deleteSnapshot(projectId: string, scenarioId: string): void {
+  const all = readCollection(SNAPSHOTS_KEY);
+  const bucket = (all[projectId] ?? {}) as Record<string, unknown>;
+  delete bucket[scenarioId];
+  all[projectId] = bucket as RawDoc;
+  writeCollection(SNAPSHOTS_KEY, all);
 }
