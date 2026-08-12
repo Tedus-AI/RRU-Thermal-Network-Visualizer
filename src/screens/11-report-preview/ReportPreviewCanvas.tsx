@@ -142,6 +142,7 @@ export function ReportPageView({
   onSelectSection,
   selectedId,
   stale,
+  printMode = false,
 }: {
   config: ThermalReportConfig;
   page: ReportPage | null;
@@ -152,6 +153,13 @@ export function ReportPageView({
   onSelectSection: (id: SectionId) => void;
   selectedId: SectionId;
   stale: boolean;
+  /**
+   * 12 §38 — Screen 12 renders THIS component to produce the PDF and the HTML
+   * report, rather than rebuilding a second report of its own. Print mode drops
+   * the preview-only chrome (drop shadow, selection outline, stale watermark)
+   * and the display transform, leaving the page content alone.
+   */
+  printMode?: boolean;
 }) {
   const box = pageBoxMm(config.page_size, config.orientation);
   const mode = config.language_mode;
@@ -171,18 +179,24 @@ export function ReportPageView({
   const header = config.header_footer;
 
   return (
-    <div className="flex justify-center py-4">
+    <div className={printMode ? '' : 'flex justify-center py-4'}>
       <div
-        className="relative origin-top bg-white shadow-lg ring-1 ring-black/10"
+        data-report-page={page.page_number}
+        className={`relative bg-white ${printMode ? '' : 'origin-top shadow-lg ring-1 ring-black/10'}`}
         style={{
           width: `${box.width}mm`,
           height: `${box.height}mm`,
-          transform: `scale(${scale})`,
-          // The scaled page must still reserve its own layout space.
-          marginBottom: `${box.height * (scale - 1)}mm`,
+          backgroundColor: '#ffffff',
+          ...(printMode
+            ? {}
+            : {
+                transform: `scale(${scale})`,
+                // The scaled page must still reserve its own layout space.
+                marginBottom: `${box.height * (scale - 1)}mm`,
+              }),
         }}
       >
-        {stale && (
+        {stale && !printMode && (
           // 11 §3, AC-11-03 — a stale preview is watermarked so a screenshot of
           // it can never be mistaken for a current result.
           <span
@@ -226,9 +240,11 @@ export function ReportPageView({
               return (
                 <section
                   key={id}
-                  onClick={() => onSelectSection(id)}
-                  className={`cursor-pointer rounded-sm transition-colors ${
-                    selectedId === id ? 'outline outline-2 outline-offset-2 outline-accent-500/60' : ''
+                  onClick={printMode ? undefined : () => onSelectSection(id)}
+                  className={`rounded-sm ${printMode ? '' : 'cursor-pointer transition-colors'} ${
+                    !printMode && selectedId === id
+                      ? 'outline outline-2 outline-offset-2 outline-accent-500/60'
+                      : ''
                   } ${section.display.compact_spacing ? 'leading-tight' : ''}`}
                 >
                   {id !== 'cover' && (

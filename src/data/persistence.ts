@@ -42,6 +42,7 @@ const SNAPSHOTS_KEY = 'tnv.results_snapshots';
 const REPORT_CONFIGS_KEY = 'tnv.report_configs';
 const REPORT_TEMPLATES_KEY = 'tnv.report_templates';
 const REPORT_PAYLOADS_KEY = 'tnv.report_export_payloads';
+const EXPORT_STAMPS_KEY = 'tnv.export_stamps';
 
 /** Keys on a project document that belong to this tool. Everything else is foreign. */
 const OWNED_PROJECT_KEYS = [
@@ -421,4 +422,29 @@ export function saveExportPayload(projectId: string, payload: ReportExportPayloa
   bucket[payload.scenario_id] = payload;
   all[projectId] = bucket as RawDoc;
   writeCollection(REPORT_PAYLOADS_KEY, all);
+}
+
+/**
+ * 12 §36 — the only thing an export is allowed to write.
+ *
+ * It lives under its own key rather than inside the project record, so writing
+ * it cannot overwrite an unknown sibling field, and it holds metadata only:
+ * never a file, never a byte of one.
+ */
+export interface ExportStamp {
+  lastExportAt: string;
+  lastExportPackageId: string;
+  lastExportArtifactTypes: string[];
+}
+
+export function loadExportStamp(projectId: string): ExportStamp | null {
+  const all = readCollection(EXPORT_STAMPS_KEY);
+  const entry = all[projectId] as unknown as ExportStamp | undefined;
+  return entry && typeof entry === 'object' && entry.lastExportAt ? entry : null;
+}
+
+export function saveExportStamp(projectId: string, stamp: ExportStamp): void {
+  const all = readCollection(EXPORT_STAMPS_KEY);
+  all[projectId] = stamp as unknown as RawDoc;
+  writeCollection(EXPORT_STAMPS_KEY, all);
 }

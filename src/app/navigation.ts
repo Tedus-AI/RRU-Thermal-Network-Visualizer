@@ -158,7 +158,7 @@ export const SCREENS: ScreenDef[] = [
     labelEn: 'Export Center',
     icon: FileDown,
     group: '報告與匯出',
-    implemented: false,
+    implemented: true,
   },
 ];
 
