@@ -12,6 +12,7 @@ import { ThermalNetworkView } from '@/screens/07-thermal-network/ThermalNetworkV
 import { BottleneckAnalysisView } from '@/screens/08-bottleneck-analysis/BottleneckAnalysisView';
 import { TemperatureDistributionView } from '@/screens/09-temperature-distribution/TemperatureDistributionView';
 import { ResultsOverviewView } from '@/screens/10-results-overview/ResultsOverviewView';
+import { ReportPreviewView } from '@/screens/11-report-preview/ReportPreviewView';
 import { useProjectStore } from '@/data/projectStore';
 
 /** Opens the most recently updated project, or shows the empty state (01 §20). */
@@ -50,6 +51,7 @@ export default function App() {
         <Route path="/project/:projectId/bottleneck" element={<BottleneckAnalysisView />} />
         <Route path="/project/:projectId/temperature" element={<TemperatureDistributionView />} />
         <Route path="/project/:projectId/results" element={<ResultsOverviewView />} />
+        <Route path="/project/:projectId/report" element={<ReportPreviewView />} />
         {SCREENS.filter((screen) => !screen.implemented).map((screen) => (
           <Route
             key={screen.code}

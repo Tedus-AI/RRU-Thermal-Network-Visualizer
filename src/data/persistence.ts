@@ -23,6 +23,11 @@ import type {
   BottleneckProposal,
 } from '@/thermal/analysis/analysisTypes';
 import type { ResultsOverviewSnapshot } from '@/thermal/overview/overviewTypes';
+import type {
+  ReportExportPayload,
+  ReportTemplate,
+  ThermalReportConfig,
+} from '@/report/reportTypes';
 import { migrateComponents } from './componentMigration';
 
 const PROJECTS_KEY = 'tnv.projects';
@@ -34,6 +39,9 @@ const SOLUTIONS_KEY = 'tnv.thermal_solutions';
 const ANALYSES_KEY = 'tnv.bottleneck_analyses';
 const PROPOSALS_KEY = 'tnv.improvement_proposals';
 const SNAPSHOTS_KEY = 'tnv.results_snapshots';
+const REPORT_CONFIGS_KEY = 'tnv.report_configs';
+const REPORT_TEMPLATES_KEY = 'tnv.report_templates';
+const REPORT_PAYLOADS_KEY = 'tnv.report_export_payloads';
 
 /** Keys on a project document that belong to this tool. Everything else is foreign. */
 const OWNED_PROJECT_KEYS = [
@@ -353,4 +361,64 @@ export function deleteSnapshot(projectId: string, scenarioId: string): void {
   delete bucket[scenarioId];
   all[projectId] = bucket as RawDoc;
   writeCollection(SNAPSHOTS_KEY, all);
+}
+
+// --- Report configuration, templates and export payloads --------------------
+// 11 §33, §46 — layout only. Thermal master data is never stored in the report
+// collections: a config references a snapshot by id, and a template carries no
+// project result at all (11 §33, AC-11-33).
+
+export function loadReportConfigs(projectId: string): ThermalReportConfig[] {
+  const all = readCollection(REPORT_CONFIGS_KEY);
+  const bucket = (all[projectId] ?? {}) as Record<string, ThermalReportConfig>;
+  return Object.values(bucket).filter(
+    (config) => config && typeof config === 'object' && config.scenario_id,
+  );
+}
+
+export function saveReportConfig(projectId: string, config: ThermalReportConfig): void {
+  const all = readCollection(REPORT_CONFIGS_KEY);
+  const bucket = (all[projectId] ?? {}) as Record<string, unknown>;
+  bucket[config.scenario_id] = config;
+  all[projectId] = bucket as RawDoc;
+  writeCollection(REPORT_CONFIGS_KEY, all);
+}
+
+export function deleteReportConfig(projectId: string, scenarioId: string): void {
+  const all = readCollection(REPORT_CONFIGS_KEY);
+  const bucket = (all[projectId] ?? {}) as Record<string, unknown>;
+  delete bucket[scenarioId];
+  all[projectId] = bucket as RawDoc;
+  writeCollection(REPORT_CONFIGS_KEY, all);
+}
+
+/** Templates are layout only, so they are shared across projects on purpose. */
+export function loadReportTemplates(): ReportTemplate[] {
+  const all = readCollection(REPORT_TEMPLATES_KEY);
+  const bucket = (all.shared ?? {}) as Record<string, ReportTemplate>;
+  return Object.values(bucket).filter((entry) => entry && typeof entry === 'object' && entry.name);
+}
+
+export function saveReportTemplate(template: ReportTemplate): void {
+  const all = readCollection(REPORT_TEMPLATES_KEY);
+  const bucket = (all.shared ?? {}) as Record<string, unknown>;
+  bucket[template.id] = template;
+  all.shared = bucket as RawDoc;
+  writeCollection(REPORT_TEMPLATES_KEY, all);
+}
+
+export function loadExportPayloads(projectId: string): ReportExportPayload[] {
+  const all = readCollection(REPORT_PAYLOADS_KEY);
+  const bucket = (all[projectId] ?? {}) as Record<string, ReportExportPayload>;
+  return Object.values(bucket).filter(
+    (entry) => entry && typeof entry === 'object' && entry.scenario_id,
+  );
+}
+
+export function saveExportPayload(projectId: string, payload: ReportExportPayload): void {
+  const all = readCollection(REPORT_PAYLOADS_KEY);
+  const bucket = (all[projectId] ?? {}) as Record<string, unknown>;
+  bucket[payload.scenario_id] = payload;
+  all[projectId] = bucket as RawDoc;
+  writeCollection(REPORT_PAYLOADS_KEY, all);
 }

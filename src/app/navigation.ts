@@ -149,7 +149,7 @@ export const SCREENS: ScreenDef[] = [
     labelEn: 'Report Preview',
     icon: FileText,
     group: '報告與匯出',
-    implemented: false,
+    implemented: true,
   },
   {
     code: '12',
