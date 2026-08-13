@@ -19,6 +19,8 @@ import type { ArtifactType, ExportArtifactRequest, ExportSession } from './expor
 
 export interface SessionInput {
   project_id: string;
+  project_revision?: string;
+  /** @deprecated compatibility for pre-Phase-1 callers and stored tests. */
   project_updated_at?: string;
   scenario_id: string;
   solution: ThermalSolution | null;
@@ -37,7 +39,7 @@ export function createExportSession(input: SessionInput): ExportSession {
     project_id: input.project_id,
     scenario_id: input.scenario_id,
 
-    project_revision: input.project_updated_at,
+    project_revision: input.project_revision ?? input.project_updated_at,
     // The solve has no id of its own; its input signature IS its identity, and
     // it is what Screens 08 and 10 already compare against to detect staleness.
     solver_solution_id: input.solution?.metadata.input_signature,

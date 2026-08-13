@@ -14,6 +14,12 @@
 
 import type { Project, ProjectContext, Scenario } from '@/domain/project';
 import { SCHEMA_VERSION, defaultProjectContext } from '@/domain/project';
+import {
+  hydrateComponentRevisionSet,
+  hydrateRevision,
+  hydrateSourceRevision,
+  type ComponentRevisionSet,
+} from '@/domain/revision';
 import type { Component } from '@/domain/component';
 import { DEFAULT_SOLVER_SETTINGS, type ThermalNetwork } from '@/thermal/types';
 import type { ScenarioBoundaryConditionSet } from '@/thermal/boundary/types';
@@ -33,6 +39,7 @@ import { migrateComponents } from './componentMigration';
 const PROJECTS_KEY = 'tnv.projects';
 const SCENARIOS_KEY = 'tnv.scenarios';
 const COMPONENTS_KEY = 'tnv.components';
+const COMPONENT_REVISIONS_KEY = 'tnv.component_revisions';
 const NETWORKS_KEY = 'tnv.thermal_networks';
 const BOUNDARY_KEY = 'tnv.boundary_sets';
 const SOLUTIONS_KEY = 'tnv.thermal_solutions';
@@ -48,6 +55,7 @@ const EXPORT_STAMPS_KEY = 'tnv.export_stamps';
 const OWNED_PROJECT_KEYS = [
   'project_id',
   'project_name',
+  'revision',
   'project_context',
   'active_scenario_id',
   'status',
@@ -89,6 +97,7 @@ function hydrateProject(raw: RawDoc): Project {
   return {
     project_id: String(raw.project_id ?? ''),
     project_name: String(raw.project_name ?? ''),
+    revision: hydrateRevision(raw.revision, 'project', meta.updated_at ?? now),
     project_context: { ...defaultProjectContext(), ...context },
     active_scenario_id: (raw.active_scenario_id as string | null) ?? null,
     status: raw.status === 'archived' ? 'archived' : 'active',
@@ -125,6 +134,7 @@ export function saveProject(project: Project): Project {
     ...(project.foreign_fields ?? {}),
     project_id: project.project_id,
     project_name: project.project_name,
+    revision: project.revision,
     project_context: project.project_context,
     active_scenario_id: project.active_scenario_id,
     status: project.status,
@@ -153,13 +163,26 @@ export function projectIdExists(projectId: string): boolean {
 export function loadScenarios(projectId: string): Scenario[] {
   const all = readCollection(SCENARIOS_KEY);
   const bucket = (all[projectId] ?? {}) as Record<string, Scenario>;
-  return Object.values(bucket);
+  const projectUpdatedAt = loadProject(projectId)?.meta.updated_at ?? projectId;
+  return Object.values(bucket).map((scenario) => ({
+    ...scenario,
+    revision: hydrateRevision(
+      scenario.revision,
+      'scenario',
+      `${projectUpdatedAt}:${scenario.id}`,
+    ),
+  }));
 }
 
 export function saveScenarios(projectId: string, scenarios: Scenario[]): void {
   const all = readCollection(SCENARIOS_KEY);
   const bucket: Record<string, Scenario> = {};
-  for (const scenario of scenarios) bucket[scenario.id] = scenario;
+  for (const scenario of scenarios) {
+    bucket[scenario.id] = {
+      ...scenario,
+      revision: hydrateRevision(scenario.revision, 'scenario', `${projectId}:${scenario.id}`),
+    };
+  }
   all[projectId] = bucket;
   writeCollection(SCENARIOS_KEY, all);
 }
@@ -180,6 +203,37 @@ export function saveComponents(projectId: string, components: Component[]): void
   writeCollection(COMPONENTS_KEY, all);
 }
 
+/**
+ * The component collection remains the legacy-compatible array shape. Its three
+ * store-level clocks therefore live in one additive, namespaced collection.
+ */
+export function loadComponentRevisions(
+  projectId: string,
+  components: Component[] = loadComponents(projectId),
+): ComponentRevisionSet {
+  const all = readCollection(COMPONENT_REVISIONS_KEY);
+  const stored = all[projectId] as Partial<ComponentRevisionSet> | undefined;
+  const latestComponentTimestamp = components
+    .flatMap((component) => [
+      component.provenance.last_modified_at,
+      component.provenance.imported_at,
+    ])
+    .filter((value): value is string => Boolean(value))
+    .sort()
+    .at(-1);
+  const fallback = latestComponentTimestamp ?? loadProject(projectId)?.meta.updated_at ?? projectId;
+  return hydrateComponentRevisionSet(stored, fallback);
+}
+
+export function saveComponentRevisions(
+  projectId: string,
+  revisions: ComponentRevisionSet,
+): void {
+  const all = readCollection(COMPONENT_REVISIONS_KEY);
+  all[projectId] = revisions as unknown as RawDoc;
+  writeCollection(COMPONENT_REVISIONS_KEY, all);
+}
+
 // --- Thermal network -------------------------------------------------------
 // The graph lives in its own collection, never inside the shared project
 // document — it is far too large and changes on a different cadence (00 §35.2).
@@ -192,6 +246,13 @@ export function loadNetwork(projectId: string): ThermalNetwork | null {
   // Tolerate networks written before a field existed.
   return {
     ...network,
+    revision: hydrateRevision(
+      network.revision,
+      'network',
+      (network.metadata?.updated_at as string | undefined) ??
+        loadProject(projectId)?.meta.updated_at ??
+        projectId,
+    ),
     nodes: network.nodes ?? {},
     edges: network.edges ?? {},
     status: network.status ?? 'DRAFT',
@@ -259,9 +320,18 @@ export function deleteBoundarySet(
 export function loadSolutions(projectId: string): ThermalSolution[] {
   const all = readCollection(SOLUTIONS_KEY);
   const bucket = (all[projectId] ?? {}) as Record<string, ThermalSolution>;
-  return Object.values(bucket).filter(
-    (solution) => solution && typeof solution === 'object' && solution.scenario_id,
-  );
+  return Object.values(bucket)
+    .filter((solution) => solution && typeof solution === 'object' && solution.scenario_id)
+    .map((solution) => ({
+      ...solution,
+      metadata: {
+        ...solution.metadata,
+        source_revision: hydrateSourceRevision(
+          solution.metadata?.source_revision,
+          `${solution.project_id}:${solution.network_id}:${solution.scenario_id}:${solution.solved_at}`,
+        ),
+      },
+    }));
 }
 
 export function saveSolution(projectId: string, solution: ThermalSolution): void {

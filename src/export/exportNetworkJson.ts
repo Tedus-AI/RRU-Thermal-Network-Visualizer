@@ -15,6 +15,7 @@
 
 import type { ThermalNetwork } from '@/thermal/types';
 import type { ThermalSolution } from '@/thermal/solver/solverTypes';
+import type { SourceRevision } from '@/domain/revision';
 
 import { EXPORT_SCHEMA_VERSION } from './exportTypes';
 
@@ -49,6 +50,7 @@ export interface NetworkJsonDocument {
     solver_engine: string;
     status: ThermalSolution['status'];
     input_signature: string;
+    source_revision?: SourceRevision;
     energy_balance: ThermalSolution['energy_balance'];
     node_temperatures_C: Record<string, number>;
   };
@@ -86,6 +88,9 @@ export function exportNetworkJson(input: NetworkJsonInput): NetworkJsonDocument 
       solver_engine: input.solution.solver_engine,
       status: input.solution.status,
       input_signature: input.solution.metadata.input_signature,
+      ...(input.solution.metadata.source_revision
+        ? { source_revision: input.solution.metadata.source_revision }
+        : {}),
       energy_balance: input.solution.energy_balance,
       node_temperatures_C: { ...input.solution.node_temperatures_C },
     };

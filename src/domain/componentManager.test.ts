@@ -170,9 +170,15 @@ describe('downstream invalidation (04 §32)', () => {
     }
   });
 
-  it('marks only the solver dirty for power, Rjc and limits', () => {
-    for (const field of ['power_W', 'r_jc_C_per_W', 'limit_C', 'limit_type']) {
+  it('marks only the solver dirty for power and Rjc', () => {
+    for (const field of ['power_W', 'r_jc_C_per_W']) {
       expect(effectOfChange(field, false)).toEqual({ networkReview: false, solverDirty: true });
+    }
+  });
+
+  it('does not invalidate the physical solve for limit changes', () => {
+    for (const field of ['limit_C', 'limit_type']) {
+      expect(effectOfChange(field, false)).toEqual({ networkReview: false, solverDirty: false });
     }
   });
 

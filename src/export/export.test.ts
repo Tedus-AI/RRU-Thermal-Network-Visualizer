@@ -1057,7 +1057,7 @@ describe('Export session (12 §47, §48)', () => {
   it('freezes the source ids the manifest later reports', () => {
     const session = createExportSession({
       project_id: 'P',
-      project_updated_at: '2026-08-12T09:00:00.000Z',
+      project_revision: 'rev:project:phase-1',
       scenario_id: 'SCN_1',
       solution: solution(),
       analysis: analysis(),
@@ -1067,6 +1067,7 @@ describe('Export session (12 §47, §48)', () => {
       now: '2026-08-12T12:50:00.000Z',
     });
 
+    expect(session.project_revision).toBe('rev:project:phase-1');
     expect(session.solver_solution_id).toBe('sig-solve-1');
     expect(session.distribution_id).toBe('sig-solve-1');
     expect(session.analysis_id).toBe('RRU::2026-08-12T12:10:00.000Z');

@@ -12,6 +12,7 @@ import { create } from 'zustand';
 import { useSolverStore } from './solverStore';
 import { loadNetwork, saveNetwork } from './persistence';
 import { DEFAULT_SOLVER_SETTINGS } from '@/thermal/types';
+import { createRevision } from '@/domain/revision';
 import type {
   BaseZone,
   ComponentTemplateBinding,
@@ -27,6 +28,7 @@ export function emptyNetwork(projectId: string): ThermalNetwork {
   return {
     schema_version: '1.0',
     project_id: projectId,
+    revision: createRevision('network'),
     network_name: 'Main Thermal Network',
     mode: 'analytical',
     status: 'EMPTY',
@@ -152,6 +154,10 @@ export const useNetworkStore = create<NetworkStoreState>((set, get) => ({
       layout: { ...current.layout, positions: { ...current.layout.positions } },
     };
     recipe(next);
+
+    // Layout-only mutations deliberately keep the engineering graph revision.
+    // Every mutation that invalidates a solve advances the provenance clock.
+    if (!options.skipInvalidate) next.revision = createRevision('network');
 
     const validation = validateGraph(next);
     next.status = Object.keys(next.nodes).length === 0
@@ -298,7 +304,11 @@ export const useNetworkStore = create<NetworkStoreState>((set, get) => ({
     const { past, network } = get();
     if (past.length === 0 || !network) return;
     const previous = past[past.length - 1];
-    const restored: ThermalNetwork = { ...network, ...previous };
+    const restored: ThermalNetwork = {
+      ...network,
+      ...previous,
+      revision: createRevision('network'),
+    };
     set({
       network: restored,
       past: past.slice(0, -1),
@@ -313,7 +323,11 @@ export const useNetworkStore = create<NetworkStoreState>((set, get) => ({
     const { future, network } = get();
     if (future.length === 0 || !network) return;
     const nextSnapshot = future[0];
-    const restored: ThermalNetwork = { ...network, ...nextSnapshot };
+    const restored: ThermalNetwork = {
+      ...network,
+      ...nextSnapshot,
+      revision: createRevision('network'),
+    };
     set({
       network: restored,
       future: future.slice(1),
@@ -344,7 +358,11 @@ export const useNetworkStore = create<NetworkStoreState>((set, get) => ({
     const network = get().network;
     if (!network) return;
     set({
-      network: { ...network, solver_settings: { ...network.solver_settings, ...patch } },
+      network: {
+        ...network,
+        revision: createRevision('network'),
+        solver_settings: { ...network.solver_settings, ...patch },
+      },
       dirty: true,
     });
     // The thresholds decide whether a result passes, so a previous solve is

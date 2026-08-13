@@ -44,12 +44,17 @@ export function effectOfChange(field: string, isMapped: boolean): InvalidationEf
     case 'power_W':
       return { networkReview: false, solverDirty: true };
 
-    // Resistance and limits change results, never topology.
+    // Resistance changes the physical solution, never topology.
     case 'r_jc_C_per_W':
-    case 'limit_C':
-    case 'limit_type':
     case 'package_type':
       return { networkReview: false, solverDirty: true };
+
+    // A limit changes margin/risk interpretation, not [G], [P] or temperature.
+    // Its independent limit revision invalidates Screens 08–12 without forcing
+    // the engineer to re-solve an unchanged physical network.
+    case 'limit_C':
+    case 'limit_type':
+      return NONE;
 
     // Bookkeeping only.
     case 'notes':

@@ -6,6 +6,8 @@
  * 5G RRU Quick Volume Evaluation Tool keeps on the same project document.
  */
 
+import { createRevision, type RevisionId } from './revision';
+
 export const PROJECT_STAGES = [
   'Concept',
   'Architecture',
@@ -103,6 +105,11 @@ export interface ProjectMeta {
 export interface Project {
   project_id: string;
   project_name: string;
+  /**
+   * Source-provenance clock; optional only for pre-Phase-1 in-memory fixtures.
+   * Constructors and persistence hydration always supply it.
+   */
+  revision?: RevisionId;
   project_context: ProjectContext;
   active_scenario_id: string | null;
   status: ProjectStatus;
@@ -117,6 +124,11 @@ export interface Project {
 export interface Scenario {
   id: string;
   project_id: string;
+  /**
+   * Moves for scenario scalars and the separate Screen 06 boundary set.
+   * Optional at the type boundary so legacy records remain readable.
+   */
+  revision?: RevisionId;
   name: string;
   ambient_C: number;
   wind_mps: number;
@@ -158,6 +170,7 @@ export function createEmptyProject(): Project {
   return {
     project_id: '',
     project_name: '',
+    revision: createRevision('project'),
     project_context: defaultProjectContext(),
     active_scenario_id: null,
     status: 'active',
@@ -170,6 +183,7 @@ export function createBaselineScenario(projectId: string): Scenario {
   return {
     id: 'SCN_001',
     project_id: projectId,
+    revision: createRevision('scenario'),
     name: 'Baseline',
     ambient_C: 55,
     wind_mps: 0,
@@ -193,6 +207,7 @@ export function createScenario(
   return {
     id: `SCN_${Date.now().toString(36).toUpperCase()}`,
     project_id: projectId,
+    revision: createRevision('scenario'),
     name,
     ambient_C: base?.ambient_C ?? 55,
     wind_mps: base?.wind_mps ?? 0,

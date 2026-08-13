@@ -13,6 +13,7 @@ import { deriveBoundaryPorts } from '../boundary/boundaryPorts';
 import { buildSolveInput, solveInputSignature } from './buildSolveInput';
 import { runPreSolveChecks } from './preSolveChecks';
 import { checkScenario, netHeatFlowOf, solveScenario } from './solveScenario';
+import type { SourceRevision } from '@/domain/revision';
 
 // --- builders --------------------------------------------------------------
 
@@ -94,6 +95,64 @@ function solve(net: ThermalNetwork, ambient_C = 20, scenarioId = 'SCN_A', powerS
 
 const close = (value: number, expected: number, tolerance = 1e-9) =>
   expect(Math.abs(value - expected)).toBeLessThan(tolerance);
+
+describe('Phase 1 solution provenance', () => {
+  const source: SourceRevision = {
+    project_revision: 'rev:project:1',
+    component_revision: 'rev:component:1',
+    solver_input_revision: 'rev:solver_input:1',
+    limit_revision: 'rev:limit:1',
+    network_revision: 'rev:network:1',
+    scenario_revision: 'rev:scenario:1',
+  };
+
+  it('freezes the authoritative source revisions into the solution', () => {
+    const net = network(
+      [node('SRC', { power: 10 }), node('AMB', { ambient: true })],
+      [edge('E1', 'SRC', 'AMB', 1)],
+    );
+    const outcome = solveScenario({
+      network: net,
+      boundarySet: ambientOnly('SCN_A', 20),
+      ports: deriveBoundaryPorts(net),
+      scenarioId: 'SCN_A',
+      sourceRevision: source,
+    });
+
+    expect(outcome.input.source_revision).toEqual(source);
+    expect(outcome.solution.metadata.source_revision).toEqual(source);
+  });
+
+  it('does not include provenance-only Limit revisions in the physics signature', () => {
+    const net = network(
+      [node('SRC', { power: 10 }), node('AMB', { ambient: true })],
+      [edge('E1', 'SRC', 'AMB', 1)],
+    );
+    const first = solveScenario({
+      network: net,
+      boundarySet: ambientOnly('SCN_A', 20),
+      ports: deriveBoundaryPorts(net),
+      scenarioId: 'SCN_A',
+      sourceRevision: source,
+    });
+    const afterLimitEdit = solveScenario({
+      network: net,
+      boundarySet: ambientOnly('SCN_A', 20),
+      ports: deriveBoundaryPorts(net),
+      scenarioId: 'SCN_A',
+      sourceRevision: {
+        ...source,
+        component_revision: 'rev:component:2',
+        limit_revision: 'rev:limit:2',
+      },
+    });
+
+    expect(afterLimitEdit.signature).toBe(first.signature);
+    expect(afterLimitEdit.solution.metadata.source_revision?.limit_revision).toBe(
+      'rev:limit:2',
+    );
+  });
+});
 
 // --- Test A ----------------------------------------------------------------
 

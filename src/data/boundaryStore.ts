@@ -135,6 +135,9 @@ export const useBoundaryStore = create<BoundaryStoreState>((set, get) => ({
     next.updated_at = new Date().toISOString();
 
     set({ sets: { ...sets, [activeKey]: next }, dirty: true });
+    // `scenarioStore` owns the aggregate scenario revision even though the
+    // boundary payload stays in its own store (approved implementation split).
+    useScenarioStore.getState().touchScenarioRevision(next.scenario_id);
     // 00 Rule 6 — the boundary problem changed, so any previous solve is stale.
     useSolverStore.getState().invalidate('boundary_changed');
     get().revalidate();
@@ -151,7 +154,11 @@ export const useBoundaryStore = create<BoundaryStoreState>((set, get) => ({
     if (current && patch.external_ambient_C != null) {
       useScenarioStore
         .getState()
-        .updateScenario(current.scenario_id, { ambient_C: patch.external_ambient_C });
+        .updateScenario(
+          current.scenario_id,
+          { ambient_C: patch.external_ambient_C },
+          { skipRevision: true, skipInvalidate: true },
+        );
     }
   },
 
@@ -168,7 +175,13 @@ export const useBoundaryStore = create<BoundaryStoreState>((set, get) => ({
       scenarioPatch.solar_W_m2 = patch.solar_irradiance_W_m2;
     }
     if (Object.keys(scenarioPatch).length > 0) {
-      useScenarioStore.getState().updateScenario(current.scenario_id, scenarioPatch);
+      useScenarioStore
+        .getState()
+        .updateScenario(
+          current.scenario_id,
+          scenarioPatch,
+          { skipRevision: true, skipInvalidate: true },
+        );
     }
   },
 
@@ -315,6 +328,7 @@ export const useBoundaryStore = create<BoundaryStoreState>((set, get) => ({
     };
 
     set({ sets: { ...sets, [activeKey]: copied }, dirty: true });
+    useScenarioStore.getState().touchScenarioRevision(copied.scenario_id);
     useSolverStore.getState().invalidate('boundary_changed');
     get().revalidate();
     return true;
@@ -331,6 +345,7 @@ export const useBoundaryStore = create<BoundaryStoreState>((set, get) => ({
       topologyVersion: topologyVersionOf(useNetworkStore.getState().network),
     });
     set({ sets: { ...sets, [activeKey]: fresh }, dirty: true });
+    useScenarioStore.getState().touchScenarioRevision(fresh.scenario_id);
     useSolverStore.getState().invalidate('boundary_changed');
     get().revalidate();
   },
@@ -409,6 +424,7 @@ export const useBoundaryStore = create<BoundaryStoreState>((set, get) => ({
       network_topology_version: topologyVersionOf(useNetworkStore.getState().network),
       updated_at: new Date().toISOString(),
     });
+    useScenarioStore.getState().persist(projectId);
     set({ dirty: false });
     get().loadFor(projectId, current.scenario_id);
   },
