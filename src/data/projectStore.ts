@@ -12,6 +12,7 @@ import {
   type ProjectContext,
   type ProjectStatus,
 } from '@/domain/project';
+import { createRevision } from '@/domain/revision';
 import {
   loadProject,
   loadProjects,
@@ -102,14 +103,24 @@ export const useProjectStore = create<ProjectStoreState>((set, get) => ({
   patchProject: (patch) => {
     const draft = get().draft;
     if (!draft || get().isReadOnly()) return;
-    set({ draft: { ...draft, ...patch }, dirty: true });
+    const next = { ...draft, ...patch };
+    if (next.project_id === draft.project_id && next.project_name === draft.project_name) return;
+    set({ draft: { ...next, revision: createRevision('project') }, dirty: true });
   },
 
   patchContext: (patch) => {
     const draft = get().draft;
     if (!draft || get().isReadOnly()) return;
+    const changed = Object.entries(patch).some(
+      ([key, value]) => !Object.is(draft.project_context[key as keyof ProjectContext], value),
+    );
+    if (!changed) return;
     set({
-      draft: { ...draft, project_context: { ...draft.project_context, ...patch } },
+      draft: {
+        ...draft,
+        revision: createRevision('project'),
+        project_context: { ...draft.project_context, ...patch },
+      },
       dirty: true,
     });
   },
@@ -118,13 +129,20 @@ export const useProjectStore = create<ProjectStoreState>((set, get) => ({
     const draft = get().draft;
     if (!draft) return;
     if (draft.active_scenario_id === scenarioId) return;
-    set({ draft: { ...draft, active_scenario_id: scenarioId }, dirty: true });
+    set({
+      draft: {
+        ...draft,
+        active_scenario_id: scenarioId,
+        revision: createRevision('project'),
+      },
+      dirty: true,
+    });
   },
 
   setStatus: (status) => {
     const draft = get().draft;
-    if (!draft) return;
-    const next = { ...draft, status };
+    if (!draft || draft.status === status) return;
+    const next = { ...draft, status, revision: createRevision('project') };
     const persisted = saveProject(next);
     set({ draft: persisted, saved: persisted, dirty: false });
     get().refreshProjects();

@@ -1,0 +1,155 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { statusOf } from '@/domain/componentReadiness';
+import {
+  loadAnalyses,
+  loadBoundarySets,
+  loadComponentRevisions,
+  loadComponents,
+  loadExportPayloads,
+  loadNetwork,
+  loadProject,
+  loadReportConfigs,
+  loadScenarios,
+  loadSnapshots,
+  loadSolutions,
+} from '@/data/persistence';
+import { deriveBoundaryPorts } from '@/thermal/boundary/boundaryPorts';
+import { validateBoundarySet } from '@/thermal/boundary/validation';
+import { topologyVersionOf } from '@/data/boundaryStore';
+import { validateGraph } from '@/thermal/graph/graphValidation';
+import { evaluateSnapshot } from '@/report/snapshotAdapter';
+import { buildResultsOverview } from '@/thermal/overview/overviewAggregator';
+
+import {
+  DEMO_PROJECT_ID,
+  DEMO_SCENARIO_ID,
+  DEMO_SOURCE_REVISION,
+} from './demoProject';
+import { buildDemoGoldenFlow } from './demoGoldenFlow';
+import { seedDemoProject } from './seed';
+
+class MemoryStorage implements Storage {
+  private data = new Map<string, string>();
+
+  get length() {
+    return this.data.size;
+  }
+
+  clear() {
+    this.data.clear();
+  }
+
+  getItem(key: string) {
+    return this.data.get(key) ?? null;
+  }
+
+  key(index: number) {
+    return [...this.data.keys()][index] ?? null;
+  }
+
+  removeItem(key: string) {
+    this.data.delete(key);
+  }
+
+  setItem(key: string, value: string) {
+    this.data.set(key, String(value));
+  }
+}
+
+beforeEach(() => {
+  vi.stubGlobal('localStorage', new MemoryStorage());
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+describe('FR1 RRU Golden Demo', () => {
+  it('builds the exact 99 reference population and a fully current 01-12 flow', async () => {
+    const flow = await buildDemoGoldenFlow();
+
+    expect(flow.components.map((component) => [component.name, component.qty])).toEqual([
+      ['Final PA', 4],
+      ['Driver', 4],
+      ['RF Filter', 1],
+      ['FPGA', 1],
+      ['Power Module', 1],
+    ]);
+    expect(flow.components.every((component) => statusOf(component) === 'READY')).toBe(true);
+    expect(Object.values(flow.network.zones).map((zone) => zone.name).sort()).toEqual([
+      'Digital',
+      'Power',
+      'RF Left',
+      'RF Right',
+    ]);
+    expect(Object.values(flow.network.nodes).filter((node) => node.power_W > 0)).toHaveLength(11);
+    expect(flow.networkValidation.errors).toBe(0);
+    expect(flow.boundary.status).toBe('ready_for_solve');
+    expect(flow.boundary.validation.errors).toHaveLength(0);
+    expect(flow.solution.status).toBe('SOLVED');
+    expect(flow.solution.metadata.source_revision).toEqual(DEMO_SOURCE_REVISION);
+    expect(flow.analysis.state).toBe('COMPLETE');
+    expect(flow.analysis.results.length).toBeGreaterThan(0);
+    expect(flow.overview.overall_status).toBe('PASS');
+    expect(flow.overview.bottleneck_availability).toBe('current');
+    expect(flow.overview.distribution).not.toBeNull();
+    expect(flow.snapshotEvaluation.state).toBe('CURRENT');
+    expect(flow.reportValidation.readiness).toBe('EXPORT_READY');
+    expect(flow.reportPayload.readiness).toBe('EXPORT_READY');
+    expect(flow.temperatureRowCount).toBeGreaterThanOrEqual(11);
+    expect(Object.values(flow.artifacts).every((artifact) => artifact.status === 'READY')).toBe(
+      true,
+    );
+  });
+
+  it('persists every authoritative artifact and reloads it without stale state', async () => {
+    await expect(seedDemoProject()).resolves.toBe(DEMO_PROJECT_ID);
+
+    const project = loadProject(DEMO_PROJECT_ID)!;
+    const scenario = loadScenarios(DEMO_PROJECT_ID)[0];
+    const components = loadComponents(DEMO_PROJECT_ID);
+    const network = loadNetwork(DEMO_PROJECT_ID)!;
+    const boundary = loadBoundarySets(DEMO_PROJECT_ID)[0];
+    const solution = loadSolutions(DEMO_PROJECT_ID)[0];
+    const analysis = loadAnalyses(DEMO_PROJECT_ID)[0];
+    const snapshot = loadSnapshots(DEMO_PROJECT_ID)[0];
+    const reportConfig = loadReportConfigs(DEMO_PROJECT_ID)[0];
+    const payload = loadExportPayloads(DEMO_PROJECT_ID)[0];
+
+    expect(project.revision).toBe(DEMO_SOURCE_REVISION.project_revision);
+    expect(scenario.id).toBe(DEMO_SCENARIO_ID);
+    expect(loadComponentRevisions(DEMO_PROJECT_ID, components)).toEqual({
+      component_revision: DEMO_SOURCE_REVISION.component_revision,
+      solver_input_revision: DEMO_SOURCE_REVISION.solver_input_revision,
+      limit_revision: DEMO_SOURCE_REVISION.limit_revision,
+    });
+    expect(validateGraph(network).errors).toBe(0);
+    expect(
+      validateBoundarySet({
+        set: boundary,
+        ports: deriveBoundaryPorts(network),
+        hasTopology: true,
+        hasScenario: true,
+        topologyVersion: topologyVersionOf(network),
+      }).errors,
+    ).toHaveLength(0);
+    expect(solution.status).toBe('SOLVED');
+    expect(analysis.baseline_signature).toBe(solution.metadata.input_signature);
+
+    const live = buildResultsOverview({
+      project_id: project.project_id,
+      scenario,
+      network,
+      solution,
+      components,
+      analysis,
+      solution_stale: false,
+      now: '2026-08-13T00:00:00.000Z',
+    }).overview;
+    expect(evaluateSnapshot(snapshot, live, scenario.name).state).toBe('CURRENT');
+    expect(reportConfig.snapshot_id).toBe(snapshot.id);
+    expect(payload.snapshot_id).toBe(snapshot.id);
+    expect(payload.readiness).toBe('EXPORT_READY');
+  });
+});

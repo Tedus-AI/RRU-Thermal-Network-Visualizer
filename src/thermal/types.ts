@@ -1,4 +1,5 @@
 import type { EdgeRthSet, ExternalMappings, TemperatureResultSet } from './resultValue';
+import type { RevisionId } from '@/domain/revision';
 
 /**
  * Thermal Graph data model.
@@ -339,6 +340,11 @@ export interface ComponentTemplateBinding {
 export interface ThermalNetwork {
   schema_version: string;
   project_id: string;
+  /**
+   * Engineering graph revision; layout-only moves do not advance it. Optional
+   * only for legacy object literals; emptyNetwork/loadNetwork always supply it.
+   */
+  revision?: RevisionId;
   network_name: string;
   mode: NetworkMode;
   status: NetworkStatus;

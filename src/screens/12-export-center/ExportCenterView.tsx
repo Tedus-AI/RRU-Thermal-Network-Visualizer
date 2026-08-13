@@ -468,7 +468,7 @@ export function ExportCenterView() {
       // 12 §47 — freeze the sources BEFORE any file is written.
       const exportSession = createExportSession({
         project_id: projectId,
-        project_updated_at: draft?.meta.updated_at,
+        project_revision: draft?.revision,
         scenario_id: scenario.id,
         solution,
         analysis,

@@ -30,6 +30,10 @@ import type {
 } from '../boundary/types';
 import type { ThermalEdge, ThermalNetwork, ThermalNode } from '../types';
 import { issue, type SolverIssue } from './solverTypes';
+import {
+  hydrateSourceRevision,
+  type SourceRevision,
+} from '@/domain/revision';
 
 /** How a boundary edge got its resistance, for the inspector and the checks. */
 export interface BoundaryEdgeAssignment {
@@ -51,6 +55,8 @@ export interface SolveInput {
   project_id: string;
   network_id: string;
   scenario_id: string;
+  /** Frozen authoritative-store provenance; not part of the physics hash. */
+  source_revision: SourceRevision;
   power_scale: number;
   ambient_C: number | null;
 
@@ -75,6 +81,7 @@ export interface BuildSolveInputOptions {
   boundarySet: ScenarioBoundaryConditionSet | null;
   ports: BoundaryPort[];
   scenarioId: string;
+  sourceRevision?: SourceRevision;
   powerScale?: number;
 }
 
@@ -313,6 +320,10 @@ export function buildSolveInput(options: BuildSolveInputOptions): SolveInput {
     project_id: network.project_id,
     network_id: boundarySet?.network_id ?? network.network_name,
     scenario_id: scenarioId,
+    source_revision: hydrateSourceRevision(
+      options.sourceRevision,
+      `${network.project_id}:${network.network_name}:${scenarioId}:${network.revision}`,
+    ),
     power_scale: powerScale,
     ambient_C,
     fixed_nodes: fixedNodes,
