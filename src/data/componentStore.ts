@@ -74,8 +74,8 @@ function applyEffects(components: Component[], ids: string[], fields: string[]) 
       return fields.map((field) => effectOfChange(field, mapped));
     }),
   );
-  if (effect.solverDirty) useSolverStore.getState().invalidate('component_power_changed');
-  if (effect.networkReview) useNetworkStore.getState().setRequiresReview(true);
+  for (const reason of effect.dirtyReasons) useSolverStore.getState().invalidate(reason);
+  if (effect.networkReview) useNetworkStore.getState().setRequiresReview(true, fields.join(','));
   return effect;
 }
 
@@ -161,8 +161,8 @@ export const useComponentStore = create<ComponentStoreState>((set, get) => ({
       dirty: true,
     });
     // A new component is not in the graph yet.
-    useNetworkStore.getState().setRequiresReview(true);
-    useSolverStore.getState().invalidate('component_power_changed');
+    useNetworkStore.getState().setRequiresReview(true, 'component_added');
+    useSolverStore.getState().invalidate('component_architecture_changed');
     return component;
   },
 
@@ -196,8 +196,8 @@ export const useComponentStore = create<ComponentStoreState>((set, get) => ({
       revisions: advanceRevisions(get().revisions, { solverInput: true, limits: true }),
       dirty: true,
     });
-    useNetworkStore.getState().setRequiresReview(true);
-    useSolverStore.getState().invalidate('component_power_changed');
+    useNetworkStore.getState().setRequiresReview(true, 'component_duplicated');
+    useSolverStore.getState().invalidate('component_architecture_changed');
     return copy;
   },
 
@@ -211,9 +211,9 @@ export const useComponentStore = create<ComponentStoreState>((set, get) => ({
     // 04 §25 — a deleted component leaves its graph mapping orphaned. Screen 04
     // never rewrites topology; it flags the graph for review.
     if (component && isMappedToNetwork(component)) {
-      useNetworkStore.getState().setRequiresReview(true);
+      useNetworkStore.getState().setRequiresReview(true, 'component_deleted');
     }
-    useSolverStore.getState().invalidate('component_power_changed');
+    useSolverStore.getState().invalidate('component_architecture_changed');
   },
 
   setEnabled: (id, enabled) => get().patchComponent(id, { enabled }, ['enabled']),

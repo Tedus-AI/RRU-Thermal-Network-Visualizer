@@ -41,6 +41,31 @@ export interface SourceRevision extends ComponentRevisionSet {
   scenario_revision: RevisionId;
 }
 
+/** Physics freshness deliberately ignores limit and bookkeeping clocks. */
+export function physicsRevisionMatches(
+  produced: Partial<SourceRevision> | null | undefined,
+  current: Partial<SourceRevision> | null | undefined,
+): boolean {
+  if (!produced || !current) return false;
+  return (
+    produced.solver_input_revision === current.solver_input_revision &&
+    produced.network_revision === current.network_revision
+  );
+}
+
+/** Margin-dependent results also follow Component Master and limit clocks. */
+export function resultRevisionMatches(
+  produced: Partial<SourceRevision> | null | undefined,
+  current: Partial<SourceRevision> | null | undefined,
+): boolean {
+  if (!produced || !current) return false;
+  return (
+    physicsRevisionMatches(produced, current) &&
+    produced.component_revision === current.component_revision &&
+    produced.limit_revision === current.limit_revision
+  );
+}
+
 let sequence = 0;
 
 /** Create a new opaque revision id. The value carries no ordering contract. */

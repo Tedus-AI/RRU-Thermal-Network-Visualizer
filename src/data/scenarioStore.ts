@@ -91,8 +91,14 @@ export const useScenarioStore = create<ScenarioStoreState>((set, get) => ({
           : scenario,
       ),
     });
-    // Ambient / wind / solar / power scale all change the boundary problem.
-    if (!options.skipInvalidate) useSolverStore.getState().invalidate('boundary_changed');
+    const changesPhysics = Object.keys(patch).some((field) =>
+      ['ambient_C', 'wind_mps', 'solar_W_m2', 'power_scale'].includes(field),
+    );
+    if (!options.skipInvalidate && changesPhysics) {
+      useSolverStore
+        .getState()
+        .invalidate(Object.hasOwn(patch, 'power_scale') ? 'scenario_changed' : 'boundary_changed');
+    }
   },
 
   touchScenarioRevision: (id) =>

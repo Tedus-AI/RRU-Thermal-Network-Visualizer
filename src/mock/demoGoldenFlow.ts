@@ -37,6 +37,10 @@ import {
   type BottleneckAnalysis,
 } from '@/thermal/analysis/analysisTypes';
 import { runAnalysis } from '@/thermal/analysis/bottleneckScore';
+import {
+  buildDistributionResult,
+  type TemperatureDistributionResult,
+} from '@/thermal/analysis/distributionResult';
 import { buildResultsOverview } from '@/thermal/overview/overviewAggregator';
 import type {
   ResultsOverview,
@@ -258,6 +262,7 @@ export function demoNetwork(components = demoComponents()): ThermalNetwork {
           : localResistance(edge);
       edges.push({
         ...edge,
+        parameter_links: edge.type === 'package_rjc' ? edge.parameter_links : undefined,
         rth: demoRth(resistance, 'Synthetic component thermal-path characterization'),
         resolution: 'resolved',
         resolution_note: undefined,
@@ -415,6 +420,7 @@ export interface DemoGoldenFlow {
   boundary: ScenarioBoundaryConditionSet;
   solution: ThermalSolution;
   analysis: BottleneckAnalysis;
+  distribution: TemperatureDistributionResult;
   overview: ResultsOverview;
   snapshot: ResultsOverviewSnapshot;
   snapshotEvaluation: SnapshotEvaluation;
@@ -441,6 +447,7 @@ export async function buildDemoGoldenFlow(): Promise<DemoGoldenFlow> {
   const ports = deriveBoundaryPorts(network);
   const solve = solveScenario({
     network,
+    components,
     boundarySet: boundary,
     ports,
     scenarioId: scenario.id,
@@ -458,6 +465,8 @@ export async function buildDemoGoldenFlow(): Promise<DemoGoldenFlow> {
       network_id: network.network_name,
       scenario_id: scenario.id,
       network,
+      components,
+      sourceRevision: DEMO_SOURCE_REVISION,
       baselineInput: solve.input,
       baselineSolution: solve.solution,
       settings: defaultSettings(),
@@ -469,6 +478,16 @@ export async function buildDemoGoldenFlow(): Promise<DemoGoldenFlow> {
     throw new Error('Golden Demo bottleneck analysis did not produce usable results.');
   }
 
+  const distribution = buildDistributionResult({
+    projectId: project.project_id,
+    network,
+    solution: solve.solution,
+    components,
+    sourceRevision: DEMO_SOURCE_REVISION,
+    now: DEMO_TIMESTAMP,
+    id: `DST_${DEMO_SCENARIO_ID}_GOLDEN_DEMO`,
+  });
+
   const overviewResult = buildResultsOverview({
     project_id: project.project_id,
     scenario,
@@ -476,6 +495,9 @@ export async function buildDemoGoldenFlow(): Promise<DemoGoldenFlow> {
     solution: solve.solution,
     components,
     analysis,
+    distribution_result: distribution,
+    distribution_stale: false,
+    current_source_revision: DEMO_SOURCE_REVISION,
     solution_stale: false,
     now: DEMO_TIMESTAMP,
   });
@@ -526,6 +548,8 @@ export async function buildDemoGoldenFlow(): Promise<DemoGoldenFlow> {
     solution_stale: false,
     analysis,
     analysis_stale: false,
+    distribution,
+    distribution_stale: false,
     boundary,
     snapshot,
     snapshot_stale: false,
@@ -546,6 +570,7 @@ export async function buildDemoGoldenFlow(): Promise<DemoGoldenFlow> {
     boundary,
     solution: solve.solution,
     analysis,
+    distribution,
     overview,
     snapshot,
     snapshotEvaluation,

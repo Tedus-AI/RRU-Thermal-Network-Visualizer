@@ -10,7 +10,12 @@
 
 import { create } from 'zustand';
 import { useSolverStore } from './solverStore';
-import { loadNetwork, saveNetwork } from './persistence';
+import {
+  loadNetwork,
+  loadNetworkReviewState,
+  saveNetwork,
+  saveNetworkReviewState,
+} from './persistence';
 import { DEFAULT_SOLVER_SETTINGS } from '@/thermal/types';
 import { createRevision } from '@/domain/revision';
 import type {
@@ -51,13 +56,14 @@ interface NetworkStoreState {
   network: ThermalNetwork | null;
   dirty: boolean;
   requiresReview: boolean;
+  requiresReviewReasons: string[];
   validation: GraphValidationResult | null;
   past: Snapshot[];
   future: Snapshot[];
 
   loadFor: (projectId: string) => void;
   clear: () => void;
-  setRequiresReview: (value: boolean) => void;
+  setRequiresReview: (value: boolean, reason?: string) => void;
 
   /** Applies a mutation, records history and invalidates the solver. */
   mutate: (
@@ -104,19 +110,20 @@ interface NetworkStoreState {
 }
 
 function snapshot(network: ThermalNetwork): Snapshot {
-  return {
-    nodes: { ...network.nodes },
-    edges: { ...network.edges },
-    templates: { ...network.templates },
-    zones: { ...network.zones },
-    layout: { ...network.layout, positions: { ...network.layout.positions } },
-  };
+  return structuredClone({
+    nodes: network.nodes,
+    edges: network.edges,
+    templates: network.templates,
+    zones: network.zones,
+    layout: network.layout,
+  });
 }
 
 export const useNetworkStore = create<NetworkStoreState>((set, get) => ({
   network: null,
   dirty: false,
   requiresReview: false,
+  requiresReviewReasons: [],
   validation: null,
   past: [],
   future: [],
@@ -124,10 +131,12 @@ export const useNetworkStore = create<NetworkStoreState>((set, get) => ({
   loadFor: (projectId) => {
     const stored = loadNetwork(projectId);
     const network = stored ?? emptyNetwork(projectId);
+    const review = loadNetworkReviewState(projectId);
     set({
       network,
       dirty: false,
-      requiresReview: false,
+      requiresReview: review.requires_review,
+      requiresReviewReasons: review.reasons,
       past: [],
       future: [],
       validation: validateGraph(network),
@@ -135,24 +144,37 @@ export const useNetworkStore = create<NetworkStoreState>((set, get) => ({
   },
 
   clear: () =>
-    set({ network: null, dirty: false, requiresReview: false, past: [], future: [], validation: null }),
+    set({
+      network: null,
+      dirty: false,
+      requiresReview: false,
+      requiresReviewReasons: [],
+      past: [],
+      future: [],
+      validation: null,
+    }),
 
-  setRequiresReview: (requiresReview) => set({ requiresReview }),
+  setRequiresReview: (requiresReview, reason) => {
+    const network = get().network;
+    const reasons = requiresReview
+      ? Array.from(new Set([...get().requiresReviewReasons, ...(reason ? [reason] : [])]))
+      : [];
+    set({ requiresReview, requiresReviewReasons: reasons });
+    if (network) {
+      saveNetworkReviewState(network.project_id, {
+        requires_review: requiresReview,
+        reasons,
+      });
+    }
+  },
 
   mutate: (recipe, options = {}) => {
     const current = get().network;
     if (!current) return;
 
     const before = snapshot(current);
-    // Work on a shallow clone so React sees a new reference.
-    const next: ThermalNetwork = {
-      ...current,
-      nodes: { ...current.nodes },
-      edges: { ...current.edges },
-      templates: { ...current.templates },
-      zones: { ...current.zones },
-      layout: { ...current.layout, positions: { ...current.layout.positions } },
-    };
+    // Recipes may edit nested ports/provenance; isolate them from history and subscribers.
+    const next: ThermalNetwork = structuredClone(current);
     recipe(next);
 
     // Layout-only mutations deliberately keep the engineering graph revision.

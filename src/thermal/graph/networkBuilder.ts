@@ -35,7 +35,7 @@ export interface Subgraph {
 }
 
 /** Reads a dotted path out of a component, unwrapping SourcedValue as needed. */
-function readComponentField(component: Component, path: string): number | null {
+export function readComponentField(component: Component, path: string): number | null {
   if (path === 'thermal_spec.geometry.contact_area') {
     return contactAreaMm2(component.thermal_spec.geometry);
   }
@@ -131,7 +131,12 @@ export function buildComponentSubgraph(
           component_id: component.id,
           modified: false,
         },
-        metadata: instance ? { instance, devices_represented: multiplier } : undefined,
+        metadata: {
+          ...(instance ? { instance } : {}),
+          devices_represented: multiplier,
+          component_power_linked: proto.heatSource,
+          component_limit_linked: proto.heatSource,
+        },
       });
     }
 

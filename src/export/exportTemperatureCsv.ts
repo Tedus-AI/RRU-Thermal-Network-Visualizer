@@ -22,6 +22,7 @@ export interface TemperatureCsvInput {
   network: ThermalNetwork;
   solution: ThermalSolution;
   components: Component[];
+  rows?: TemperatureRow[];
   config: ExportConfiguration;
 }
 
@@ -49,10 +50,12 @@ export function temperatureCsvColumns(
 }
 
 export function exportTemperatureCsv(input: TemperatureCsvInput): string {
-  const rows = buildTemperatureDataset({
-    network: input.network,
-    solution: input.solution,
-    components: input.components,
-  });
+  const rows =
+    input.rows ??
+    buildTemperatureDataset({
+      network: input.network,
+      solution: input.solution,
+      components: input.components,
+    });
   return buildCsv(rows, temperatureCsvColumns(input), input.config);
 }

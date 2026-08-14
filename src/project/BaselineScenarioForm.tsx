@@ -9,6 +9,7 @@ import { Field, NumberInput, SectionCard, TextInput } from '@/ui/primitives';
 import { SCENARIO_LIMITS, type Scenario } from '@/domain/project';
 import { useScenarioStore } from '@/data/scenarioStore';
 import { useProjectStore } from '@/data/projectStore';
+import { useBoundaryStore } from '@/data/boundaryStore';
 import { useFormTouch, useVisibleError } from './formTouch';
 
 export function BaselineScenarioForm({
@@ -37,7 +38,20 @@ export function BaselineScenarioForm({
 
   const patch = (values: Partial<Scenario>) => {
     for (const field of Object.keys(values)) touch(field === 'name' ? 'scenario_name' : field);
-    updateScenario(scenario.id, values);
+    const boundaryValues = {
+      ...(Object.hasOwn(values, 'ambient_C') ? { ambient_C: values.ambient_C } : {}),
+      ...(Object.hasOwn(values, 'wind_mps') ? { wind_mps: values.wind_mps } : {}),
+      ...(Object.hasOwn(values, 'solar_W_m2') ? { solar_W_m2: values.solar_W_m2 } : {}),
+    };
+    const ownsBoundaryValue = Object.keys(boundaryValues).length > 0;
+    const synchronized = ownsBoundaryValue
+      ? useBoundaryStore.getState().syncScenarioDefaults(scenario.id, boundaryValues)
+      : false;
+    updateScenario(
+      scenario.id,
+      values,
+      synchronized ? { skipRevision: true, skipInvalidate: true } : undefined,
+    );
     markDirty();
   };
 

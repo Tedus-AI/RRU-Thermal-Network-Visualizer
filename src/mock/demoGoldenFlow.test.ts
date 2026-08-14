@@ -7,6 +7,7 @@ import {
   loadComponentRevisions,
   loadComponents,
   loadExportPayloads,
+  loadDistributions,
   loadNetwork,
   loadProject,
   loadReportConfigs,
@@ -20,6 +21,18 @@ import { topologyVersionOf } from '@/data/boundaryStore';
 import { validateGraph } from '@/thermal/graph/graphValidation';
 import { evaluateSnapshot } from '@/report/snapshotAdapter';
 import { buildResultsOverview } from '@/thermal/overview/overviewAggregator';
+import { useComponentStore } from '@/data/componentStore';
+import { useNetworkStore } from '@/data/networkStore';
+import { useScenarioStore } from '@/data/scenarioStore';
+import { useBoundaryStore } from '@/data/boundaryStore';
+import { useSolutionStore } from '@/data/solutionStore';
+import { useAnalysisStore } from '@/data/analysisStore';
+import { useDistributionStore } from '@/data/distributionStore';
+import { useOverviewStore } from '@/data/overviewStore';
+import { useSolverStore } from '@/data/solverStore';
+import { currentSourceRevision } from '@/data/sourceRevision';
+import { sourced } from '@/domain/sourcedValue';
+import { evaluateAllArtifacts } from '@/export/exportValidator';
 
 import {
   DEMO_PROJECT_ID,
@@ -113,6 +126,7 @@ describe('FR1 RRU Golden Demo', () => {
     const boundary = loadBoundarySets(DEMO_PROJECT_ID)[0];
     const solution = loadSolutions(DEMO_PROJECT_ID)[0];
     const analysis = loadAnalyses(DEMO_PROJECT_ID)[0];
+    const distribution = loadDistributions(DEMO_PROJECT_ID)[0];
     const snapshot = loadSnapshots(DEMO_PROJECT_ID)[0];
     const reportConfig = loadReportConfigs(DEMO_PROJECT_ID)[0];
     const payload = loadExportPayloads(DEMO_PROJECT_ID)[0];
@@ -144,6 +158,9 @@ describe('FR1 RRU Golden Demo', () => {
       solution,
       components,
       analysis,
+      distribution_result: distribution,
+      distribution_stale: false,
+      current_source_revision: DEMO_SOURCE_REVISION,
       solution_stale: false,
       now: '2026-08-13T00:00:00.000Z',
     }).overview;
@@ -151,5 +168,97 @@ describe('FR1 RRU Golden Demo', () => {
     expect(reportConfig.snapshot_id).toBe(snapshot.id);
     expect(payload.snapshot_id).toBe(snapshot.id);
     expect(payload.readiness).toBe('EXPORT_READY');
+  });
+
+  it('detects a physics revision mismatch even before the solution signature is refreshed', async () => {
+    await seedDemoProject();
+    useScenarioStore.getState().loadFor(DEMO_PROJECT_ID);
+    useComponentStore.getState().loadFor(DEMO_PROJECT_ID);
+    useNetworkStore.getState().loadFor(DEMO_PROJECT_ID);
+    useBoundaryStore.getState().loadFor(DEMO_PROJECT_ID, DEMO_SCENARIO_ID);
+    useSolutionStore.getState().loadFor(DEMO_PROJECT_ID, DEMO_SCENARIO_ID);
+    expect(useSolutionStore.getState().isStale()).toBe(false);
+
+    const pa = useComponentStore.getState().byId('CMP_FINAL_PA')!;
+    useComponentStore
+      .getState()
+      .patchComponent(pa.id, { power_W: sourced(99, 'Manual') }, ['power_W']);
+
+    expect(useSolutionStore.getState().isStale()).toBe(true);
+    expect(useSolverStore.getState().dirtyReasons).toContain('component_power_changed');
+  });
+
+  it('propagates a Limit-only edit through 08-12 without dirtying Screen 07', async () => {
+    await seedDemoProject();
+    useScenarioStore.getState().loadFor(DEMO_PROJECT_ID);
+    useComponentStore.getState().loadFor(DEMO_PROJECT_ID);
+    useNetworkStore.getState().loadFor(DEMO_PROJECT_ID);
+    useBoundaryStore.getState().loadFor(DEMO_PROJECT_ID, DEMO_SCENARIO_ID);
+    useSolutionStore.getState().loadFor(DEMO_PROJECT_ID, DEMO_SCENARIO_ID);
+    useAnalysisStore.getState().loadFor(DEMO_PROJECT_ID, DEMO_SCENARIO_ID);
+    useDistributionStore.getState().loadFor(DEMO_PROJECT_ID, DEMO_SCENARIO_ID);
+    useOverviewStore.getState().loadFor(DEMO_PROJECT_ID, DEMO_SCENARIO_ID);
+
+    expect(useAnalysisStore.getState().state()).toBe('COMPLETE');
+    expect(useDistributionStore.getState().state()).toBe('CURRENT');
+    const pa = useComponentStore.getState().byId('CMP_FINAL_PA')!;
+    useComponentStore.getState().patchComponent(
+      pa.id,
+      {
+        thermal_spec: {
+          ...pa.thermal_spec,
+          limit_C: sourced(80, 'Manual'),
+        },
+      },
+      ['limit_C'],
+    );
+
+    expect(useSolverStore.getState().state).toBe('SOLVED');
+    expect(useSolutionStore.getState().isStale()).toBe(false);
+    expect(useNetworkStore.getState().requiresReview).toBe(false);
+    expect(useAnalysisStore.getState().state()).toBe('DIRTY');
+    expect(useDistributionStore.getState().state()).toBe('DIRTY');
+
+    const project = loadProject(DEMO_PROJECT_ID)!;
+    const scenario = useScenarioStore.getState().activeScenario()!;
+    const network = useNetworkStore.getState().network!;
+    const solution = useSolutionStore.getState().current()!;
+    const analysis = useAnalysisStore.getState().current();
+    const distribution = useDistributionStore.getState().current();
+    const snapshot = useOverviewStore.getState().current()!;
+    const sourceRevision = currentSourceRevision(DEMO_PROJECT_ID, network, scenario);
+    const live = buildResultsOverview({
+      project_id: project.project_id,
+      scenario,
+      network,
+      solution,
+      components: useComponentStore.getState().components,
+      analysis,
+      distribution_result: distribution,
+      distribution_stale: true,
+      current_source_revision: sourceRevision,
+      solution_stale: false,
+    }).overview;
+    expect(evaluateSnapshot(snapshot, live, scenario.name).state).toBe('STALE');
+
+    const artifacts = evaluateAllArtifacts({
+      network,
+      solution,
+      solution_stale: false,
+      analysis,
+      analysis_stale: true,
+      distribution,
+      distribution_stale: true,
+      boundary: useBoundaryStore.getState().current(),
+      snapshot,
+      snapshot_stale: true,
+      payload: loadExportPayloads(DEMO_PROJECT_ID)[0],
+      components_without_limits: snapshot.completeness.components_without_limits,
+      low_confidence_edges: snapshot.completeness.low_confidence_critical_edges,
+    });
+    expect(artifacts.temperature_csv.status).toBe('BLOCKED');
+    expect(artifacts.bottleneck_csv.status).toBe('BLOCKED');
+    expect(artifacts.pdf_report.status).toBe('BLOCKED');
+    expect(artifacts.network_json.status).toBe('READY');
   });
 });

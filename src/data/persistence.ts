@@ -29,6 +29,7 @@ import type {
   BottleneckProposal,
 } from '@/thermal/analysis/analysisTypes';
 import type { ResultsOverviewSnapshot } from '@/thermal/overview/overviewTypes';
+import type { TemperatureDistributionResult } from '@/thermal/analysis/distributionResult';
 import type {
   ReportExportPayload,
   ReportTemplate,
@@ -41,9 +42,11 @@ const SCENARIOS_KEY = 'tnv.scenarios';
 const COMPONENTS_KEY = 'tnv.components';
 const COMPONENT_REVISIONS_KEY = 'tnv.component_revisions';
 const NETWORKS_KEY = 'tnv.thermal_networks';
+const NETWORK_REVIEW_KEY = 'tnv.network_review_state';
 const BOUNDARY_KEY = 'tnv.boundary_sets';
 const SOLUTIONS_KEY = 'tnv.thermal_solutions';
 const ANALYSES_KEY = 'tnv.bottleneck_analyses';
+const DISTRIBUTIONS_KEY = 'tnv.temperature_distributions';
 const PROPOSALS_KEY = 'tnv.improvement_proposals';
 const SNAPSHOTS_KEY = 'tnv.results_snapshots';
 const REPORT_CONFIGS_KEY = 'tnv.report_configs';
@@ -64,21 +67,71 @@ const OWNED_PROJECT_KEYS = [
 
 type RawDoc = Record<string, unknown>;
 
+export interface PersistenceRecoveryIssue {
+  key: string;
+  raw: string;
+  message: string;
+}
+
+export class PersistenceCorruptionError extends Error {
+  readonly key: string;
+
+  constructor(key: string, message: string) {
+    super(`Stored collection "${key}" is corrupt and has been opened read-only: ${message}`);
+    this.name = 'PersistenceCorruptionError';
+    this.key = key;
+  }
+}
+
+const recoveryIssues = new Map<string, PersistenceRecoveryIssue>();
+
+function parseCollection(key: string, raw: string): Record<string, RawDoc> {
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      throw new Error('expected a JSON object at the collection root');
+    }
+    recoveryIssues.delete(key);
+    return parsed as Record<string, RawDoc>;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'invalid JSON';
+    recoveryIssues.set(key, { key, raw, message });
+    throw new PersistenceCorruptionError(key, message);
+  }
+}
+
+export function getPersistenceRecoveryIssues(): PersistenceRecoveryIssue[] {
+  return [...recoveryIssues.values()].map((issue) => ({ ...issue }));
+}
+
+/** Explicit recovery only; callers may export the raw issue before discarding. */
+export function discardCorruptCollection(key: string): void {
+  if (typeof localStorage === 'undefined') return;
+  localStorage.removeItem(key);
+  recoveryIssues.delete(key);
+}
+
 function readCollection(key: string): Record<string, RawDoc> {
   if (typeof localStorage === 'undefined') return {};
   try {
     const raw = localStorage.getItem(key);
-    if (!raw) return {};
-    const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === 'object' ? (parsed as Record<string, RawDoc>) : {};
-  } catch {
-    // A corrupt blob must not take the app down — 00 §35.2 bad-file protection.
-    return {};
+    if (!raw) {
+      recoveryIssues.delete(key);
+      return {};
+    }
+    return parseCollection(key, raw);
+  } catch (error) {
+    // Preserve the raw blob and surface a typed error. The caller can present
+    // recovery options without silently replacing user data on the next save.
+    if (error instanceof PersistenceCorruptionError) throw error;
+    throw new PersistenceCorruptionError(key, error instanceof Error ? error.message : 'invalid JSON');
   }
 }
 
 function writeCollection(key: string, value: Record<string, RawDoc>): void {
   if (typeof localStorage === 'undefined') return;
+  const existing = localStorage.getItem(key);
+  if (existing) parseCollection(key, existing);
   localStorage.setItem(key, JSON.stringify(value));
 }
 
@@ -334,6 +387,36 @@ export function loadSolutions(projectId: string): ThermalSolution[] {
     }));
 }
 
+export interface NetworkReviewState {
+  requires_review: boolean;
+  reasons: string[];
+  updated_at: string;
+}
+
+export function loadNetworkReviewState(projectId: string): NetworkReviewState {
+  const all = readCollection(NETWORK_REVIEW_KEY);
+  const stored = all[projectId] as Partial<NetworkReviewState> | undefined;
+  return {
+    requires_review: stored?.requires_review === true,
+    reasons: Array.isArray(stored?.reasons)
+      ? stored.reasons.filter((reason): reason is string => typeof reason === 'string')
+      : [],
+    updated_at: typeof stored?.updated_at === 'string' ? stored.updated_at : '',
+  };
+}
+
+export function saveNetworkReviewState(
+  projectId: string,
+  review: Omit<NetworkReviewState, 'updated_at'>,
+): void {
+  const all = readCollection(NETWORK_REVIEW_KEY);
+  all[projectId] = {
+    ...review,
+    updated_at: new Date().toISOString(),
+  } as unknown as RawDoc;
+  writeCollection(NETWORK_REVIEW_KEY, all);
+}
+
 export function saveSolution(projectId: string, solution: ThermalSolution): void {
   const all = readCollection(SOLUTIONS_KEY);
   const bucket = (all[projectId] ?? {}) as Record<string, unknown>;
@@ -381,6 +464,39 @@ export function deleteAnalysis(projectId: string, networkId: string, scenarioId:
   delete bucket[boundaryKey(networkId, scenarioId)];
   all[projectId] = bucket as RawDoc;
   writeCollection(ANALYSES_KEY, all);
+}
+
+// --- Temperature distribution results -------------------------------------
+
+export function loadDistributions(projectId: string): TemperatureDistributionResult[] {
+  const all = readCollection(DISTRIBUTIONS_KEY);
+  const bucket = (all[projectId] ?? {}) as Record<string, TemperatureDistributionResult>;
+  return Object.values(bucket).filter(
+    (entry) => entry && typeof entry === 'object' && entry.scenario_id && Array.isArray(entry.rows),
+  );
+}
+
+export function saveDistribution(
+  projectId: string,
+  distribution: TemperatureDistributionResult,
+): void {
+  const all = readCollection(DISTRIBUTIONS_KEY);
+  const bucket = (all[projectId] ?? {}) as Record<string, unknown>;
+  bucket[boundaryKey(distribution.network_id, distribution.scenario_id)] = distribution;
+  all[projectId] = bucket as RawDoc;
+  writeCollection(DISTRIBUTIONS_KEY, all);
+}
+
+export function deleteDistribution(
+  projectId: string,
+  networkId: string,
+  scenarioId: string,
+): void {
+  const all = readCollection(DISTRIBUTIONS_KEY);
+  const bucket = (all[projectId] ?? {}) as Record<string, unknown>;
+  delete bucket[boundaryKey(networkId, scenarioId)];
+  all[projectId] = bucket as RawDoc;
+  writeCollection(DISTRIBUTIONS_KEY, all);
 }
 
 export function loadProposals(projectId: string): BottleneckProposal[] {

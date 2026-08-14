@@ -55,6 +55,11 @@ interface BoundaryStoreState {
 
   setAmbient: (patch: Partial<ScenarioBoundaryConditionSet['ambient']>) => void;
   setSite: (patch: Partial<ScenarioBoundaryConditionSet['site']>) => void;
+  /** One-way Screen 01 -> Screen 06 synchronization for shared scenario defaults. */
+  syncScenarioDefaults: (
+    scenarioId: string,
+    patch: { ambient_C?: number; wind_mps?: number; solar_W_m2?: number },
+  ) => boolean;
   upsertProfile: (profile: BoundaryConditionProfile) => void;
   removeProfile: (profileId: string) => void;
   assignProfiles: (portId: string, profileIds: string[]) => void;
@@ -183,6 +188,34 @@ export const useBoundaryStore = create<BoundaryStoreState>((set, get) => ({
           { skipRevision: true, skipInvalidate: true },
         );
     }
+  },
+
+  syncScenarioDefaults: (scenarioId, patch) => {
+    const current = get().current();
+    if (!current || current.scenario_id !== scenarioId) return false;
+
+    const changed =
+      (Object.hasOwn(patch, 'ambient_C') &&
+        !Object.is(current.ambient.external_ambient_C, patch.ambient_C)) ||
+      (Object.hasOwn(patch, 'wind_mps') &&
+        !Object.is(current.site.wind_speed_m_s, patch.wind_mps)) ||
+      (Object.hasOwn(patch, 'solar_W_m2') &&
+        !Object.is(current.site.solar_irradiance_W_m2, patch.solar_W_m2));
+
+    if (changed) {
+      get().mutate((next) => {
+        if (Object.hasOwn(patch, 'ambient_C')) {
+          next.ambient.external_ambient_C = patch.ambient_C ?? null;
+        }
+        if (Object.hasOwn(patch, 'wind_mps')) {
+          next.site.wind_speed_m_s = patch.wind_mps ?? null;
+        }
+        if (Object.hasOwn(patch, 'solar_W_m2')) {
+          next.site.solar_irradiance_W_m2 = patch.solar_W_m2 ?? null;
+        }
+      });
+    }
+    return true;
   },
 
   upsertProfile: (profile) =>

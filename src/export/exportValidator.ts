@@ -19,6 +19,7 @@ import type { BottleneckAnalysis } from '@/thermal/analysis/analysisTypes';
 import type { ScenarioBoundaryConditionSet } from '@/thermal/boundary/types';
 import type { ResultsOverviewSnapshot } from '@/thermal/overview/overviewTypes';
 import type { ReportExportPayload } from '@/report/reportTypes';
+import type { TemperatureDistributionResult } from '@/thermal/analysis/distributionResult';
 
 import {
   ARTIFACT_DEFINITIONS,
@@ -40,6 +41,8 @@ export interface ReadinessInput {
   analysis: BottleneckAnalysis | null;
   /** True when Screen 08's analysis was built on a superseded solve. */
   analysis_stale: boolean;
+  distribution?: TemperatureDistributionResult | null;
+  distribution_stale?: boolean;
   boundary: ScenarioBoundaryConditionSet | null;
   snapshot: ResultsOverviewSnapshot | null;
   /** True when the Screen 10 snapshot no longer matches the live overview. */
@@ -139,6 +142,18 @@ export function evaluateArtifact(type: ArtifactType, input: ReadinessInput): Art
       return wrap(reportReadiness(input), reportReason(input));
 
     case 'temperature_csv':
+      if (('distribution' in input || 'distribution_stale' in input) && !input.distribution) {
+        return wrap('NOT_AVAILABLE', {
+          en: 'No formal Screen 09 distribution. Refresh Screen 09 first.',
+          zh: '尚無正式的 Screen 09 溫度分佈結果，請先重新整理 Screen 09。',
+        });
+      }
+      if (input.distribution_stale) {
+        return wrap('BLOCKED', {
+          en: 'The Screen 09 distribution is stale. Refresh it before export.',
+          zh: 'Screen 09 溫度分佈已過期，請先重新整理。',
+        });
+      }
       return wrap(solvedResultStatus(input), solvedResultReason(input));
 
     case 'bottleneck_csv': {
@@ -210,6 +225,15 @@ export function evaluateArtifact(type: ArtifactType, input: ReadinessInput): Art
         return wrap('WARNING', {
           en: 'The bottleneck overlay is unavailable; the other views still export.',
           zh: '瓶頸疊圖不可用，其餘視圖仍可匯出。',
+        });
+      }
+      if (
+        ('distribution' in input || 'distribution_stale' in input) &&
+        (!input.distribution || input.distribution_stale)
+      ) {
+        return wrap('WARNING', {
+          en: 'The Screen 09 distribution snapshot is unavailable; current 07/08 views still export.',
+          zh: 'Screen 09 分佈快照不可用；目前的 07/08 畫面仍可匯出。',
         });
       }
       return wrap('READY');
@@ -308,8 +332,13 @@ export function evaluateSources(input: ReadinessInput): SourceReadinessEntry[] {
     ),
     entry(
       'temperature_distribution',
-      // 09 derives from the same solve; it has no separate stored artifact.
-      solutionState,
+      'distribution' in input || 'distribution_stale' in input
+        ? !input.distribution
+          ? 'NOT_AVAILABLE'
+          : input.distribution_stale || input.solution_stale
+            ? 'BLOCKED'
+            : 'READY'
+        : solutionState,
       input.solution
         ? `Derived from the current solve · ${Object.keys(input.solution.node_temperatures_C).length} node(s)`
         : 'No solved temperatures.',
