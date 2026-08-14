@@ -14,6 +14,8 @@ import { buildSolveInput, solveInputSignature } from './buildSolveInput';
 import { runPreSolveChecks } from './preSolveChecks';
 import { checkScenario, netHeatFlowOf, solveScenario } from './solveScenario';
 import type { SourceRevision } from '@/domain/revision';
+import { createComponent } from '@/domain/component';
+import { sourced } from '@/domain/sourcedValue';
 
 // --- builders --------------------------------------------------------------
 
@@ -151,6 +153,69 @@ describe('Phase 1 solution provenance', () => {
     expect(afterLimitEdit.solution.metadata.source_revision?.limit_revision).toBe(
       'rev:limit:2',
     );
+  });
+
+  it('projects authoritative Component Master power and linked Rth into every solve', () => {
+    const component = createComponent({
+      id: 'CMP_PA',
+      name: 'Final PA',
+      category: 'RF',
+      qty: 4,
+      power_W: 45,
+      provenance: {
+        source_type: 'Manual',
+        source_project_id: null,
+        source_project_name: null,
+        source_file: null,
+        imported_at: '2026-08-13T00:00:00.000Z',
+      },
+    });
+    component.thermal_spec.r_jc_C_per_W = sourced(0.25, 'Datasheet');
+
+    const sourceNode = {
+      ...node('SRC', { power: 1 }),
+      component_ref: component.id,
+      origin: { kind: 'template' as const, component_id: component.id, modified: false },
+      metadata: { component_power_linked: true, devices_represented: 4 },
+    };
+    const linkedEdge = edge('E1', 'SRC', 'AMB', 9, {
+      method: 'direct_rth',
+      parameters: { R_C_per_W: 9 },
+      parameter_links: { R_C_per_W: 'thermal_spec.r_jc_C_per_W' },
+      origin: { kind: 'template', component_id: component.id, modified: false },
+    });
+    const net = network([sourceNode, node('AMB', { ambient: true })], [linkedEdge]);
+
+    const first = solveScenario({
+      network: net,
+      components: [component],
+      boundarySet: ambientOnly('SCN_A', 20),
+      ports: deriveBoundaryPorts(net),
+      scenarioId: 'SCN_A',
+    });
+    expect(first.solution.energy_balance.component_W).toBeCloseTo(180, 9);
+    expect(first.input.network.edges.E1.rth.analytical).toBeCloseTo(0.25, 9);
+
+    const changed = {
+      ...component,
+      power_W: sourced(99, 'Manual'),
+      thermal_spec: {
+        ...component.thermal_spec,
+        r_jc_C_per_W: sourced(0.1, 'Datasheet'),
+      },
+    };
+    const second = solveScenario({
+      network: net,
+      components: [changed],
+      boundarySet: ambientOnly('SCN_A', 20),
+      ports: deriveBoundaryPorts(net),
+      scenarioId: 'SCN_A',
+    });
+    expect(second.solution.energy_balance.component_W).toBeCloseTo(396, 9);
+    expect(second.input.network.edges.E1.rth.analytical).toBeCloseTo(0.1, 9);
+    expect(second.signature).not.toBe(first.signature);
+    expect(net.nodes.SRC.power_W).toBe(1);
+    expect(net.edges.E1.rth.analytical).toBe(9);
   });
 });
 

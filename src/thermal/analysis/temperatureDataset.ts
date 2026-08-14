@@ -13,6 +13,7 @@
 import type { Component } from '@/domain/component';
 import type { ThermalNetwork, ThermalNode } from '../types';
 import type { ThermalSolution } from '../solver/solverTypes';
+import { projectComponentLimits } from '../graph/componentProjection';
 
 export const RESULT_SOURCES = ['analytical', 'flotherm', 'measurement'] as const;
 export type ResultSource = (typeof RESULT_SOURCES)[number];
@@ -166,8 +167,9 @@ export function buildTemperatureDataset(input: {
   components: Component[];
 }): TemperatureRow[] {
   const byId = new Map(input.components.map((component) => [component.id, component]));
+  const network = projectComponentLimits(input.network, input.components);
 
-  return Object.values(input.network.nodes)
+  return Object.values(network.nodes)
     .filter((node) => !node.disabled)
     .flatMap((node) => {
       const temperature = input.solution.node_temperatures_C[node.id];

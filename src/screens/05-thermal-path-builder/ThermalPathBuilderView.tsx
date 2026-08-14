@@ -295,6 +295,13 @@ export function ThermalPathBuilderView() {
       );
     }
     useNetworkStore.getState().save(projectId);
+    const current = useNetworkStore.getState();
+    if (
+      current.validation?.errors === 0 &&
+      Object.keys(current.network?.templates ?? {}).length >= enabledComponents.length
+    ) {
+      current.setRequiresReview(false);
+    }
     toast.success('Thermal network saved / 熱網路已儲存');
   };
 

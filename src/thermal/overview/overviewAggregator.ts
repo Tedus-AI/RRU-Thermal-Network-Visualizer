@@ -16,6 +16,8 @@ import type { ThermalSolution } from '../solver/solverTypes';
 import { energyGrade } from '../solver/solverTypes';
 import { DEFAULT_SOLVER_SETTINGS, type SolverSettings } from '../types';
 import type { BottleneckAnalysis } from '../analysis/analysisTypes';
+import type { TemperatureDistributionResult } from '../analysis/distributionResult';
+import { resultRevisionMatches, type SourceRevision } from '@/domain/revision';
 import {
   WARNING_TEMPERATURE_C,
   buildTemperatureDataset,
@@ -58,6 +60,10 @@ export interface OverviewInput {
   components: Component[];
   /** Screen 08's stored analysis for this scenario, if any. */
   analysis: BottleneckAnalysis | null;
+  /** Formal Screen 09 result. Product callers always provide it. */
+  distribution_result?: TemperatureDistributionResult | null;
+  distribution_stale?: boolean;
+  current_source_revision?: SourceRevision;
   /** 07 §38 — the stored solution predates a change to the inputs. */
   solution_stale: boolean;
   solver_settings?: SolverSettings;
@@ -79,11 +85,19 @@ export interface OverviewResult {
 export function bottleneckAvailabilityOf(
   analysis: BottleneckAnalysis | null,
   solution: ThermalSolution,
+  currentSourceRevision?: SourceRevision,
 ): BottleneckAvailability {
   if (!analysis) return 'not_run';
   if (analysis.state === 'FAILED') return 'failed';
   if (analysis.scenario_id !== solution.scenario_id) return 'stale';
   if (analysis.baseline_signature !== solution.metadata.input_signature) return 'stale';
+  if (
+    currentSourceRevision &&
+    (!analysis.source_revision ||
+      !resultRevisionMatches(analysis.source_revision, currentSourceRevision))
+  ) {
+    return 'stale';
+  }
   if (analysis.results.length === 0) return 'not_run';
   return 'current';
 }
@@ -190,14 +204,22 @@ export function buildResultsOverview(input: OverviewInput): OverviewResult {
   const generatedAt = input.now ?? new Date().toISOString();
 
   // --- the Screen 09 dataset, read not recomputed (10 §10) ------------------
-  const rows = buildTemperatureDataset({
-    network: input.network,
-    solution: input.solution,
-    components: input.components,
-  });
+  const distributionStale = input.distribution_stale === true;
+  const rows = distributionStale
+    ? []
+    : input.distribution_result?.rows ??
+      buildTemperatureDataset({
+        network: input.network,
+        solution: input.solution,
+        components: input.components,
+      });
 
   // --- Screen 08 (10 §9) ----------------------------------------------------
-  const availability = bottleneckAvailabilityOf(input.analysis, input.solution);
+  const availability = bottleneckAvailabilityOf(
+    input.analysis,
+    input.solution,
+    input.current_source_revision,
+  );
   const bottlenecks =
     availability === 'current' && input.analysis ? summariseBottlenecks(input.analysis) : [];
 
@@ -256,7 +278,7 @@ export function buildResultsOverview(input: OverviewInput): OverviewResult {
   const monitored = rows.filter((row) => row.margin_C != null).length;
 
   const status = evaluateOverallStatus({
-    solution_stale: input.solution_stale,
+    solution_stale: input.solution_stale || distributionStale,
     solver_status: input.solution.status,
     energy_grade: solverQuality.quality,
     component_statuses: criticalComponents.map((row) => row.status),
@@ -270,7 +292,7 @@ export function buildResultsOverview(input: OverviewInput): OverviewResult {
   });
 
   const readiness = buildReadiness({
-    solution_stale: input.solution_stale,
+    solution_stale: input.solution_stale || distributionStale,
     solver: solverQuality,
     bottleneck_availability: availability,
     distribution_available: distribution != null,
@@ -281,7 +303,7 @@ export function buildResultsOverview(input: OverviewInput): OverviewResult {
 
   const actionInput = {
     overall_status: status.status,
-    solution_stale: input.solution_stale,
+    solution_stale: input.solution_stale || distributionStale,
     critical_components: criticalComponents,
     bottlenecks,
     bottleneck_availability: availability,
@@ -329,6 +351,8 @@ export function buildResultsOverview(input: OverviewInput): OverviewResult {
       input.scenario.id,
       availability,
       input.analysis?.analyzed_at ?? null,
+      input.distribution_result?.id ?? null,
+      input.distribution_result?.source_revision ?? null,
       rows.map((row) => [row.node_id, row.temperature_C, row.limit_C ?? null]),
       // Staleness belongs in the signature. A boundary or power change leaves
       // the STORED solution byte-identical — its own input signature is a
@@ -336,6 +360,7 @@ export function buildResultsOverview(input: OverviewInput): OverviewResult {
       // a snapshot of a now-superseded result would still read as current,
       // which is exactly what 10 §19 forbids.
       input.solution_stale,
+      distributionStale,
     ]),
   };
 

@@ -13,6 +13,7 @@
  */
 
 import type { Confidence, DataSource, ThermalEdge } from '../types';
+import type { SourceRevision } from '@/domain/revision';
 
 export const ANALYSIS_SCHEMA_VERSION = '1.0';
 
@@ -232,6 +233,7 @@ export interface AnalysisIssue {
 
 export interface BottleneckAnalysis {
   schema_version: string;
+  id?: string;
   project_id: string;
   network_id: string;
   scenario_id: string;
@@ -239,6 +241,7 @@ export interface BottleneckAnalysis {
   settings: AnalysisSettings;
   /** Fingerprint of the 07 solve this analysis was built on (08 §14, §21). */
   baseline_signature: string;
+  source_revision?: SourceRevision;
   analyzed_at: string;
   elapsed_ms: number;
 

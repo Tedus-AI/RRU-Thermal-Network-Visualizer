@@ -25,6 +25,7 @@ import { DEFAULT_SOLVER_SETTINGS, type SolverSettings } from '../types';
 import type { BoundaryPort, ScenarioBoundaryConditionSet } from '../boundary/types';
 import type { ThermalNetwork } from '../types';
 import type { SourceRevision } from '@/domain/revision';
+import type { Component } from '@/domain/component';
 
 import {
   buildSolveInput,
@@ -46,6 +47,7 @@ import {
 
 export interface SolveScenarioOptions {
   network: ThermalNetwork;
+  components?: Component[];
   boundarySet: ScenarioBoundaryConditionSet | null;
   ports: BoundaryPort[];
   scenarioId: string;
@@ -113,6 +115,7 @@ export function checkScenario(options: SolveScenarioOptions): {
 } {
   const input = buildSolveInput({
     network: options.network,
+    components: options.components,
     boundarySet: options.boundarySet,
     ports: options.ports,
     scenarioId: options.scenarioId,

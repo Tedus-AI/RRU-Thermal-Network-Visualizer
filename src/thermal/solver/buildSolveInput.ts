@@ -23,6 +23,8 @@
 
 import { buildAllPreviews } from '../boundary/validation';
 import { edgeResistance } from '../rth';
+import { projectComponentMaster } from '../graph/componentProjection';
+import type { Component } from '@/domain/component';
 import type {
   BoundaryDerivedPreview,
   BoundaryPort,
@@ -78,6 +80,7 @@ export interface SolveInput {
 
 export interface BuildSolveInputOptions {
   network: ThermalNetwork;
+  components?: Component[];
   boundarySet: ScenarioBoundaryConditionSet | null;
   ports: BoundaryPort[];
   scenarioId: string;
@@ -138,7 +141,9 @@ export function buildSolveInput(options: BuildSolveInputOptions): SolveInput {
   const { network, boundarySet, ports, scenarioId } = options;
   const powerScale = options.powerScale ?? 1;
 
-  const clone = cloneNetwork(network);
+  const clone = options.components
+    ? projectComponentMaster(network, options.components, { physics: true, limits: true })
+    : cloneNetwork(network);
 
   // 05 §51 — a disabled node keeps its data but leaves the ACTIVE network, and
   // its edges leave with it so the solver never sees a dangling source.

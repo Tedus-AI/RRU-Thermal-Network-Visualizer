@@ -55,6 +55,8 @@ import { useSolutionStore } from '@/data/solutionStore';
 import { useComponentStore } from '@/data/componentStore';
 import { useAnalysisStore } from '@/data/analysisStore';
 import { useOverviewStore } from '@/data/overviewStore';
+import { useDistributionStore } from '@/data/distributionStore';
+import { currentSourceRevision } from '@/data/sourceRevision';
 
 import { buildResultsOverview } from '@/thermal/overview/overviewAggregator';
 import { CRITICAL_COMPONENT_TOP_N } from '@/thermal/overview/criticalComponents';
@@ -197,6 +199,9 @@ export function ResultsOverviewView() {
   const solutionKey = useSolutionStore((s) => s.activeKey);
   const analyses = useAnalysisStore((s) => s.analyses);
   const snapshots = useOverviewStore((s) => s.snapshots);
+  const distributionResults = useDistributionStore((s) => s.results);
+  const distributionKey = useDistributionStore((s) => s.activeKey);
+  const distributionState = useDistributionStore((s) => s.state());
 
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
@@ -210,6 +215,7 @@ export function ResultsOverviewView() {
   const analysis = solution
     ? (analyses[`${solution.network_id}::${solution.scenario_id}`] ?? null)
     : null;
+  const distribution = distributionKey ? (distributionResults[distributionKey] ?? null) : null;
 
   // --- load -----------------------------------------------------------------
   useEffect(() => {
@@ -227,6 +233,7 @@ export function ResultsOverviewView() {
     useBoundaryStore.getState().loadFor(projectId, scenarioId);
     useSolutionStore.getState().loadFor(projectId, scenarioId);
     useAnalysisStore.getState().loadFor(projectId, scenarioId);
+    useDistributionStore.getState().loadFor(projectId, scenarioId);
     useOverviewStore.getState().loadFor(projectId, scenarioId);
   }, [projectId]);
 
@@ -237,6 +244,7 @@ export function ResultsOverviewView() {
     useBoundaryStore.getState().loadFor(projectId, activeScenarioId);
     useSolutionStore.getState().loadFor(projectId, activeScenarioId);
     useAnalysisStore.getState().loadFor(projectId, activeScenarioId);
+    useDistributionStore.getState().loadFor(projectId, activeScenarioId);
     useOverviewStore.getState().loadFor(projectId, activeScenarioId);
     setSelectedNodeId(null);
     setSelectedEdgeId(null);
@@ -254,13 +262,28 @@ export function ResultsOverviewView() {
       solution,
       components,
       analysis,
+      distribution_result: distribution,
+      distribution_stale: distributionState !== 'CURRENT',
+      current_source_revision: currentSourceRevision(projectId, network, scenario),
       solution_stale: stale || solverState === 'DIRTY',
       solver_settings: network.solver_settings,
     });
     // `refreshToken` is a deliberate dependency: Refresh Overview re-reads the
     // stores and rebuilds even when nothing React can see has changed.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [network, solution, scenario, projectId, components, analysis, stale, solverState, refreshToken]);
+  }, [
+    network,
+    solution,
+    scenario,
+    projectId,
+    components,
+    analysis,
+    distribution,
+    distributionState,
+    stale,
+    solverState,
+    refreshToken,
+  ]);
 
   const overview = built?.overview ?? null;
   const snapshot = activeScenarioId ? (snapshots[activeScenarioId] ?? null) : null;

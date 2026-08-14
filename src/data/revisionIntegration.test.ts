@@ -134,4 +134,32 @@ describe('Phase 1 revision propagation', () => {
     expect(useSolverStore.getState().state).toBe('DIRTY');
     expect(useSolverStore.getState().dirtyReasons).toContain('boundary_changed');
   });
+
+  it('synchronizes Screen 01 scenario defaults into the Screen 06 overlay', () => {
+    const scenario = createBaselineScenario('P');
+    useScenarioStore.setState({ scenarios: [scenario], activeScenarioId: scenario.id });
+    useNetworkStore.getState().loadFor('P');
+    useBoundaryStore.getState().loadFor('P', scenario.id);
+
+    const synchronized = useBoundaryStore.getState().syncScenarioDefaults(scenario.id, {
+      ambient_C: 60,
+      wind_mps: 3,
+      solar_W_m2: 700,
+    });
+    useScenarioStore.getState().updateScenario(
+      scenario.id,
+      { ambient_C: 60, wind_mps: 3, solar_W_m2: 700 },
+      { skipRevision: true, skipInvalidate: true },
+    );
+
+    expect(synchronized).toBe(true);
+    expect(useBoundaryStore.getState().current()?.ambient.external_ambient_C).toBe(60);
+    expect(useBoundaryStore.getState().current()?.site.wind_speed_m_s).toBe(3);
+    expect(useBoundaryStore.getState().current()?.site.solar_irradiance_W_m2).toBe(700);
+    expect(useScenarioStore.getState().activeScenario()).toMatchObject({
+      ambient_C: 60,
+      wind_mps: 3,
+      solar_W_m2: 700,
+    });
+  });
 });

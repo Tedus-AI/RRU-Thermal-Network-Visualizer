@@ -6,7 +6,7 @@
  * solver invalidation.
  */
 
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useNetworkStore } from './networkStore';
 import { useSolverStore } from './solverStore';
@@ -16,6 +16,16 @@ import { buildComponentSubgraph } from '@/thermal/graph/networkBuilder';
 import { buildSharedStructure } from '@/thermal/graph/sharedStructure';
 import { createRth } from '@/thermal/rth';
 import type { ThermalEdge } from '@/thermal/types';
+
+class MemoryStorage implements Storage {
+  private data = new Map<string, string>();
+  get length() { return this.data.size; }
+  clear() { this.data.clear(); }
+  getItem(key: string) { return this.data.get(key) ?? null; }
+  key(index: number) { return [...this.data.keys()][index] ?? null; }
+  removeItem(key: string) { this.data.delete(key); }
+  setItem(key: string, value: string) { this.data.set(key, String(value)); }
+}
 
 function pa() {
   const component = createComponent({
@@ -54,6 +64,7 @@ function manualEdge(id: string, from: string, to: string): ThermalEdge {
 }
 
 beforeEach(() => {
+  vi.stubGlobal('localStorage', new MemoryStorage());
   useNetworkStore.getState().clear();
   useNetworkStore.getState().loadFor('TEST');
   useSolverStore.getState().reset();
@@ -181,6 +192,49 @@ describe('undo / redo (05 §41, AC-05-27)', () => {
       x: 10,
       y: 20,
     });
+  });
+
+  it('restores nested port state as well as the generated connection edge', () => {
+    const structure = buildSharedStructure('FUNCTIONAL_ZONES');
+    const subgraph = buildComponentSubgraph(pa(), {
+      templateId: 'BOTTOM_COOL_COIN',
+      qtyModel: 'AGGREGATE',
+    })!;
+    useNetworkStore.getState().addSubgraph({
+      nodes: structure.nodes,
+      edges: structure.edges,
+      zones: structure.zones,
+    });
+    useNetworkStore.getState().addSubgraph(subgraph);
+    const portNode = subgraph.nodes.find((entry) => entry.ports?.length)!;
+    const zoneId = structure.zones[0].id;
+
+    useNetworkStore.getState().connectPort(portNode.id, 'HEAT_OUT', zoneId);
+    useNetworkStore.getState().undo();
+
+    const restored = useNetworkStore.getState().network!;
+    expect(restored.nodes[portNode.id].ports?.[0].connected_to).toBeNull();
+    expect(
+      Object.values(restored.edges).some(
+        (candidate) => candidate.from === portNode.id && candidate.to === zoneId,
+      ),
+    ).toBe(false);
+  });
+});
+
+afterEach(() => vi.unstubAllGlobals());
+
+describe('persistent network review state', () => {
+  it('survives a reload with its reasons until explicitly cleared', () => {
+    useNetworkStore.getState().setRequiresReview(true, 'component_qty_changed');
+    useNetworkStore.getState().loadFor('TEST');
+    expect(useNetworkStore.getState().requiresReview).toBe(true);
+    expect(useNetworkStore.getState().requiresReviewReasons).toContain('component_qty_changed');
+
+    useNetworkStore.getState().setRequiresReview(false);
+    useNetworkStore.getState().loadFor('TEST');
+    expect(useNetworkStore.getState().requiresReview).toBe(false);
+    expect(useNetworkStore.getState().requiresReviewReasons).toEqual([]);
   });
 });
 
