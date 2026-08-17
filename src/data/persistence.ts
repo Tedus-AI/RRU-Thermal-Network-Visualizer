@@ -128,11 +128,34 @@ function readCollection(key: string): Record<string, RawDoc> {
   }
 }
 
+/**
+ * Write listeners.
+ *
+ * Every persisted change in the app passes through `writeCollection`, which
+ * makes it the one place a mirror can hook without each store having to
+ * remember to announce itself. Used by the local-folder sync.
+ */
+type StorageWriteListener = (key: string) => void;
+const writeListeners = new Set<StorageWriteListener>();
+
+export function onStorageWrite(listener: StorageWriteListener): () => void {
+  writeListeners.add(listener);
+  return () => writeListeners.delete(listener);
+}
+
 function writeCollection(key: string, value: Record<string, RawDoc>): void {
   if (typeof localStorage === 'undefined') return;
   const existing = localStorage.getItem(key);
   if (existing) parseCollection(key, existing);
   localStorage.setItem(key, JSON.stringify(value));
+
+  for (const listener of writeListeners) {
+    try {
+      listener(key);
+    } catch {
+      // A broken mirror must never stop the write that already succeeded.
+    }
+  }
 }
 
 function splitForeignFields(raw: RawDoc): Record<string, unknown> {

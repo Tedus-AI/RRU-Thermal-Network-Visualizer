@@ -12,16 +12,22 @@ import {
   Database,
   FileDown,
   FileUp,
+  FolderOpen,
+  FolderSync,
   HardDrive,
   Info,
   RotateCcw,
 } from 'lucide-react';
 
-import { Badge, Button, Modal } from '@/ui/primitives';
+import { Badge, Button, Modal, type Tone } from '@/ui/primitives';
 import { toast } from '@/ui/toast';
 import { SCREENS } from './navigation';
 import { BUILD_ID, resetProjectStorage } from '@/data/bootstrapStorage';
 import { storageUsage } from '@/data/buildStamp';
+import { useProjectStore } from '@/data/projectStore';
+import { useFolderStore } from '@/data/folderStore';
+import type { FolderStatus } from '@/data/folderStore';
+import type { FolderEntry } from '@/data/folderBinding';
 import { SCHEMA_VERSION } from '@/domain/project';
 import {
   PROJECT_FILE_VERSION,
@@ -73,17 +79,229 @@ function Row({ label, zh, value }: { label: string; zh: string; value: React.Rea
   );
 }
 
+// --- Local folder ----------------------------------------------------------
+
+const FOLDER_TONE: Record<FolderStatus, { tone: Tone; label: string; zh: string }> = {
+  unsupported: {
+    tone: 'neutral',
+    label: 'Not available in this browser',
+    zh: '此瀏覽器不支援',
+  },
+  unbound: { tone: 'neutral', label: 'No folder bound', zh: '尚未綁定資料夾' },
+  connected: { tone: 'ok', label: 'Connected', zh: '已連線' },
+  needs_permission: {
+    tone: 'warn',
+    label: 'Permission needed',
+    zh: '需要重新授權',
+  },
+  error: { tone: 'danger', label: 'Last write failed', zh: '上次寫入失敗' },
+};
+
+/**
+ * Binding a folder gives the working store a durable copy on real disk.
+ *
+ * The whole section is honest about being Chromium-only: on a browser without
+ * `showDirectoryPicker` it says so and points at the project file instead of
+ * offering a button that could not work.
+ */
+function LocalFolderSection({ onFileText }: { onFileText: (text: string) => void }) {
+  const status = useFolderStore((s) => s.status);
+  const folderName = useFolderStore((s) => s.folderName);
+  const lastSyncAt = useFolderStore((s) => s.lastSyncAt);
+  const lastSyncedProjectId = useFolderStore((s) => s.lastSyncedProjectId);
+  const lastError = useFolderStore((s) => s.lastError);
+  const syncing = useFolderStore((s) => s.syncing);
+
+  const projectId = useProjectStore((s) => s.draft?.project_id ?? null);
+  const isNew = useProjectStore((s) => s.isNew);
+  const canMirror = Boolean(projectId) && !isNew;
+
+  const [files, setFiles] = useState<FolderEntry[] | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const meta = FOLDER_TONE[status];
+
+  if (status === 'unsupported') {
+    return (
+      <Section icon={FolderSync} title="Local folder" zh="本機資料夾">
+        <p className="text-[11.5px] leading-relaxed text-ink-500">
+          This browser has no File System Access API, so a folder cannot be bound. Chrome and Edge
+          support it; Firefox and Safari do not. Use the project file above instead — it works
+          everywhere.
+          <span className="mt-0.5 block text-ink-400">
+            此瀏覽器不支援 File System Access API，無法綁定資料夾。Chrome 與 Edge 支援，Firefox
+            與 Safari 不支援；請改用上方的專案檔匯出／匯入。
+          </span>
+        </p>
+      </Section>
+    );
+  }
+
+  return (
+    <Section icon={FolderSync} title="Local folder" zh="本機資料夾">
+      <p className="text-[11.5px] leading-relaxed text-ink-500">
+        Bind a folder and every save is also written there as a project file, one file per
+        project. The folder survives a browser reset or a new deployment.
+        <span className="mt-0.5 block text-ink-400">
+          綁定資料夾後，每次儲存都會同步寫入一份專案檔（每個專案一個檔案）。
+          即使瀏覽器資料被清除或部署新版本，資料夾中的副本仍然存在。
+        </span>
+      </p>
+
+      <div className="flex flex-col gap-1 rounded border border-line bg-surface-muted px-2.5 py-2">
+        <div className="flex items-center justify-between gap-2">
+          <span className="flex min-w-0 items-center gap-1.5 text-[11.5px] text-ink-700">
+            <FolderOpen className="size-3.5 shrink-0 text-ink-400" aria-hidden />
+            <span className="truncate font-mono">{folderName ?? '—'}</span>
+          </span>
+          <Badge tone={meta.tone}>{syncing ? 'Syncing…' : meta.label}</Badge>
+        </div>
+        <p className="text-[10.5px] text-ink-400">
+          {meta.zh}
+          {lastSyncAt && (
+            <>
+              {' · '}Last write {new Date(lastSyncAt).toLocaleTimeString()}
+              {lastSyncedProjectId ? ` (${lastSyncedProjectId})` : ''}
+            </>
+          )}
+        </p>
+        {lastError && <p className="text-[10.5px] text-danger-600">{lastError}</p>}
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        {status === 'needs_permission' && (
+          <Button
+            variant="primary"
+            icon={<FolderSync className="size-3.5" aria-hidden />}
+            onClick={async () => {
+              const ok = await useFolderStore.getState().reconnect();
+              toast[ok ? 'success' : 'error'](
+                ok ? 'Folder reconnected.' : 'Permission was not granted.',
+              );
+            }}
+          >
+            Reconnect / 重新授權
+          </Button>
+        )}
+        <Button
+          variant="secondary"
+          icon={<FolderOpen className="size-3.5" aria-hidden />}
+          onClick={async () => {
+            const ok = await useFolderStore.getState().bind();
+            if (!ok) return;
+            toast.success('Folder bound. Saves will be mirrored there.');
+            if (canMirror && projectId) await useFolderStore.getState().mirror(projectId);
+          }}
+        >
+          {status === 'unbound' ? 'Choose Folder / 選擇資料夾' : 'Change Folder / 變更資料夾'}
+        </Button>
+        {status !== 'unbound' && (
+          <>
+            <Button
+              variant="secondary"
+              disabled={!canMirror || status !== 'connected'}
+              onClick={async () => {
+                if (!projectId) return;
+                const ok = await useFolderStore.getState().mirror(projectId);
+                toast[ok ? 'success' : 'error'](
+                  ok ? `Wrote ${projectId} to the folder.` : 'Could not write to the folder.',
+                );
+              }}
+            >
+              Sync Now / 立即同步
+            </Button>
+            <Button
+              variant="ghost"
+              onClick={async () => {
+                await useFolderStore.getState().unbind();
+                toast.success('Folder disconnected. Local data is untouched.');
+              }}
+            >
+              Disconnect / 解除綁定
+            </Button>
+          </>
+        )}
+      </div>
+
+      {status !== 'unbound' && !canMirror && (
+        <p className="text-[11px] text-ink-400">
+          Open a saved project to mirror it. 請先開啟已儲存的專案才能同步。
+        </p>
+      )}
+
+      {/* A backup you cannot restore from is not a backup. */}
+      {status === 'connected' && (
+        <div className="flex flex-col gap-1.5">
+          <Button
+            variant="ghost"
+            disabled={busy}
+            onClick={async () => {
+              setBusy(true);
+              setFiles(await useFolderStore.getState().listFiles());
+              setBusy(false);
+            }}
+          >
+            {files == null ? 'Browse Folder / 瀏覽資料夾' : 'Refresh / 重新整理'}
+          </Button>
+
+          {files != null && files.length === 0 && (
+            <p className="text-[11px] text-ink-400">
+              No project files in this folder yet. 此資料夾尚無專案檔。
+            </p>
+          )}
+
+          {files != null && files.length > 0 && (
+            <ul className="flex max-h-40 flex-col gap-1 overflow-y-auto">
+              {files.map((entry) => (
+                <li
+                  key={entry.filename}
+                  className="flex items-center justify-between gap-2 rounded border border-line px-2 py-1"
+                >
+                  <span className="min-w-0">
+                    <span className="block truncate font-mono text-[11px] text-ink-900">
+                      {entry.filename}
+                    </span>
+                    <span className="text-[10px] text-ink-400">
+                      {new Date(entry.modified_at).toLocaleString()} · {size(entry.size)}
+                    </span>
+                  </span>
+                  <Button
+                    variant="secondary"
+                    className="!h-7 shrink-0 !px-2 !text-[11px]"
+                    onClick={async () => {
+                      const text = await useFolderStore.getState().readFile(entry.filename);
+                      if (text == null) {
+                        toast.error(`Could not read ${entry.filename}.`);
+                        return;
+                      }
+                      onFileText(text);
+                    }}
+                  >
+                    Load / 載入
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </Section>
+  );
+}
+
 // --- Settings --------------------------------------------------------------
 
 export function SettingsDialog({
   onClose,
   onExportProject,
   onImportProject,
+  onFileText,
   canExport,
 }: {
   onClose: () => void;
   onExportProject: () => void;
   onImportProject: () => void;
+  onFileText: (text: string) => void;
   canExport: boolean;
 }) {
   const [confirmingReset, setConfirmingReset] = useState(false);
@@ -177,6 +395,8 @@ export function SettingsDialog({
             </p>
           )}
         </Section>
+
+        <LocalFolderSection onFileText={onFileText} />
 
         <Section icon={Database} title="Storage usage" zh="儲存用量">
           {usage == null || usage.entries.length === 0 ? (

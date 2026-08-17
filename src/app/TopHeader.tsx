@@ -176,14 +176,17 @@ export function TopHeader({ onSave }: { onSave?: () => void }) {
     toast.success(`Exported ${file.project_name || file.project_id}.`);
   };
 
-  const picker = useProjectFilePicker((text) => {
+  /** Shared by the file picker and by loading from the bound folder. */
+  const openImport = (text: string) => {
     const parsed = parseProjectFile(text);
     if (!parsed.ok) {
       toast.error(parsed.error);
       return;
     }
     setPending({ file: parsed.file, summary: parsed.summary });
-  });
+  };
+
+  const picker = useProjectFilePicker(openImport);
 
   const handleProjectChange = (value: string) => {
     if (value === '__new__') {
@@ -363,6 +366,10 @@ export function TopHeader({ onSave }: { onSave?: () => void }) {
           onImportProject={() => {
             setDialog(null);
             picker.open();
+          }}
+          onFileText={(text) => {
+            setDialog(null);
+            openImport(text);
           }}
         />
       )}
