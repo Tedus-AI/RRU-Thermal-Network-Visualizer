@@ -8,6 +8,7 @@
  */
 
 import type { AnalysisSettings, BottleneckAnalysis } from './analysisTypes';
+import { resultRevisionMatches, type SourceRevision } from '@/domain/revision';
 
 export function analysisKey(baselineSignature: string, settings: AnalysisSettings): string {
   const filters = settings.filters;
@@ -33,7 +34,14 @@ export function isAnalysisCurrent(
   analysis: BottleneckAnalysis | null,
   baselineSignature: string | null,
   settings: AnalysisSettings,
+  sourceRevision?: SourceRevision,
 ): boolean {
   if (!analysis || !baselineSignature) return false;
+  if (
+    sourceRevision &&
+    (!analysis.source_revision || !resultRevisionMatches(analysis.source_revision, sourceRevision))
+  ) {
+    return false;
+  }
   return analysisKey(analysis.baseline_signature, analysis.settings) === analysisKey(baselineSignature, settings);
 }

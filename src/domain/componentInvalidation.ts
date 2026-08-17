@@ -8,15 +8,25 @@
  */
 
 import type { Component } from './component';
+import type { DirtyReason } from '@/thermal/types';
 
 export interface InvalidationEffect {
   /** The existing topology must be reviewed before the next solve is trusted. */
   networkReview: boolean;
   /** Previous solver results are stale. */
   solverDirty: boolean;
+  dirtyReasons: DirtyReason[];
 }
 
-const NONE: InvalidationEffect = { networkReview: false, solverDirty: false };
+const NONE: InvalidationEffect = { networkReview: false, solverDirty: false, dirtyReasons: [] };
+
+function effect(
+  networkReview: boolean,
+  solverDirty: boolean,
+  reason: DirtyReason,
+): InvalidationEffect {
+  return { networkReview, solverDirty, dirtyReasons: solverDirty ? [reason] : [] };
+}
 
 /**
  * 04 §32. `isMapped` = this component already backs nodes in the graph; several
@@ -26,30 +36,40 @@ export function effectOfChange(field: string, isMapped: boolean): InvalidationEf
   switch (field) {
     // Identity: only matters once the graph references it.
     case 'name':
-      return { networkReview: isMapped, solverDirty: isMapped };
+      return effect(isMapped, isMapped, 'component_identity_changed');
 
     // Topology-shaping changes.
     case 'category':
     case 'qty':
+      return effect(true, true, field === 'qty' ? 'component_qty_changed' : 'component_architecture_changed');
     case 'tim':
     case 'tim.type':
+      return effect(true, true, 'component_tim_changed');
     case 'board_path':
     case 'board_path.type':
+      return effect(true, true, 'component_architecture_changed');
     case 'geometry':
+      return effect(true, true, 'component_geometry_changed');
     case 'architecture_prep':
+      return effect(true, true, 'component_architecture_changed');
     case 'enabled':
-      return { networkReview: true, solverDirty: true };
+      return effect(true, true, 'component_enabled_changed');
 
     // Power changes the load, not the shape of the graph.
     case 'power_W':
-      return { networkReview: false, solverDirty: true };
+      return effect(false, true, 'component_power_changed');
 
-    // Resistance and limits change results, never topology.
+    // Resistance changes the physical solution, never topology.
     case 'r_jc_C_per_W':
+    case 'package_type':
+      return effect(false, true, 'component_rth_changed');
+
+    // A limit changes margin/risk interpretation, not [G], [P] or temperature.
+    // Its independent limit revision invalidates Screens 08–12 without forcing
+    // the engineer to re-solve an unchanged physical network.
     case 'limit_C':
     case 'limit_type':
-    case 'package_type':
-      return { networkReview: false, solverDirty: true };
+      return NONE;
 
     // Bookkeeping only.
     case 'notes':
@@ -60,7 +80,7 @@ export function effectOfChange(field: string, isMapped: boolean): InvalidationEf
 
     default:
       // Unknown edits are treated as thermally relevant — the safe direction.
-      return { networkReview: false, solverDirty: true };
+      return effect(false, true, 'component_physics_changed');
   }
 }
 
@@ -68,6 +88,7 @@ export function combineEffects(effects: InvalidationEffect[]): InvalidationEffec
   return {
     networkReview: effects.some((e) => e.networkReview),
     solverDirty: effects.some((e) => e.solverDirty),
+    dirtyReasons: Array.from(new Set(effects.flatMap((entry) => entry.dirtyReasons))),
   };
 }
 

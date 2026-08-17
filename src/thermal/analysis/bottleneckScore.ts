@@ -19,6 +19,9 @@
  */
 
 import type { SolverSettings, ThermalNetwork } from '../types';
+import type { Component } from '@/domain/component';
+import type { SourceRevision } from '@/domain/revision';
+import { projectComponentLimits } from '../graph/componentProjection';
 import type { SolveInput } from '../solver/buildSolveInput';
 import type { ThermalSolution } from '../solver/solverTypes';
 
@@ -46,6 +49,8 @@ export interface AnalysisInput {
   scenario_id: string;
   /** The stored topology — read-only. */
   network: ThermalNetwork;
+  components?: Component[];
+  sourceRevision?: SourceRevision;
   /** Screen 07's solve-ready clone, with boundary Rth and scaled power applied. */
   baselineInput: SolveInput;
   baselineSolution: ThermalSolution;
@@ -85,9 +90,12 @@ export async function runAnalysis(
   const started = performance.now();
   const yieldEvery = options.yieldEvery ?? 4;
   const issues: AnalysisIssue[] = [];
+  const analysisNetwork = input.components
+    ? projectComponentLimits(input.baselineInput.network, input.components)
+    : input.network;
 
   const { candidates, rejected } = selectCandidates({
-    network: input.network,
+    network: analysisNetwork,
     solution: input.baselineSolution,
     scenarioId: input.scenario_id,
     scope: input.settings.scope,
@@ -97,7 +105,7 @@ export async function runAnalysis(
   });
 
   const baseline = baselineMetricsOf(
-    input.network,
+    analysisNetwork,
     input.baselineSolution.node_temperatures_C,
     input.baselineSolution.energy_balance.error_pct,
   );
@@ -105,7 +113,7 @@ export async function runAnalysis(
   const context: SensitivityContext = {
     baselineInput: input.baselineInput,
     baseline,
-    network: input.network,
+    network: analysisNetwork,
     scenarioId: input.scenario_id,
     settings: input.solverSettings,
     target_metric: input.settings.target_metric,
@@ -277,12 +285,14 @@ export async function runAnalysis(
 
   return {
     schema_version: ANALYSIS_SCHEMA_VERSION,
+    id: `ANL_${input.scenario_id}_${input.baselineSolution.metadata.input_signature}_${new Date().toISOString()}`,
     project_id: input.project_id,
     network_id: input.network_id,
     scenario_id: input.scenario_id,
     state,
     settings: input.settings,
     baseline_signature: input.baselineSolution.metadata.input_signature,
+    source_revision: input.sourceRevision,
     analyzed_at: new Date().toISOString(),
     elapsed_ms: performance.now() - started,
     results,

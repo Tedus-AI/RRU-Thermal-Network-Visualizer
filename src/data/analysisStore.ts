@@ -25,6 +25,8 @@ import {
 import { useNetworkStore } from './networkStore';
 import { useScenarioStore } from './scenarioStore';
 import { useSolutionStore } from './solutionStore';
+import { useComponentStore } from './componentStore';
+import { currentSourceRevision } from './sourceRevision';
 
 import { DEFAULT_SOLVER_SETTINGS } from '@/thermal/types';
 import { AnalysisCancelled, runAnalysis } from '@/thermal/analysis/bottleneckScore';
@@ -77,6 +79,9 @@ function gather() {
   const solutions = useSolutionStore.getState();
   const solution = solutions.current();
   const input = solutions.input;
+  const scenario = useScenarioStore
+    .getState()
+    .scenarios.find((entry) => entry.id === scenarioId);
 
   if (!network || !scenarioId || !solution || !input) return null;
 
@@ -88,6 +93,8 @@ function gather() {
     networkId: solution.network_id,
     stale: solutions.isStale(),
     solverSettings: network.solver_settings ?? DEFAULT_SOLVER_SETTINGS,
+    components: useComponentStore.getState().components,
+    sourceRevision: currentSourceRevision(network.project_id, network, scenario),
   };
 }
 
@@ -163,6 +170,7 @@ export const useAnalysisStore = create<AnalysisStoreState>((set, get) => ({
       analysis,
       context.solution.metadata.input_signature,
       get().settings,
+      context.sourceRevision,
     );
     if (!fresh) return 'DIRTY';
     return analysis.state;
@@ -194,6 +202,8 @@ export const useAnalysisStore = create<AnalysisStoreState>((set, get) => ({
           network_id: context.networkId,
           scenario_id: context.scenarioId,
           network: context.network,
+          components: context.components,
+          sourceRevision: context.sourceRevision,
           baselineInput: context.input,
           baselineSolution: context.solution,
           settings: get().settings,

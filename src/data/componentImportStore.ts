@@ -257,7 +257,7 @@ export const useComponentImportStore = create<ImportState>((set, get) => ({
       useSolverStore.getState().invalidate('component_power_changed');
     }
     if (result.requires_network_review) {
-      useNetworkStore.getState().setRequiresReview(true);
+      useNetworkStore.getState().setRequiresReview(true, 'component_import_applied');
     }
 
     set({ applyResult: result, phase: 'applied', step: 'apply' });

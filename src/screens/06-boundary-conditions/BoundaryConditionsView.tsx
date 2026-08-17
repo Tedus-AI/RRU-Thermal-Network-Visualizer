@@ -39,10 +39,12 @@ import { Bi, biTitle } from '@/ui/FieldLabel';
 import { toast } from '@/ui/toast';
 
 import { useProjectStore } from '@/data/projectStore';
+import { useComponentStore } from '@/data/componentStore';
 import { useNetworkStore } from '@/data/networkStore';
 import { useScenarioStore } from '@/data/scenarioStore';
 import { useSolverStore } from '@/data/solverStore';
 import { useBoundaryStore } from '@/data/boundaryStore';
+import { useSolutionStore } from '@/data/solutionStore';
 import { createScenario } from '@/domain/project';
 
 import { surfaceGroupsOf } from '@/thermal/boundary/boundaryPorts';
@@ -189,16 +191,20 @@ export function BoundaryConditionsView() {
       useSolverStore.getState().reset();
     }
     useScenarioStore.getState().loadFor(projectId);
+    useComponentStore.getState().loadFor(projectId);
     useNetworkStore.getState().loadFor(projectId);
-    useBoundaryStore
-      .getState()
-      .loadFor(projectId, useScenarioStore.getState().activeScenarioId);
+    const scenarioId = useScenarioStore.getState().activeScenarioId;
+    useBoundaryStore.getState().loadFor(projectId, scenarioId);
+    // Restores the global lifecycle badge on direct routes; Screen 06 still
+    // never reads or renders solved temperatures or heat flows.
+    useSolutionStore.getState().loadFor(projectId, scenarioId);
   }, [projectId]);
 
   // Switching scenario loads that scenario's own boundary set (06 §5 step 1).
   useEffect(() => {
     if (!projectId) return;
     useBoundaryStore.getState().loadFor(projectId, activeScenarioId);
+    useSolutionStore.getState().loadFor(projectId, activeScenarioId);
     setSelectedPortId(null);
   }, [projectId, activeScenarioId]);
 

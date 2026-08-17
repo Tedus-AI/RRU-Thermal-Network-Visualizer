@@ -9,7 +9,17 @@
 import { create } from 'zustand';
 import { useSolverStore } from './solverStore';
 import { useNetworkStore } from './networkStore';
-import { loadComponents, saveComponents } from './persistence';
+import {
+  loadComponentRevisions,
+  loadComponents,
+  saveComponentRevisions,
+  saveComponents,
+} from './persistence';
+import {
+  createComponentRevisionSet,
+  createRevision,
+  type ComponentRevisionSet,
+} from '@/domain/revision';
 import {
   createComponent,
   isHeatSource,
@@ -28,6 +38,7 @@ interface ComponentStoreState {
   /** Unsaved edits exist (04 §12). */
   dirty: boolean;
   loaded_project_id: string | null;
+  revisions: ComponentRevisionSet;
 
   loadFor: (projectId: string) => void;
   setComponents: (projectId: string, components: Component[]) => void;
@@ -63,8 +74,24 @@ function applyEffects(components: Component[], ids: string[], fields: string[]) 
       return fields.map((field) => effectOfChange(field, mapped));
     }),
   );
-  if (effect.solverDirty) useSolverStore.getState().invalidate('component_power_changed');
-  if (effect.networkReview) useNetworkStore.getState().setRequiresReview(true);
+  for (const reason of effect.dirtyReasons) useSolverStore.getState().invalidate(reason);
+  if (effect.networkReview) useNetworkStore.getState().setRequiresReview(true, fields.join(','));
+  return effect;
+}
+
+function advanceRevisions(
+  current: ComponentRevisionSet,
+  options: { solverInput: boolean; limits: boolean },
+): ComponentRevisionSet {
+  return {
+    component_revision: createRevision('component'),
+    solver_input_revision: options.solverInput
+      ? createRevision('solver_input')
+      : current.solver_input_revision,
+    limit_revision: options.limits
+      ? createRevision('limit')
+      : current.limit_revision,
+  };
 }
 
 function touch(component: Component): Component {
@@ -78,35 +105,64 @@ export const useComponentStore = create<ComponentStoreState>((set, get) => ({
   components: [],
   dirty: false,
   loaded_project_id: null,
+  revisions: createComponentRevisionSet(),
 
-  loadFor: (projectId) =>
-    set({ components: loadComponents(projectId), dirty: false, loaded_project_id: projectId }),
+  loadFor: (projectId) => {
+    const components = loadComponents(projectId);
+    set({
+      components,
+      revisions: loadComponentRevisions(projectId, components),
+      dirty: false,
+      loaded_project_id: projectId,
+    });
+  },
 
   setComponents: (projectId, components) => {
-    set({ components, dirty: false, loaded_project_id: projectId });
+    const current =
+      get().loaded_project_id === projectId
+        ? get().revisions
+        : loadComponentRevisions(projectId);
+    const revisions = advanceRevisions(current, { solverInput: true, limits: true });
+    set({ components, revisions, dirty: false, loaded_project_id: projectId });
     saveComponents(projectId, components);
+    saveComponentRevisions(projectId, revisions);
     useSolverStore.getState().invalidate('component_power_changed');
   },
 
-  clear: () => set({ components: [], dirty: false, loaded_project_id: null }),
+  clear: () =>
+    set({
+      components: [],
+      dirty: false,
+      loaded_project_id: null,
+      revisions: createComponentRevisionSet(),
+    }),
 
   patchComponent: (id, patch, fields) => {
     const components = get().components;
-    applyEffects(components, [id], fields);
+    const effect = applyEffects(components, [id], fields);
+    const revisions = advanceRevisions(get().revisions, {
+      solverInput: effect.solverDirty,
+      limits: fields.some((field) => field === 'limit_C' || field === 'limit_type'),
+    });
     set({
       components: components.map((component) =>
         component.id === id ? touch({ ...component, ...patch }) : component,
       ),
+      revisions,
       dirty: true,
     });
   },
 
   addComponent: (input) => {
     const component = createComponent(input);
-    set({ components: [...get().components, component], dirty: true });
+    set({
+      components: [...get().components, component],
+      revisions: advanceRevisions(get().revisions, { solverInput: true, limits: true }),
+      dirty: true,
+    });
     // A new component is not in the graph yet.
-    useNetworkStore.getState().setRequiresReview(true);
-    useSolverStore.getState().invalidate('component_power_changed');
+    useNetworkStore.getState().setRequiresReview(true, 'component_added');
+    useSolverStore.getState().invalidate('component_architecture_changed');
     return component;
   },
 
@@ -135,46 +191,64 @@ export const useComponentStore = create<ComponentStoreState>((set, get) => ({
       },
     };
 
-    set({ components: [...get().components, copy], dirty: true });
-    useNetworkStore.getState().setRequiresReview(true);
-    useSolverStore.getState().invalidate('component_power_changed');
+    set({
+      components: [...get().components, copy],
+      revisions: advanceRevisions(get().revisions, { solverInput: true, limits: true }),
+      dirty: true,
+    });
+    useNetworkStore.getState().setRequiresReview(true, 'component_duplicated');
+    useSolverStore.getState().invalidate('component_architecture_changed');
     return copy;
   },
 
   deleteComponent: (id) => {
     const component = get().components.find((c) => c.id === id);
-    set({ components: get().components.filter((c) => c.id !== id), dirty: true });
+    set({
+      components: get().components.filter((c) => c.id !== id),
+      revisions: advanceRevisions(get().revisions, { solverInput: true, limits: true }),
+      dirty: true,
+    });
     // 04 §25 — a deleted component leaves its graph mapping orphaned. Screen 04
     // never rewrites topology; it flags the graph for review.
     if (component && isMappedToNetwork(component)) {
-      useNetworkStore.getState().setRequiresReview(true);
+      useNetworkStore.getState().setRequiresReview(true, 'component_deleted');
     }
-    useSolverStore.getState().invalidate('component_power_changed');
+    useSolverStore.getState().invalidate('component_architecture_changed');
   },
 
   setEnabled: (id, enabled) => get().patchComponent(id, { enabled }, ['enabled']),
 
   bulkPatch: (ids, patch, fields) => {
     const components = get().components;
-    applyEffects(components, ids, fields);
+    const effect = applyEffects(components, ids, fields);
     const idSet = new Set(ids);
     set({
       components: components.map((component) =>
         idSet.has(component.id) ? touch({ ...component, ...patch(component) }) : component,
       ),
+      revisions: advanceRevisions(get().revisions, {
+        solverInput: effect.solverDirty,
+        limits: fields.some((field) => field === 'limit_C' || field === 'limit_type'),
+      }),
       dirty: true,
     });
   },
 
   save: (projectId) => {
     saveComponents(projectId, get().components);
+    saveComponentRevisions(projectId, get().revisions);
     set({ dirty: false });
   },
 
   revert: () => {
     const projectId = get().loaded_project_id;
     if (!projectId) return;
-    set({ components: loadComponents(projectId), dirty: false });
+    const components = loadComponents(projectId);
+    set({
+      components,
+      revisions: loadComponentRevisions(projectId, components),
+      dirty: false,
+    });
   },
 
   byId: (id) => get().components.find((component) => component.id === id),

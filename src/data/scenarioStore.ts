@@ -8,6 +8,7 @@
 
 import { create } from 'zustand';
 import { createBaselineScenario, type Scenario } from '@/domain/project';
+import { createRevision } from '@/domain/revision';
 import { loadProject, loadScenarios, saveProject, saveScenarios } from './persistence';
 import { useSolverStore } from './solverStore';
 
@@ -19,7 +20,13 @@ interface ScenarioStoreState {
   clear: () => void;
 
   createDefaultScenario: (projectId: string) => Scenario;
-  updateScenario: (id: string, patch: Partial<Scenario>) => void;
+  updateScenario: (
+    id: string,
+    patch: Partial<Scenario>,
+    options?: { skipRevision?: boolean; skipInvalidate?: boolean },
+  ) => void;
+  /** Advances provenance for a change owned by the separate boundaryStore. */
+  touchScenarioRevision: (id: string) => void;
   /** `projectId` persists the choice onto the project record (01 §35). */
   setActiveScenario: (id: string | null, projectId?: string) => void;
   persist: (projectId: string) => void;
@@ -64,13 +71,44 @@ export const useScenarioStore = create<ScenarioStoreState>((set, get) => ({
     return scenario;
   },
 
-  updateScenario: (id, patch) => {
+  updateScenario: (id, patch, options = {}) => {
+    const current = get().scenarios.find((scenario) => scenario.id === id);
+    if (!current) return;
+    const changed = Object.entries(patch).some(
+      ([key, value]) => !Object.is(current[key as keyof Scenario], value),
+    );
+    if (!changed) return;
     set({
-      scenarios: get().scenarios.map((s) => (s.id === id ? { ...s, ...patch } : s)),
+      scenarios: get().scenarios.map((scenario) =>
+        scenario.id === id
+          ? {
+              ...scenario,
+              ...patch,
+              revision: options.skipRevision
+                ? scenario.revision
+                : createRevision('scenario'),
+            }
+          : scenario,
+      ),
     });
-    // Ambient / wind / solar / power scale all change the boundary problem.
-    useSolverStore.getState().invalidate('boundary_changed');
+    const changesPhysics = Object.keys(patch).some((field) =>
+      ['ambient_C', 'wind_mps', 'solar_W_m2', 'power_scale'].includes(field),
+    );
+    if (!options.skipInvalidate && changesPhysics) {
+      useSolverStore
+        .getState()
+        .invalidate(Object.hasOwn(patch, 'power_scale') ? 'scenario_changed' : 'boundary_changed');
+    }
   },
+
+  touchScenarioRevision: (id) =>
+    set({
+      scenarios: get().scenarios.map((scenario) =>
+        scenario.id === id
+          ? { ...scenario, revision: createRevision('scenario') }
+          : scenario,
+      ),
+    }),
 
   setActiveScenario: (id, projectId) => {
     set({ activeScenarioId: id });
@@ -80,7 +118,11 @@ export const useScenarioStore = create<ScenarioStoreState>((set, get) => ({
     if (projectId) {
       const project = loadProject(projectId);
       if (project && project.active_scenario_id !== id) {
-        saveProject({ ...project, active_scenario_id: id });
+        saveProject({
+          ...project,
+          active_scenario_id: id,
+          revision: createRevision('project'),
+        });
       }
     }
     useSolverStore.getState().invalidate('scenario_changed');

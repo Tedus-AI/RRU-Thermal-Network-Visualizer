@@ -48,6 +48,7 @@ import { biTitle } from '@/ui/FieldLabel';
 import { toast } from '@/ui/toast';
 
 import { useProjectStore } from '@/data/projectStore';
+import { useComponentStore } from '@/data/componentStore';
 import { useNetworkStore } from '@/data/networkStore';
 import { useScenarioStore } from '@/data/scenarioStore';
 import { useSolverStore } from '@/data/solverStore';
@@ -198,6 +199,7 @@ export function ThermalNetworkView() {
       useSolverStore.getState().reset();
     }
     useScenarioStore.getState().loadFor(projectId);
+    useComponentStore.getState().loadFor(projectId);
     useNetworkStore.getState().loadFor(projectId);
     const scenarioId = useScenarioStore.getState().activeScenarioId;
     useBoundaryStore.getState().loadFor(projectId, scenarioId);

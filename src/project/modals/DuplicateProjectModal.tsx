@@ -15,6 +15,7 @@ import {
   type Scenario,
 } from '@/domain/project';
 import { projectIdExists, saveProject, saveScenarios } from '@/data/persistence';
+import { createRevision } from '@/domain/revision';
 import { toast } from '@/ui/toast';
 
 export interface DuplicateOptions {
@@ -69,6 +70,7 @@ export function DuplicateProjectModal({
       ...source,
       project_id: id.trim(),
       project_name: name.trim(),
+      revision: createRevision('project'),
       status: 'active',
       meta: { ...source.meta, created_at: now, updated_at: now },
     };
@@ -77,7 +79,11 @@ export function DuplicateProjectModal({
     if (options.scenarios && scenarios.length > 0) {
       saveScenarios(
         copy.project_id,
-        scenarios.map((s) => ({ ...s, project_id: copy.project_id })),
+        scenarios.map((s) => ({
+          ...s,
+          project_id: copy.project_id,
+          revision: createRevision('scenario'),
+        })),
       );
     } else {
       saveScenarios(copy.project_id, [createBaselineScenario(copy.project_id)]);

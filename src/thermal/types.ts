@@ -1,4 +1,5 @@
 import type { EdgeRthSet, ExternalMappings, TemperatureResultSet } from './resultValue';
+import type { RevisionId } from '@/domain/revision';
 
 /**
  * Thermal Graph data model.
@@ -339,6 +340,11 @@ export interface ComponentTemplateBinding {
 export interface ThermalNetwork {
   schema_version: string;
   project_id: string;
+  /**
+   * Engineering graph revision; layout-only moves do not advance it. Optional
+   * only for legacy object literals; emptyNetwork/loadNetwork always supply it.
+   */
+  revision?: RevisionId;
   network_name: string;
   mode: NetworkMode;
   status: NetworkStatus;
@@ -362,6 +368,15 @@ export type SolverState = (typeof SOLVER_STATES)[number];
 /** Every mutation that must invalidate a previous solve. */
 export type DirtyReason =
   | 'component_power_changed'
+  | 'component_rth_changed'
+  | 'component_tim_changed'
+  | 'component_qty_changed'
+  | 'component_geometry_changed'
+  | 'component_architecture_changed'
+  | 'component_enabled_changed'
+  | 'component_identity_changed'
+  | 'component_physics_changed'
+  | 'source_revision_changed'
   | 'node_power_changed'
   | 'edge_rth_changed'
   | 'boundary_changed'

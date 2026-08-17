@@ -16,8 +16,16 @@
 
 import { create } from 'zustand';
 
-import { deleteSolution, loadSolutions, saveSolution } from './persistence';
+import {
+  deleteSolution,
+  loadComponentRevisions,
+  loadComponents,
+  loadProject,
+  loadSolutions,
+  saveSolution,
+} from './persistence';
 import { useBoundaryStore } from './boundaryStore';
+import { useComponentStore } from './componentStore';
 import { useNetworkStore } from './networkStore';
 import { useScenarioStore } from './scenarioStore';
 import { useSolverStore } from './solverStore';
@@ -26,6 +34,7 @@ import { checkScenario, solveScenario } from '@/thermal/solver/solveScenario';
 import type { SolveInput } from '@/thermal/solver/buildSolveInput';
 import type { PreSolveReport } from '@/thermal/solver/preSolveChecks';
 import type { ThermalSolution } from '@/thermal/solver/solverTypes';
+import { hydrateSourceRevision, physicsRevisionMatches } from '@/domain/revision';
 
 const keyOf = (networkId: string, scenarioId: string) => `${networkId}::${scenarioId}`;
 
@@ -65,14 +74,35 @@ function gather(scenarioId: string | null) {
     .scenarios.find((entry) => entry.id === scenarioId);
 
   if (!network || !scenarioId) return null;
+  const componentState = useComponentStore.getState();
+  // Screen 07 can be opened directly, before any component-consuming screen.
+  // In that case read the persisted clocks instead of attaching the unrelated
+  // empty-store revision created at application startup.
+  const componentRevisions =
+    componentState.loaded_project_id === network.project_id
+      ? componentState.revisions
+      : loadComponentRevisions(network.project_id);
 
   return {
     network,
+    components:
+      componentState.loaded_project_id === network.project_id
+        ? componentState.components
+        : loadComponents(network.project_id),
     boundarySet: boundary.current(),
     ports: boundary.ports,
     scenarioId,
     powerScale: scenario?.power_scale ?? 1,
     networkId: boundary.current()?.network_id ?? network.network_name,
+    sourceRevision: hydrateSourceRevision(
+      {
+        project_revision: loadProject(network.project_id)?.revision,
+        ...componentRevisions,
+        network_revision: network.revision,
+        scenario_revision: scenario?.revision,
+      },
+      `${network.project_id}:${network.network_name}:${scenarioId}`,
+    ),
   };
 }
 
@@ -106,7 +136,7 @@ export const useSolutionStore = create<SolutionStoreState>((set, get) => ({
       solver.reset();
     } else if (get().isStale()) {
       solver.setSolutionState(current.status, current.solved_at);
-      solver.invalidate('scenario_changed');
+      solver.invalidate('source_revision_changed');
     } else {
       solver.setSolutionState(current.status, current.solved_at);
     }
@@ -132,7 +162,12 @@ export const useSolutionStore = create<SolutionStoreState>((set, get) => ({
     const current = get().current();
     const signature = get().signature;
     if (!current || !signature) return false;
-    return current.metadata.input_signature !== signature;
+    const context = gather(useScenarioStore.getState().activeScenarioId);
+    return (
+      current.metadata.input_signature !== signature ||
+      !context ||
+      !physicsRevisionMatches(current.metadata.source_revision, context.sourceRevision)
+    );
   },
 
   /** Recomputes the input signature from the current stores, without solving. */

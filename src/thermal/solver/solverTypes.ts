@@ -12,6 +12,7 @@
  */
 
 import type { DataSource, SolverSettings } from '../types';
+import type { SourceRevision } from '@/domain/revision';
 
 /** Bumped when the stored solution shape changes. */
 export const SOLUTION_SCHEMA_VERSION = '1.0';
@@ -87,6 +88,11 @@ export interface SolutionEnergyBalance {
 export interface SolutionMetadata {
   /** Fingerprint of the solve inputs; a mismatch means the result is stale. */
   input_signature: string;
+  /**
+   * Authoritative source provenance. Optional only so pre-Phase-1 fixtures and
+   * persisted solutions can hydrate safely; every newly solved result sets it.
+   */
+  source_revision?: SourceRevision;
   solved_nodes: number;
   solved_edges: number;
   fixed_nodes: number;

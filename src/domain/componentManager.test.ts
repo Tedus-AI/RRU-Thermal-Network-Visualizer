@@ -166,25 +166,35 @@ describe('component readiness', () => {
 describe('downstream invalidation (04 §32)', () => {
   it('marks both network review and solver dirty for topology-shaping fields', () => {
     for (const field of ['category', 'qty', 'tim.type', 'board_path.type', 'geometry']) {
-      expect(effectOfChange(field, false)).toEqual({ networkReview: true, solverDirty: true });
+      expect(effectOfChange(field, false)).toMatchObject({ networkReview: true, solverDirty: true });
     }
   });
 
-  it('marks only the solver dirty for power, Rjc and limits', () => {
-    for (const field of ['power_W', 'r_jc_C_per_W', 'limit_C', 'limit_type']) {
-      expect(effectOfChange(field, false)).toEqual({ networkReview: false, solverDirty: true });
+  it('marks only the solver dirty for power and Rjc', () => {
+    for (const field of ['power_W', 'r_jc_C_per_W']) {
+      expect(effectOfChange(field, false)).toMatchObject({ networkReview: false, solverDirty: true });
+    }
+    expect(effectOfChange('power_W', false).dirtyReasons).toEqual(['component_power_changed']);
+    expect(effectOfChange('r_jc_C_per_W', false).dirtyReasons).toEqual([
+      'component_rth_changed',
+    ]);
+  });
+
+  it('does not invalidate the physical solve for limit changes', () => {
+    for (const field of ['limit_C', 'limit_type']) {
+      expect(effectOfChange(field, false)).toEqual({ networkReview: false, solverDirty: false, dirtyReasons: [] });
     }
   });
 
   it('invalidates nothing for provenance or a FloTHERM alias', () => {
     for (const field of ['provenance', 'external_mappings', 'flotherm_alias', 'notes']) {
-      expect(effectOfChange(field, false)).toEqual({ networkReview: false, solverDirty: false });
+      expect(effectOfChange(field, false)).toEqual({ networkReview: false, solverDirty: false, dirtyReasons: [] });
     }
   });
 
   it('makes a rename consequential only once the component is mapped', () => {
-    expect(effectOfChange('name', false)).toEqual({ networkReview: false, solverDirty: false });
-    expect(effectOfChange('name', true)).toEqual({ networkReview: true, solverDirty: true });
+    expect(effectOfChange('name', false)).toEqual({ networkReview: false, solverDirty: false, dirtyReasons: [] });
+    expect(effectOfChange('name', true)).toMatchObject({ networkReview: true, solverDirty: true });
   });
 
   it('knows a component is mapped once Screen 05 drafted a profile', () => {
@@ -200,7 +210,7 @@ describe('downstream invalidation (04 §32)', () => {
   it('combines a batch of edits into the strongest effect', () => {
     expect(
       combineEffects([effectOfChange('notes', false), effectOfChange('qty', false)]),
-    ).toEqual({ networkReview: true, solverDirty: true });
+    ).toMatchObject({ networkReview: true, solverDirty: true });
   });
 });
 

@@ -19,6 +19,7 @@ import type { BottleneckAnalysis } from '@/thermal/analysis/analysisTypes';
 import type { ScenarioBoundaryConditionSet } from '@/thermal/boundary/types';
 import type { ResultsOverviewSnapshot } from '@/thermal/overview/overviewTypes';
 import type { ThermalReportConfig } from '@/report/reportTypes';
+import type { TemperatureDistributionResult } from '@/thermal/analysis/distributionResult';
 
 import { encodeCsv, encodeJson } from './csv';
 import { sha256Hex } from './checksum';
@@ -48,6 +49,7 @@ export interface ExportSources {
   solution: ThermalSolution | null;
   solution_status: SolutionStatus;
   analysis: BottleneckAnalysis | null;
+  distribution?: TemperatureDistributionResult | null;
   boundary: ScenarioBoundaryConditionSet | null;
   components: Component[];
   snapshot: ResultsOverviewSnapshot | null;
@@ -248,6 +250,7 @@ async function generate(
         network: sources.network,
         solution: sources.solution,
         components: sources.components,
+        rows: sources.distribution?.rows,
         config,
       });
       return {

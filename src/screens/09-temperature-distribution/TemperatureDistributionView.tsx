@@ -44,12 +44,12 @@ import { useSolverStore } from '@/data/solverStore';
 import { useBoundaryStore } from '@/data/boundaryStore';
 import { useSolutionStore } from '@/data/solutionStore';
 import { useComponentStore } from '@/data/componentStore';
+import { useDistributionStore } from '@/data/distributionStore';
 
 import {
   DEFAULT_SCOPE,
   applyFilters,
   applyScope,
-  buildTemperatureDataset,
   emptyFilters,
   filterOptionsOf,
   groupRows,
@@ -184,13 +184,14 @@ export function TemperatureDistributionView() {
   const projectStatus = useProjectStore((s) => s.status);
 
   const network = useNetworkStore((s) => s.network);
-  const components = useComponentStore((s) => s.components);
   const scenarios = useScenarioStore((s) => s.scenarios);
   const activeScenarioId = useScenarioStore((s) => s.activeScenarioId);
   const solverState = useSolverStore((s) => s.state);
 
   const solutions = useSolutionStore((s) => s.solutions);
   const solutionKey = useSolutionStore((s) => s.activeKey);
+  const distributionResults = useDistributionStore((s) => s.results);
+  const distributionKey = useDistributionStore((s) => s.activeKey);
 
   // --- view state ---------------------------------------------------------
   const [scope, setScope] = useState<DistributionScope>(DEFAULT_SCOPE);
@@ -213,6 +214,7 @@ export function TemperatureDistributionView() {
   const networkRef = useRef<NetworkViewHandle | null>(null);
 
   const solution = solutionKey ? (solutions[solutionKey] ?? null) : null;
+  const distribution = distributionKey ? (distributionResults[distributionKey] ?? null) : null;
   const scenario = scenarios.find((entry) => entry.id === activeScenarioId) ?? null;
 
   // --- load ---------------------------------------------------------------
@@ -230,6 +232,7 @@ export function TemperatureDistributionView() {
     const scenarioId = useScenarioStore.getState().activeScenarioId;
     useBoundaryStore.getState().loadFor(projectId, scenarioId);
     useSolutionStore.getState().loadFor(projectId, scenarioId);
+    useDistributionStore.getState().loadFor(projectId, scenarioId);
   }, [projectId]);
 
   // 09 §50 — a scenario change must not leave the previous scenario's numbers
@@ -238,16 +241,19 @@ export function TemperatureDistributionView() {
     if (!projectId) return;
     useBoundaryStore.getState().loadFor(projectId, activeScenarioId);
     useSolutionStore.getState().loadFor(projectId, activeScenarioId);
+    useDistributionStore.getState().loadFor(projectId, activeScenarioId);
     setSelectedNodeId(null);
   }, [projectId, activeScenarioId]);
 
-  const stale = useSolutionStore((s) => s.isStale());
+  const solutionStale = useSolutionStore((s) => s.isStale());
+  const distributionState = useDistributionStore((s) => s.state());
+  const stale = solutionStale || distributionState !== 'CURRENT';
 
   // --- dataset ------------------------------------------------------------
   const allRows = useMemo(() => {
-    if (!network || !solution) return [];
-    return buildTemperatureDataset({ network, solution, components });
-  }, [network, solution, components]);
+    if (!network || !solution || !distribution) return [];
+    return distribution.rows;
+  }, [network, solution, distribution]);
 
   const scopedRows = useMemo(
     () => applyScope(allRows, scope, selectedNodeId ? [selectedNodeId] : []),
@@ -338,9 +344,9 @@ export function TemperatureDistributionView() {
       baselineScenarioId: solution.scenario_id,
       comparisonSolution,
       comparisonScenarioId: comparisonSolution.scenario_id,
-      limitOf: (nodeId) => network.nodes[nodeId]?.limit_C ?? undefined,
+      limitOf: (nodeId) => allRows.find((row) => row.node_id === nodeId)?.limit_C,
     });
-  }, [comparisonSolution, solution, network, rows]);
+  }, [comparisonSolution, solution, network, rows, allRows]);
 
   /**
    * 09 §22 — with the lock on, both scenarios share one range so a cooler
@@ -408,6 +414,12 @@ export function TemperatureDistributionView() {
     useNetworkStore.getState().loadFor(projectId);
     useComponentStore.getState().loadFor(projectId);
     useSolutionStore.getState().loadFor(projectId, activeScenarioId);
+    useDistributionStore.getState().loadFor(projectId, activeScenarioId);
+    const refreshed = useDistributionStore.getState().refresh(projectId);
+    if (!refreshed) {
+      toast.warning('Screen 07 must be current before refreshing the distribution.');
+      return;
+    }
     toast.success('Reloaded from the Screen 07 solution / 已重新讀取 07 的解');
   };
 
@@ -548,14 +560,20 @@ export function TemperatureDistributionView() {
         <div className="flex items-start gap-2 rounded-lg border border-warn-500/40 bg-warn-100 px-3.5 py-2.5">
           <TriangleAlert size={16} className="mt-0.5 shrink-0 text-warn-600" />
           <p className="text-[12px] leading-relaxed font-semibold text-warn-600">
-            Temperature results are stale. Re-solve the active scenario in Screen 07.
+            {solutionStale
+              ? 'Temperature results are stale. Re-solve the active scenario in Screen 07.'
+              : 'The formal Screen 09 distribution is dirty. Refresh it from the current solution.'}
             <span className="block font-normal text-ink-500">{T09.stale}</span>
           </p>
           <Button
             className="ml-auto h-7 shrink-0 !text-[12px]"
-            onClick={() => guardedNavigate(projectPath(projectId, 'network'))}
+            onClick={() =>
+              solutionStale
+                ? guardedNavigate(projectPath(projectId, 'network'))
+                : refreshFromSolution()
+            }
           >
-            Go to 07
+            {solutionStale ? 'Go to 07' : 'Refresh 09'}
           </Button>
         </div>
       )}

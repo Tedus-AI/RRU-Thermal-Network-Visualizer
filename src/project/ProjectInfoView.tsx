@@ -17,6 +17,8 @@ import { useScenarioStore } from '@/data/scenarioStore';
 import { useComponentStore } from '@/data/componentStore';
 import { useNetworkStore } from '@/data/networkStore';
 import { useSolverStore } from '@/data/solverStore';
+import { useBoundaryStore } from '@/data/boundaryStore';
+import { useSolutionStore } from '@/data/solutionStore';
 import { useShellActions } from '@/app/shellActions';
 import { projectPath } from '@/app/navigation';
 import { useGuardedNavigate } from '@/app/useGuardedNavigate';
@@ -108,6 +110,22 @@ function ErrorState({ message, onRetry }: { message: string; onRetry: () => void
 /** 01 §20 */
 export function EmptyProjectState() {
   const navigate = useNavigate();
+  const [loadingDemo, setLoadingDemo] = useState(false);
+
+  const handleLoadDemo = async () => {
+    setLoadingDemo(true);
+    try {
+      const id = await seedDemoProject();
+      useProjectStore.getState().refreshProjects();
+      navigate(projectPath(id, 'info'));
+      toast.success('Golden Demo loaded with current analytical results.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to build the Golden Demo.');
+    } finally {
+      setLoadingDemo(false);
+    }
+  };
+
   return (
     <div className="flex h-full items-center justify-center p-8">
       <div className="max-w-md text-center">
@@ -136,13 +154,10 @@ export function EmptyProjectState() {
             + New Project / 新增專案
           </Button>
           <Button
-            onClick={() => {
-              const id = seedDemoProject();
-              useProjectStore.getState().refreshProjects();
-              navigate(projectPath(id, 'info'));
-            }}
+            disabled={loadingDemo}
+            onClick={handleLoadDemo}
           >
-            Load Demo Project / 載入示範專案
+            {loadingDemo ? 'Building Golden Demo…' : 'Load Golden Demo Project'}
           </Button>
         </div>
       </div>
@@ -185,6 +200,8 @@ export function ProjectInfoView() {
     if (projectId === 'new') {
       projectStore.startNewProject();
       scenarioStore.clear();
+      useBoundaryStore.getState().clear();
+      useSolutionStore.getState().clear();
       // 01 §8: a new project starts with an editable Baseline; it is persisted on
       // the first save (AC-03).
       scenarioStore.createDefaultScenario('');
@@ -194,6 +211,9 @@ export function ProjectInfoView() {
     projectStore.openProject(projectId);
     const loaded = scenarioStore.loadFor(projectId);
     if (loaded.length === 0) scenarioStore.createDefaultScenario(projectId);
+    const activeScenarioId = useScenarioStore.getState().activeScenarioId;
+    useBoundaryStore.getState().loadFor(projectId, activeScenarioId);
+    useSolutionStore.getState().loadFor(projectId, activeScenarioId);
   }, [projectId]);
 
   // Expose Save to the shared header.

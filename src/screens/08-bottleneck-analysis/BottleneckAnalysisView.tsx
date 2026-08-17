@@ -42,6 +42,7 @@ import { biTitle } from '@/ui/FieldLabel';
 import { toast } from '@/ui/toast';
 
 import { useProjectStore } from '@/data/projectStore';
+import { useComponentStore } from '@/data/componentStore';
 import { useNetworkStore } from '@/data/networkStore';
 import { useScenarioStore } from '@/data/scenarioStore';
 import { useSolverStore } from '@/data/solverStore';
@@ -50,7 +51,6 @@ import { useSolutionStore } from '@/data/solutionStore';
 import { useAnalysisStore } from '@/data/analysisStore';
 
 import { filterOptions } from '@/thermal/analysis/candidateSelector';
-import { isAnalysisCurrent } from '@/thermal/analysis/analysisCache';
 import {
   CLASSIFICATION_COLOR,
   TARGET_METRIC_LABELS,
@@ -174,7 +174,6 @@ export function BottleneckAnalysisView() {
 
   const solutions = useSolutionStore((s) => s.solutions);
   const solutionKey = useSolutionStore((s) => s.activeKey);
-  const solutionSignature = useSolutionStore((s) => s.signature);
 
   const analyses = useAnalysisStore((s) => s.analyses);
   const analysisKey = useAnalysisStore((s) => s.activeKey);
@@ -205,6 +204,7 @@ export function BottleneckAnalysisView() {
       useSolverStore.getState().reset();
     }
     useScenarioStore.getState().loadFor(projectId);
+    useComponentStore.getState().loadFor(projectId);
     useNetworkStore.getState().loadFor(projectId);
     const scenarioId = useScenarioStore.getState().activeScenarioId;
     useBoundaryStore.getState().loadFor(projectId, scenarioId);
@@ -224,10 +224,7 @@ export function BottleneckAnalysisView() {
   const solutionStale = useSolutionStore((s) => s.isStale());
   const analysisState = useAnalysisStore((s) => s.state());
 
-  const analysisStale = useMemo(
-    () => Boolean(analysis) && !isAnalysisCurrent(analysis, solutionSignature, settings),
-    [analysis, solutionSignature, settings],
-  );
+  const analysisStale = Boolean(analysis) && analysisState === 'DIRTY';
 
   const results = analysis?.results ?? [];
   const selected = results.find((entry) => entry.edge_id === selectedEdgeId) ?? null;

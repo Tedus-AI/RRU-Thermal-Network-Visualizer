@@ -9,6 +9,18 @@
 
 ---
 
+## Approved implementation decisions (2026-08 integration)
+
+- Keep the existing `/project/:projectId/...` route family. Screen IDs, names and sidebar order remain 01-12; no aliases are required without a compatibility need.
+- Keep `scenarioStore` and `boundaryStore` separate. Screen 01 scenario defaults synchronize one-way into the active Screen 06 boundary overlay; Screen 05 topology is never mutated by this synchronization.
+- Persist `networkStore.requiresReview` and its reasons independently from unsaved graph edits.
+- Use independent component clocks: `component_revision`, `solver_input_revision`, and `limit_revision`. `solveInputSignature` remains the exact physics fingerprint.
+- A Limit edit does **not** make Screen 07 DIRTY and does **not** set `requiresReview`. It makes margin-dependent Screens 08-12 dirty/stale according to `99_State_Propagation_Matrix.md`.
+- Screen 09 has a formal persisted distribution result with `distributionId`, source revision and freshness. Only reproducible engineering rows/metadata are persisted; hover, selection, panel state and zoom remain UI-local.
+- Screen 03 remains Deferred. Routes, hooks, external mappings and multi-source schemas stay reserved, but no parser, guessed export format or synthetic CFD data is implemented.
+
+---
+
 # 0. Purpose
 
 此文件不是新的 UI Screen，而是整套產品的「總裝配規格」。它負責把目前的：

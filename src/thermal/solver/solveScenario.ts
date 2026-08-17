@@ -24,6 +24,8 @@ import { edgeResistance } from '../rth';
 import { DEFAULT_SOLVER_SETTINGS, type SolverSettings } from '../types';
 import type { BoundaryPort, ScenarioBoundaryConditionSet } from '../boundary/types';
 import type { ThermalNetwork } from '../types';
+import type { SourceRevision } from '@/domain/revision';
+import type { Component } from '@/domain/component';
 
 import {
   buildSolveInput,
@@ -45,9 +47,11 @@ import {
 
 export interface SolveScenarioOptions {
   network: ThermalNetwork;
+  components?: Component[];
   boundarySet: ScenarioBoundaryConditionSet | null;
   ports: BoundaryPort[];
   scenarioId: string;
+  sourceRevision?: SourceRevision;
   powerScale?: number;
   settings?: SolverSettings;
 }
@@ -90,6 +94,7 @@ function emptySolution(
     warnings: issues,
     metadata: {
       input_signature: signature,
+      source_revision: input.source_revision,
       solved_nodes: 0,
       solved_edges: 0,
       fixed_nodes: Object.keys(input.fixed_nodes).length,
@@ -110,9 +115,11 @@ export function checkScenario(options: SolveScenarioOptions): {
 } {
   const input = buildSolveInput({
     network: options.network,
+    components: options.components,
     boundarySet: options.boundarySet,
     ports: options.ports,
     scenarioId: options.scenarioId,
+    sourceRevision: options.sourceRevision,
     powerScale: options.powerScale,
   });
   return { checks: runPreSolveChecks(input), input, signature: solveInputSignature(input) };
@@ -275,6 +282,7 @@ export function solveScenario(options: SolveScenarioOptions): SolveScenarioOutco
     warnings,
     metadata: {
       input_signature: signature,
+      source_revision: input.source_revision,
       solved_nodes: Object.keys(result.temperatures).length,
       solved_edges: Object.keys(edgeResults).length,
       fixed_nodes: fixedCount,

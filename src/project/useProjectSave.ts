@@ -13,6 +13,7 @@ import { useProjectStore } from '@/data/projectStore';
 import { useScenarioStore } from '@/data/scenarioStore';
 import { useComponentStore } from '@/data/componentStore';
 import { useNetworkStore } from '@/data/networkStore';
+import { useBoundaryStore } from '@/data/boundaryStore';
 import { validateProjectForm } from './projectValidation';
 import { toast } from '@/ui/toast';
 
@@ -75,6 +76,10 @@ export function useProjectSave() {
     }
 
     scenarioStore.persist(projectId);
+    const boundaryStore = useBoundaryStore.getState();
+    if (boundaryStore.dirty && boundaryStore.current()?.project_id === projectId) {
+      boundaryStore.save(projectId);
+    }
     toast.success('Project saved successfully');
     return true;
   }, [errors]);
