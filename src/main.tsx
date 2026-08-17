@@ -1,3 +1,7 @@
+// Must stay the first import: this module checks the build stamp as a side
+// effect, and it has to run before any store reads localStorage.
+import '@/data/bootstrapStorage';
+
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
