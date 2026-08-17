@@ -37,10 +37,17 @@ class MemoryStorage {
 
 let store: MemoryStorage;
 
-/** Re-runs the module's boot-time side effect. */
+/**
+ * Re-runs the module's boot-time side effect and waits for it to settle.
+ *
+ * The seed is async — it builds the Golden Flow — so awaiting the import alone
+ * would assert against a half-written store.
+ */
 async function boot() {
   vi.resetModules();
-  return import('./bootstrapStorage');
+  const module = await import('./bootstrapStorage');
+  await module.storageReady;
+  return module;
 }
 
 beforeEach(() => {
@@ -56,7 +63,7 @@ afterEach(() => {
 
 describe('bootstrapStorage', () => {
   // The reported symptom: a browser holding data from before this check existed.
-  it('clears unstamped data and re-seeds the demo project', async () => {
+  it('clears unstamped data and re-seeds the Golden Demo', async () => {
     store.setItem('tnv.projects', JSON.stringify({ OLD_PROJECT: { project_id: 'OLD_PROJECT' } }));
     store.setItem('tnv.thermal_solutions', JSON.stringify({ OLD_PROJECT: [] }));
 
@@ -65,7 +72,12 @@ describe('bootstrapStorage', () => {
     const projects = JSON.parse(store.getItem('tnv.projects') ?? '{}');
     expect(projects.OLD_PROJECT).toBeUndefined();
     expect(projects[DEMO_PROJECT_ID]).toBeDefined();
-    expect(store.getItem('tnv.thermal_solutions')).toBeNull();
+
+    // The seed re-populates solutions for the Golden Demo, so the collection is
+    // not empty afterwards — what matters is that the old project's entry went.
+    const solutions = JSON.parse(store.getItem('tnv.thermal_solutions') ?? '{}');
+    expect(solutions.OLD_PROJECT).toBeUndefined();
+    expect(solutions[DEMO_PROJECT_ID]).toBeDefined();
   });
 
   it('records the running build id', async () => {
@@ -108,11 +120,29 @@ describe('bootstrapStorage', () => {
     const { resetProjectStorage } = await boot();
     store.setItem('tnv.components', JSON.stringify({ JUNK: [] }));
 
-    vi.stubGlobal('location', { reload: vi.fn() });
-    resetProjectStorage();
+    const reload = vi.fn();
+    vi.stubGlobal('location', { reload });
+    await resetProjectStorage();
 
     const projects = JSON.parse(store.getItem('tnv.projects') ?? '{}');
     expect(projects[DEMO_PROJECT_ID]).toBeDefined();
     expect(JSON.parse(store.getItem('tnv.components') ?? '{}').JUNK).toBeUndefined();
+  });
+
+  // Reloading before the Golden Flow finishes writing would leave storage
+  // half-populated — the same broken state this module exists to prevent.
+  it('reloads only after the re-seed has finished writing', async () => {
+    const { resetProjectStorage } = await boot();
+
+    let seededBeforeReload: boolean | null = null;
+    const reload = vi.fn(() => {
+      seededBeforeReload = store.getItem('tnv.thermal_solutions') != null;
+    });
+    vi.stubGlobal('location', { reload });
+
+    await resetProjectStorage();
+
+    expect(reload).toHaveBeenCalledOnce();
+    expect(seededBeforeReload).toBe(true);
   });
 });

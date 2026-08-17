@@ -45,23 +45,30 @@ function storage(): StorageLike | null {
 }
 
 /**
- * Runs the build check. Returns what happened, or null if storage is unusable.
+ * Runs the build check. Resolves with what happened, or null if storage is
+ * unusable.
+ *
+ * Async because `seedDemoProject` builds the Golden Flow — it solves the
+ * network and writes every downstream artifact — and the caller must be able to
+ * wait for those writes before reading them back.
  */
-export function bootstrapStorage(buildId: string = BUILD_ID): BuildStampOutcome | null {
+export async function bootstrapStorage(
+  buildId: string = BUILD_ID,
+): Promise<BuildStampOutcome | null> {
   const store = storage();
   if (store == null) return null;
 
   const outcome = syncBuildStamp(buildId, store);
 
   if (outcome.action === 'reset') {
-    seedDemoProject();
+    await seedDemoProject();
     // Say it out loud: data disappearing without explanation is worse than the
     // stale data this check exists to prevent.
     console.info(
       `[tnv] Project storage was written by build "${
         outcome.previous_build_id ?? 'unstamped'
       }" and has been reset for build "${outcome.build_id}". ` +
-        `Cleared ${outcome.cleared.length} collection(s) and re-seeded the demo project.`,
+        `Cleared ${outcome.cleared.length} collection(s) and re-seeded the Golden Demo.`,
     );
   }
 
@@ -69,20 +76,35 @@ export function bootstrapStorage(buildId: string = BUILD_ID): BuildStampOutcome 
 }
 
 /**
- * Clears every `tnv.*` collection, re-seeds the demo project and reloads.
+ * Clears every `tnv.*` collection, re-seeds the Golden Demo and reloads.
  *
  * Exposed on `window` as `tnvResetStorage()` for the case the build id cannot
  * catch: local development, where the id stays `dev` across code changes.
+ *
+ * The reload waits for the seed. Reloading first would race the Golden Flow's
+ * writes and leave storage half-populated.
  */
-export function resetProjectStorage(): void {
+export async function resetProjectStorage(): Promise<void> {
   const store = storage();
   if (store == null) return;
   clearOwnedStorage(store);
-  seedDemoProject();
+  await seedDemoProject();
   if (typeof location !== 'undefined') location.reload();
 }
 
-bootstrapStorage();
+/**
+ * The boot check, started at import time.
+ *
+ * `main.tsx` awaits this before mounting, so no store can read storage while it
+ * is being rebuilt. It never rejects: a failed seed leaves the app to open on
+ * its empty state rather than not opening at all.
+ */
+export const storageReady: Promise<BuildStampOutcome | null> = bootstrapStorage().catch(
+  (error: unknown) => {
+    console.error('[tnv] Storage bootstrap failed; continuing with empty storage.', error);
+    return null;
+  },
+);
 
 if (typeof window !== 'undefined') {
   window.tnvResetStorage = resetProjectStorage;
