@@ -3,23 +3,84 @@
  * Project selector, active scenario selector, and the global actions.
  */
 
+import { useState } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Download, HelpCircle, Save, Settings, Upload } from 'lucide-react';
+import { Download, HelpCircle, Lock, Save, Settings, Upload } from 'lucide-react';
 import { GROUP_LABELS_EN, SCREENS, projectPath } from './navigation';
 import { useProjectStore } from '@/data/projectStore';
 import { useScenarioStore } from '@/data/scenarioStore';
 import { useSolverStore } from '@/data/solverStore';
 import { useNavigationGuard } from './navigationGuard';
 import { useGuardedNavigate } from './useGuardedNavigate';
+import { toast } from '@/ui/toast';
+import { biTitle } from '@/ui/FieldLabel';
+import { triggerDownload } from '@/export/download';
+import { BUILD_ID } from '@/data/bootstrapStorage';
+import {
+  collectProject,
+  parseProjectFile,
+  projectFilename,
+  serializeProjectFile,
+  type ProjectFile,
+  type ProjectFileSummary,
+} from '@/data/projectFile';
+import {
+  HelpDialog,
+  ImportProjectDialog,
+  SettingsDialog,
+  useProjectFilePicker,
+} from './ShellDialogs';
 import type { SolverState } from '@/thermal/types';
 
-const SOLVER_TONE: Record<SolverState, { dot: string; text: string; label: string }> = {
-  READY: { dot: 'bg-ok-500', text: 'text-ok-500', label: 'Ready' },
-  DIRTY: { dot: 'bg-warn-500', text: 'text-warn-500', label: 'Stale results' },
-  SOLVING: { dot: 'bg-accent-500', text: 'text-accent-500', label: 'Solving' },
-  SOLVED: { dot: 'bg-ok-500', text: 'text-ok-500', label: 'Solved' },
-  WARNING: { dot: 'bg-warn-500', text: 'text-warn-500', label: 'Warning' },
-  FAILED: { dot: 'bg-danger-500', text: 'text-danger-500', label: 'Failed' },
+/**
+ * Solver state as the engineer reads it.
+ *
+ * `READY` means "never solved" — see `solverStore.invalidate`, where a
+ * never-solved network deliberately stays READY. It is therefore shown as
+ * `Not Solved` in neutral grey: a green "Ready" reads as "all good" when it
+ * actually means there are no results at all, and it made the state
+ * indistinguishable from a genuine `SOLVED`.
+ */
+export const SOLVER_TONE: Record<
+  SolverState,
+  { dot: string; text: string; label: string; zh: string }
+> = {
+  READY: {
+    dot: 'bg-white/30',
+    text: 'text-white/60',
+    label: 'Not Solved',
+    zh: '尚未求解：此網路與情境還沒有任何結果。',
+  },
+  SOLVING: {
+    dot: 'bg-accent-500',
+    text: 'text-accent-500',
+    label: 'Solving…',
+    zh: '求解中。',
+  },
+  SOLVED: {
+    dot: 'bg-ok-500',
+    text: 'text-ok-500',
+    label: 'Solved',
+    zh: '已求解：結果為最新且無警告。',
+  },
+  WARNING: {
+    dot: 'bg-warn-500',
+    text: 'text-warn-500',
+    label: 'Warning',
+    zh: '已求解，但能量平衡或驗證有警告，採用前請確認。',
+  },
+  DIRTY: {
+    dot: 'bg-warn-500',
+    text: 'text-warn-500',
+    label: 'Stale Results',
+    zh: '結果已過期：求解後輸入被修改，請重新求解再讀取數值。',
+  },
+  FAILED: {
+    dot: 'bg-danger-500',
+    text: 'text-danger-500',
+    label: 'Solve Failed',
+    zh: '求解失敗：沒有可用結果。',
+  },
 };
 
 function HeaderAction({
@@ -28,12 +89,14 @@ function HeaderAction({
   onClick,
   disabled,
   badge,
+  title,
 }: {
   icon: typeof Save;
   label: string;
   onClick?: () => void;
   disabled?: boolean;
   badge?: boolean;
+  title?: string;
 }) {
   return (
     <button
@@ -41,6 +104,7 @@ function HeaderAction({
       onClick={onClick}
       disabled={disabled}
       aria-label={label}
+      title={title}
       className="relative flex h-12 w-16 flex-col items-center justify-center gap-1 rounded-md text-white/75 transition-colors hover:bg-shell-700 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
     >
       <Icon size={17} />
@@ -77,6 +141,49 @@ export function TopHeader({ onSave }: { onSave?: () => void }) {
 
   const currentScreen =
     SCREENS.find((screen) => location.pathname.endsWith(`/${screen.path}`)) ?? SCREENS[0];
+
+  const [dialog, setDialog] = useState<'settings' | 'help' | null>(null);
+  const [pending, setPending] = useState<{
+    file: ProjectFile;
+    summary: ProjectFileSummary;
+  } | null>(null);
+
+  const activeScenario = scenarios.find((scenario) => scenario.id === activeScenarioId) ?? null;
+  // A project only exists on disk once saved, and that is what a file is built from.
+  const canExport = Boolean(draft && !isNew);
+
+  const handleExport = () => {
+    if (!draft || isNew) {
+      toast.error('Save the project before exporting a project file.');
+      return;
+    }
+    if (dirty) {
+      // A project file is built from storage, so unsaved edits would be missing
+      // from it — silently shipping a stale file is the worse failure here.
+      toast.error('Save your changes first — a project file contains the saved state.');
+      return;
+    }
+    const file = collectProject(draft.project_id, BUILD_ID);
+    if (!file) {
+      toast.error('This project could not be read from storage.');
+      return;
+    }
+    const blob = new Blob([serializeProjectFile(file)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    triggerDownload(url, projectFilename(draft.project_id));
+    // The anchor click is synchronous; the URL can go on the next tick.
+    setTimeout(() => URL.revokeObjectURL(url), 10_000);
+    toast.success(`Exported ${file.project_name || file.project_id}.`);
+  };
+
+  const picker = useProjectFilePicker((text) => {
+    const parsed = parseProjectFile(text);
+    if (!parsed.ok) {
+      toast.error(parsed.error);
+      return;
+    }
+    setPending({ file: parsed.file, summary: parsed.summary });
+  });
 
   const handleProjectChange = (value: string) => {
     if (value === '__new__') {
@@ -128,8 +235,31 @@ export function TopHeader({ onSave }: { onSave?: () => void }) {
       </div>
 
       <div className="w-48">
-        <label htmlFor="hdr-scenario" className="mb-0.5 block text-[11px] text-white/50">
-          Scenario <span className="text-accent-500">(Active)</span>
+        {/*
+          This selector sets the scenario every downstream screen computes
+          against, so the label says which one is driving them rather than
+          carrying a decorative "(Active)" tag that never changed.
+        */}
+        <label
+          htmlFor="hdr-scenario"
+          className="mb-0.5 flex items-center gap-1.5 text-[11px] text-white/50"
+          title={biTitle(
+            'Sets the scenario used by Screens 06–12.',
+            '設定 06–12 各畫面所使用的情境；切換後下游結果會依該情境重新判定。',
+          )}
+        >
+          <span className="truncate">Scenario / 情境</span>
+          {activeScenario && (
+            <span
+              className={`shrink-0 rounded px-1 text-[9.5px] font-bold ${
+                activeScenario.is_default
+                  ? 'bg-accent-600/30 text-accent-500'
+                  : 'bg-white/10 text-white/60'
+              }`}
+            >
+              {activeScenario.is_default ? 'DEFAULT' : 'VARIANT'}
+            </span>
+          )}
         </label>
         <select
           id="hdr-scenario"
@@ -147,6 +277,21 @@ export function TopHeader({ onSave }: { onSave?: () => void }) {
         </select>
       </div>
 
+      {/* Archived projects are read-only, and the disabled Save button alone
+          did not say why. */}
+      {readOnly && (
+        <span
+          className="flex items-center gap-1.5 rounded border border-accent-500/40 bg-accent-600/20 px-2 py-1 text-[11px] font-bold text-accent-500"
+          title={biTitle(
+            'This project is archived and cannot be edited. Restore it on Screen 01 to make changes.',
+            '此專案已封存，無法編輯。請至 Screen 01 還原後才能修改。',
+          )}
+        >
+          <Lock size={12} aria-hidden />
+          READ-ONLY / 唯讀
+        </span>
+      )}
+
       <div className="ml-auto flex items-center gap-1">
         <HeaderAction
           icon={Save}
@@ -154,12 +299,41 @@ export function TopHeader({ onSave }: { onSave?: () => void }) {
           badge={dirty}
           disabled={!onSave || readOnly}
           onClick={onSave}
+          title={biTitle('Save the project', '儲存專案')}
         />
-        <HeaderAction icon={Upload} label="Import" disabled />
-        <HeaderAction icon={Download} label="Export" disabled />
-        <HeaderAction icon={Settings} label="Settings" disabled />
-        <HeaderAction icon={HelpCircle} label="Help" disabled />
+        <HeaderAction
+          icon={Upload}
+          label="Import"
+          onClick={picker.open}
+          title={biTitle(
+            'Open a project file from disk',
+            '從磁碟開啟專案檔（.tnv.json），可選擇覆寫或匯入為副本。',
+          )}
+        />
+        <HeaderAction
+          icon={Download}
+          label="Export"
+          disabled={!canExport}
+          onClick={handleExport}
+          title={biTitle(
+            'Save this project to disk as a project file',
+            '將目前專案存成專案檔（.tnv.json），包含元件、網路、邊界、求解結果與報告設定。',
+          )}
+        />
+        <HeaderAction
+          icon={Settings}
+          label="Settings"
+          onClick={() => setDialog('settings')}
+          title={biTitle('Application and data settings', '應用程式與資料設定')}
+        />
+        <HeaderAction
+          icon={HelpCircle}
+          label="Help"
+          onClick={() => setDialog('help')}
+          title={biTitle('What the screens and status words mean', '畫面導覽與狀態說明')}
+        />
       </div>
+      {picker.input}
 
       <div className="ml-2 flex flex-col items-end gap-1 border-l border-shell-line pl-4">
         <div className="text-[13px] font-bold text-accent-500">
@@ -169,11 +343,43 @@ export function TopHeader({ onSave }: { onSave?: () => void }) {
             {GROUP_LABELS_EN[currentScreen.group] ?? currentScreen.group}
           </span>
         </div>
-        <div className={`flex items-center gap-1.5 text-[12px] ${tone.text}`}>
+        <div
+          className={`flex items-center gap-1.5 text-[12px] ${tone.text}`}
+          title={biTitle(`Solver: ${tone.label}`, tone.zh)}
+        >
           <span aria-hidden className={`size-2 rounded-full ${tone.dot}`} />
           {tone.label}
         </div>
       </div>
+
+      {dialog === 'settings' && (
+        <SettingsDialog
+          onClose={() => setDialog(null)}
+          canExport={canExport && !dirty}
+          onExportProject={() => {
+            setDialog(null);
+            handleExport();
+          }}
+          onImportProject={() => {
+            setDialog(null);
+            picker.open();
+          }}
+        />
+      )}
+      {dialog === 'help' && <HelpDialog onClose={() => setDialog(null)} />}
+      {pending && (
+        <ImportProjectDialog
+          file={pending.file}
+          summary={pending.summary}
+          onCancel={() => setPending(null)}
+          onImported={(projectId) => {
+            setPending(null);
+            useProjectStore.getState().refreshProjects();
+            navigate(projectPath(projectId, 'info'));
+            toast.success(`Imported ${projectId}.`);
+          }}
+        />
+      )}
     </header>
   );
 }

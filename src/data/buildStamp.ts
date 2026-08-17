@@ -63,6 +63,33 @@ export function ownedKeys(storage: StorageLike): string[] {
   return keys;
 }
 
+export interface StorageEntryUsage {
+  key: string;
+  /**
+   * UTF-16 code units, which is what a browser actually charges against the
+   * quota — not UTF-8 bytes. Reported as-is rather than converted, so the
+   * numbers line up with the limit the browser enforces.
+   */
+  characters: number;
+}
+
+export interface StorageUsage {
+  entries: StorageEntryUsage[];
+  total_characters: number;
+}
+
+/** What this tool is holding in storage, largest collection first. */
+export function storageUsage(storage: StorageLike): StorageUsage {
+  const entries = ownedKeys(storage)
+    .map((key) => ({ key, characters: (storage.getItem(key) ?? '').length }))
+    .sort((a, b) => b.characters - a.characters);
+
+  return {
+    entries,
+    total_characters: entries.reduce((sum, entry) => sum + entry.characters, 0),
+  };
+}
+
 /** Removes every owned key and reports what went. Foreign keys are untouched. */
 export function clearOwnedStorage(storage: StorageLike): string[] {
   const keys = ownedKeys(storage);

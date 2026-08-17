@@ -12,6 +12,7 @@ import { useComponentStore } from '@/data/componentStore';
 import { useNetworkStore } from '@/data/networkStore';
 import { useSolverStore } from '@/data/solverStore';
 import { useProjectHealth } from '@/project/projectHealth';
+import { SOLVER_TONE } from './TopHeader';
 
 function StatusItem({
   icon,
@@ -78,16 +79,20 @@ export function BottomStatusBar() {
         value={String(componentCount)}
       />
       <StatusItem icon={<Share2 size={16} />} label="Node Count / 節點數" value={String(nodeCount)} />
+      {/* Same wording as the header, so one solver state never reads as two
+          different things depending on where you look. */}
       <StatusItem
         icon={<CircleCheck size={16} />}
         label="Solver / 求解器"
-        value={solverState}
+        value={SOLVER_TONE[solverState].label}
         tone={
           solverState === 'DIRTY' || solverState === 'WARNING'
             ? 'text-warn-500'
             : solverState === 'FAILED'
               ? 'text-danger-500'
-              : 'text-white/80'
+              : solverState === 'READY'
+                ? 'text-white/60'
+                : 'text-white/80'
         }
       />
 
