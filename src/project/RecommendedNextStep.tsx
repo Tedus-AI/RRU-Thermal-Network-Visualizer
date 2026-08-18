@@ -1,16 +1,15 @@
 /** Right Panel G — Recommended Next Step (01 §12, §34, AC-08). */
 
 import { ArrowRight, Lightbulb } from 'lucide-react';
-import { useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { Button, Skeleton } from '@/ui/primitives';
 import { nextStepFor, useProjectHealth } from './projectHealth';
 import { projectPath } from '@/app/navigation';
-import { useGuardedNavigate } from '@/app/useGuardedNavigate';
 
 export function RecommendedNextStep({ loading }: { loading?: boolean }) {
   const health = useProjectHealth();
   const { projectId } = useParams();
-  const navigate = useGuardedNavigate();
+  const navigate = useNavigate();
   const step = nextStepFor(health);
 
   if (loading) {

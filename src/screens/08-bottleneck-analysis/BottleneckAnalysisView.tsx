@@ -35,7 +35,6 @@ import {
 
 import { ScreenWorkspace } from '@/app/ScreenWorkspace';
 import { projectPath } from '@/app/navigation';
-import { useGuardedNavigate } from '@/app/useGuardedNavigate';
 import { useShellActions } from '@/app/shellActions';
 import { Badge, Button, Modal, Skeleton } from '@/ui/primitives';
 import { biTitle } from '@/ui/FieldLabel';
@@ -161,7 +160,6 @@ function IconButton({
 export function BottleneckAnalysisView() {
   const { projectId } = useParams();
   const navigate = useNavigate();
-  const guardedNavigate = useGuardedNavigate();
 
   const draft = useProjectStore((s) => s.draft);
   const projectStatus = useProjectStore((s) => s.status);
@@ -180,7 +178,6 @@ export function BottleneckAnalysisView() {
   const settings = useAnalysisStore((s) => s.settings);
   const running = useAnalysisStore((s) => s.running);
   const progress = useAnalysisStore((s) => s.progress);
-  const analysisDirty = useAnalysisStore((s) => s.dirty);
   const proposals = useAnalysisStore((s) => s.proposals);
   const lastError = useAnalysisStore((s) => s.lastError);
 
@@ -368,7 +365,7 @@ export function BottleneckAnalysisView() {
               variant="primary"
               className="mt-4"
               onClick={() =>
-                guardedNavigate(projectPath(projectId, hasTopology ? 'network' : 'thermal-path'))
+                navigate(projectPath(projectId, hasTopology ? 'network' : 'thermal-path'))
               }
             >
               {hasTopology ? 'Open 07 Thermal Network / 前往 07' : 'Open 05 Thermal Path Builder / 前往 05'}
@@ -431,7 +428,6 @@ export function BottleneckAnalysisView() {
       badge={
         <div className="flex flex-wrap items-center gap-2">
           {readOnly && <Badge tone="accent">READ ONLY / 唯讀</Badge>}
-          {!readOnly && analysisDirty && <Badge tone="warn">● Unsaved / 未儲存</Badge>}
           <Badge
             tone={
               analysisState === 'COMPLETE'
@@ -462,7 +458,7 @@ export function BottleneckAnalysisView() {
           <Button
             icon={<ArrowLeft size={15} />}
             title={biTitle('Back to 07 Thermal Network', T08.action.back)}
-            onClick={() => guardedNavigate(projectPath(projectId, 'network'))}
+            onClick={() => navigate(projectPath(projectId, 'network'))}
           >
             Back to Thermal Network
           </Button>

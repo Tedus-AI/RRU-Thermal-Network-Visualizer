@@ -41,7 +41,6 @@ import {
 
 import { ScreenWorkspace } from '@/app/ScreenWorkspace';
 import { projectPath } from '@/app/navigation';
-import { useGuardedNavigate } from '@/app/useGuardedNavigate';
 import { useShellActions } from '@/app/shellActions';
 import { Badge, Button, Modal, Skeleton } from '@/ui/primitives';
 import { biTitle } from '@/ui/FieldLabel';
@@ -149,7 +148,6 @@ function LoadingState() {
 export function ThermalNetworkView() {
   const { projectId } = useParams();
   const navigate = useNavigate();
-  const guardedNavigate = useGuardedNavigate();
 
   const draft = useProjectStore((s) => s.draft);
   const projectStatus = useProjectStore((s) => s.status);
@@ -170,7 +168,6 @@ export function ThermalNetworkView() {
   const checks = useSolutionStore((s) => s.checks);
   const signature = useSolutionStore((s) => s.signature);
   const solving = useSolutionStore((s) => s.solving);
-  const solutionDirty = useSolutionStore((s) => s.dirty);
 
   const [mode, setMode] = useState<ResultMode>('node_type');
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
@@ -358,7 +355,7 @@ export function ThermalNetworkView() {
             <Button
               variant="primary"
               className="mt-4"
-              onClick={() => guardedNavigate(projectPath(projectId, 'thermal-path'))}
+              onClick={() => navigate(projectPath(projectId, 'thermal-path'))}
             >
               Open 05 Thermal Path Builder / 前往 05
             </Button>
@@ -390,7 +387,6 @@ export function ThermalNetworkView() {
       badge={
         <div className="flex flex-wrap items-center gap-2">
           {readOnly && <Badge tone="accent">READ ONLY / 唯讀</Badge>}
-          {!readOnly && solutionDirty && <Badge tone="warn">● Unsaved / 未儲存</Badge>}
           <Badge
             tone={
               stale
@@ -420,7 +416,7 @@ export function ThermalNetworkView() {
           <Button
             icon={<ArrowLeft size={15} />}
             title={biTitle('Back to 06 Boundary Conditions', T07.action.backTo06)}
-            onClick={() => guardedNavigate(projectPath(projectId, 'boundary'))}
+            onClick={() => navigate(projectPath(projectId, 'boundary'))}
           >
             Back to 06
           </Button>
@@ -494,7 +490,7 @@ export function ThermalNetworkView() {
           </p>
           <Button
             className="ml-auto h-7 shrink-0 !text-[12px]"
-            onClick={() => guardedNavigate(projectPath(projectId, 'boundary'))}
+            onClick={() => navigate(projectPath(projectId, 'boundary'))}
           >
             Go to 06
           </Button>
@@ -531,7 +527,7 @@ export function ThermalNetworkView() {
               boundaryCount={boundarySet?.assignments.filter((entry) => entry.enabled).length ?? 0}
               portCount={boundaryPortCount}
               solarLoadCount={boundarySet?.external_loads.length ?? 0}
-              onEditBoundary={() => guardedNavigate(projectPath(projectId, 'boundary'))}
+              onEditBoundary={() => navigate(projectPath(projectId, 'boundary'))}
             />
           </Section>
         </div>
@@ -779,7 +775,7 @@ export function ThermalNetworkView() {
             hasRun={Boolean(checks || solution)}
             onFocus={focusIssue}
             onNavigate={(screen) =>
-              guardedNavigate(projectPath(projectId, screen === '05' ? 'thermal-path' : 'boundary'))
+              navigate(projectPath(projectId, screen === '05' ? 'thermal-path' : 'boundary'))
             }
           />
         </Section>

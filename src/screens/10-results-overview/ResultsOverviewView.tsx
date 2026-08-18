@@ -41,7 +41,6 @@ import {
 
 import { ScreenWorkspace } from '@/app/ScreenWorkspace';
 import { projectPath } from '@/app/navigation';
-import { useGuardedNavigate } from '@/app/useGuardedNavigate';
 import { Badge, Button, Skeleton } from '@/ui/primitives';
 import { EngineeringInfo, biTitle } from '@/ui/FieldLabel';
 import { toast } from '@/ui/toast';
@@ -184,7 +183,6 @@ function NotReady({
 export function ResultsOverviewView() {
   const { projectId } = useParams();
   const navigate = useNavigate();
-  const guardedNavigate = useGuardedNavigate();
 
   const draft = useProjectStore((s) => s.draft);
   const projectStatus = useProjectStore((s) => s.status);
@@ -295,7 +293,7 @@ export function ResultsOverviewView() {
     );
   }, [snapshot, overview]);
 
-  const go = (path: string) => guardedNavigate(projectPath(projectId ?? '', path));
+  const go = (path: string) => navigate(projectPath(projectId ?? '', path));
   const SCREEN_PATHS: Record<string, string> = {
     '04': 'components',
     '05': 'thermal-path',

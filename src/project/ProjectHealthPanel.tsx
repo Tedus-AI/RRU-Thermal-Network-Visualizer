@@ -6,11 +6,10 @@
  */
 
 import { CircleCheck, CircleMinus, ShieldCheck, TriangleAlert } from 'lucide-react';
-import { useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { PanelCard, Skeleton } from '@/ui/primitives';
 import { useProjectHealth } from './projectHealth';
 import { projectPath } from '@/app/navigation';
-import { useGuardedNavigate } from '@/app/useGuardedNavigate';
 
 type RowState = 'done' | 'optional' | 'todo';
 
@@ -24,7 +23,7 @@ function HealthRow({
   targetPath?: string;
 }) {
   const { projectId } = useParams();
-  const navigate = useGuardedNavigate();
+  const navigate = useNavigate();
 
   const icon =
     state === 'done' ? (

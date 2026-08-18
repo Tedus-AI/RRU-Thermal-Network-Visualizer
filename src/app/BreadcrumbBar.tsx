@@ -6,15 +6,14 @@
  */
 
 import { ChevronRight, Home } from 'lucide-react';
-import { useLocation, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { SCREENS, projectPath } from './navigation';
 import { useProjectStore } from '@/data/projectStore';
-import { useGuardedNavigate } from './useGuardedNavigate';
 
 export function BreadcrumbBar() {
   const { projectId } = useParams();
   const location = useLocation();
-  const navigate = useGuardedNavigate();
+  const navigate = useNavigate();
   const projectName = useProjectStore((s) => s.draft?.project_name);
 
   const screen = SCREENS.find((item) => location.pathname.endsWith(`/${item.path}`));

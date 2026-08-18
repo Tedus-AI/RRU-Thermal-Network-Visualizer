@@ -32,7 +32,6 @@ import {
 
 import { ScreenWorkspace } from '@/app/ScreenWorkspace';
 import { projectPath } from '@/app/navigation';
-import { useGuardedNavigate } from '@/app/useGuardedNavigate';
 import { useShellActions } from '@/app/shellActions';
 import { Badge, Button, Modal, Skeleton } from '@/ui/primitives';
 import { Bi, biTitle } from '@/ui/FieldLabel';
@@ -159,7 +158,6 @@ function LoadingState() {
 export function BoundaryConditionsView() {
   const { projectId } = useParams();
   const navigate = useNavigate();
-  const guardedNavigate = useGuardedNavigate();
 
   const draft = useProjectStore((s) => s.draft);
   const projectStatus = useProjectStore((s) => s.status);
@@ -459,7 +457,7 @@ export function BoundaryConditionsView() {
             <Button
               variant="primary"
               className="mt-4"
-              onClick={() => guardedNavigate(projectPath(projectId, 'thermal-path'))}
+              onClick={() => navigate(projectPath(projectId, 'thermal-path'))}
             >
               Open 05 Thermal Path Builder / 前往 05
             </Button>
@@ -478,7 +476,6 @@ export function BoundaryConditionsView() {
       badge={
         <div className="flex flex-wrap items-center gap-2">
           {readOnly && <Badge tone="accent">READ ONLY / 唯讀</Badge>}
-          {!readOnly && dirty && <Badge tone="warn">● Unsaved / 未儲存</Badge>}
           <Badge tone={set?.status === 'ready_for_solve' ? 'ok' : 'warn'}>
             {(set?.status ?? 'draft').replace(/_/g, ' ').toUpperCase()}
           </Badge>
@@ -562,7 +559,7 @@ export function BoundaryConditionsView() {
           <Button
             icon={<ArrowLeft size={15} />}
             title={biTitle('Back to 05 Thermal Path Builder', '回到 05 熱路徑設定')}
-            onClick={() => guardedNavigate(projectPath(projectId, 'thermal-path'))}
+            onClick={() => navigate(projectPath(projectId, 'thermal-path'))}
           >
             Back to 05
           </Button>

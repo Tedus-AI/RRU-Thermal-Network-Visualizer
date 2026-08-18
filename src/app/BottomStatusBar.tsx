@@ -7,7 +7,6 @@
 import {
   Boxes,
   CircleCheck,
-  CloudUpload,
   FileText,
   FolderSync,
   PencilLine,
@@ -48,7 +47,6 @@ function StatusItem({
 
 export function BottomStatusBar() {
   const draft = useProjectStore((s) => s.draft);
-  const dirty = useProjectStore((s) => s.dirty);
   const isNew = useProjectStore((s) => s.isNew);
   const readOnly = useProjectStore((s) => s.isReadOnly());
 
@@ -77,15 +75,9 @@ export function BottomStatusBar() {
       />
       <StatusItem
         icon={<PencilLine size={16} />}
-        label="Dirty State / 編輯狀態"
-        value={dirty ? 'Unsaved / 未儲存' : 'Clean / 無變更'}
-        tone={dirty ? 'text-warn-500' : 'text-white/80'}
-      />
-      <StatusItem
-        icon={<CloudUpload size={16} />}
-        label="Save Status / 儲存狀態"
-        value={readOnly ? 'Read Only / 唯讀' : isNew || dirty ? 'Not Saved / 未儲存' : 'Saved / 已儲存'}
-        tone={readOnly ? 'text-accent-500' : isNew || dirty ? 'text-warn-500' : 'text-ok-500'}
+        label="Project State / 專案狀態"
+        value={readOnly ? 'Read Only / 唯讀' : isNew ? 'Not Created / 尚未建立' : 'Active / 使用中'}
+        tone={readOnly ? 'text-accent-500' : isNew ? 'text-warn-500' : 'text-white/80'}
       />
       <StatusItem
         icon={<Boxes size={16} />}

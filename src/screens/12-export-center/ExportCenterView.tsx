@@ -41,7 +41,6 @@ import {
 
 import { ScreenWorkspace } from '@/app/ScreenWorkspace';
 import { projectPath } from '@/app/navigation';
-import { useGuardedNavigate } from '@/app/useGuardedNavigate';
 import { Badge, Button, Modal, Skeleton } from '@/ui/primitives';
 import { EngineeringInfo } from '@/ui/FieldLabel';
 import { toast } from '@/ui/toast';
@@ -202,7 +201,6 @@ function NoArtifacts({
 export function ExportCenterView() {
   const { projectId } = useParams();
   const navigate = useNavigate();
-  const guardedNavigate = useGuardedNavigate();
 
   const draft = useProjectStore((s) => s.draft);
   const projectStatus = useProjectStore((s) => s.status);
@@ -459,7 +457,7 @@ export function ExportCenterView() {
     return entries;
   }, [selected, config, projectId, scenario]);
 
-  const go = (path: string) => guardedNavigate(projectPath(projectId ?? '', path));
+  const go = (path: string) => navigate(projectPath(projectId ?? '', path));
 
   const downloadAgain = useCallback((entry: QueueEntry | ExportHistoryEntry) => {
     if (!entry.object_url) {
