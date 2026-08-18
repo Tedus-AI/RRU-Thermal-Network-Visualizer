@@ -12,6 +12,7 @@ import { useScenarioStore } from '@/data/scenarioStore';
 import { useSolverStore } from '@/data/solverStore';
 import { toast } from '@/ui/toast';
 import { biTitle } from '@/ui/FieldLabel';
+import { SaveIndicator } from './SaveIndicator';
 import { triggerDownload } from '@/export/download';
 import { BUILD_ID } from '@/data/bootstrapStorage';
 import {
@@ -189,7 +190,7 @@ export function TopHeader() {
   };
 
   return (
-    <header className="flex h-16 shrink-0 items-center gap-5 border-b border-shell-line bg-shell-800 pr-4">
+    <header className="flex h-16 shrink-0 items-center gap-3 border-b border-shell-line bg-shell-800 pr-4 2xl:gap-5">
       <div className="flex h-full shrink-0 items-center gap-2.5 bg-shell-900 pr-6 pl-4">
         <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-accent-600 text-[13px] font-black text-white">
           5G
@@ -200,7 +201,7 @@ export function TopHeader() {
         </div>
       </div>
 
-      <div className="w-56">
+      <div className="w-40 shrink xl:w-56">
         <label htmlFor="hdr-project" className="mb-0.5 block text-[11px] text-white/50">
           Project
         </label>
@@ -221,7 +222,7 @@ export function TopHeader() {
         </select>
       </div>
 
-      <div className="w-48">
+      <div className="w-36 shrink xl:w-48">
         {/*
           This selector sets the scenario every downstream screen computes
           against, so the label says which one is driving them rather than
@@ -279,7 +280,11 @@ export function TopHeader() {
         </span>
       )}
 
-      <div className="ml-auto flex items-center gap-1">
+      <div className="ml-auto flex shrink-0 items-center gap-2">
+        <SaveIndicator />
+      </div>
+
+      <div className="flex shrink-0 items-center gap-1">
         <HeaderAction
           icon={Upload}
           label="Import"
@@ -314,10 +319,10 @@ export function TopHeader() {
       </div>
       {picker.input}
 
-      <div className="ml-2 flex flex-col items-end gap-1 border-l border-shell-line pl-4">
+      <div className="ml-2 flex shrink-0 flex-col items-end gap-1 border-l border-shell-line pl-4 whitespace-nowrap">
         <div className="text-[13px] font-bold text-accent-500">
           {currentScreen.code} {currentScreen.labelEn}
-          <span className="font-normal text-white/50">
+          <span className="hidden font-normal text-white/50 2xl:inline">
             {' / '}
             {GROUP_LABELS_EN[currentScreen.group] ?? currentScreen.group}
           </span>
