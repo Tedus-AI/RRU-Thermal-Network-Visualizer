@@ -48,12 +48,31 @@ interface ProjectStoreState {
   markDirty: () => void;
 
   commit: () => Project | null;
+  /** Persists shortly after an edit, so nothing lives only in the draft. */
+  scheduleAutoCommit: () => void;
   revert: () => void;
   clear: () => void;
 
   isReadOnly: () => boolean;
   isProjectIdTaken: (projectId: string) => boolean;
 }
+
+/**
+ * Auto-commit.
+ *
+ * The folder is where projects live, so an edit that only sits in the draft is
+ * an edit that is not anywhere. Every mutation therefore schedules a commit,
+ * which persists and — through the storage write listener — reaches disk.
+ *
+ * Only for a project that already exists. A new project is still created
+ * explicitly: its id is editable until the first save, and committing on each
+ * keystroke would litter the folder with `F.tnv.json`, `FR.tnv.json`, and so on.
+ *
+ * The window is shorter than the folder's own coalescing window, so a burst of
+ * typing produces one commit and then one file write, in that order.
+ */
+const AUTO_COMMIT_MS = 400;
+let autoCommitTimer: ReturnType<typeof setTimeout> | null = null;
 
 export const useProjectStore = create<ProjectStoreState>((set, get) => ({
   draft: null,
@@ -106,6 +125,7 @@ export const useProjectStore = create<ProjectStoreState>((set, get) => ({
     const next = { ...draft, ...patch };
     if (next.project_id === draft.project_id && next.project_name === draft.project_name) return;
     set({ draft: { ...next, revision: createRevision('project') }, dirty: true });
+    get().scheduleAutoCommit();
   },
 
   patchContext: (patch) => {
@@ -123,6 +143,7 @@ export const useProjectStore = create<ProjectStoreState>((set, get) => ({
       },
       dirty: true,
     });
+    get().scheduleAutoCommit();
   },
 
   setActiveScenarioId: (scenarioId) => {
@@ -137,6 +158,7 @@ export const useProjectStore = create<ProjectStoreState>((set, get) => ({
       },
       dirty: true,
     });
+    get().scheduleAutoCommit();
   },
 
   setStatus: (status) => {
@@ -149,12 +171,30 @@ export const useProjectStore = create<ProjectStoreState>((set, get) => ({
   },
 
   markDirty: () => {
-    if (get().draft && !get().isReadOnly()) set({ dirty: true });
+    if (get().draft && !get().isReadOnly()) {
+      set({ dirty: true });
+      get().scheduleAutoCommit();
+    }
+  },
+
+  scheduleAutoCommit: () => {
+    // A project that has never been saved is created deliberately, not by typing.
+    if (get().isNew || get().isReadOnly() || !get().draft) return;
+    if (autoCommitTimer) clearTimeout(autoCommitTimer);
+    autoCommitTimer = setTimeout(() => {
+      autoCommitTimer = null;
+      const state = useProjectStore.getState();
+      if (state.dirty && !state.isNew && !state.isReadOnly()) state.commit();
+    }, AUTO_COMMIT_MS);
   },
 
   commit: () => {
     const draft = get().draft;
     if (!draft) return null;
+    if (autoCommitTimer) {
+      clearTimeout(autoCommitTimer);
+      autoCommitTimer = null;
+    }
     const persisted = saveProject(draft);
     set({ draft: persisted, saved: persisted, isNew: false, dirty: false });
     get().refreshProjects();
@@ -162,6 +202,10 @@ export const useProjectStore = create<ProjectStoreState>((set, get) => ({
   },
 
   revert: () => {
+    if (autoCommitTimer) {
+      clearTimeout(autoCommitTimer);
+      autoCommitTimer = null;
+    }
     const saved = get().saved;
     if (!saved) {
       set({ draft: createEmptyProject(), dirty: false });
@@ -170,8 +214,13 @@ export const useProjectStore = create<ProjectStoreState>((set, get) => ({
     set({ draft: saved, dirty: false });
   },
 
-  clear: () =>
-    set({ draft: null, saved: null, isNew: false, dirty: false, status: 'idle', error: null }),
+  clear: () => {
+    if (autoCommitTimer) {
+      clearTimeout(autoCommitTimer);
+      autoCommitTimer = null;
+    }
+    set({ draft: null, saved: null, isNew: false, dirty: false, status: 'idle', error: null });
+  },
 
   isReadOnly: () => get().draft?.status === 'archived',
 
