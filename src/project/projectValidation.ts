@@ -81,9 +81,6 @@ export function validateProjectForm(input: {
   if (!project.project_context.customer.trim()) warnings.push('Customer / Program is empty.');
   if (!project.project_context.owner.trim()) warnings.push('Project Owner is empty.');
   if (!project.project_context.description.trim()) warnings.push('Project Description is empty.');
-  if (project.project_context.main_heat_rejection.length === 0) {
-    warnings.push('No main heat rejection path selected.');
-  }
   if (componentCount === 0) warnings.push('No hardware components imported yet.');
   if (flothermMappingCount === 0) warnings.push('No FloTHERM data imported (optional).');
 

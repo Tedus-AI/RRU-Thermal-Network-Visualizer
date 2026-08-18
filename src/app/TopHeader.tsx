@@ -40,7 +40,7 @@ import type { SolverState } from '@/thermal/types';
  * actually means there are no results at all, and it made the state
  * indistinguishable from a genuine `SOLVED`.
  */
-export const SOLVER_TONE: Record<
+const SOLVER_TONE: Record<
   SolverState,
   { dot: string; text: string; label: string; zh: string }
 > = {

@@ -5,11 +5,11 @@
  * screen from turning any of them into thermal nodes or edges — topology is
  * built in Screen 05 from architecture templates.
  *
- * Cooling Architecture and Main Heat Rejection are deliberately split along
- * mechanism vs surface: the first says how heat is moved and shed, the second
- * says where it leaves. Before that split they overlapped — a heat pipe and a
- * fan were options in both — so the same fact could be recorded twice, or in
- * neither.
+ * Cooling Architecture is the single list describing the cooling solution.
+ * A separate "Main Heat Rejection" field used to sit beside it, but the two
+ * overlapped — a heat pipe and a fan were options in both — and the enclosure
+ * type already records how many faces shed heat, so it was removed rather than
+ * kept as a second place to say the same thing.
  */
 
 import { ChipMultiSelect, Field, SectionCard, Select } from '@/ui/primitives';
@@ -18,7 +18,6 @@ import {
   DEPLOYMENTS_BY_PRODUCT,
   ENCLOSURE_TYPES,
   FREQUENCY_RANGES,
-  MAIN_HEAT_REJECTIONS,
   PRODUCT_TYPES,
   defaultDeploymentFor,
 } from '@/domain/project';
@@ -27,7 +26,6 @@ import type {
   Deployment,
   EnclosureType,
   FrequencyRange,
-  MainHeatRejection,
   ProductType,
 } from '@/domain/project';
 import { useProjectStore } from '@/data/projectStore';
@@ -126,9 +124,9 @@ export function ProductThermalContextForm({ readOnly }: { readOnly: boolean }) {
           <Field
             label="Cooling Architecture"
             zh="散熱方式"
-            hint="How heat is moved and shed — pick every mechanism in use."
-            hintZh="熱如何被帶走與散出：請勾選所有實際採用的方式，可複選。"
-            tip="專案層級的散熱手段摘要，例如自然對流搭配熱管與均熱板。實際熱路徑於 Screen 05 定義，本頁不建立任何 Node/Edge。"
+            hint="Pick every element of the cooling solution."
+            hintZh="請勾選此設計採用的所有散熱手段，可複選。"
+            tip="專案層級的散熱方案摘要，例如壓鑄鰭片搭配自然對流與均熱板。實際熱路徑於 Screen 05 定義，本頁不建立任何 Node/Edge。"
           >
             <ChipMultiSelect
               label="Cooling Architecture"
@@ -142,24 +140,6 @@ export function ProductThermalContextForm({ readOnly }: { readOnly: boolean }) {
           </Field>
         </div>
 
-        <div className="lg:col-span-3">
-          <Field
-            label="Main Heat Rejection"
-            zh="主要散熱面"
-            hint="Where heat finally leaves the product — the surfaces, not the mechanisms."
-            hintZh="熱最終從哪些表面離開產品；這裡填「位置」，方式請填上方的散熱方式。"
-          >
-            <ChipMultiSelect
-              label="Main Heat Rejection"
-              options={MAIN_HEAT_REJECTIONS}
-              value={context.main_heat_rejection}
-              disabled={readOnly}
-              onChange={(next) =>
-                patchContext({ main_heat_rejection: next as MainHeatRejection[] })
-              }
-            />
-          </Field>
-        </div>
       </div>
     </SectionCard>
   );

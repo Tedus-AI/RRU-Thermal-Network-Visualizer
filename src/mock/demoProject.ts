@@ -53,9 +53,8 @@ export function demoProject(): Project {
       deployment: 'Outdoor',
       frequency_range: 'FR1',
       project_stage: 'EVT',
-      cooling_architecture: ['Natural Convection'],
+      cooling_architecture: ['Natural Convection', 'Die-casting Fin'],
       enclosure_type: 'Single-sided Cooling',
-      main_heat_rejection: ['Finned Heat Sink'],
       notes: [
         'Synthetic engineering fixture only; no customer CAD or test data.',
         'Four thermal zones share one rear heat sink and one ambient boundary.',

@@ -40,20 +40,20 @@ export const FREQUENCY_RANGES = ['FR1', 'FR2'] as const;
 export type FrequencyRange = (typeof FREQUENCY_RANGES)[number];
 
 /**
- * HOW heat is moved and shed — the mechanisms in play.
+ * The cooling solution, as a set of elements rather than one label.
  *
- * Multi-select, because real products combine them: natural convection at the
- * fins with a heat pipe and a vapor chamber inside is one common answer, not
- * three competing ones.
+ * Multi-select because real products combine them: a die-cast finned housing
+ * cooled by natural convection with a vapor chamber under the PA is one answer,
+ * not three competing ones.
  *
- * Kept strictly to mechanism. WHERE the heat finally leaves is
- * `main_heat_rejection`, which is why no surface appears in this list and no
- * mechanism appears in that one — the overlap between the two was the whole
- * problem with the previous pair.
+ * Ordered the way an engineer describes a design — how air moves over it, how
+ * the fins are made, then what spreads heat to them.
  */
 export const COOLING_ARCHITECTURES = [
   'Natural Convection',
   'Forced Convection (Fan)',
+  'Die-casting Fin',
+  'Embedded Fin',
   'Heat Pipe',
   'Vapor Chamber',
   'Liquid Cooling',
@@ -71,23 +71,6 @@ export type CoolingArchitecture = (typeof COOLING_ARCHITECTURES)[number];
 export const ENCLOSURE_TYPES = ['Double-sided Cooling', 'Single-sided Cooling'] as const;
 export type EnclosureType = (typeof ENCLOSURE_TYPES)[number];
 
-/**
- * WHERE heat leaves the product — the surfaces, not the mechanisms.
- *
- * The pair with `cooling_architecture` used to overlap: a heat pipe and a fan
- * appeared in both lists, so the same fact could be recorded twice or in
- * neither. Splitting mechanism from surface makes each answer a question the
- * other cannot.
- */
-export const MAIN_HEAT_REJECTIONS = [
-  'Finned Heat Sink',
-  'Flat Housing Surface',
-  'Cavity Filter Body',
-  'Liquid Cold Plate',
-  'Mounting Bracket Conduction',
-] as const;
-export type MainHeatRejection = (typeof MAIN_HEAT_REJECTIONS)[number];
-
 export type ProjectStatus = 'active' | 'archived';
 
 /**
@@ -103,11 +86,9 @@ export interface ProjectContext {
   deployment: Deployment;
   frequency_range: FrequencyRange;
   project_stage: ProjectStage;
-  /** Mechanisms in play; multi-select. */
+  /** The cooling solution as a set of elements; multi-select. */
   cooling_architecture: CoolingArchitecture[];
   enclosure_type: EnclosureType;
-  /** Surfaces that shed heat; multi-select. */
-  main_heat_rejection: MainHeatRejection[];
   notes: string;
 }
 
@@ -175,7 +156,6 @@ export function defaultProjectContext(): ProjectContext {
     project_stage: 'Prototype',
     cooling_architecture: ['Natural Convection'],
     enclosure_type: 'Double-sided Cooling',
-    main_heat_rejection: ['Finned Heat Sink'],
     notes: '',
   };
 }
@@ -288,13 +268,6 @@ export function normalizeProjectContext(raw: Partial<ProjectContext>): ProjectCo
       COOLING_ARCHITECTURES.includes(entry as CoolingArchitecture),
     );
 
-  const rejectionAbsent = raw.main_heat_rejection == null;
-  const rejection = (raw.main_heat_rejection ?? [])
-    .map((entry) => LEGACY_REJECTION[entry] ?? entry)
-    .filter((entry): entry is MainHeatRejection =>
-      MAIN_HEAT_REJECTIONS.includes(entry as MainHeatRejection),
-    );
-
   return {
     ...base,
     ...raw,
@@ -316,10 +289,6 @@ export function normalizeProjectContext(raw: Partial<ProjectContext>): ProjectCo
     enclosure_type: ENCLOSURE_TYPES.includes(raw.enclosure_type as EnclosureType)
       ? (raw.enclosure_type as EnclosureType)
       : LEGACY_ENCLOSURE[raw.enclosure_type as string] ?? base.enclosure_type,
-    main_heat_rejection: rejectionAbsent ? base.main_heat_rejection : [...new Set(rejection)],
-    // A rejection list emptied by filtering is left empty: unlike cooling, the
-    // legacy entries that vanish here (fan, heat pipe) moved to the mechanism
-    // field rather than disappearing, so re-adding a surface would invent one.
   };
 }
 
@@ -354,10 +323,3 @@ const LEGACY_ENCLOSURE: Record<string, EnclosureType> = {
   Custom: 'Double-sided Cooling',
 };
 
-const LEGACY_REJECTION: Record<string, MainHeatRejection> = {
-  'Rear Heat Sink': 'Finned Heat Sink',
-  'Front Heat Sink': 'Finned Heat Sink',
-  'Side Heat Sink': 'Finned Heat Sink',
-  'Housing Surface': 'Flat Housing Surface',
-  'Liquid Cold Plate': 'Liquid Cold Plate',
-};
