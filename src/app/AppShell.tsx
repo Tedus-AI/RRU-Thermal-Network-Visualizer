@@ -5,17 +5,21 @@
  *   ├─ TopHeader
  *   ├─ MainSidebar
  *   ├─ BreadcrumbBar
- *   ├─ ScreenWorkspace   (rendered by each screen)
- *   └─ BottomStatusBar
+ *   └─ ScreenWorkspace   (rendered by each screen)
  *
  * Screens 01–12 may not replace, restyle or re-invent any part of this frame.
+ *
+ * The bottom status bar that 00 §49 lists is deliberately gone, to give the
+ * workspace back its height. 00 §13 still holds: solver state, project,
+ * scenario and save state all read from the header, so no screen shows numbers
+ * without their status. Only the component and node counts were lost, and
+ * Screen 01's Project Overview already carries those.
  */
 
 import { useEffect, useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { TopHeader } from './TopHeader';
 import { MainSidebar } from './MainSidebar';
-import { BottomStatusBar } from './BottomStatusBar';
 import { BreadcrumbBar } from './BreadcrumbBar';
 import { ToastViewport } from '@/ui/toast';
 import { ScreenErrorBoundary } from './ErrorBoundary';
@@ -63,7 +67,6 @@ export function AppShell() {
             </div>
           </main>
         </div>
-        <BottomStatusBar />
         <ToastViewport />
       </div>
     </WorkspaceGate>

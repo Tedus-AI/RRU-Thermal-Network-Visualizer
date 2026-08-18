@@ -18,7 +18,6 @@ const LEGACY = {
   project_stage: 'Architecture',
   cooling_architecture: 'Heat Pipe Assisted',
   enclosure_type: 'Outdoor Sealed',
-  main_heat_rejection: ['Rear Heat Sink', 'Housing Surface', 'Internal Fan'],
   base_architecture: 'Single Main Base',
   notes: 'kept',
 } as unknown as Partial<ProjectContext>;
@@ -54,12 +53,6 @@ describe('normalizeProjectContext', () => {
     expect(result.cooling_architecture).toEqual(['Natural Convection']);
   });
 
-  // Fan and heat pipe moved to the mechanism field; they are not surfaces.
-  it('drops rejection entries that are now mechanisms, and merges the heat sinks', () => {
-    const result = normalizeProjectContext(LEGACY);
-    expect(result.main_heat_rejection).toEqual(['Finned Heat Sink', 'Flat Housing Surface']);
-    expect(result.main_heat_rejection).not.toContain('Internal Fan');
-  });
 
   it('keeps free text the user wrote', () => {
     const result = normalizeProjectContext(LEGACY);
@@ -93,6 +86,17 @@ describe('normalizeProjectContext', () => {
     expect(result.deployment).toBe('Outdoor');
   });
 
+  it('accepts the fin construction options', () => {
+    const result = normalizeProjectContext({
+      cooling_architecture: ['Die-casting Fin', 'Embedded Fin', 'Natural Convection'],
+    } as unknown as Partial<ProjectContext>);
+    expect(result.cooling_architecture).toEqual([
+      'Die-casting Fin',
+      'Embedded Fin',
+      'Natural Convection',
+    ]);
+  });
+
   it('accepts FR2, which is now a real option', () => {
     const result = normalizeProjectContext({
       frequency_range: 'FR2',
@@ -100,12 +104,6 @@ describe('normalizeProjectContext', () => {
     expect(result.frequency_range).toBe('FR2');
   });
 
-  it('de-duplicates values that collapsed onto the same option', () => {
-    const result = normalizeProjectContext({
-      main_heat_rejection: ['Rear Heat Sink', 'Front Heat Sink', 'Side Heat Sink'],
-    } as unknown as Partial<ProjectContext>);
-    expect(result.main_heat_rejection).toEqual(['Finned Heat Sink']);
-  });
 });
 
 describe('deployment constraints', () => {
