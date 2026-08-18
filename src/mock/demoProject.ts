@@ -50,12 +50,12 @@ export function demoProject(): Project {
       owner: 'Thermal Engineering Demo',
       description: 'Non-confidential synthetic FR1 RRU golden-flow validation project',
       product_type: 'RRU',
+      deployment: 'Outdoor',
       frequency_range: 'FR1',
       project_stage: 'EVT',
-      cooling_architecture: 'Natural Convection',
-      enclosure_type: 'Outdoor Sealed',
-      main_heat_rejection: ['Rear Heat Sink'],
-      base_architecture: 'Multi-zone Main Base',
+      cooling_architecture: ['Natural Convection'],
+      enclosure_type: 'Single-sided Cooling',
+      main_heat_rejection: ['Finned Heat Sink'],
       notes: [
         'Synthetic engineering fixture only; no customer CAD or test data.',
         'Four thermal zones share one rear heat sink and one ambient boundary.',
@@ -83,7 +83,7 @@ export function demoSourceProject(): Project {
     project_context: {
       ...demoProject().project_context,
       description: 'Synthetic component source used to exercise Screen 02 import',
-      project_stage: 'Architecture',
+      project_stage: 'Prototype',
       notes: 'Synthetic reference rows with deliberate duplicate names for import testing.',
     },
   };

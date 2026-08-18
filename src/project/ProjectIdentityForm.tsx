@@ -137,9 +137,11 @@ export function ProjectIdentityForm({
         </Field>
 
         <Field label="Description" zh="專案說明" htmlFor="description">
+          {/* Same height as the Project ID input opposite it; drag to grow. */}
           <TextArea
             id="description"
-            rows={3}
+            rows={1}
+            className="h-9"
             value={draft.project_context.description}
             disabled={readOnly}
             placeholder="FR1 outdoor RRU thermal network development"

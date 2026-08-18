@@ -77,7 +77,8 @@ export function SaveIndicator() {
     <span
       className={`${base} ${
         busy
-          ? 'border-accent-500/40 bg-accent-500/15 text-accent-400'
+          ? // Bright amber: the accent blue sat too close to the dark shell to read.
+            'border-warn-400/50 bg-warn-400/15 text-warn-400'
           : 'border-ok-500/30 bg-ok-500/10 text-ok-500'
       }`}
       // aria-live so a screen reader hears the transition to saved, which is

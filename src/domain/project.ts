@@ -8,73 +8,85 @@
 
 import { createRevision, type RevisionId } from './revision';
 
-export const PROJECT_STAGES = [
-  'Concept',
-  'Architecture',
-  'EVT',
-  'DVT',
-  'PVT',
-  'MP',
-  'Field Validation',
-] as const;
+export const PROJECT_STAGES = ['Prototype', 'EVT', 'DVT', 'PVT'] as const;
 export type ProjectStage = (typeof PROJECT_STAGES)[number];
 
-export const PRODUCT_TYPES = [
-  'RRU',
-  'AAU',
-  'Small Cell',
-  'Outdoor Radio',
-  'Indoor Radio',
-  'Custom',
-] as const;
+export const PRODUCT_TYPES = ['RRU', 'AAU', 'Small Cell'] as const;
 export type ProductType = (typeof PRODUCT_TYPES)[number];
 
-/** V1 product scope is FR1; the field is shown but locked (01 §7.2). */
-export const FREQUENCY_RANGES = ['FR1'] as const;
+export const DEPLOYMENTS = ['Indoor', 'Outdoor'] as const;
+export type Deployment = (typeof DEPLOYMENTS)[number];
+
+/**
+ * Where each product type can actually be installed.
+ *
+ * An AAU is an outdoor macro radio and a small cell is an indoor unit; only an
+ * RRU is built both ways. Encoding that here keeps the pair from drifting into
+ * a combination that does not exist — the ambient assumptions downstream differ
+ * enormously between indoor and outdoor.
+ */
+export const DEPLOYMENTS_BY_PRODUCT: Record<ProductType, readonly Deployment[]> = {
+  RRU: ['Indoor', 'Outdoor'],
+  AAU: ['Outdoor'],
+  'Small Cell': ['Indoor'],
+};
+
+/** The deployment to fall back to when the product type changes. */
+export function defaultDeploymentFor(product: ProductType): Deployment {
+  return DEPLOYMENTS_BY_PRODUCT[product][0];
+}
+
+export const FREQUENCY_RANGES = ['FR1', 'FR2'] as const;
 export type FrequencyRange = (typeof FREQUENCY_RANGES)[number];
 
+/**
+ * HOW heat is moved and shed — the mechanisms in play.
+ *
+ * Multi-select, because real products combine them: natural convection at the
+ * fins with a heat pipe and a vapor chamber inside is one common answer, not
+ * three competing ones.
+ *
+ * Kept strictly to mechanism. WHERE the heat finally leaves is
+ * `main_heat_rejection`, which is why no surface appears in this list and no
+ * mechanism appears in that one — the overlap between the two was the whole
+ * problem with the previous pair.
+ */
 export const COOLING_ARCHITECTURES = [
   'Natural Convection',
-  'Forced Convection',
-  'Heat Pipe Assisted',
-  'Vapor Chamber Assisted',
+  'Forced Convection (Fan)',
+  'Heat Pipe',
+  'Vapor Chamber',
   'Liquid Cooling',
-  'Hybrid',
-  'Custom',
 ] as const;
 export type CoolingArchitecture = (typeof COOLING_ARCHITECTURES)[number];
 
-export const ENCLOSURE_TYPES = [
-  'Outdoor Sealed',
-  'Outdoor Vented',
-  'Indoor',
-  'IP-rated Custom',
-  'Custom',
-] as const;
+/**
+ * How many faces of the enclosure actually reject heat.
+ *
+ * Single-sided is common on FR1: one face is the cavity filter block, which is
+ * effectively dead weight thermally, leaving only the other face to carry the
+ * heat sink. It halves the available rejection area, so it is worth stating up
+ * front rather than discovering it in the results.
+ */
+export const ENCLOSURE_TYPES = ['Double-sided Cooling', 'Single-sided Cooling'] as const;
 export type EnclosureType = (typeof ENCLOSURE_TYPES)[number];
 
+/**
+ * WHERE heat leaves the product — the surfaces, not the mechanisms.
+ *
+ * The pair with `cooling_architecture` used to overlap: a heat pipe and a fan
+ * appeared in both lists, so the same fact could be recorded twice or in
+ * neither. Splitting mechanism from surface makes each answer a question the
+ * other cannot.
+ */
 export const MAIN_HEAT_REJECTIONS = [
-  'Rear Heat Sink',
-  'Front Heat Sink',
-  'Side Heat Sink',
-  'Housing Surface',
-  'Heat Pipe',
-  'Internal Fan',
-  'External Fan',
+  'Finned Heat Sink',
+  'Flat Housing Surface',
+  'Cavity Filter Body',
   'Liquid Cold Plate',
-  'Other',
+  'Mounting Bracket Conduction',
 ] as const;
 export type MainHeatRejection = (typeof MAIN_HEAT_REJECTIONS)[number];
-
-export const BASE_ARCHITECTURES = [
-  'Single Main Base',
-  'Multi-zone Main Base',
-  'Small Base + Main Base',
-  'Heat Pipe + Main Base',
-  'Direct Housing',
-  'Custom',
-] as const;
-export type BaseArchitecture = (typeof BASE_ARCHITECTURES)[number];
 
 export type ProjectStatus = 'active' | 'archived';
 
@@ -87,12 +99,15 @@ export interface ProjectContext {
   owner: string;
   description: string;
   product_type: ProductType;
+  /** Constrained by `product_type` — see `DEPLOYMENTS_BY_PRODUCT`. */
+  deployment: Deployment;
   frequency_range: FrequencyRange;
   project_stage: ProjectStage;
-  cooling_architecture: CoolingArchitecture;
+  /** Mechanisms in play; multi-select. */
+  cooling_architecture: CoolingArchitecture[];
   enclosure_type: EnclosureType;
+  /** Surfaces that shed heat; multi-select. */
   main_heat_rejection: MainHeatRejection[];
-  base_architecture: BaseArchitecture;
   notes: string;
 }
 
@@ -155,12 +170,12 @@ export function defaultProjectContext(): ProjectContext {
     owner: '',
     description: '',
     product_type: 'RRU',
+    deployment: 'Outdoor',
     frequency_range: 'FR1',
-    project_stage: 'Concept',
-    cooling_architecture: 'Natural Convection',
-    enclosure_type: 'Outdoor Sealed',
-    main_heat_rejection: ['Rear Heat Sink'],
-    base_architecture: 'Single Main Base',
+    project_stage: 'Prototype',
+    cooling_architecture: ['Natural Convection'],
+    enclosure_type: 'Double-sided Cooling',
+    main_heat_rejection: ['Finned Heat Sink'],
     notes: '',
   };
 }
@@ -228,3 +243,121 @@ export function suggestProjectId(name: string): string {
     .slice(0, 64);
   return cleaned.toUpperCase();
 }
+
+/**
+ * Maps a stored context onto the current option sets.
+ *
+ * Project files on disk outlive any one version of these lists, and the folder
+ * is the source of truth — so an older file has to open, not break. Anything
+ * unrecognised falls back to the default rather than being shown as a value the
+ * dropdown cannot offer.
+ */
+export function normalizeProjectContext(raw: Partial<ProjectContext>): ProjectContext {
+  const base = defaultProjectContext();
+
+  const stage = LEGACY_STAGES[raw.project_stage as string] ?? raw.project_stage;
+  const product = LEGACY_PRODUCTS[raw.product_type as string] ?? raw.product_type;
+  const productType = PRODUCT_TYPES.includes(product as ProductType)
+    ? (product as ProductType)
+    : base.product_type;
+
+  // A stored deployment is only kept if the product type actually allows it.
+  const allowed = DEPLOYMENTS_BY_PRODUCT[productType];
+  const storedDeployment =
+    (raw.deployment as Deployment | undefined) ??
+    (LEGACY_OUTDOOR_PRODUCTS.has(raw.product_type as string) ? 'Outdoor' : undefined);
+  const deployment =
+    storedDeployment && allowed.includes(storedDeployment)
+      ? storedDeployment
+      : // Prefer the overall default where the product allows it, so an
+        // untouched context matches `defaultProjectContext` exactly.
+        allowed.includes(base.deployment)
+        ? base.deployment
+        : defaultDeploymentFor(productType);
+
+  // Was a single value before it became a list.
+  const coolingAbsent = raw.cooling_architecture == null;
+  const coolingRaw = Array.isArray(raw.cooling_architecture)
+    ? raw.cooling_architecture
+    : raw.cooling_architecture
+      ? [raw.cooling_architecture as string]
+      : [];
+  const cooling = coolingRaw
+    .map((entry) => LEGACY_COOLING[entry] ?? entry)
+    .filter((entry): entry is CoolingArchitecture =>
+      COOLING_ARCHITECTURES.includes(entry as CoolingArchitecture),
+    );
+
+  const rejectionAbsent = raw.main_heat_rejection == null;
+  const rejection = (raw.main_heat_rejection ?? [])
+    .map((entry) => LEGACY_REJECTION[entry] ?? entry)
+    .filter((entry): entry is MainHeatRejection =>
+      MAIN_HEAT_REJECTIONS.includes(entry as MainHeatRejection),
+    );
+
+  return {
+    ...base,
+    ...raw,
+    product_type: productType,
+    deployment,
+    frequency_range: FREQUENCY_RANGES.includes(raw.frequency_range as FrequencyRange)
+      ? (raw.frequency_range as FrequencyRange)
+      : base.frequency_range,
+    project_stage: PROJECT_STAGES.includes(stage as ProjectStage)
+      ? (stage as ProjectStage)
+      : base.project_stage,
+    // Three cases, not two: absent takes the default; deliberately emptied
+    // stays empty; and non-empty-but-nothing-survived means the stored values
+    // are no longer offered, so falling back beats showing nothing.
+    cooling_architecture:
+      coolingAbsent || (coolingRaw.length > 0 && cooling.length === 0)
+        ? base.cooling_architecture
+        : [...new Set(cooling)],
+    enclosure_type: ENCLOSURE_TYPES.includes(raw.enclosure_type as EnclosureType)
+      ? (raw.enclosure_type as EnclosureType)
+      : LEGACY_ENCLOSURE[raw.enclosure_type as string] ?? base.enclosure_type,
+    main_heat_rejection: rejectionAbsent ? base.main_heat_rejection : [...new Set(rejection)],
+    // A rejection list emptied by filtering is left empty: unlike cooling, the
+    // legacy entries that vanish here (fan, heat pipe) moved to the mechanism
+    // field rather than disappearing, so re-adding a surface would invent one.
+  };
+}
+
+const LEGACY_STAGES: Record<string, ProjectStage> = {
+  Concept: 'Prototype',
+  Architecture: 'Prototype',
+  MP: 'PVT',
+  'Field Validation': 'PVT',
+};
+
+const LEGACY_PRODUCTS: Record<string, ProductType> = {
+  'Outdoor Radio': 'RRU',
+  'Indoor Radio': 'RRU',
+  Custom: 'RRU',
+};
+
+const LEGACY_OUTDOOR_PRODUCTS = new Set(['Outdoor Radio', 'AAU']);
+
+const LEGACY_COOLING: Record<string, CoolingArchitecture> = {
+  'Forced Convection': 'Forced Convection (Fan)',
+  'Heat Pipe Assisted': 'Heat Pipe',
+  'Vapor Chamber Assisted': 'Vapor Chamber',
+  Hybrid: 'Natural Convection',
+  Custom: 'Natural Convection',
+};
+
+const LEGACY_ENCLOSURE: Record<string, EnclosureType> = {
+  'Outdoor Sealed': 'Double-sided Cooling',
+  'Outdoor Vented': 'Double-sided Cooling',
+  Indoor: 'Double-sided Cooling',
+  'IP-rated Custom': 'Double-sided Cooling',
+  Custom: 'Double-sided Cooling',
+};
+
+const LEGACY_REJECTION: Record<string, MainHeatRejection> = {
+  'Rear Heat Sink': 'Finned Heat Sink',
+  'Front Heat Sink': 'Finned Heat Sink',
+  'Side Heat Sink': 'Finned Heat Sink',
+  'Housing Surface': 'Flat Housing Surface',
+  'Liquid Cold Plate': 'Liquid Cold Plate',
+};

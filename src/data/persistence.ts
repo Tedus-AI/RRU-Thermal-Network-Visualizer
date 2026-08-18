@@ -13,7 +13,7 @@
  */
 
 import type { Project, ProjectContext, Scenario } from '@/domain/project';
-import { SCHEMA_VERSION, defaultProjectContext } from '@/domain/project';
+import { SCHEMA_VERSION, normalizeProjectContext } from '@/domain/project';
 import {
   hydrateComponentRevisionSet,
   hydrateRevision,
@@ -174,7 +174,10 @@ function hydrateProject(raw: RawDoc): Project {
     project_id: String(raw.project_id ?? ''),
     project_name: String(raw.project_name ?? ''),
     revision: hydrateRevision(raw.revision, 'project', meta.updated_at ?? now),
-    project_context: { ...defaultProjectContext(), ...context },
+    // Files on disk outlive any one version of the option sets, so a context
+    // written by an older build is mapped forward rather than shown as a value
+    // its own dropdown can no longer offer.
+    project_context: normalizeProjectContext(context),
     active_scenario_id: (raw.active_scenario_id as string | null) ?? null,
     status: raw.status === 'archived' ? 'archived' : 'active',
     meta: {
