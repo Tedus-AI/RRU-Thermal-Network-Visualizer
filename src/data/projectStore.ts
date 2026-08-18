@@ -13,6 +13,7 @@ import {
   type ProjectStatus,
 } from '@/domain/project';
 import { createRevision } from '@/domain/revision';
+import { markSavePending } from './saveStatus';
 import {
   loadProject,
   loadProjects,
@@ -180,6 +181,9 @@ export const useProjectStore = create<ProjectStoreState>((set, get) => ({
   scheduleAutoCommit: () => {
     // A project that has never been saved is created deliberately, not by typing.
     if (get().isNew || get().isReadOnly() || !get().draft) return;
+    // Light the indicator now, not when the write eventually starts: until then
+    // it would still be claiming the previous state was saved.
+    markSavePending();
     if (autoCommitTimer) clearTimeout(autoCommitTimer);
     autoCommitTimer = setTimeout(() => {
       autoCommitTimer = null;

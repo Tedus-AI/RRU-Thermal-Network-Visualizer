@@ -18,6 +18,7 @@ import { collectProject, serializeProjectFile } from './projectFile';
 import { clearOwnedStorage } from './buildStamp';
 import { hydrateFromFolder } from './workspace';
 import { isSyncSuspended, withSyncSuspended } from './syncSuspend';
+import { markSaveSettled } from './saveStatus';
 import { useProjectStore } from './projectStore';
 import {
   clearStoredHandle,
@@ -211,6 +212,7 @@ export const useFolderStore = create<FolderStoreState>((set, get) => ({
     // Re-check rather than trusting the cached status: the browser can revoke
     // between one save and the next.
     if ((await queryPermission(handle)) !== 'granted') {
+      markSaveSettled();
       set({ status: 'needs_permission' });
       return false;
     }
@@ -221,6 +223,7 @@ export const useFolderStore = create<FolderStoreState>((set, get) => ({
     set({ syncing: true });
     try {
       await writeTextFile(handle, mirrorFilename(projectId), serializeProjectFile(file));
+      markSaveSettled();
       set({
         status: 'connected',
         syncing: false,
@@ -230,6 +233,7 @@ export const useFolderStore = create<FolderStoreState>((set, get) => ({
       });
       return true;
     } catch (error) {
+      markSaveSettled();
       set({
         status: 'error',
         syncing: false,

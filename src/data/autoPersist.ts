@@ -22,6 +22,7 @@ import { useNetworkStore } from './networkStore';
 import { useProjectStore } from './projectStore';
 import { useReportStore } from './reportStore';
 import { useSolutionStore } from './solutionStore';
+import { markSavePending } from './saveStatus';
 
 /** A store that tracks unsaved edits and can flush them for a project. */
 interface PersistableStore {
@@ -69,6 +70,8 @@ export function startAutoPersist(): () => void {
   const unsubscribes = STORES.map(({ name, store }) =>
     store.subscribe(() => {
       if (!store.getState().dirty) return;
+
+      markSavePending();
 
       const existing = timers.get(name);
       if (existing) clearTimeout(existing);
