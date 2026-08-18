@@ -23,6 +23,7 @@ import { useShellActions } from './shellActions';
 import { ScreenErrorBoundary } from './ErrorBoundary';
 import { useProjectStore } from '@/data/projectStore';
 import { setSyncProject, startFolderAutoSync, useFolderStore } from '@/data/folderStore';
+import { WorkspaceGate } from './WorkspaceGate';
 
 export function AppShell() {
   const [collapsed, setCollapsed] = useState(false);
@@ -43,23 +44,25 @@ export function AppShell() {
   }, [projectId, isNewProject]);
 
   return (
-    <div className="flex h-full flex-col overflow-hidden">
-      <TopHeader onSave={saveHandler ?? undefined} />
-      <div className="flex min-h-0 flex-1">
-        <MainSidebar collapsed={collapsed} onToggle={() => setCollapsed((v) => !v)} />
-        <main className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-canvas">
-          <BreadcrumbBar />
-          <div className="min-h-0 flex-1">
-            {/* A screen crash must never blank the whole app. */}
-            <ScreenErrorBoundary resetKey={location.pathname}>
-              <Outlet />
-            </ScreenErrorBoundary>
-          </div>
-        </main>
+    <WorkspaceGate>
+      <div className="flex h-full flex-col overflow-hidden">
+        <TopHeader onSave={saveHandler ?? undefined} />
+        <div className="flex min-h-0 flex-1">
+          <MainSidebar collapsed={collapsed} onToggle={() => setCollapsed((v) => !v)} />
+          <main className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-canvas">
+            <BreadcrumbBar />
+            <div className="min-h-0 flex-1">
+              {/* A screen crash must never blank the whole app. */}
+              <ScreenErrorBoundary resetKey={location.pathname}>
+                <Outlet />
+              </ScreenErrorBoundary>
+            </div>
+          </main>
+        </div>
+        <BottomStatusBar />
+        <UnsavedChangesModal />
+        <ToastViewport />
       </div>
-      <BottomStatusBar />
-      <UnsavedChangesModal />
-      <ToastViewport />
-    </div>
+    </WorkspaceGate>
   );
 }

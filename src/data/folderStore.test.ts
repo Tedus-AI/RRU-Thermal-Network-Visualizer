@@ -225,7 +225,7 @@ describe('auto-sync', () => {
 });
 
 describe('unbind', () => {
-  it('drops the binding and leaves local data alone', async () => {
+  it('drops the binding', async () => {
     await seedDemoProject();
     connect(fakeFolder());
 
@@ -233,6 +233,22 @@ describe('unbind', () => {
 
     expect(useFolderStore.getState().handle).toBeNull();
     expect(useFolderStore.getState().folderName).toBeNull();
-    expect(loadProject(DEMO_PROJECT_ID)).not.toBeNull();
+    expect(useFolderStore.getState().hydrated).toBe(false);
+  });
+
+  // The cache only ever mirrored the folder. Keeping it would leave projects on
+  // screen that the app has nowhere to write to, and the files on disk are
+  // untouched, so nothing is actually lost.
+  it('clears the cache, since the folder was the source of truth', async () => {
+    await seedDemoProject();
+    const folder = fakeFolder();
+    connect(folder);
+    await useFolderStore.getState().mirror(DEMO_PROJECT_ID);
+
+    await useFolderStore.getState().unbind();
+
+    expect(loadProject(DEMO_PROJECT_ID)).toBeNull();
+    // The file on disk is left exactly as it was.
+    expect(folder.files.has(mirrorFilename(DEMO_PROJECT_ID))).toBe(true);
   });
 });

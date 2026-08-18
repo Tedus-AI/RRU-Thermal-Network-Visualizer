@@ -38,6 +38,7 @@ import { useProjectSave } from './useProjectSave';
 import { nextStepFor, useProjectHealth } from './projectHealth';
 import { useFormTouch } from './formTouch';
 import { seedDemoProject } from '@/mock/seed';
+import { useFolderStore } from '@/data/folderStore';
 
 function PageHeader({ subtitle }: { subtitle?: string }) {
   return (
@@ -117,6 +118,9 @@ export function EmptyProjectState() {
     try {
       const id = await seedDemoProject();
       useProjectStore.getState().refreshProjects();
+      // Seeding makes two projects; the write listener only follows the active
+      // one, so write them both out before the folder is read again.
+      await useFolderStore.getState().mirrorAll();
       navigate(projectPath(id, 'info'));
       toast.success('Golden Demo loaded with current analytical results.');
     } catch (error) {

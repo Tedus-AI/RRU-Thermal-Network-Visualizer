@@ -13,8 +13,12 @@
 import { create } from 'zustand';
 
 import { BUILD_ID } from './bootstrapStorage';
-import { onStorageWrite } from './persistence';
+import { loadProjects, onStorageWrite } from './persistence';
 import { collectProject, serializeProjectFile } from './projectFile';
+import { clearOwnedStorage } from './buildStamp';
+import { hydrateFromFolder } from './workspace';
+import { isSyncSuspended, withSyncSuspended } from './syncSuspend';
+import { useProjectStore } from './projectStore';
 import {
   clearStoredHandle,
   listProjectFiles,
@@ -52,6 +56,16 @@ interface FolderStoreState {
   lastError: string | null;
   syncing: boolean;
 
+  /**
+   * True until the startup restore has settled. Without it the gate would flash
+   * "choose a folder" before the remembered handle has been looked up.
+   */
+  restoring: boolean;
+  /** True once the folder has been read into the local cache. */
+  hydrated: boolean;
+  /** Files in the folder that are not usable project files. */
+  skipped: Array<{ filename: string; reason: string }>;
+
   /** Called once at startup to pick up a folder bound in an earlier session. */
   restore: () => Promise<void>;
   /** Opens the picker. Must run from a user gesture. */
@@ -59,9 +73,16 @@ interface FolderStoreState {
   /** Re-prompts for a downgraded permission. Must run from a user gesture. */
   reconnect: () => Promise<boolean>;
   unbind: () => Promise<void>;
+  /** Reads the folder into the local cache, replacing whatever was cached. */
+  hydrate: () => Promise<void>;
 
   /** Writes one project to the folder now. */
   mirror: (projectId: string) => Promise<boolean>;
+  /**
+   * Writes every cached project. Needed after anything that creates or changes
+   * a project other than the active one — seeding the demo makes two.
+   */
+  mirrorAll: () => Promise<number>;
   listFiles: () => Promise<FolderEntry[]>;
   readFile: (filename: string) => Promise<string | null>;
 }
@@ -74,25 +95,34 @@ export const useFolderStore = create<FolderStoreState>((set, get) => ({
   lastSyncedProjectId: null,
   lastError: null,
   syncing: false,
+  restoring: true,
+  hydrated: false,
+  skipped: [],
 
   restore: async () => {
-    if (!supportsFolderBinding()) {
-      set({ status: 'unsupported' });
-      return;
+    try {
+      if (!supportsFolderBinding()) {
+        set({ status: 'unsupported' });
+        return;
+      }
+      const handle = await loadStoredHandle();
+      if (!handle) {
+        set({ status: 'unbound' });
+        return;
+      }
+      // A stored handle can come back with its permission downgraded to
+      // `prompt`; regaining it needs a click, so the state says so rather than
+      // failing later.
+      const permission = await queryPermission(handle);
+      if (permission !== 'granted') {
+        set({ handle, folderName: handle.name, status: 'needs_permission' });
+        return;
+      }
+      set({ handle, folderName: handle.name, status: 'connected' });
+      await get().hydrate();
+    } finally {
+      set({ restoring: false });
     }
-    const handle = await loadStoredHandle();
-    if (!handle) {
-      set({ status: 'unbound' });
-      return;
-    }
-    // A stored handle can come back with its permission downgraded to `prompt`;
-    // regaining it needs a click, so the state says so rather than failing later.
-    const permission = await queryPermission(handle);
-    set({
-      handle,
-      folderName: handle.name,
-      status: permission === 'granted' ? 'connected' : 'needs_permission',
-    });
   },
 
   bind: async () => {
@@ -119,7 +149,9 @@ export const useFolderStore = create<FolderStoreState>((set, get) => ({
       folderName: handle.name,
       status: 'connected',
       lastError: null,
+      hydrated: false,
     });
+    await get().hydrate();
     return true;
   },
 
@@ -132,11 +164,17 @@ export const useFolderStore = create<FolderStoreState>((set, get) => ({
       return false;
     }
     set({ status: 'connected', lastError: null });
+    await get().hydrate();
     return true;
   },
 
   unbind: async () => {
     await clearStoredHandle();
+    // The cache only ever mirrored the folder; keeping it would leave projects
+    // on screen that the app can no longer write to.
+    await withSyncSuspended(async () => {
+      if (typeof localStorage !== 'undefined') clearOwnedStorage(localStorage);
+    });
     set({
       handle: null,
       folderName: null,
@@ -144,7 +182,26 @@ export const useFolderStore = create<FolderStoreState>((set, get) => ({
       lastSyncAt: null,
       lastSyncedProjectId: null,
       lastError: null,
+      hydrated: false,
+      skipped: [],
     });
+  },
+
+  hydrate: async () => {
+    const { handle } = get();
+    if (!handle) return;
+    try {
+      const result = await hydrateFromFolder(handle);
+      set({ hydrated: true, skipped: result.skipped, lastError: null });
+      // The cache was replaced wholesale; the project list must be re-read.
+      useProjectStore.getState().refreshProjects();
+    } catch (error) {
+      set({
+        status: 'error',
+        hydrated: false,
+        lastError: error instanceof Error ? error.message : 'Could not read the folder',
+      });
+    }
   },
 
   mirror: async (projectId) => {
@@ -182,6 +239,16 @@ export const useFolderStore = create<FolderStoreState>((set, get) => ({
     }
   },
 
+  mirrorAll: async () => {
+    const { handle, status } = get();
+    if (!handle || status !== 'connected') return 0;
+    let written = 0;
+    for (const project of loadProjects()) {
+      if (await get().mirror(project.project_id)) written += 1;
+    }
+    return written;
+  },
+
   listFiles: async () => {
     const { handle } = get();
     if (!handle) return [];
@@ -209,14 +276,19 @@ export function setSyncProject(projectId: string | null): void {
 }
 
 /**
- * Coalescing window. A single user-visible "save" fans out into many
- * `writeCollection` calls — project, scenarios, components, network — and
- * mirroring each one would rewrite the same file a dozen times per click.
+ * Coalescing window.
+ *
+ * One user-visible edit fans out into many `writeCollection` calls — project,
+ * scenarios, components, network — and each keystroke in a form is another
+ * round. A Golden Demo project file is ~415 KB, so writing per call would mean
+ * rewriting that much disk many times a second. Everything inside the window
+ * collapses into a single write.
  */
-const DEBOUNCE_MS = 1200;
+const DEBOUNCE_MS = 800;
 
 let timer: ReturnType<typeof setTimeout> | null = null;
 let started = false;
+
 
 /**
  * Starts mirroring on every persisted write. Idempotent.
@@ -228,6 +300,7 @@ export function startFolderAutoSync(): () => void {
   started = true;
 
   const stop = onStorageWrite(() => {
+    if (isSyncSuspended()) return;
     const { status } = useFolderStore.getState();
     if (status !== 'connected' || !activeProjectId) return;
 
