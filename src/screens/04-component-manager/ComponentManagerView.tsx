@@ -13,7 +13,6 @@ import { ArrowLeft, ArrowRight, Boxes, CheckCheck, Save, XCircle } from 'lucide-
 
 import { ScreenWorkspace } from '@/app/ScreenWorkspace';
 import { projectPath } from '@/app/navigation';
-import { useGuardedNavigate } from '@/app/useGuardedNavigate';
 import { useShellActions } from '@/app/shellActions';
 import { Badge, Button, Modal, Skeleton } from '@/ui/primitives';
 import { toast } from '@/ui/toast';
@@ -65,7 +64,6 @@ function LoadingState() {
 export function ComponentManagerView() {
   const { projectId } = useParams();
   const navigate = useNavigate();
-  const guardedNavigate = useGuardedNavigate();
 
   const draft = useProjectStore((s) => s.draft);
   const projectStatus = useProjectStore((s) => s.status);
@@ -184,7 +182,7 @@ export function ComponentManagerView() {
       <div className="mt-4 flex justify-center gap-2">
         <Button
           variant="primary"
-          onClick={() => guardedNavigate(projectPath(projectId, 'import-components'))}
+          onClick={() => navigate(projectPath(projectId, 'import-components'))}
         >
           Import Components / 匯入元件
         </Button>
@@ -204,7 +202,6 @@ export function ComponentManagerView() {
       badge={
         <div className="flex flex-wrap items-center gap-2">
           {readOnly && <Badge tone="accent">READ ONLY / 唯讀</Badge>}
-          {!readOnly && dirty && <Badge tone="warn">● Unsaved / 未儲存</Badge>}
           {requiresReview && <Badge tone="warn">Network review required / 需重新檢視網路</Badge>}
         </div>
       }
@@ -223,7 +220,7 @@ export function ComponentManagerView() {
         <div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-line bg-surface px-6 py-3">
           <Button
             icon={<ArrowLeft size={15} />}
-            onClick={() => guardedNavigate(projectPath(projectId, 'import-components'))}
+            onClick={() => navigate(projectPath(projectId, 'import-components'))}
           >
             Back / 返回
           </Button>

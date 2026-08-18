@@ -19,9 +19,7 @@ import { useNetworkStore } from '@/data/networkStore';
 import { useSolverStore } from '@/data/solverStore';
 import { useBoundaryStore } from '@/data/boundaryStore';
 import { useSolutionStore } from '@/data/solutionStore';
-import { useShellActions } from '@/app/shellActions';
 import { projectPath } from '@/app/navigation';
-import { useGuardedNavigate } from '@/app/useGuardedNavigate';
 import { toast } from '@/ui/toast';
 
 import { ProjectIdentityForm } from './ProjectIdentityForm';
@@ -172,12 +170,10 @@ export function EmptyProjectState() {
 export function ProjectInfoView() {
   const { projectId } = useParams();
   const navigate = useNavigate();
-  const guardedNavigate = useGuardedNavigate();
 
   const status = useProjectStore((s) => s.status);
   const error = useProjectStore((s) => s.error);
   const draft = useProjectStore((s) => s.draft);
-  const dirty = useProjectStore((s) => s.dirty);
   const readOnly = useProjectStore((s) => s.isReadOnly());
   const isNew = useProjectStore((s) => s.isNew);
 
@@ -220,15 +216,11 @@ export function ProjectInfoView() {
     useSolutionStore.getState().loadFor(projectId, activeScenarioId);
   }, [projectId]);
 
-  // Expose Save to the shared header.
-  const setSaveHandler = useShellActions((s) => s.setSaveHandler);
-  useEffect(() => {
-    setSaveHandler(handleSave);
-    return () => setSaveHandler(null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canSave, readOnly, errors, scenario]);
-
-  const handleSave = (): boolean => {
+  /**
+   * Creates the project. Only reachable while it is new — an existing project
+   * persists on its own, so there is nothing here to trigger.
+   */
+  const handleCreate = (): boolean => {
     useFormTouch.getState().markSubmitAttempted();
     const savedId = useProjectStore.getState().draft?.project_id.trim();
     if (!save()) return false;
@@ -239,11 +231,11 @@ export function ProjectInfoView() {
     return true;
   };
 
-  const handleSaveAndContinue = () => {
+  const handleContinue = () => {
     const savedId = useProjectStore.getState().draft?.project_id.trim();
     const wasNew = isNew;
-    // Already clean? Then Save & Continue is just Continue.
-    if (dirty && !handleSave()) return;
+    // A project that does not exist yet has to be created before moving on.
+    if (wasNew && !handleCreate()) return;
     const step = nextStepFor(health);
     const target = savedId ?? projectId!;
     // 01 §15: new projects go to Import Components; existing ones follow readiness.
@@ -282,20 +274,16 @@ export function ProjectInfoView() {
       }
       actionBar={
         <ProjectActionBar
-          dirty={dirty}
+          isNew={isNew}
           readOnly={readOnly}
-          canSave={canSave && dirty}
+          canSave={canSave}
           canContinue={canSave}
           archived={draft.status === 'archived'}
           warningCount={warnings.length}
-          onCancel={() => {
-            useProjectStore.getState().revert();
-            toast.warning('Changes discarded / 已捨棄變更');
-          }}
           onDuplicate={() => setShowDuplicate(true)}
           onArchive={() => setShowArchive(true)}
-          onSave={handleSave}
-          onSaveAndContinue={handleSaveAndContinue}
+          onCreate={handleCreate}
+          onContinue={handleContinue}
         />
       }
     >
@@ -312,7 +300,7 @@ export function ProjectInfoView() {
           onDuplicated={(newId) => {
             setShowDuplicate(false);
             useProjectStore.getState().refreshProjects();
-            guardedNavigate(projectPath(newId, 'info'));
+            navigate(projectPath(newId, 'info'));
           }}
         />
       )}

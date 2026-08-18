@@ -4,14 +4,12 @@
  */
 
 import { useState } from 'react';
-import { useLocation } from 'react-router-dom';
-import { Download, HelpCircle, Lock, Save, Settings, Upload } from 'lucide-react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { Download, HelpCircle, Lock, Settings, Upload } from 'lucide-react';
 import { GROUP_LABELS_EN, SCREENS, projectPath } from './navigation';
 import { useProjectStore } from '@/data/projectStore';
 import { useScenarioStore } from '@/data/scenarioStore';
 import { useSolverStore } from '@/data/solverStore';
-import { useNavigationGuard } from './navigationGuard';
-import { useGuardedNavigate } from './useGuardedNavigate';
 import { toast } from '@/ui/toast';
 import { biTitle } from '@/ui/FieldLabel';
 import { triggerDownload } from '@/export/download';
@@ -91,7 +89,7 @@ function HeaderAction({
   badge,
   title,
 }: {
-  icon: typeof Save;
+  icon: typeof Upload;
   label: string;
   onClick?: () => void;
   disabled?: boolean;
@@ -122,13 +120,12 @@ function HeaderAction({
 const HEADER_SELECT_CLASS =
   "h-9 w-full appearance-none rounded-md border border-shell-600 bg-shell-700 bg-[url('data:image/svg+xml;utf8,<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"12\" height=\"12\" viewBox=\"0 0 12 12\"><path d=\"M2 4.5L6 8.5L10 4.5\" stroke=\"white\" stroke-width=\"1.5\" fill=\"none\" stroke-linecap=\"round\"/></svg>')] bg-[right_0.6rem_center] bg-no-repeat px-2.5 pr-7 text-[13px] font-medium text-white focus:border-accent-500 focus:outline-none disabled:opacity-50";
 
-export function TopHeader({ onSave }: { onSave?: () => void }) {
+export function TopHeader() {
   const location = useLocation();
-  const navigate = useGuardedNavigate();
+  const navigate = useNavigate();
 
   const draft = useProjectStore((s) => s.draft);
   const projects = useProjectStore((s) => s.projects);
-  const dirty = useProjectStore((s) => s.dirty);
   const isNew = useProjectStore((s) => s.isNew);
   const readOnly = useProjectStore((s) => s.isReadOnly());
 
@@ -149,18 +146,12 @@ export function TopHeader({ onSave }: { onSave?: () => void }) {
   } | null>(null);
 
   const activeScenario = scenarios.find((scenario) => scenario.id === activeScenarioId) ?? null;
-  // A project only exists on disk once saved, and that is what a file is built from.
+  // A project only exists on disk once created, and that is what a file is built from.
   const canExport = Boolean(draft && !isNew);
 
   const handleExport = () => {
     if (!draft || isNew) {
-      toast.error('Save the project before exporting a project file.');
-      return;
-    }
-    if (dirty) {
-      // A project file is built from storage, so unsaved edits would be missing
-      // from it — silently shipping a stale file is the worse failure here.
-      toast.error('Save your changes first — a project file contains the saved state.');
+      toast.error('Create the project before exporting a project file.');
       return;
     }
     const file = collectProject(draft.project_id, BUILD_ID);
@@ -188,17 +179,10 @@ export function TopHeader({ onSave }: { onSave?: () => void }) {
 
   const picker = useProjectFilePicker(openImport);
 
+  // Edits are already on disk, so switching away can never lose anything.
   const handleProjectChange = (value: string) => {
     if (value === '__new__') {
-      if (dirty) {
-        useNavigationGuard.getState().request({ kind: 'new-project' });
-        return;
-      }
       navigate('/project/new/info');
-      return;
-    }
-    if (dirty) {
-      useNavigationGuard.getState().request({ kind: 'switch-project', projectId: value });
       return;
     }
     navigate(projectPath(value, currentScreen.path));
@@ -280,8 +264,8 @@ export function TopHeader({ onSave }: { onSave?: () => void }) {
         </select>
       </div>
 
-      {/* Archived projects are read-only, and the disabled Save button alone
-          did not say why. */}
+      {/* An archived project accepts no edits, and nothing else in the header
+          says so. */}
       {readOnly && (
         <span
           className="flex items-center gap-1.5 rounded border border-accent-500/40 bg-accent-600/20 px-2 py-1 text-[11px] font-bold text-accent-500"
@@ -296,14 +280,6 @@ export function TopHeader({ onSave }: { onSave?: () => void }) {
       )}
 
       <div className="ml-auto flex items-center gap-1">
-        <HeaderAction
-          icon={Save}
-          label={dirty ? 'Unsaved' : 'Save'}
-          badge={dirty}
-          disabled={!onSave || readOnly}
-          onClick={onSave}
-          title={biTitle('Save the project', '儲存專案')}
-        />
         <HeaderAction
           icon={Upload}
           label="Import"
@@ -358,7 +334,7 @@ export function TopHeader({ onSave }: { onSave?: () => void }) {
       {dialog === 'settings' && (
         <SettingsDialog
           onClose={() => setDialog(null)}
-          canExport={canExport && !dirty}
+          canExport={canExport}
           onExportProject={() => {
             setDialog(null);
             handleExport();

@@ -2,10 +2,9 @@
  * Left sidebar — part of the Master App Shell (00 §49). Identical on 01–12.
  */
 
-import { useLocation, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { ChevronsLeft } from 'lucide-react';
 import { GROUP_ICONS, SCREEN_GROUPS, projectPath } from './navigation';
-import { useGuardedNavigate } from './useGuardedNavigate';
 
 export function MainSidebar({
   collapsed,
@@ -16,7 +15,7 @@ export function MainSidebar({
 }) {
   const { projectId } = useParams();
   const location = useLocation();
-  const navigate = useGuardedNavigate();
+  const navigate = useNavigate();
 
   return (
     <nav

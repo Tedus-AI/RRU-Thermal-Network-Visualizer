@@ -22,7 +22,6 @@ import {
 
 import { ScreenWorkspace } from '@/app/ScreenWorkspace';
 import { projectPath } from '@/app/navigation';
-import { useGuardedNavigate } from '@/app/useGuardedNavigate';
 import { Badge, Button, PanelCard } from '@/ui/primitives';
 import { toast } from '@/ui/toast';
 
@@ -95,7 +94,6 @@ function ActionBar({
 export function ImportComponentsView() {
   const { projectId } = useParams();
   const navigate = useNavigate();
-  const guardedNavigate = useGuardedNavigate();
   const [applyThenContinue, setApplyThenContinue] = useState(false);
 
   const projectStatus = useProjectStore((s) => s.status);
@@ -195,7 +193,7 @@ export function ImportComponentsView() {
         <Button
           variant="primary"
           trailingIcon={<ArrowRight size={14} />}
-          onClick={() => guardedNavigate(projectPath(projectId, 'components'))}
+          onClick={() => navigate(projectPath(projectId, 'components'))}
         >
           Review Components / 檢視元件
         </Button>
@@ -248,7 +246,7 @@ export function ImportComponentsView() {
           canApply={canApply}
           readOnly={readOnly}
           hasSession={Boolean(table)}
-          onBack={() => guardedNavigate(projectPath(projectId, 'info'))}
+          onBack={() => navigate(projectPath(projectId, 'info'))}
           onCancel={() => {
             store.cancel();
             toast.warning('Import cancelled — staged data cleared / 已取消匯入');

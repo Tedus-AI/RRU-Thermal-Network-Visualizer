@@ -21,7 +21,6 @@ import {
   Link2,
   Octagon,
   RotateCcw,
-  Save,
   Share2,
   TriangleAlert,
   XCircle,
@@ -29,7 +28,6 @@ import {
 
 import { ScreenWorkspace } from '@/app/ScreenWorkspace';
 import { projectPath } from '@/app/navigation';
-import { useGuardedNavigate } from '@/app/useGuardedNavigate';
 import { useShellActions } from '@/app/shellActions';
 import { Badge, Button, Modal, Select, Skeleton, TextInput } from '@/ui/primitives';
 import { FieldLabel } from '@/ui/FieldLabel';
@@ -197,7 +195,6 @@ function LoadingState() {
 export function ThermalPathBuilderView() {
   const { projectId } = useParams();
   const navigate = useNavigate();
-  const guardedNavigate = useGuardedNavigate();
   const canvasRef = useRef<CanvasHandle | null>(null);
   const pendingSourceRef = useRef<string | null>(null);
 
@@ -208,7 +205,6 @@ export function ThermalPathBuilderView() {
   const components = useComponentStore((s) => s.components);
   const network = useNetworkStore((s) => s.network);
   const validation = useNetworkStore((s) => s.validation);
-  const dirty = useNetworkStore((s) => s.dirty);
   const requiresReview = useNetworkStore((s) => s.requiresReview);
   const past = useNetworkStore((s) => s.past);
   const future = useNetworkStore((s) => s.future);
@@ -629,7 +625,6 @@ export function ThermalPathBuilderView() {
       badge={
         <div className="flex flex-wrap items-center gap-2">
           {readOnly && <Badge tone="accent">READ ONLY / 唯讀</Badge>}
-          {!readOnly && dirty && <Badge tone="warn">● Unsaved / 未儲存</Badge>}
           <Badge tone={network.status === 'NEEDS_REVIEW' ? 'warn' : 'neutral'}>
             {network.status}
           </Badge>
@@ -760,7 +755,7 @@ export function ThermalPathBuilderView() {
         <div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-line bg-surface px-6 py-3">
           <Button
             icon={<ArrowLeft size={15} />}
-            onClick={() => guardedNavigate(projectPath(projectId, 'components'))}
+            onClick={() => navigate(projectPath(projectId, 'components'))}
           >
             Back / 返回
           </Button>
@@ -795,9 +790,6 @@ export function ThermalPathBuilderView() {
               }}
             >
               Validate / 驗證
-            </Button>
-            <Button icon={<Save size={15} />} disabled={readOnly || !dirty} onClick={handleSave}>
-              Save Network / 儲存
             </Button>
             <Button
               variant="primary"
@@ -941,7 +933,7 @@ export function ThermalPathBuilderView() {
                   setStep('structure');
                 }}
                 onGoToComponents={() =>
-                  guardedNavigate(projectPath(projectId, 'components'))
+                  navigate(projectPath(projectId, 'components'))
                 }
               />
             ) : (

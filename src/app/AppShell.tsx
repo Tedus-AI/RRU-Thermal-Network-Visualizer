@@ -18,27 +18,31 @@ import { MainSidebar } from './MainSidebar';
 import { BottomStatusBar } from './BottomStatusBar';
 import { BreadcrumbBar } from './BreadcrumbBar';
 import { ToastViewport } from '@/ui/toast';
-import { UnsavedChangesModal } from '@/project/modals/UnsavedChangesModal';
-import { useShellActions } from './shellActions';
 import { ScreenErrorBoundary } from './ErrorBoundary';
 import { useProjectStore } from '@/data/projectStore';
 import { setSyncProject, startFolderAutoSync, useFolderStore } from '@/data/folderStore';
 import { WorkspaceGate } from './WorkspaceGate';
+import { startAutoPersist } from '@/data/autoPersist';
 
 export function AppShell() {
   const [collapsed, setCollapsed] = useState(false);
-  const saveHandler = useShellActions((s) => s.saveHandler);
   const location = useLocation();
   const projectId = useProjectStore((s) => s.draft?.project_id ?? null);
   const isNewProject = useProjectStore((s) => s.isNew);
 
-  // Pick up a folder bound in an earlier session, and start mirroring saves.
+  // Pick up a folder bound in an earlier session, then keep edits flowing to it:
+  // stores flush themselves, and the flush reaches the folder.
   useEffect(() => {
     void useFolderStore.getState().restore();
-    return startFolderAutoSync();
+    const stopSync = startFolderAutoSync();
+    const stopPersist = startAutoPersist();
+    return () => {
+      stopSync();
+      stopPersist();
+    };
   }, []);
 
-  // Only a saved project can be mirrored — an unsaved one is not on disk to read.
+  // Only a created project can be mirrored — a new one has no file yet.
   useEffect(() => {
     setSyncProject(isNewProject ? null : projectId);
   }, [projectId, isNewProject]);
@@ -46,7 +50,7 @@ export function AppShell() {
   return (
     <WorkspaceGate>
       <div className="flex h-full flex-col overflow-hidden">
-        <TopHeader onSave={saveHandler ?? undefined} />
+        <TopHeader />
         <div className="flex min-h-0 flex-1">
           <MainSidebar collapsed={collapsed} onToggle={() => setCollapsed((v) => !v)} />
           <main className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-canvas">
@@ -60,7 +64,6 @@ export function AppShell() {
           </main>
         </div>
         <BottomStatusBar />
-        <UnsavedChangesModal />
         <ToastViewport />
       </div>
     </WorkspaceGate>

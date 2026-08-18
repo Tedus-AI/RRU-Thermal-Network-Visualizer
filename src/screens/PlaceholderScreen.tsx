@@ -2,10 +2,9 @@
 
 import { useEffect } from 'react';
 import { FileClock, ShieldCheck } from 'lucide-react';
-import { useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 
 import { SCREENS, projectPath } from '@/app/navigation';
-import { useGuardedNavigate } from '@/app/useGuardedNavigate';
 import { Badge, Button } from '@/ui/primitives';
 import { useProjectStore } from '@/data/projectStore';
 import { useScenarioStore } from '@/data/scenarioStore';
@@ -17,7 +16,7 @@ import { useSolutionStore } from '@/data/solutionStore';
 export function PlaceholderScreen({ code }: { code: string }) {
   const screen = SCREENS.find((candidate) => candidate.code === code)!;
   const { projectId } = useParams();
-  const navigate = useGuardedNavigate();
+  const navigate = useNavigate();
 
   useEffect(() => {
     if (!projectId) return;

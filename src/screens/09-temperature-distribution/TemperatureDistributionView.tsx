@@ -31,7 +31,6 @@ import {
 
 import { ScreenWorkspace } from '@/app/ScreenWorkspace';
 import { projectPath } from '@/app/navigation';
-import { useGuardedNavigate } from '@/app/useGuardedNavigate';
 import { Badge, Button, Select, Skeleton } from '@/ui/primitives';
 import { EngineeringInfo, biTitle } from '@/ui/FieldLabel';
 import { toast } from '@/ui/toast';
@@ -178,7 +177,6 @@ function IconButton({
 export function TemperatureDistributionView() {
   const { projectId } = useParams();
   const navigate = useNavigate();
-  const guardedNavigate = useGuardedNavigate();
 
   const draft = useProjectStore((s) => s.draft);
   const projectStatus = useProjectStore((s) => s.status);
@@ -473,7 +471,7 @@ export function TemperatureDistributionView() {
               variant="primary"
               className="mt-4"
               onClick={() =>
-                guardedNavigate(projectPath(projectId, network ? 'network' : 'thermal-path'))
+                navigate(projectPath(projectId, network ? 'network' : 'thermal-path'))
               }
             >
               {network ? 'Open 07 Thermal Network / 前往 07' : 'Open 05 Thermal Path Builder / 前往 05'}
@@ -518,7 +516,7 @@ export function TemperatureDistributionView() {
           <Button
             icon={<ArrowLeft size={15} />}
             title={biTitle('Back to 08 Bottleneck Analysis', '回到 08 瓶頸分析')}
-            onClick={() => guardedNavigate(projectPath(projectId, 'bottleneck'))}
+            onClick={() => navigate(projectPath(projectId, 'bottleneck'))}
           >
             Back to 08 Bottleneck Analysis
           </Button>
@@ -569,7 +567,7 @@ export function TemperatureDistributionView() {
             className="ml-auto h-7 shrink-0 !text-[12px]"
             onClick={() =>
               solutionStale
-                ? guardedNavigate(projectPath(projectId, 'network'))
+                ? navigate(projectPath(projectId, 'network'))
                 : refreshFromSolution()
             }
           >

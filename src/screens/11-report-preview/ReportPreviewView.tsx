@@ -25,7 +25,6 @@ import { ArrowLeft, ArrowRight, RefreshCw, Save, Send, TriangleAlert } from 'luc
 
 import { ScreenWorkspace } from '@/app/ScreenWorkspace';
 import { projectPath } from '@/app/navigation';
-import { useGuardedNavigate } from '@/app/useGuardedNavigate';
 import { Badge, Button, Select, Skeleton, TextInput } from '@/ui/primitives';
 import { EngineeringInfo } from '@/ui/FieldLabel';
 import { toast } from '@/ui/toast';
@@ -189,7 +188,6 @@ function NoSnapshot({ onGoToOverview }: { onGoToOverview: () => void }) {
 export function ReportPreviewView() {
   const { projectId } = useParams();
   const navigate = useNavigate();
-  const guardedNavigate = useGuardedNavigate();
 
   const draft = useProjectStore((s) => s.draft);
   const projectStatus = useProjectStore((s) => s.status);
@@ -382,7 +380,7 @@ export function ReportPreviewView() {
     return Number(zoom) / 100;
   }, [zoom, canvasBox, config]);
 
-  const go = (path: string) => guardedNavigate(projectPath(projectId ?? '', path));
+  const go = (path: string) => navigate(projectPath(projectId ?? '', path));
 
   // --- gates ----------------------------------------------------------------
   if (projectStatus === 'loading' || (projectId && !draft)) return <LoadingState />;
@@ -480,7 +478,6 @@ export function ReportPreviewView() {
           </Badge>
           <Badge tone="neutral">{config.template_name}</Badge>
           <Badge tone="accent">{scenario.name}</Badge>
-          {storeDirty && <Badge tone="warn">Unsaved layout</Badge>}
         </span>
       }
       metrics={
