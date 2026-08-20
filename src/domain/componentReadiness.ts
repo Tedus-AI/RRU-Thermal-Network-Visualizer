@@ -5,7 +5,7 @@
  * engineer must be able to see exactly which of the nine facts is missing.
  */
 
-import { contactAreaMm2, isHeatSource, powerWOf, type Component } from './component';
+import { isHeatSource, powerWOf, sourceAreaMm2, type Component } from './component';
 import { valueOf } from './sourcedValue';
 
 export type ComponentStatus = 'READY' | 'WARNING' | 'ERROR' | 'DISABLED';
@@ -25,7 +25,7 @@ export const COMPLETENESS_ITEMS = [
   'Package',
   'Rjc',
   'Contact Geometry',
-  'Board Path',
+  'Heat Path',
   'TIM',
   'Architecture Prep',
 ] as const;
@@ -37,8 +37,8 @@ export const COMPLETENESS_ITEMS_ZH: Record<CompletenessItem, string> = {
   Limit: '溫度上限',
   Package: '封裝',
   Rjc: '接面熱阻',
-  'Contact Geometry': '接觸幾何',
-  'Board Path': '板級路徑',
+  'Contact Geometry': '熱源面幾何',
+  'Heat Path': '散熱路徑',
   TIM: '熱介面材料',
   'Architecture Prep': '架構準備',
 };
@@ -53,8 +53,8 @@ export function completenessOf(component: Component): CompletenessMap {
     Limit: spec.limit_type_confirmed && valueOf(spec.limit_C) != null,
     Package: spec.package_type != null && spec.package_type !== 'Unknown',
     Rjc: valueOf(spec.r_jc_C_per_W) != null,
-    'Contact Geometry': contactAreaMm2(spec.geometry) != null,
-    'Board Path': spec.board_path.type !== 'Custom' && spec.board_path.type != null,
+    'Contact Geometry': sourceAreaMm2(spec.geometry) != null,
+    'Heat Path': spec.heat_path_confirmed,
     TIM: spec.tim.type != null && spec.tim.type !== 'Custom',
     'Architecture Prep': component.architecture_prep.template_preference !== 'UNASSIGNED',
   };
@@ -133,13 +133,14 @@ export function validateComponent(component: Component): ComponentIssue[] {
     ['package_L_mm', 'Package L', '封裝長'],
     ['package_W_mm', 'Package W', '封裝寬'],
     ['package_H_mm', 'Package H', '封裝高'],
-    ['contact_L_mm', 'Contact L', '接觸面長'],
-    ['contact_W_mm', 'Contact W', '接觸面寬'],
-    ['pad_L_mm', 'Pad L', 'Pad 長'],
-    ['pad_W_mm', 'Pad W', 'Pad 寬'],
+    ['source_L_mm', 'Source face L', '熱源面長'],
+    ['source_W_mm', 'Source face W', '熱源面寬'],
+    ['spread_L_mm', 'Spread face L', '擴散面長'],
+    ['spread_W_mm', 'Spread face W', '擴散面寬'],
     ['board_thickness_mm', 'Board thickness', '板厚'],
     ['coin_thickness_mm', 'Coin thickness', 'Coin 厚度'],
-    ['custom_contact_area_mm2', 'Contact area', '接觸面積'],
+    ['custom_source_area_mm2', 'Source area', '熱源面積'],
+    ['custom_spread_area_mm2', 'Spread area', '擴散面積'],
   ];
   for (const [key, label, labelZh] of geometryFields) {
     const value = spec.geometry[key];
@@ -209,21 +210,21 @@ export function validateComponent(component: Component): ComponentIssue[] {
     });
   }
 
-  if (spec.board_path.type === 'Custom') {
+  if (!spec.heat_path_confirmed) {
     issues.push({
       severity: 'warning',
-      field: 'board_path.type',
-      message: 'Board path is unresolved (Custom).',
-      message_zh: '板級導熱路徑尚未確認（Custom）。',
+      field: 'heat_path.type',
+      message: `Heat path is assumed to be ${spec.heat_path.type} — it selects the whole resistance chain, so confirm it.`,
+      message_zh: `散熱路徑為推定值（${spec.heat_path.type}），它決定整條熱阻鏈，請確認。`,
     });
   }
 
-  if (isHeatSource(component) && contactAreaMm2(spec.geometry) == null) {
+  if (isHeatSource(component) && sourceAreaMm2(spec.geometry) == null) {
     issues.push({
       severity: 'warning',
       field: 'geometry',
-      message: 'Contact area is missing.',
-      message_zh: '缺少熱接觸面積。',
+      message: 'Source face size is missing.',
+      message_zh: '缺少熱源面尺寸。',
     });
   }
 

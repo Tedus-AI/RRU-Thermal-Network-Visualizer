@@ -13,12 +13,21 @@ import { ColumnLabel } from '@/ui/FieldLabel';
 import { COMPONENT_CATEGORIES, type ComponentCategory } from '@/domain/component';
 import { useComponentImportStore } from '@/data/componentImportStore';
 import { rowTotalPowerW } from '@/importers/component/summarize';
-import { DUPLICATE_POLICIES, type DuplicatePolicy, type StagingRow } from '@/importers/component/types';
+import {
+  DUPLICATE_POLICIES,
+  type DuplicatePolicy,
+  type StagingRow,
+} from '@/importers/component/types';
 import { ZH_NAMES, tip } from '@/i18n/componentImportCopy';
 
 const STATUS_META: Record<
   StagingRow['status'],
-  { label: string; zh: string; tone: 'ok' | 'warn' | 'danger' | 'accent' | 'neutral'; icon: typeof CheckCircle2 }
+  {
+    label: string;
+    zh: string;
+    tone: 'ok' | 'warn' | 'danger' | 'accent' | 'neutral';
+    icon: typeof CheckCircle2;
+  }
 > = {
   VALID: { label: 'Valid', zh: '有效', tone: 'ok', icon: CheckCircle2 },
   WARNING: { label: 'Warning', zh: '警告', tone: 'warn', icon: AlertTriangle },
@@ -43,7 +52,9 @@ function StatusCell({ row }: { row: StagingRow }) {
   const Icon = meta.icon;
   const errors = row.issues.filter((issue) => issue.severity === 'error');
   const warnings = row.issues.filter((issue) => issue.severity === 'warning');
-  const detail = [...errors, ...warnings].map((issue) => issue.message_zh ?? issue.message).join('\n');
+  const detail = [...errors, ...warnings]
+    .map((issue) => issue.message_zh ?? issue.message)
+    .join('\n');
 
   return (
     <span
@@ -224,16 +235,16 @@ export function ComponentPreviewTable() {
               </th>
               <th scope="col" className="px-2 py-2">
                 <ColumnLabel
-                  label="Board Type"
-                  zh={ZH_NAMES['Board Type']}
-                  tooltip={tip('Board Type')}
+                  label="Heat Path"
+                  zh={ZH_NAMES['Heat Path']}
+                  tooltip={tip('Heat Path')}
                 />
               </th>
               <th scope="col" className="px-2 py-2">
                 <ColumnLabel label="TIM" zh={ZH_NAMES.TIM} tooltip={tip('TIM')} />
               </th>
               <th scope="col" className="px-2 py-2 text-right">
-                <ColumnLabel label="Pad L / W" unit="mm" zh="Pad 長 / 寬" />
+                <ColumnLabel label="Source L / W" unit="mm" zh="熱源面長 / 寬" />
               </th>
               <th scope="col" className="px-2 py-2">
                 <ColumnLabel
@@ -368,12 +379,10 @@ export function ComponentPreviewTable() {
                       className={`${INPUT_CLASS} w-16 text-right`}
                     />
                   </td>
-                  <td className="tabular px-2 py-1.5 whitespace-nowrap">
-                    {row.board_type ?? '—'}
-                  </td>
+                  <td className="tabular px-2 py-1.5 whitespace-nowrap">{row.heat_path ?? '—'}</td>
                   <td className="tabular px-2 py-1.5 whitespace-nowrap">{row.tim_type ?? '—'}</td>
                   <td className="tabular px-2 py-1.5 text-right whitespace-nowrap">
-                    {numberCell(row.pad_L_mm, 1)} / {numberCell(row.pad_W_mm, 1)}
+                    {numberCell(row.source_L_mm, 1)} / {numberCell(row.source_W_mm, 1)}
                   </td>
                   <td className="px-2 py-1.5">
                     {row.duplicate_of ? (

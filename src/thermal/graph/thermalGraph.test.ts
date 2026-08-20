@@ -31,7 +31,7 @@ function component(overrides: Partial<Component> = {}): Component {
       limit_C: sourced(180, 'Datasheet'),
       r_jc_C_per_W: sourced(0.35, 'Datasheet'),
       package_type: 'QFN',
-      geometry: { ...emptyThermalSpec().geometry, contact_L_mm: 20, contact_W_mm: 10 },
+      geometry: { ...emptyThermalSpec().geometry, source_L_mm: 20, source_W_mm: 10 },
       tim: {
         ...emptyThermalSpec().tim,
         type: 'Grease',

@@ -20,18 +20,66 @@ export const COMPONENT_CATEGORIES = ['RF', 'Digital', 'Power', 'Filter', 'Other'
 export type ComponentCategory = (typeof COMPONENT_CATEGORIES)[number];
 
 /**
- * Board-level heat spreading path — 04 §11, §17.
- * Widened from the Screen 02 vocabulary, which had no Direct Metal / PCB Only.
+ * Which way heat actually leaves the component — 04 §11, §17.
+ *
+ * This was `BOARD_TYPES`, a list that mixed two ideas and hid a third:
+ *   - `None` did not mean "no path". In the Volume Evaluation Tool it means the
+ *     board path is skipped because heat leaves through the component's TOP
+ *     surface, which is a direction, not an absence.
+ *   - `PCB Only` and `Thermal Via` both described heat going down through the
+ *     board, so a component could be filed under either.
+ *   - `Custom` was not a path at all; it meant nobody had decided. That now
+ *     lives in `heat_path_confirmed`.
+ *
+ * The four that remain are the four the physics actually distinguishes, and
+ * each selects a different resistance chain (see TEMPLATE_FOR_HEAT_PATH).
  */
-export const BOARD_TYPES = [
-  'Thermal Via',
-  'Copper Coin',
-  'Direct Metal',
-  'PCB Only',
-  'None',
-  'Custom',
-] as const;
-export type BoardType = (typeof BOARD_TYPES)[number];
+export const HEAT_PATH_TYPES = ['Coin', 'Board', 'TopSurface', 'DirectMetal'] as const;
+export type HeatPathType = (typeof HEAT_PATH_TYPES)[number];
+
+export const HEAT_PATH_LABELS: Record<HeatPathType, { en: string; zh: string }> = {
+  Coin: { en: 'Copper Coin (down)', zh: '銅塊焊接（往下）' },
+  Board: { en: 'Board Vias (down)', zh: '板級導熱孔（往下）' },
+  TopSurface: { en: 'Top Surface (up)', zh: '元件表面（往上）' },
+  DirectMetal: { en: 'Direct Metal Mount', zh: '直接鎖附金屬' },
+};
+
+/**
+ * What the source face L/W MEANS for each path.
+ *
+ * One stored field, four readings. In the Volume Evaluation Tool the single
+ * `Pad_L` / `Pad_W` column already carried all of these — a Final PA's was the
+ * copper block joint, a bottom-cooled IC's was its E-PAD, a top-cooled part's
+ * was its case. The field is the same measurement in every case (the face heat
+ * leaves through); only its name in the world changes, so the label changes
+ * rather than the schema.
+ */
+export const SOURCE_FACE_LABELS: Record<HeatPathType, { en: string; zh: string }> = {
+  Coin: { en: 'Coin joint face', zh: '銅塊接合面' },
+  Board: { en: 'E-PAD', zh: 'E-PAD 散熱墊' },
+  TopSurface: { en: 'Case face', zh: 'Case 上表面' },
+  DirectMetal: { en: 'Contact face', zh: '鎖附接觸面' },
+};
+
+/**
+ * Best guess at a component's heat path, mirroring the category defaults the
+ * Volume Evaluation Tool ships (RF parts on copper coins, digital parts on
+ * thermal vias, power parts cooled from the top).
+ *
+ * As with `inferLimitType`, a guess must leave `heat_path_confirmed` false.
+ */
+export function inferHeatPath(category: ComponentCategory): HeatPathType {
+  switch (category) {
+    case 'RF':
+      return 'Coin';
+    case 'Power':
+      return 'TopSurface';
+    case 'Filter':
+      return 'DirectMetal';
+    default:
+      return 'Board';
+  }
+}
 
 /**
  * Thermal interface material — 04 §11.
@@ -122,6 +170,21 @@ export const ARCHITECTURE_TEMPLATE_LABELS: Record<ArchitectureTemplate, string> 
   CUSTOM: 'Custom',
 };
 
+/**
+ * The template each heat path implies — 05 §8, §11.
+ *
+ * This is a SUGGESTION Screen 04 offers and Screen 05 applies; picking a heat
+ * path never builds topology on its own (02 §34, 04 §40). `BARE_DIE`,
+ * `SMALL_BASE_HEAT_PIPE` and `CUSTOM` stay hand-picked — no heat path implies
+ * them, and Screen 05 can still reach every template and edit every edge.
+ */
+export const TEMPLATE_FOR_HEAT_PATH: Record<HeatPathType, ArchitectureTemplate> = {
+  Coin: 'BOTTOM_COOL_COIN',
+  Board: 'BOTTOM_COOL_VIA',
+  TopSurface: 'TOP_COOL_LID',
+  DirectMetal: 'DIRECT_METAL',
+};
+
 /** 04 §20 — a placement hint, never an actual base node. */
 export const BASE_ZONES = [
   'Unassigned',
@@ -149,18 +212,38 @@ export type ThermalProfileStatus = 'Not Assigned' | 'Draft' | 'Ready' | 'Custom'
 
 // ---------------------------------------------------------------------------
 
-/** 04 §16 — package and contact geometry. */
+/**
+ * 04 §16 — package geometry plus the two faces the resistance chain needs.
+ *
+ * Heat entering a spreading path and heat leaving it cross DIFFERENT areas, and
+ * conflating them is not a rounding error. For a 10 × 10 E-PAD on a 2.5 mm
+ * board the source face is 100 mm² and the spread face 156 mm², so a TIM
+ * resistance computed on the source face comes out 56% high.
+ *
+ * There used to be a `contact_*` pair AND a `pad_*` pair describing the same
+ * measurement, with `contactAreaMm2` silently preferring one. They are one pair
+ * now, named for the role rather than for the part of the package they sit on.
+ */
 export interface ComponentGeometry {
   package_L_mm: number | null;
   package_W_mm: number | null;
   package_H_mm: number | null;
-  /** Thermal contact footprint; falls back to pad dimensions when absent. */
-  contact_L_mm: number | null;
-  contact_W_mm: number | null;
-  /** Overrides the L × W product when the contact is not rectangular. */
-  custom_contact_area_mm2: number | null;
-  pad_L_mm: number | null;
-  pad_W_mm: number | null;
+  /**
+   * The face heat LEAVES the component through. What it is called depends on
+   * the heat path — see SOURCE_FACE_LABELS — but it is one measurement.
+   */
+  source_L_mm: number | null;
+  source_W_mm: number | null;
+  /** Overrides the L × W product when the face is not rectangular. */
+  custom_source_area_mm2: number | null;
+  /**
+   * The face heat leaves the SPREADING structure through: the coin's heatsink
+   * side, or the board footprint the via array has spread into. Left null it is
+   * derived per heat path (see `spreadAreaMm2`); set, it wins.
+   */
+  spread_L_mm: number | null;
+  spread_W_mm: number | null;
+  custom_spread_area_mm2: number | null;
   board_thickness_mm: number | null;
   coin_thickness_mm: number | null;
   /**
@@ -170,9 +253,9 @@ export interface ComponentGeometry {
   needs_review?: boolean;
 }
 
-/** 04 §17 — board path spec. Parameters differ per type; none of it is an edge. */
-export interface BoardPathSpec {
-  type: BoardType;
+/** 04 §17 — heat path spec. Parameters differ per type; none of it is an edge. */
+export interface HeatPathSpec {
+  type: HeatPathType;
   parameters: Record<string, number | string | boolean | null>;
 }
 
@@ -197,7 +280,13 @@ export interface ThermalSpec {
   r_jc_C_per_W: SourcedValue<number> | null;
   package_type: PackageType | null;
   geometry: ComponentGeometry;
-  board_path: BoardPathSpec;
+  heat_path: HeatPathSpec;
+  /**
+   * False while `heat_path.type` is only this tool's inference from category.
+   * The path selects the whole resistance chain, so an unchecked guess is worth
+   * flagging as loudly as an unchecked limit type.
+   */
+  heat_path_confirmed: boolean;
   tim: TimSpec;
 }
 
@@ -257,18 +346,19 @@ export function emptyGeometry(): ComponentGeometry {
     package_L_mm: null,
     package_W_mm: null,
     package_H_mm: null,
-    contact_L_mm: null,
-    contact_W_mm: null,
-    custom_contact_area_mm2: null,
-    pad_L_mm: null,
-    pad_W_mm: null,
+    source_L_mm: null,
+    source_W_mm: null,
+    custom_source_area_mm2: null,
+    spread_L_mm: null,
+    spread_W_mm: null,
+    custom_spread_area_mm2: null,
     board_thickness_mm: null,
     coin_thickness_mm: null,
   };
 }
 
-export function emptyBoardPath(): BoardPathSpec {
-  return { type: 'None', parameters: {} };
+export function emptyHeatPath(type: HeatPathType = 'Board'): HeatPathSpec {
+  return { type, parameters: {} };
 }
 
 export function emptyTim(): TimSpec {
@@ -281,7 +371,10 @@ export function emptyTim(): TimSpec {
   };
 }
 
-export function emptyThermalSpec(limitType: LimitType = 'Tj'): ThermalSpec {
+export function emptyThermalSpec(
+  limitType: LimitType = 'Tj',
+  heatPath: HeatPathType = 'Board',
+): ThermalSpec {
   return {
     limit_type: limitType,
     limit_type_confirmed: false,
@@ -289,7 +382,8 @@ export function emptyThermalSpec(limitType: LimitType = 'Tj'): ThermalSpec {
     r_jc_C_per_W: null,
     package_type: null,
     geometry: emptyGeometry(),
-    board_path: emptyBoardPath(),
+    heat_path: emptyHeatPath(heatPath),
+    heat_path_confirmed: false,
     tim: emptyTim(),
   };
 }
@@ -324,7 +418,7 @@ export function createComponent(input: {
     qty: input.qty ?? 1,
     power_W:
       input.power_W == null ? unknownValue<number>('Manual') : sourced(input.power_W, 'Manual'),
-    thermal_spec: emptyThermalSpec(inferLimitType(category, input.name)),
+    thermal_spec: emptyThermalSpec(inferLimitType(category, input.name), inferHeatPath(category)),
     architecture_prep: emptyArchitecturePrep(),
     provenance: input.provenance,
     external_mappings: emptyExternalMappings(),
@@ -359,14 +453,66 @@ export function isHeatSource(component: Component): boolean {
   return powerWOf(component) > 0;
 }
 
-/** Contact area, mm² — custom override wins, else contact L×W, else pad L×W. */
-export function contactAreaMm2(geometry: ComponentGeometry): number | null {
-  if (geometry.custom_contact_area_mm2 != null) return geometry.custom_contact_area_mm2;
-  if (geometry.contact_L_mm != null && geometry.contact_W_mm != null) {
-    return geometry.contact_L_mm * geometry.contact_W_mm;
-  }
-  if (geometry.pad_L_mm != null && geometry.pad_W_mm != null) {
-    return geometry.pad_L_mm * geometry.pad_W_mm;
+/** Source face area, mm² — a custom override wins, else L × W. */
+export function sourceAreaMm2(geometry: ComponentGeometry): number | null {
+  if (geometry.custom_source_area_mm2 != null) return geometry.custom_source_area_mm2;
+  if (geometry.source_L_mm != null && geometry.source_W_mm != null) {
+    return geometry.source_L_mm * geometry.source_W_mm;
   }
   return null;
+}
+
+/**
+ * Spread face area, mm² — the area heat leaves the spreading structure through.
+ *
+ * An explicit value always wins. Otherwise it is derived per heat path:
+ *
+ *   Board       heat spreads out by roughly one board thickness across the
+ *               footprint, the 45° approximation the Volume Evaluation Tool uses
+ *               (`Pad_L + Thick` by `Pad_W + Thick`).
+ *   Coin        the coin's heatsink-side face, which is a MECHANICAL decision
+ *               shared by the design, so it comes from the project defaults.
+ *               With none supplied this returns null rather than guessing — a
+ *               fabricated coin size would silently change every PA's margin.
+ *   TopSurface  nothing spreads; heat leaves the case face it entered.
+ *   DirectMetal same — the mount is modelled as its own edge in Screen 05.
+ */
+export function spreadAreaMm2(
+  geometry: ComponentGeometry,
+  heatPath: HeatPathType,
+  projectCoinAreaMm2: number | null = null,
+): number | null {
+  if (geometry.custom_spread_area_mm2 != null) return geometry.custom_spread_area_mm2;
+  if (geometry.spread_L_mm != null && geometry.spread_W_mm != null) {
+    return geometry.spread_L_mm * geometry.spread_W_mm;
+  }
+
+  if (heatPath === 'Coin') return projectCoinAreaMm2;
+
+  if (heatPath === 'Board') {
+    const { source_L_mm: L, source_W_mm: W, board_thickness_mm: t } = geometry;
+    if (L == null || W == null || t == null) return null;
+    return (L + t) * (W + t);
+  }
+
+  return sourceAreaMm2(geometry);
+}
+
+/**
+ * The area a conduction edge THROUGH the spreading structure sees.
+ *
+ * Neither face on its own is right: heat enters across the source face and
+ * leaves across the spread face, so the effective area is the geometric mean
+ * — the same approximation the Volume Evaluation Tool makes.
+ */
+export function spreadingAreaMm2(
+  geometry: ComponentGeometry,
+  heatPath: HeatPathType,
+  projectCoinAreaMm2: number | null = null,
+): number | null {
+  const source = sourceAreaMm2(geometry);
+  const spread = spreadAreaMm2(geometry, heatPath, projectCoinAreaMm2);
+  if (source == null || source <= 0) return null;
+  if (spread == null || spread <= 0) return source;
+  return Math.sqrt(source * spread);
 }

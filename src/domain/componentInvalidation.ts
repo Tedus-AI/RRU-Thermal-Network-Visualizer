@@ -41,12 +41,16 @@ export function effectOfChange(field: string, isMapped: boolean): InvalidationEf
     // Topology-shaping changes.
     case 'category':
     case 'qty':
-      return effect(true, true, field === 'qty' ? 'component_qty_changed' : 'component_architecture_changed');
+      return effect(
+        true,
+        true,
+        field === 'qty' ? 'component_qty_changed' : 'component_architecture_changed',
+      );
     case 'tim':
     case 'tim.type':
       return effect(true, true, 'component_tim_changed');
-    case 'board_path':
-    case 'board_path.type':
+    case 'heat_path':
+    case 'heat_path.type':
       return effect(true, true, 'component_architecture_changed');
     case 'geometry':
       return effect(true, true, 'component_geometry_changed');

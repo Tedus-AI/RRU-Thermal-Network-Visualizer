@@ -14,23 +14,27 @@ import {
   ARCHITECTURE_TEMPLATES,
   ARCHITECTURE_TEMPLATE_LABELS,
   BASE_ZONES,
-  BOARD_TYPES,
   COMPONENT_CATEGORIES,
+  HEAT_PATH_LABELS,
+  HEAT_PATH_TYPES,
   LIMIT_TYPES,
   LIMIT_TYPE_LABELS,
   PACKAGE_TYPES,
   QTY_MODELS,
   QTY_MODEL_LABELS,
+  SOURCE_FACE_LABELS,
+  TEMPLATE_FOR_HEAT_PATH,
   TIM_TYPES,
   componentTotalPowerW,
-  contactAreaMm2,
   isHeatSource,
+  sourceAreaMm2,
+  spreadAreaMm2,
   type ArchitectureTemplate,
   type BaseZone,
-  type BoardType,
   type Component,
   type ComponentCategory,
   type ComponentGeometry,
+  type HeatPathType,
   type LimitType,
   type PackageType,
   type QtyModel,
@@ -200,6 +204,20 @@ export function ComponentInspector({
 
   const patchGeometry = (patch: Partial<ComponentGeometry>) =>
     patchSpec({ geometry: { ...spec.geometry, ...patch } }, ['geometry']);
+
+  const heatPath = spec.heat_path.type;
+  const sourceArea = sourceAreaMm2(spec.geometry);
+  // Screen 01's project coin size arrives in a follow-up; until then a coin
+  // spread face has to be stated per component or it stays unresolved.
+  const spreadArea = spreadAreaMm2(spec.geometry, heatPath);
+  const spreadOrigin =
+    spec.geometry.custom_spread_area_mm2 != null || spec.geometry.spread_L_mm != null
+      ? 'Stated on this component / 由此元件指定'
+      : heatPath === 'Board'
+        ? 'Derived: (L + board thickness) × (W + board thickness) / 由 45° 擴散推導'
+        : heatPath === 'Coin'
+          ? 'Needs a coin size — state Spread L × W / 需指定銅塊尺寸'
+          : 'No spreading on this path / 此路徑無擴散，等於熱源面';
 
   const patchPrep = (patch: Partial<Component['architecture_prep']>) =>
     onPatch(component.id, { architecture_prep: { ...prep, ...patch } }, ['architecture_prep']);
@@ -520,112 +538,51 @@ export function ComponentInspector({
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-2.5">
-                <GeometryField
-                  label="Contact L"
-                  zh="接觸面長"
-                  field="contact_L_mm"
-                  geometry={spec.geometry}
-                  readOnly={readOnly}
-                  onChange={patchGeometry}
-                />
-                <GeometryField
-                  label="Contact W"
-                  zh="接觸面寬"
-                  field="contact_W_mm"
-                  geometry={spec.geometry}
-                  readOnly={readOnly}
-                  onChange={patchGeometry}
-                />
-                <GeometryField
-                  label="Pad / EPAD L"
-                  zh="Pad 長"
-                  field="pad_L_mm"
-                  geometry={spec.geometry}
-                  readOnly={readOnly}
-                  onChange={patchGeometry}
-                />
-                <GeometryField
-                  label="Pad / EPAD W"
-                  zh="Pad 寬"
-                  field="pad_W_mm"
-                  geometry={spec.geometry}
-                  readOnly={readOnly}
-                  onChange={patchGeometry}
-                />
-              </div>
-
-              <div className="rounded-md border border-line bg-surface-muted px-3 py-2">
-                <div className="flex items-baseline justify-between">
-                  <BilingualTooltip zh={tip('Contact Area') ?? ''} align="left">
-                    <span className="text-[12px] text-ink-500">Contact Area / 接觸面積</span>
-                  </BilingualTooltip>
-                  <span className="tabular text-[13px] font-bold">
-                    {contactAreaMm2(spec.geometry) == null
-                      ? '—'
-                      : `${contactAreaMm2(spec.geometry)!.toFixed(1)} mm²`}
-                  </span>
-                </div>
-                <p className="mt-1 text-[11px] text-ink-400">
-                  {spec.geometry.custom_contact_area_mm2 != null
-                    ? 'Custom area / 自訂面積'
-                    : 'Derived from L × W / 由長寬導出'}
-                </p>
-              </div>
-
-              <GeometryField
-                label="Custom Contact Area"
-                zh="自訂接觸面積 (mm²)"
-                field="custom_contact_area_mm2"
-                geometry={spec.geometry}
-                readOnly={readOnly}
-                onChange={patchGeometry}
-              />
-
-              <div className="grid grid-cols-2 gap-2.5">
-                <GeometryField
-                  label="Board Thk"
-                  zh="板厚"
-                  field="board_thickness_mm"
-                  geometry={spec.geometry}
-                  readOnly={readOnly}
-                  onChange={patchGeometry}
-                />
-                <GeometryField
-                  label="Coin Thk"
-                  zh="Coin 厚"
-                  field="coin_thickness_mm"
-                  geometry={spec.geometry}
-                  readOnly={readOnly}
-                  onChange={patchGeometry}
-                />
-              </div>
-
-              {/* --- Board path (04 §17) --- */}
+              {/* --- Heat path (04 §17) --- */}
               <fieldset className="rounded-md border border-line p-3">
                 <legend className="px-1 text-[12px] font-semibold text-ink-700">
-                  Board Path / 板級路徑
+                  Heat Path / 主要散熱路徑
                 </legend>
                 <div className="flex flex-col gap-3">
                   <Select
-                    aria-label="Board path type"
-                    options={BOARD_TYPES}
-                    value={spec.board_path.type}
+                    aria-label="Heat path type"
+                    items={HEAT_PATH_TYPES.map((type) => ({
+                      value: type,
+                      label: `${HEAT_PATH_LABELS[type].en} / ${HEAT_PATH_LABELS[type].zh}`,
+                    }))}
+                    value={heatPath}
                     disabled={readOnly}
                     onChange={(event) =>
                       patchSpec(
                         {
-                          board_path: {
-                            ...spec.board_path,
-                            type: event.target.value as BoardType,
+                          heat_path: {
+                            ...spec.heat_path,
+                            type: event.target.value as HeatPathType,
                           },
+                          // Picking a path IS the confirmation.
+                          heat_path_confirmed: true,
                         },
-                        ['board_path.type'],
+                        ['heat_path.type'],
                       )
                     }
                   />
+                  {spec.heat_path_confirmed ? (
+                    <p className="text-[11px] text-ink-400">
+                      Suggests the {ARCHITECTURE_TEMPLATE_LABELS[TEMPLATE_FOR_HEAT_PATH[heatPath]]}{' '}
+                      template. Picking a path does not build topology — Screen 05 does.
+                      <span className="block">
+                        建議套用「{ARCHITECTURE_TEMPLATE_LABELS[TEMPLATE_FOR_HEAT_PATH[heatPath]]}
+                        」模板。選擇路徑不會建立 Node/Edge，那是 Screen 05 的工作。
+                      </span>
+                    </p>
+                  ) : (
+                    <p className="text-[11px] text-warn-600">
+                      Assumed from category — it selects the whole resistance chain, so confirm it.
+                      <span className="block">依類別推定，它決定整條熱阻鏈，請確認。</span>
+                    </p>
+                  )}
 
-                  {spec.board_path.type === 'Thermal Via' && (
+                  {heatPath === 'Board' && (
                     <div className="grid grid-cols-2 gap-2.5">
                       {(
                         [
@@ -636,20 +593,20 @@ export function ComponentInspector({
                         ] as const
                       ).map(([key, label, zh]) => (
                         <div key={key} className="flex flex-col gap-1.5">
-                          <FieldLabel label={label} zh={zh} htmlFor={`bp-${key}`} />
+                          <FieldLabel label={label} zh={zh} htmlFor={`hp-${key}`} />
                           <NumberInput
-                            id={`bp-${key}`}
+                            id={`hp-${key}`}
                             step="any"
-                            value={(spec.board_path.parameters[key] as number) ?? ''}
+                            value={(spec.heat_path.parameters[key] as number) ?? ''}
                             placeholder="—"
                             disabled={readOnly}
                             onChange={(event) =>
                               patchSpec(
                                 {
-                                  board_path: {
-                                    ...spec.board_path,
+                                  heat_path: {
+                                    ...spec.heat_path,
                                     parameters: {
-                                      ...spec.board_path.parameters,
+                                      ...spec.heat_path.parameters,
                                       [key]:
                                         event.target.value === ''
                                           ? null
@@ -657,66 +614,119 @@ export function ComponentInspector({
                                     },
                                   },
                                 },
-                                ['board_path'],
+                                ['heat_path'],
                               )
                             }
                           />
                         </div>
                       ))}
-                    </div>
-                  )}
-
-                  {spec.board_path.type === 'Copper Coin' && (
-                    <div className="grid grid-cols-2 gap-2.5">
-                      {(
-                        [
-                          ['coin_L_mm', 'Coin L', 'Coin 長'],
-                          ['coin_W_mm', 'Coin W', 'Coin 寬'],
-                          ['coin_thickness_mm', 'Coin Thk', 'Coin 厚'],
-                          ['copper_k_W_mK', 'Copper k', '銅導熱係數'],
-                        ] as const
-                      ).map(([key, label, zh]) => (
-                        <div key={key} className="flex flex-col gap-1.5">
-                          <FieldLabel label={label} zh={zh} htmlFor={`bp-${key}`} />
-                          <NumberInput
-                            id={`bp-${key}`}
-                            step="any"
-                            value={(spec.board_path.parameters[key] as number) ?? ''}
-                            placeholder="—"
-                            disabled={readOnly}
-                            onChange={(event) =>
-                              patchSpec(
-                                {
-                                  board_path: {
-                                    ...spec.board_path,
-                                    parameters: {
-                                      ...spec.board_path.parameters,
-                                      [key]:
-                                        event.target.value === ''
-                                          ? null
-                                          : Number(event.target.value),
-                                    },
-                                  },
-                                },
-                                ['board_path'],
-                              )
-                            }
-                          />
-                        </div>
-                      ))}
-                      <p className="col-span-2 text-[11px] text-ink-400">
-                        This screen does not create a Copper Coin edge. / 本頁不建立 Copper Coin
-                        Edge。
-                      </p>
                     </div>
                   )}
                 </div>
               </fieldset>
 
+              {/* Source face — one measurement, named for the path it serves. */}
+              <div className="grid grid-cols-2 gap-2.5">
+                <GeometryField
+                  label={`${SOURCE_FACE_LABELS[heatPath].en} L`}
+                  zh={`${SOURCE_FACE_LABELS[heatPath].zh}長`}
+                  field="source_L_mm"
+                  geometry={spec.geometry}
+                  readOnly={readOnly}
+                  onChange={patchGeometry}
+                />
+                <GeometryField
+                  label={`${SOURCE_FACE_LABELS[heatPath].en} W`}
+                  zh={`${SOURCE_FACE_LABELS[heatPath].zh}寬`}
+                  field="source_W_mm"
+                  geometry={spec.geometry}
+                  readOnly={readOnly}
+                  onChange={patchGeometry}
+                />
+              </div>
+
+              <div className="rounded-md border border-line bg-surface-muted px-3 py-2">
+                <div className="flex items-baseline justify-between">
+                  <BilingualTooltip zh={tip('Source Area') ?? ''} align="left">
+                    <span className="text-[12px] text-ink-500">Source Area / 熱源面積</span>
+                  </BilingualTooltip>
+                  <span className="tabular text-[13px] font-bold">
+                    {sourceArea == null ? '—' : `${sourceArea.toFixed(1)} mm²`}
+                  </span>
+                </div>
+                <div className="mt-1.5 flex items-baseline justify-between">
+                  <BilingualTooltip zh={tip('Spread Area') ?? ''} align="left">
+                    <span className="text-[12px] text-ink-500">Spread Area / 擴散面積</span>
+                  </BilingualTooltip>
+                  <span className="tabular text-[13px] font-bold">
+                    {spreadArea == null ? '—' : `${spreadArea.toFixed(1)} mm²`}
+                  </span>
+                </div>
+                <p className="mt-1 text-[11px] text-ink-400">{spreadOrigin}</p>
+              </div>
+
+              {/* Spread face — blank means derived, so it is optional by design. */}
+              <div className="grid grid-cols-2 gap-2.5">
+                <GeometryField
+                  label="Spread L"
+                  zh="擴散面長"
+                  field="spread_L_mm"
+                  geometry={spec.geometry}
+                  readOnly={readOnly}
+                  onChange={patchGeometry}
+                />
+                <GeometryField
+                  label="Spread W"
+                  zh="擴散面寬"
+                  field="spread_W_mm"
+                  geometry={spec.geometry}
+                  readOnly={readOnly}
+                  onChange={patchGeometry}
+                />
+                <GeometryField
+                  label="Custom Source Area"
+                  zh="自訂熱源面積 (mm²)"
+                  field="custom_source_area_mm2"
+                  geometry={spec.geometry}
+                  readOnly={readOnly}
+                  onChange={patchGeometry}
+                />
+                <GeometryField
+                  label="Custom Spread Area"
+                  zh="自訂擴散面積 (mm²)"
+                  field="custom_spread_area_mm2"
+                  geometry={spec.geometry}
+                  readOnly={readOnly}
+                  onChange={patchGeometry}
+                />
+              </div>
+
+              {/* Only the thickness this path actually conducts through. */}
+              {heatPath === 'Coin' && (
+                <GeometryField
+                  label="Coin Thickness"
+                  zh="銅塊厚度"
+                  field="coin_thickness_mm"
+                  geometry={spec.geometry}
+                  readOnly={readOnly}
+                  onChange={patchGeometry}
+                />
+              )}
+              {heatPath === 'Board' && (
+                <GeometryField
+                  label="Board Thickness"
+                  zh="板厚"
+                  field="board_thickness_mm"
+                  geometry={spec.geometry}
+                  readOnly={readOnly}
+                  onChange={patchGeometry}
+                />
+              )}
+
               {spec.geometry.needs_review && (
                 <p className="rounded-md border border-warn-500/30 bg-warn-100/60 p-2.5 text-[11px] leading-relaxed text-warn-600">
-                  Imported legacy geometry needs review — Height / Thickness / Pad may follow Volume
-                  Tool semantics.
+                  Imported legacy geometry needs review — Thickness / Pad may follow Volume Tool
+                  semantics.
                   <span className="block">
                     匯入的舊版幾何資料需人工確認（可能沿用舊工具定義）。
                   </span>

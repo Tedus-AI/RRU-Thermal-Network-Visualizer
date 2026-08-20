@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { detectDelimiter, parseDelimitedText, splitDelimitedLine } from './parseTable';
 import { autoMapColumns, matchCanonicalField } from './autoMapColumns';
 import {
-  normalizeBoardType,
+  normalizeHeatPath,
   normalizeCategory,
   normalizeTim,
   parseNumericCell,
@@ -84,12 +84,12 @@ describe('delimited parsing', () => {
 
 describe('column auto-mapping', () => {
   it('maps the canonical legacy schema with no user interaction', () => {
-    const headers = ['Component', 'Qty', 'Power(W)', 'Pad_L', 'R_jc', 'TIM_Type'];
+    const headers = ['Component', 'Qty', 'Power(W)', 'Source_L', 'R_jc', 'TIM_Type'];
     expect(autoMapColumns(headers)).toEqual([
       'Component',
       'Qty',
       'Power(W)',
-      'Pad_L',
+      'Source_L',
       'R_jc',
       'TIM_Type',
     ]);
@@ -100,6 +100,21 @@ describe('column auto-mapping', () => {
   it('no longer claims the legacy Height column', () => {
     expect(matchCanonicalField('Height(mm)')).toBeNull();
     expect(autoMapColumns(['Component', 'Height(mm)'])).toEqual(['Component', 'Ignore Column']);
+  });
+
+  // An export written before the rename must still map itself with no help.
+  it('maps the pre-rename column names onto their new fields', () => {
+    expect(autoMapColumns(['Pad_L', 'Pad_W', 'Board_Type'])).toEqual([
+      'Source_L',
+      'Source_W',
+      'Heat_Path',
+    ]);
+  });
+
+  it('maps the Volume Tool Traditional Chinese headers', () => {
+    expect(matchCanonicalField('Pad 長 (mm)')).toBe('Source_L');
+    expect(matchCanonicalField('Pad 寬 (mm)')).toBe('Source_W');
+    expect(matchCanonicalField('導熱方式')).toBe('Heat_Path');
   });
 
   it('maps the alias headers from the specification', () => {
@@ -155,11 +170,19 @@ describe('enum normalization', () => {
     expect(normalizeCategory('digital')).toBe('Digital');
   });
 
-  it('maps board type aliases and falls back to Custom', () => {
-    expect(normalizeBoardType('Cu Coin')).toBe('Copper Coin');
-    expect(normalizeBoardType('Thermal Vias')).toBe('Thermal Via');
-    expect(normalizeBoardType('No Board Path')).toBe('None');
-    expect(normalizeBoardType('Something Else')).toBe('Custom');
+  it('maps heat path aliases, including the Volume Tool vocabulary', () => {
+    expect(normalizeHeatPath('Cu Coin')).toBe('Coin');
+    expect(normalizeHeatPath('Thermal Vias')).toBe('Board');
+    expect(normalizeHeatPath('Direct Metal')).toBe('DirectMetal');
+    // `None` is top-surface cooling in the Volume Tool, not an absent path.
+    expect(normalizeHeatPath('None')).toBe('TopSurface');
+  });
+
+  // There is no Custom heat path to park an unknown in, so it stays null and
+  // the caller infers — which is visible — instead of hiding it in an enum.
+  it('returns null for text it cannot recognise', () => {
+    expect(normalizeHeatPath('Something Else')).toBeNull();
+    expect(normalizeHeatPath('')).toBeNull();
   });
 
   it('keeps Solder and Gap Filler as first-class TIM types (04 §11)', () => {
@@ -492,14 +515,14 @@ describe('legacy adapter', () => {
         source_file: null,
         imported_at: '2026-01-01T00:00:00Z',
       },
-      normalizeBoardType,
+      normalizeHeatPath,
       normalizeTim,
     });
 
     expect(canonical.name).toBe('Final PA');
     expect(canonical.category).toBe('RF');
     expect(canonical.thermal_spec.r_jc_C_per_W?.value).toBe(0.35);
-    expect(canonical.thermal_spec.board_path.type).toBe('Copper Coin');
+    expect(canonical.thermal_spec.heat_path.type).toBe('Coin');
     // 04 §30 — legacy geometry semantics must be confirmed, not assumed.
     expect(canonical.thermal_spec.geometry.needs_review).toBeUndefined();
     expect(canonical.metadata?.customField).toBe('keep me');

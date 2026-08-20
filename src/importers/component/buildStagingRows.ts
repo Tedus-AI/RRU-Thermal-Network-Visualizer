@@ -6,10 +6,11 @@
 import type { Component } from '@/domain/component';
 import {
   fellBackToCustom,
-  normalizeBoardType,
   normalizeCategory,
+  normalizeHeatPath,
   normalizeTim,
   parseNumericCell,
+  unrecognisedHeatPath,
 } from './normalizeComponent';
 import {
   IGNORE_COLUMN,
@@ -74,13 +75,17 @@ export function buildStagingRows({
     const power = parseNumericCell(cellFor(cells, mapping, 'Power(W)'));
     const rjc = parseNumericCell(cellFor(cells, mapping, 'R_jc'));
     const limit = parseNumericCell(cellFor(cells, mapping, 'Limit(C)'));
-    const padL = parseNumericCell(cellFor(cells, mapping, 'Pad_L'));
-    const padW = parseNumericCell(cellFor(cells, mapping, 'Pad_W'));
+    const sourceL = parseNumericCell(cellFor(cells, mapping, 'Source_L'));
+    const sourceW = parseNumericCell(cellFor(cells, mapping, 'Source_W'));
+    const spreadL = parseNumericCell(cellFor(cells, mapping, 'Spread_L'));
+    const spreadW = parseNumericCell(cellFor(cells, mapping, 'Spread_W'));
     const thickness = parseNumericCell(cellFor(cells, mapping, 'Thick(mm)'));
+    const timK = parseNumericCell(cellFor(cells, mapping, 'TIM_k'));
+    const timBlt = parseNumericCell(cellFor(cells, mapping, 'TIM_BLT'));
 
-    const rawBoardType = cellFor(cells, mapping, 'Board_Type');
+    const rawHeatPath = cellFor(cells, mapping, 'Heat_Path');
     const rawTim = cellFor(cells, mapping, 'TIM_Type');
-    const boardType = normalizeBoardType(rawBoardType);
+    const heatPath = normalizeHeatPath(rawHeatPath);
     const tim = normalizeTim(rawTim);
 
     const duplicate = existingByKey.get(duplicateKey(name, category));
@@ -94,10 +99,14 @@ export function buildStagingRows({
       power_W: power.value,
       r_jc_C_per_W: rjc.value,
       limit_C: limit.value,
-      board_type: boardType,
+      heat_path: heatPath,
       tim_type: tim,
-      pad_L_mm: padL.value,
-      pad_W_mm: padW.value,
+      tim_k_W_mK: timK.value,
+      tim_thickness_mm: timBlt.value,
+      source_L_mm: sourceL.value,
+      source_W_mm: sourceW.value,
+      spread_L_mm: spreadL.value,
+      spread_W_mm: spreadW.value,
       thickness_mm: thickness.value,
       raw,
       extra,
@@ -113,11 +122,15 @@ export function buildStagingRows({
         'Power(W)': power.invalid,
         R_jc: rjc.invalid,
         'Limit(C)': limit.invalid,
-        Pad_L: padL.invalid,
-        Pad_W: padW.invalid,
+        Source_L: sourceL.invalid,
+        Source_W: sourceW.invalid,
+        Spread_L: spreadL.invalid,
+        Spread_W: spreadW.invalid,
+        TIM_k: timK.invalid,
+        TIM_BLT: timBlt.invalid,
         'Thick(mm)': thickness.invalid,
       },
-      boardTypeFallback: fellBackToCustom(rawBoardType, boardType),
+      heatPathUnrecognised: unrecognisedHeatPath(rawHeatPath, heatPath),
       timFallback: fellBackToCustom(rawTim, tim),
       unmappedRequired: REQUIRED_FIELDS.filter((field) => !mapping.includes(field)),
     });
@@ -126,7 +139,7 @@ export function buildStagingRows({
 
 export interface ValidateContext {
   invalidNumerics?: Partial<Record<CanonicalField, boolean>>;
-  boardTypeFallback?: boolean;
+  heatPathUnrecognised?: boolean;
   timFallback?: boolean;
   unmappedRequired?: CanonicalField[];
 }
@@ -266,12 +279,30 @@ export function validateStagingRow(row: StagingRow, context: ValidateContext = {
     });
   }
 
-  if (context.boardTypeFallback) {
+  // The heat path selects the whole resistance chain, so a missing or
+  // unreadable one is worth saying out loud even though it never blocks.
+  if (context.heatPathUnrecognised) {
     issues.push({
       severity: 'warning',
-      field: 'Board_Type',
-      message: `Unrecognised board type "${row.raw.Board_Type ?? ''}" mapped to Custom.`,
-      message_zh: `無法辨識的板材類型「${row.raw.Board_Type ?? ''}」，已對應為 Custom。`,
+      field: 'Heat_Path',
+      message: `Unrecognised heat path "${row.raw.Heat_Path ?? ''}" — it will be inferred from the category.`,
+      message_zh: `無法辨識的散熱路徑「${row.raw.Heat_Path ?? ''}」，將依類別推定。`,
+    });
+  } else if (row.heat_path == null) {
+    issues.push({
+      severity: 'warning',
+      field: 'Heat_Path',
+      message: 'Heat path is missing — it will be inferred from the category.',
+      message_zh: '缺少散熱路徑，將依類別推定。',
+    });
+  }
+
+  if (row.source_L_mm == null || row.source_W_mm == null) {
+    issues.push({
+      severity: 'warning',
+      field: 'Source_L',
+      message: 'Source face size is missing — spreading and TIM resistance cannot be computed.',
+      message_zh: '缺少熱源面尺寸，將無法計算擴散與 TIM 熱阻。',
     });
   }
 

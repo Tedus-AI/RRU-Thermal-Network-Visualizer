@@ -19,7 +19,7 @@ import {
   type LimitType,
   type PackageType,
   type TimType,
-  type BoardType,
+  type HeatPathType,
 } from '@/domain/component';
 import type { SourceRevision } from '@/domain/revision';
 import { sourced, type SourcedValue, type ThermalDataSource } from '@/domain/sourcedValue';
@@ -128,7 +128,7 @@ interface Seed {
   limit_C: number;
   limit_type: LimitType;
   package_type: PackageType;
-  board_type: BoardType;
+  heat_path: HeatPathType;
   tim: TimType;
   contact: [number, number];
   template: ArchitectureTemplate;
@@ -166,13 +166,13 @@ function buildReadyComponents(seeds: Seed[]): Component[] {
           package_L_mm: seed.contact[0] + 2,
           package_W_mm: seed.contact[1] + 2,
           package_H_mm: 2,
-          contact_L_mm: seed.contact[0],
-          contact_W_mm: seed.contact[1],
-          pad_L_mm: seed.contact[0],
-          pad_W_mm: seed.contact[1],
+          source_L_mm: seed.contact[0],
+          source_W_mm: seed.contact[1],
           board_thickness_mm: 1.6,
         },
-        board_path: { type: seed.board_type, parameters: {} },
+        heat_path: { type: seed.heat_path, parameters: {} },
+        // The demo states every heat path deliberately, so none is a guess.
+        heat_path_confirmed: true,
         tim: {
           ...spec.tim,
           type: seed.tim,
@@ -207,7 +207,7 @@ export function demoComponents(): Component[] {
       limit_C: 150,
       limit_type: 'Tj',
       package_type: 'QFN',
-      board_type: 'Copper Coin',
+      heat_path: 'Coin',
       tim: 'Grease',
       contact: [18, 12],
       template: 'BOTTOM_COOL_COIN',
@@ -223,7 +223,7 @@ export function demoComponents(): Component[] {
       limit_C: 140,
       limit_type: 'Tj',
       package_type: 'QFN',
-      board_type: 'Thermal Via',
+      heat_path: 'Board',
       tim: 'Pad',
       contact: [8, 8],
       template: 'BOTTOM_COOL_VIA',
@@ -239,7 +239,7 @@ export function demoComponents(): Component[] {
       limit_C: 120,
       limit_type: 'Tc',
       package_type: 'Shielded Module',
-      board_type: 'Direct Metal',
+      heat_path: 'DirectMetal',
       tim: 'Pad',
       contact: [30, 18],
       template: 'DIRECT_METAL',
@@ -255,7 +255,7 @@ export function demoComponents(): Component[] {
       limit_C: 125,
       limit_type: 'Tj',
       package_type: 'BGA',
-      board_type: 'Thermal Via',
+      heat_path: 'Board',
       tim: 'Putty',
       contact: [28, 28],
       template: 'BOTTOM_COOL_VIA',
@@ -271,7 +271,7 @@ export function demoComponents(): Component[] {
       limit_C: 115,
       limit_type: 'Tc',
       package_type: 'Module',
-      board_type: 'Direct Metal',
+      heat_path: 'DirectMetal',
       tim: 'Grease',
       contact: [24, 20],
       template: 'DIRECT_METAL',
@@ -293,7 +293,7 @@ export function demoSourceComponents(): Component[] {
       limit_C: 150,
       limit_type: 'Tj',
       package_type: 'QFN',
-      board_type: 'Copper Coin',
+      heat_path: 'Coin',
       tim: 'Grease',
       contact: [18, 12],
       template: 'BOTTOM_COOL_COIN',
@@ -309,7 +309,7 @@ export function demoSourceComponents(): Component[] {
       limit_C: 125,
       limit_type: 'Tj',
       package_type: 'BGA',
-      board_type: 'Thermal Via',
+      heat_path: 'Board',
       tim: 'Putty',
       contact: [28, 28],
       template: 'BOTTOM_COOL_VIA',
@@ -325,7 +325,7 @@ export function demoSourceComponents(): Component[] {
       limit_C: 110,
       limit_type: 'Tj',
       package_type: 'QFN',
-      board_type: 'Thermal Via',
+      heat_path: 'Board',
       tim: 'Pad',
       contact: [5, 5],
       template: 'BOTTOM_COOL_VIA',

@@ -10,12 +10,16 @@ import {
 import { combineEffects, effectOfChange, isMappedToNetwork } from './componentInvalidation';
 import {
   componentTotalPowerW,
-  contactAreaMm2,
+  sourceAreaMm2,
   createComponent,
   emptyArchitecturePrep,
   emptyExternalMappings,
+  TEMPLATE_FOR_HEAT_PATH,
   emptyThermalSpec,
+  inferHeatPath,
   inferLimitType,
+  spreadAreaMm2,
+  spreadingAreaMm2,
   totalPowerW,
   type Component,
 } from './component';
@@ -26,7 +30,7 @@ import {
   canonicalComponentToLegacy,
   legacyComponentToCanonical,
 } from '@/adapters/legacyComponentAdapter';
-import { normalizeBoardType, normalizeTim } from '@/importers/component/normalizeComponent';
+import { normalizeHeatPath, normalizeTim } from '@/importers/component/normalizeComponent';
 import { toLibraryEntry, fromLibraryEntry } from '@/data/componentLibraryStore';
 
 function base(overrides: Partial<Component> = {}): Component {
@@ -61,8 +65,9 @@ function readyPA(): Component {
       limit_C: sourced(180, 'Datasheet'),
       r_jc_C_per_W: sourced(0.35, 'Datasheet'),
       package_type: 'QFN',
-      geometry: { ...emptyThermalSpec().geometry, contact_L_mm: 20, contact_W_mm: 10 },
-      board_path: { type: 'Copper Coin', parameters: {} },
+      geometry: { ...emptyThermalSpec().geometry, source_L_mm: 20, source_W_mm: 10 },
+      heat_path: { type: 'Coin', parameters: {} },
+      heat_path_confirmed: true,
       tim: { ...emptyThermalSpec().tim, type: 'Grease', inheritance: 'component' },
     },
     architecture_prep: {
@@ -169,21 +174,84 @@ describe('component readiness', () => {
     expect(statusOf(passive)).toBe('READY');
   });
 
-  it('derives contact area from contact dims, pad dims or a custom override', () => {
+  it('derives source area from L × W, or a custom override', () => {
     const geometry = emptyThermalSpec().geometry;
-    expect(contactAreaMm2(geometry)).toBeNull();
-    expect(contactAreaMm2({ ...geometry, pad_L_mm: 4, pad_W_mm: 5 })).toBe(20);
+    expect(sourceAreaMm2(geometry)).toBeNull();
+    expect(sourceAreaMm2({ ...geometry, source_L_mm: 4, source_W_mm: 5 })).toBe(20);
     expect(
-      contactAreaMm2({ ...geometry, pad_L_mm: 4, pad_W_mm: 5, contact_L_mm: 2, contact_W_mm: 3 }),
-    ).toBe(6);
-    expect(
-      contactAreaMm2({
+      sourceAreaMm2({
         ...geometry,
-        contact_L_mm: 2,
-        contact_W_mm: 3,
-        custom_contact_area_mm2: 99,
+        source_L_mm: 4,
+        source_W_mm: 5,
+        custom_source_area_mm2: 99,
       }),
     ).toBe(99);
+  });
+
+  // The whole point of splitting the two faces: heat enters across one and
+  // leaves across the other, and for a bottom-cooled part they differ a lot.
+  describe('spread area', () => {
+    const board = {
+      ...emptyThermalSpec().geometry,
+      source_L_mm: 10,
+      source_W_mm: 10,
+      board_thickness_mm: 2.5,
+    };
+
+    it('spreads a board path by one board thickness across the footprint', () => {
+      expect(spreadAreaMm2(board, 'Board')).toBeCloseTo(12.5 * 12.5, 6);
+    });
+
+    it('uses the geometric mean for conduction through the spreader', () => {
+      expect(spreadingAreaMm2(board, 'Board')).toBeCloseTo(Math.sqrt(100 * 156.25), 6);
+    });
+
+    it('does not spread a top-cooled or bolted part', () => {
+      expect(spreadAreaMm2(board, 'TopSurface')).toBe(100);
+      expect(spreadAreaMm2(board, 'DirectMetal')).toBe(100);
+    });
+
+    // A fabricated coin size would silently move every PA's margin.
+    it('leaves a coin path unresolved until a coin size is supplied', () => {
+      expect(spreadAreaMm2(board, 'Coin')).toBeNull();
+      expect(spreadAreaMm2(board, 'Coin', 55 * 35)).toBe(1925);
+    });
+
+    it('prefers a stated spread face over any derivation', () => {
+      const stated = { ...board, spread_L_mm: 20, spread_W_mm: 20 };
+      expect(spreadAreaMm2(stated, 'Board')).toBe(400);
+      expect(spreadAreaMm2({ ...stated, custom_spread_area_mm2: 7 }, 'Board')).toBe(7);
+    });
+
+    it('cannot spread without the inputs, and never invents them', () => {
+      const bare = { ...emptyThermalSpec().geometry, source_L_mm: 10, source_W_mm: 10 };
+      expect(spreadAreaMm2(bare, 'Board')).toBeNull();
+      // Conduction still has the source face to fall back on.
+      expect(spreadingAreaMm2(bare, 'Board')).toBe(100);
+    });
+  });
+
+  describe('heat path', () => {
+    it('mirrors the Volume Tool category defaults', () => {
+      expect(inferHeatPath('RF')).toBe('Coin');
+      expect(inferHeatPath('Digital')).toBe('Board');
+      expect(inferHeatPath('Power')).toBe('TopSurface');
+      expect(inferHeatPath('Filter')).toBe('DirectMetal');
+    });
+
+    it('leaves a new component unconfirmed and warns about it', () => {
+      const component = base();
+      expect(component.thermal_spec.heat_path_confirmed).toBe(false);
+      expect(completenessOf(component)['Heat Path']).toBe(false);
+      expect(validateComponent(component).some((i) => i.field === 'heat_path.type')).toBe(true);
+    });
+
+    it('maps each path onto the template it implies', () => {
+      expect(TEMPLATE_FOR_HEAT_PATH.Coin).toBe('BOTTOM_COOL_COIN');
+      expect(TEMPLATE_FOR_HEAT_PATH.Board).toBe('BOTTOM_COOL_VIA');
+      expect(TEMPLATE_FOR_HEAT_PATH.TopSurface).toBe('TOP_COOL_LID');
+      expect(TEMPLATE_FOR_HEAT_PATH.DirectMetal).toBe('DIRECT_METAL');
+    });
   });
 
   it('summarises the project, excluding disabled components', () => {
@@ -208,7 +276,7 @@ describe('component readiness', () => {
 
 describe('downstream invalidation (04 §32)', () => {
   it('marks both network review and solver dirty for topology-shaping fields', () => {
-    for (const field of ['category', 'qty', 'tim.type', 'board_path.type', 'geometry']) {
+    for (const field of ['category', 'qty', 'tim.type', 'heat_path.type', 'geometry']) {
       expect(effectOfChange(field, false)).toMatchObject({
         networkReview: true,
         solverDirty: true,
@@ -434,7 +502,7 @@ describe('legacy compatibility (04 §30)', () => {
         source_file: null,
         imported_at: '2026-01-01T00:00:00Z',
       },
-      normalizeBoardType,
+      normalizeHeatPath,
       normalizeTim,
     });
 
@@ -445,7 +513,7 @@ describe('legacy compatibility (04 §30)', () => {
     expect(component.qty).toBe(4);
     expect(component.power_W.value).toBeCloseTo(52.13);
     expect(component.thermal_spec.r_jc_C_per_W?.value).toBe(0.35);
-    expect(component.thermal_spec.board_path.type).toBe('Copper Coin');
+    expect(component.thermal_spec.heat_path.type).toBe('Coin');
     expect(component.thermal_spec.tim.type).toBe('Grease');
   });
 

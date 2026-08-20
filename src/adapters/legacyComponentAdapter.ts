@@ -22,8 +22,9 @@ import {
   emptyExternalMappings,
   emptyGeometry,
   emptyTim,
+  inferHeatPath,
   inferLimitType,
-  type BoardType,
+  type HeatPathType,
   type Component,
   type ComponentCategory,
   type ComponentProvenance,
@@ -82,7 +83,7 @@ export function legacyComponentToCanonical(
   options: {
     id: string;
     provenance: ComponentProvenance;
-    normalizeBoardType: (value: unknown) => BoardType | null;
+    normalizeHeatPath: (value: unknown) => HeatPathType | null;
     normalizeTim: (value: unknown) => TimType | null;
   },
 ): Component {
@@ -95,6 +96,8 @@ export function legacyComponentToCanonical(
 
   const name = String(row.Component ?? '').trim();
   const category = legacyCategoryToCanonical(row.category) ?? 'Other';
+  const statedHeatPath = options.normalizeHeatPath(row.Board_Type);
+  const heatPath = statedHeatPath ?? inferHeatPath(category);
 
   return {
     id: options.id,
@@ -121,15 +124,15 @@ export function legacyComponentToCanonical(
       package_type: null,
       geometry: {
         ...emptyGeometry(),
-        pad_L_mm: row.Pad_L ?? null,
-        pad_W_mm: row.Pad_W ?? null,
-        board_thickness_mm: row['Thick(mm)'] ?? null,
+        source_L_mm: row.Pad_L ?? null,
+        source_W_mm: row.Pad_W ?? null,
+        // `Thick(mm)` is the coin for a coin path and the PCB otherwise.
+        board_thickness_mm: heatPath === 'Coin' ? null : (row['Thick(mm)'] ?? null),
+        coin_thickness_mm: heatPath === 'Coin' ? (row['Thick(mm)'] ?? null) : null,
         needs_review: hasLegacyGeometry || undefined,
       },
-      board_path: {
-        type: options.normalizeBoardType(row.Board_Type) ?? 'None',
-        parameters: {},
-      },
+      heat_path: { type: heatPath, parameters: {} },
+      heat_path_confirmed: statedHeatPath != null,
       tim: {
         ...emptyTim(),
         type: options.normalizeTim(row.TIM_Type) ?? 'None',
@@ -143,6 +146,14 @@ export function legacyComponentToCanonical(
     metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
   };
 }
+
+/** Heat paths written back in the vocabulary the Volume Evaluation Tool reads. */
+const LEGACY_BOARD_TYPE: Record<HeatPathType, string> = {
+  Coin: 'Copper Coin',
+  Board: 'Thermal Via',
+  TopSurface: 'None',
+  DirectMetal: 'None',
+};
 
 const CANONICAL_TO_LEGACY_CATEGORY: Record<ComponentCategory, string> = {
   RF: 'rf',
@@ -160,10 +171,10 @@ export function canonicalComponentToLegacy(component: Component): LegacyComponen
     Component: component.name,
     Qty: component.qty,
     'Power(W)': component.power_W.value ?? 0,
-    Pad_L: spec.geometry.pad_L_mm,
-    Pad_W: spec.geometry.pad_W_mm,
-    'Thick(mm)': spec.geometry.board_thickness_mm,
-    Board_Type: spec.board_path.type,
+    Pad_L: spec.geometry.source_L_mm,
+    Pad_W: spec.geometry.source_W_mm,
+    'Thick(mm)': spec.geometry.coin_thickness_mm ?? spec.geometry.board_thickness_mm,
+    Board_Type: LEGACY_BOARD_TYPE[spec.heat_path.type],
     'Limit(C)': spec.limit_C?.value ?? null,
     R_jc: spec.r_jc_C_per_W?.value ?? null,
     TIM_Type: spec.tim.type,

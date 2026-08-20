@@ -11,6 +11,7 @@ import {
   emptyExternalMappings,
   emptyGeometry,
   emptyTim,
+  inferHeatPath,
   inferLimitType,
   type Component,
   type ComponentProvenance,
@@ -21,6 +22,8 @@ import { duplicateKey, effectiveDuplicateAction } from './buildStagingRows';
 import type { ApplyResult, DuplicatePolicy, ImportSourceDescriptor, StagingRow } from './types';
 
 function specFromRow(row: StagingRow): ThermalSpec {
+  // No heat path stated means it is inferred, which must not read as a decision.
+  const heatPath = row.heat_path ?? inferHeatPath(row.category ?? 'Other');
   return {
     // No source this tool imports from records WHICH surface the limit belongs
     // to, so it is inferred and left unconfirmed for Screen 04 to settle.
@@ -35,14 +38,33 @@ function specFromRow(row: StagingRow): ThermalSpec {
     package_type: null,
     geometry: {
       ...emptyGeometry(),
-      pad_L_mm: row.pad_L_mm,
-      pad_W_mm: row.pad_W_mm,
-      board_thickness_mm: row.thickness_mm,
+      source_L_mm: row.source_L_mm,
+      source_W_mm: row.source_W_mm,
+      spread_L_mm: row.spread_L_mm,
+      spread_W_mm: row.spread_W_mm,
+      // Thickness means the coin for a coin path and the board otherwise —
+      // the Volume Evaluation Tool overloads one column for both.
+      board_thickness_mm: heatPath === 'Coin' ? null : row.thickness_mm,
+      coin_thickness_mm: heatPath === 'Coin' ? row.thickness_mm : null,
       // 04 §30 — legacy geometry semantics must be confirmed, not assumed.
-      needs_review: row.thickness_mm != null || row.pad_L_mm != null || undefined,
+      needs_review: row.thickness_mm != null || row.source_L_mm != null || undefined,
     },
-    board_path: { type: row.board_type ?? 'None', parameters: {} },
-    tim: { ...emptyTim(), type: row.tim_type ?? 'None', inheritance: 'component' },
+    heat_path: { type: heatPath, parameters: {} },
+    heat_path_confirmed: row.heat_path != null,
+    tim: {
+      ...emptyTim(),
+      type: row.tim_type ?? 'None',
+      // A source that states k or BLT has overridden the project default.
+      inheritance: row.tim_k_W_mK != null || row.tim_thickness_mm != null ? 'component' : 'project',
+      k_W_mK:
+        row.tim_k_W_mK == null
+          ? null
+          : sourced(row.tim_k_W_mK, 'Imported', { confidence: 'medium' }),
+      thickness_mm:
+        row.tim_thickness_mm == null
+          ? null
+          : sourced(row.tim_thickness_mm, 'Imported', { confidence: 'medium' }),
+    },
   };
 }
 
@@ -146,6 +168,10 @@ export function applyImport({ existing, rows, sessionPolicy, source }: ApplyOpti
               // A limit type an engineer already settled outranks a fresh guess.
               limit_type: target.thermal_spec.limit_type,
               limit_type_confirmed: target.thermal_spec.limit_type_confirmed,
+              // Same for the heat path: an unstated one must not overwrite a
+              // decision, so a settled path survives a Replace.
+              heat_path: row.heat_path == null ? target.thermal_spec.heat_path : spec.heat_path,
+              heat_path_confirmed: row.heat_path != null || target.thermal_spec.heat_path_confirmed,
               package_type: target.thermal_spec.package_type,
             }
           : {
@@ -154,21 +180,33 @@ export function applyImport({ existing, rows, sessionPolicy, source }: ApplyOpti
               r_jc_C_per_W: mergeSourced(spec.r_jc_C_per_W, target.thermal_spec.r_jc_C_per_W),
               geometry: {
                 ...target.thermal_spec.geometry,
-                pad_L_mm: mergeNonEmpty(
-                  spec.geometry.pad_L_mm,
-                  target.thermal_spec.geometry.pad_L_mm,
+                source_L_mm: mergeNonEmpty(
+                  spec.geometry.source_L_mm,
+                  target.thermal_spec.geometry.source_L_mm,
                 ),
-                pad_W_mm: mergeNonEmpty(
-                  spec.geometry.pad_W_mm,
-                  target.thermal_spec.geometry.pad_W_mm,
+                source_W_mm: mergeNonEmpty(
+                  spec.geometry.source_W_mm,
+                  target.thermal_spec.geometry.source_W_mm,
+                ),
+                spread_L_mm: mergeNonEmpty(
+                  spec.geometry.spread_L_mm,
+                  target.thermal_spec.geometry.spread_L_mm,
+                ),
+                spread_W_mm: mergeNonEmpty(
+                  spec.geometry.spread_W_mm,
+                  target.thermal_spec.geometry.spread_W_mm,
                 ),
                 board_thickness_mm: mergeNonEmpty(
                   spec.geometry.board_thickness_mm,
                   target.thermal_spec.geometry.board_thickness_mm,
                 ),
+                coin_thickness_mm: mergeNonEmpty(
+                  spec.geometry.coin_thickness_mm,
+                  target.thermal_spec.geometry.coin_thickness_mm,
+                ),
               },
-              board_path:
-                spec.board_path.type === 'None' ? target.thermal_spec.board_path : spec.board_path,
+              heat_path: row.heat_path == null ? target.thermal_spec.heat_path : spec.heat_path,
+              heat_path_confirmed: row.heat_path != null || target.thermal_spec.heat_path_confirmed,
               tim: spec.tim.type === 'None' ? target.thermal_spec.tim : spec.tim,
             };
 
@@ -182,7 +220,7 @@ export function applyImport({ existing, rows, sessionPolicy, source }: ApplyOpti
         target.thermal_spec.r_jc_C_per_W?.value ?? null,
         target.thermal_spec.limit_C?.value ?? null,
         target.thermal_spec.tim.type,
-        target.thermal_spec.board_path.type,
+        target.thermal_spec.heat_path.type,
       ];
       const after = [
         nextPower.value,
@@ -190,7 +228,7 @@ export function applyImport({ existing, rows, sessionPolicy, source }: ApplyOpti
         nextSpec.r_jc_C_per_W?.value ?? null,
         nextSpec.limit_C?.value ?? null,
         nextSpec.tim.type,
-        nextSpec.board_path.type,
+        nextSpec.heat_path.type,
       ];
       if (before.some((value, index) => value !== after[index])) {
         invalidatedSolver = true;

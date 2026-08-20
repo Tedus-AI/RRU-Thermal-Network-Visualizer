@@ -20,9 +20,13 @@ export const MANAGER_TOOLTIPS_ZH: Record<string, string> = {
   Power: '單顆元件功耗，單位 W。',
   Limit: '元件允許最高溫度，單位 °C。',
   Package: '封裝型式，例如 QFN、BGA、Bare Die、Module。',
-  'Board Type': '板級主要導熱方式，例如 Thermal Via、Copper Coin、Direct Metal。',
+  'Heat Path':
+    '熱離開元件的主要方向，決定套用哪一條熱阻鏈與哪一個架構模板。選擇路徑本身不會建立 Node/Edge。',
   TIM: '熱介面材料；指定材料不代表一定建立獨立 Edge。',
-  'Contact Area': '熱接觸面積；可由接觸面長寬相乘導出，或改用自訂面積。',
+  'Source Area':
+    '熱離開元件的那個面的面積，由長寬相乘導出，或改用自訂面積。焊料層與擴散段的熱阻用它。',
+  'Spread Area':
+    '熱離開擴散結構的那個面的面積。板級路徑由 45 度擴散推導、銅塊路徑取銅塊尺寸、其餘等於熱源面。TIM 熱阻用它，所以它通常大於熱源面。',
   Completeness: '熱規格完整度檢查清單，逐項顯示缺少哪一種資料。',
   Source: '此筆資料的來源與修改紀錄，用於資料追溯。',
 };
@@ -49,7 +53,7 @@ export const ZH: Record<string, string> = {
   Limit: '限制溫度',
   Rjc: '接面熱阻',
   Package: '封裝',
-  'Board Type': '板材類型',
+  'Heat Path': '散熱路徑',
   TIM: '導熱介質',
   'Thermal Profile': '熱模型狀態',
   Source: '來源',
