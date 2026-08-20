@@ -23,7 +23,6 @@ const FIELD_ZH: Record<string, string> = {
   R_jc: '熱阻',
   Board_Type: '板材類型',
   TIM_Type: '導熱介質',
-  'Height(mm)': '高度',
   Pad_L: 'Pad 長',
   Pad_W: 'Pad 寬',
   'Thick(mm)': '厚度',
@@ -124,9 +123,7 @@ export function ColumnMappingPanel() {
         <FieldLabel label="Column Mapping" zh="欄位對應" tooltip={tip('Column Mapping')} />
         <span className="tabular">Unmapped columns / 未對應欄位: {unmappedColumns}</span>
         {missingRecommended.length > 0 && (
-          <Badge tone="warn">
-            Missing recommended: {missingRecommended.join(', ')} / 建議補齊
-          </Badge>
+          <Badge tone="warn">Missing recommended: {missingRecommended.join(', ')} / 建議補齊</Badge>
         )}
       </div>
     </SectionCard>

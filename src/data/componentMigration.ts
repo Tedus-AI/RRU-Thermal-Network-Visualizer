@@ -16,7 +16,7 @@ import {
   emptyExternalMappings,
   emptyGeometry,
   emptyThermalSpec,
-  emptyTim,
+  inferLimitType,
   type BoardType,
   type Component,
   type ComponentCategory,
@@ -74,14 +74,34 @@ function migrateGeometry(spec: Raw): ComponentGeometry {
   geometry.pad_L_mm = geometry.pad_L_mm ?? num(spec.pad_L_mm);
   geometry.pad_W_mm = geometry.pad_W_mm ?? num(spec.pad_W_mm);
   geometry.board_thickness_mm = geometry.board_thickness_mm ?? num(spec.thickness_mm);
-  geometry.legacy_height_mm = geometry.legacy_height_mm ?? num(spec.height_mm);
 
   // 04 §30 — legacy geometry semantics must be confirmed, not assumed.
-  if (geometry.legacy_height_mm != null || spec.thickness_mm != null || spec.pad_L_mm != null) {
+  if (spec.thickness_mm != null || spec.pad_L_mm != null) {
     geometry.needs_review = true;
   }
 
+  // `legacy_height_mm` and `custom_thickness_mm` are gone. The loop above only
+  // copies keys the current shape declares, so both are dropped on read; a
+  // stored Height is preserved as component metadata by the import that wrote it.
   return geometry;
+}
+
+/**
+ * Legacy limit types collapse onto Tj / Tc.
+ *
+ * `Ts` named the package exterior, which `Tc` already covers — but calling a
+ * surface limit a case limit is a reinterpretation, so it lands unconfirmed.
+ * `Custom` and `Unknown` never were limit types; they meant nobody had decided,
+ * which is exactly what `limit_type_confirmed: false` records.
+ */
+function migrateLimitType(
+  raw: unknown,
+  category: ComponentCategory,
+  name: string,
+): { limit_type: LimitType; limit_type_confirmed: boolean } {
+  if (raw === 'Tj' || raw === 'Tc') return { limit_type: raw, limit_type_confirmed: true };
+  if (raw === 'Ts') return { limit_type: 'Tc', limit_type_confirmed: false };
+  return { limit_type: inferLimitType(category, name), limit_type_confirmed: false };
 }
 
 export function migrateComponent(raw: unknown, index: number): Component | null {
@@ -98,25 +118,32 @@ export function migrateComponent(raw: unknown, index: number): Component | null 
     : (specRaw.board_type as BoardType | undefined);
 
   const timRaw = isObject(specRaw.tim) ? specRaw.tim : null;
-  const timType = (timRaw?.type as TimType | undefined) ?? (specRaw.tim_type as TimType | undefined);
+  const timType =
+    (timRaw?.type as TimType | undefined) ?? (specRaw.tim_type as TimType | undefined);
 
   const architecture = isObject(raw.architecture_prep) ? raw.architecture_prep : {};
+  const category = (raw.category as ComponentCategory) ?? 'Other';
+  const limit =
+    typeof specRaw.limit_type_confirmed === 'boolean'
+      ? {
+          limit_type: (specRaw.limit_type === 'Tc' ? 'Tc' : 'Tj') as LimitType,
+          limit_type_confirmed: specRaw.limit_type_confirmed,
+        }
+      : migrateLimitType(specRaw.limit_type, category, name);
 
   return {
     id: typeof raw.id === 'string' && raw.id ? raw.id : `CMP_MIGRATED_${index + 1}`,
     name,
-    category: (raw.category as ComponentCategory) ?? 'Other',
+    category,
     // Pre-04 records had no enabled flag; they were all active.
     enabled: typeof raw.enabled === 'boolean' ? raw.enabled : true,
     qty: num(raw.qty) ?? 1,
     power_W: toSourced(raw.power_W) ?? unknownValue<number>('Imported'),
 
     thermal_spec: {
-      limit_type: (specRaw.limit_type as LimitType) ?? 'Unknown',
+      ...limit,
       limit_C: toSourced(specRaw.limit_C),
       r_jc_C_per_W: toSourced(specRaw.r_jc_C_per_W),
-      r_jb_C_per_W: toSourced(specRaw.r_jb_C_per_W),
-      r_ja_C_per_W: toSourced(specRaw.r_ja_C_per_W),
       package_type: (specRaw.package_type as PackageType) ?? null,
       geometry: migrateGeometry(specRaw),
       board_path: boardTypeRaw
@@ -124,17 +151,20 @@ export function migrateComponent(raw: unknown, index: number): Component | null 
             type: boardTypeRaw,
             parameters:
               isObject(specRaw.board_path) && isObject(specRaw.board_path.parameters)
-                ? (specRaw.board_path.parameters as Component['thermal_spec']['board_path']['parameters'])
+                ? (specRaw.board_path
+                    .parameters as Component['thermal_spec']['board_path']['parameters'])
                 : {},
           }
         : emptyBoardPath(),
+      // Built field by field rather than spread, so a dropped field (such as the
+      // never-solved `compression_pct`) cannot ride back in from stored data.
       tim: {
-        ...emptyTim(),
-        ...(timRaw ?? {}),
         type: timType ?? base.tim.type,
         inheritance: (timRaw?.inheritance as 'project' | 'component') ?? 'component',
         k_W_mK: toSourced(timRaw?.k_W_mK),
         thickness_mm: toSourced(timRaw?.thickness_mm),
+        contact_area_mode:
+          timRaw?.contact_area_mode === 'custom' ? 'custom' : base.tim.contact_area_mode,
       },
     },
 

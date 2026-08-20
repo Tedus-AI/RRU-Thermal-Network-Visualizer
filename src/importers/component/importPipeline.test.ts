@@ -2,7 +2,12 @@ import { describe, expect, it } from 'vitest';
 
 import { detectDelimiter, parseDelimitedText, splitDelimitedLine } from './parseTable';
 import { autoMapColumns, matchCanonicalField } from './autoMapColumns';
-import { normalizeBoardType, normalizeCategory, normalizeTim, parseNumericCell } from './normalizeComponent';
+import {
+  normalizeBoardType,
+  normalizeCategory,
+  normalizeTim,
+  parseNumericCell,
+} from './normalizeComponent';
 import { buildStagingRows, duplicateKey } from './buildStagingRows';
 import { applyImport } from './applyImport';
 import { projectImpact, summarizeImport } from './summarize';
@@ -79,15 +84,22 @@ describe('delimited parsing', () => {
 
 describe('column auto-mapping', () => {
   it('maps the canonical legacy schema with no user interaction', () => {
-    const headers = ['Component', 'Qty', 'Power(W)', 'Height(mm)', 'R_jc', 'TIM_Type'];
+    const headers = ['Component', 'Qty', 'Power(W)', 'Pad_L', 'R_jc', 'TIM_Type'];
     expect(autoMapColumns(headers)).toEqual([
       'Component',
       'Qty',
       'Power(W)',
-      'Height(mm)',
+      'Pad_L',
       'R_jc',
       'TIM_Type',
     ]);
+  });
+
+  // Height is a Volume-Tool vertical position, not geometry this tool models.
+  // It must fall through to metadata rather than claim a canonical field.
+  it('no longer claims the legacy Height column', () => {
+    expect(matchCanonicalField('Height(mm)')).toBeNull();
+    expect(autoMapColumns(['Component', 'Height(mm)'])).toEqual(['Component', 'Ignore Column']);
   });
 
   it('maps the alias headers from the specification', () => {
@@ -109,10 +121,7 @@ describe('column auto-mapping', () => {
   });
 
   it('never lets two columns claim the same canonical field', () => {
-    expect(autoMapColumns(['Power(W)', 'Power Dissipation'])).toEqual([
-      'Power(W)',
-      IGNORE_COLUMN,
-    ]);
+    expect(autoMapColumns(['Power(W)', 'Power Dissipation'])).toEqual(['Power(W)', IGNORE_COLUMN]);
   });
 });
 
@@ -192,7 +201,9 @@ describe('row validation', () => {
   });
 
   it('allows zero power with a warning', () => {
-    const [row] = stage('Component,Category,Qty,Power(W),R_jc,Limit(C),TIM_Type\nCan,Other,2,0,0.1,85,None');
+    const [row] = stage(
+      'Component,Category,Qty,Power(W),R_jc,Limit(C),TIM_Type\nCan,Other,2,0,0.1,85,None',
+    );
     expect(row.status).toBe('WARNING');
     expect(row.power_W).toBe(0);
     expect(row.issues.some((issue) => issue.message.includes('0 W'))).toBe(true);
@@ -229,7 +240,8 @@ describe('duplicate handling', () => {
     }),
   ];
 
-  const csv = 'Component,Category,Qty,Power(W),R_jc,Limit(C),TIM_Type\nFinal PA,RF,4,52.13,,175,Grease';
+  const csv =
+    'Component,Category,Qty,Power(W),R_jc,Limit(C),TIM_Type\nFinal PA,RF,4,52.13,,175,Grease';
 
   it('matches on component name plus category', () => {
     expect(duplicateKey('Final PA', 'RF')).toBe(duplicateKey('final pa', 'RF'));
@@ -338,9 +350,9 @@ describe('apply', () => {
       source: SOURCE,
     });
     // No topology, and no architecture preference invented by the importer.
-    expect(
-      components.every((c) => c.architecture_prep.template_preference === 'UNASSIGNED'),
-    ).toBe(true);
+    expect(components.every((c) => c.architecture_prep.template_preference === 'UNASSIGNED')).toBe(
+      true,
+    );
     expect(
       components.every((c) => c.architecture_prep.thermal_profile_status === 'Not Assigned'),
     ).toBe(true);

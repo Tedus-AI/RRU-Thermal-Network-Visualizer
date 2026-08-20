@@ -5,12 +5,7 @@
  * engineer must be able to see exactly which of the nine facts is missing.
  */
 
-import {
-  contactAreaMm2,
-  isHeatSource,
-  powerWOf,
-  type Component,
-} from './component';
+import { contactAreaMm2, isHeatSource, powerWOf, type Component } from './component';
 import { valueOf } from './sourcedValue';
 
 export type ComponentStatus = 'READY' | 'WARNING' | 'ERROR' | 'DISABLED';
@@ -55,7 +50,7 @@ export function completenessOf(component: Component): CompletenessMap {
   return {
     Identity: Boolean(component.name.trim()) && component.qty > 0,
     Power: component.power_W.value != null,
-    Limit: spec.limit_type !== 'Unknown' && valueOf(spec.limit_C) != null,
+    Limit: spec.limit_type_confirmed && valueOf(spec.limit_C) != null,
     Package: spec.package_type != null && spec.package_type !== 'Unknown',
     Rjc: valueOf(spec.r_jc_C_per_W) != null,
     'Contact Geometry': contactAreaMm2(spec.geometry) != null,
@@ -169,12 +164,12 @@ export function validateComponent(component: Component): ComponentIssue[] {
     });
   }
 
-  if (spec.limit_type === 'Unknown') {
+  if (!spec.limit_type_confirmed) {
     issues.push({
       severity: 'warning',
       field: 'limit_type',
-      message: 'Limit type is unknown — set Tj, Tc or Ts.',
-      message_zh: '未指定溫度上限類型（Tj / Tc / Ts）。',
+      message: `Limit type is assumed to be ${spec.limit_type} — confirm it against the datasheet.`,
+      message_zh: `溫度上限類型為推定值（${spec.limit_type}），請對照規格書確認。`,
     });
   }
 
@@ -246,9 +241,8 @@ export function validateComponent(component: Component): ComponentIssue[] {
       severity: 'warning',
       field: 'geometry',
       message:
-        'Imported legacy geometry needs review — Height / Thickness / Pad may use ' +
-        'Volume Tool semantics.',
-      message_zh: '匯入的舊版幾何資料需人工確認（Height / Thick / Pad 可能沿用舊工具定義）。',
+        'Imported legacy geometry needs review — Thickness / Pad may use Volume Tool semantics.',
+      message_zh: '匯入的舊版幾何資料需人工確認（Thick / Pad 可能沿用舊工具定義）。',
     });
   }
 

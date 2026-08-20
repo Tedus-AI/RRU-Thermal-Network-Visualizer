@@ -6,9 +6,15 @@
  * directions are supported and unknown legacy columns survive a round trip
  * (AC-04-17, AC-04-18).
  *
- * 04 §30 also warns that legacy `Height(mm)` / `Thick(mm)` / `Pad_L` / `Pad_W`
- * may carry Volume-Tool-specific meaning. They are carried across but flagged
+ * 04 §30 also warns that legacy `Thick(mm)` / `Pad_L` / `Pad_W` may carry
+ * Volume-Tool-specific meaning. They are carried across but flagged
  * `needs_review` rather than silently reinterpreted as package geometry.
+ *
+ * `Height(mm)` is deliberately NOT an owned column any more. In the Volume Tool
+ * it is a vertical POSITION feeding a local-ambient correction
+ * (`T_amb + Height x 0.03`), not package geometry, and this tool gets local
+ * ambient from the boundary conditions and the network instead. It therefore
+ * falls through to `metadata` and round trips untouched.
  */
 
 import {
@@ -16,6 +22,7 @@ import {
   emptyExternalMappings,
   emptyGeometry,
   emptyTim,
+  inferLimitType,
   type BoardType,
   type Component,
   type ComponentCategory,
@@ -60,7 +67,6 @@ const OWNED_LEGACY_KEYS = new Set([
   'Component',
   'Qty',
   'Power(W)',
-  'Height(mm)',
   'Pad_L',
   'Pad_W',
   'Thick(mm)',
@@ -85,16 +91,15 @@ export function legacyComponentToCanonical(
     if (!OWNED_LEGACY_KEYS.has(key)) metadata[key] = value;
   }
 
-  const hasLegacyGeometry =
-    row['Height(mm)'] != null ||
-    row['Thick(mm)'] != null ||
-    row.Pad_L != null ||
-    row.Pad_W != null;
+  const hasLegacyGeometry = row['Thick(mm)'] != null || row.Pad_L != null || row.Pad_W != null;
+
+  const name = String(row.Component ?? '').trim();
+  const category = legacyCategoryToCanonical(row.category) ?? 'Other';
 
   return {
     id: options.id,
-    name: String(row.Component ?? '').trim(),
-    category: legacyCategoryToCanonical(row.category) ?? 'Other',
+    name,
+    category,
     enabled: true,
     qty: Number(row.Qty ?? 0),
     power_W:
@@ -103,8 +108,10 @@ export function legacyComponentToCanonical(
         : sourced(Number(row['Power(W)']), 'Imported', { reference: 'Volume Evaluation Tool' }),
 
     thermal_spec: {
-      // The legacy schema records a limit but never says which surface it is.
-      limit_type: 'Unknown',
+      // The legacy schema records a limit but never says which surface it is,
+      // so the surface is inferred and left for Screen 04 to confirm.
+      limit_type: inferLimitType(category, name),
+      limit_type_confirmed: false,
       limit_C:
         row['Limit(C)'] == null
           ? null
@@ -117,7 +124,6 @@ export function legacyComponentToCanonical(
         pad_L_mm: row.Pad_L ?? null,
         pad_W_mm: row.Pad_W ?? null,
         board_thickness_mm: row['Thick(mm)'] ?? null,
-        legacy_height_mm: row['Height(mm)'] ?? null,
         needs_review: hasLegacyGeometry || undefined,
       },
       board_path: {
@@ -154,7 +160,6 @@ export function canonicalComponentToLegacy(component: Component): LegacyComponen
     Component: component.name,
     Qty: component.qty,
     'Power(W)': component.power_W.value ?? 0,
-    'Height(mm)': spec.geometry.legacy_height_mm ?? spec.geometry.package_H_mm,
     Pad_L: spec.geometry.pad_L_mm,
     Pad_W: spec.geometry.pad_W_mm,
     'Thick(mm)': spec.geometry.board_thickness_mm,

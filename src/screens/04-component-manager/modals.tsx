@@ -76,7 +76,12 @@ export function AddComponentModal({
       }
     >
       <div className="flex flex-col gap-3.5">
-        <Field label="Component Name / 元件名稱" htmlFor="add-name" required error={error ?? undefined}>
+        <Field
+          label="Component Name / 元件名稱"
+          htmlFor="add-name"
+          required
+          error={error ?? undefined}
+        >
           <TextInput
             id="add-name"
             value={draft.name}
@@ -260,6 +265,8 @@ export function bulkPatchFor(values: BulkEditValues) {
       patch.thermal_spec = {
         ...spec,
         limit_type: values.limit_type ?? spec.limit_type,
+        // Choosing a type in bulk edit is a decision, so it counts as confirmed.
+        limit_type_confirmed: values.limit_type ? true : spec.limit_type_confirmed,
         board_path: values.board_type
           ? { ...spec.board_path, type: values.board_type }
           : spec.board_path,

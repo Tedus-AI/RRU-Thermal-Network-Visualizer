@@ -36,7 +36,7 @@ function node(
     type?: ThermalNode['type'];
     component?: string;
     limit?: number;
-    limitType?: 'Tj' | 'Tc' | 'Ts';
+    limitType?: 'Tj' | 'Tc';
     ambient?: boolean;
   } = {},
 ): ThermalNode {
@@ -59,7 +59,10 @@ function edge(
   id: string,
   from: string,
   to: string,
-  options: { source?: ThermalEdge['rth']['active_source']; confidence?: 'high' | 'medium' | 'low' } = {},
+  options: {
+    source?: ThermalEdge['rth']['active_source'];
+    confidence?: 'high' | 'medium' | 'low';
+  } = {},
 ): ThermalEdge {
   return {
     id,
@@ -446,9 +449,9 @@ describe('Test E — bottleneck analysis not run (10 §34 E)', () => {
 
   it('treats an analysis built on a different solve as stale, not current', () => {
     const built = chain({ limit: 150 });
-    expect(
-      bottleneckAvailabilityOf(analysis({ signature: 'other-sig' }), built.solution),
-    ).toBe('stale');
+    expect(bottleneckAvailabilityOf(analysis({ signature: 'other-sig' }), built.solution)).toBe(
+      'stale',
+    );
     expect(bottleneckAvailabilityOf(analysis({ state: 'FAILED' }), built.solution)).toBe('failed');
     expect(bottleneckAvailabilityOf(null, built.solution)).toBe('not_run');
   });
@@ -714,7 +717,11 @@ describe('Data completeness (10 §12)', () => {
   it('counts components with and without limits from the component records', () => {
     const overview = overviewOf({
       limit: 150,
-      components: [component('C1', 'PA1', 110), component('C2', 'FPGA', null), component('C3', 'DDR', null)],
+      components: [
+        component('C1', 'PA1', 110),
+        component('C2', 'FPGA', null),
+        component('C3', 'DDR', null),
+      ],
     });
 
     expect(overview.completeness.components_with_limits).toBe(1);
@@ -752,10 +759,7 @@ describe('Data completeness (10 §12)', () => {
       node('N_C', { name: 'PA1 Case', component: 'C1' }),
       node('N_A', { name: 'Ambient', ambient: true }),
     ];
-    const edges = [
-      edge('E1', 'N_J', 'N_C', { confidence: 'low' }),
-      edge('E2', 'N_C', 'N_A'),
-    ];
+    const edges = [edge('E1', 'N_J', 'N_C', { confidence: 'low' }), edge('E2', 'N_C', 'N_A')];
     const built = buildResultsOverview({
       project_id: 'TEST',
       scenario,

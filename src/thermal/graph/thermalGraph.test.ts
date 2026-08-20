@@ -32,7 +32,12 @@ function component(overrides: Partial<Component> = {}): Component {
       r_jc_C_per_W: sourced(0.35, 'Datasheet'),
       package_type: 'QFN',
       geometry: { ...emptyThermalSpec().geometry, contact_L_mm: 20, contact_W_mm: 10 },
-      tim: { ...emptyThermalSpec().tim, type: 'Grease', k_W_mK: sourced(3, 'Vendor'), thickness_mm: sourced(0.1, 'Vendor') },
+      tim: {
+        ...emptyThermalSpec().tim,
+        type: 'Grease',
+        k_W_mK: sourced(3, 'Vendor'),
+        thickness_mm: sourced(0.1, 'Vendor'),
+      },
     },
     architecture_prep: {
       ...emptyArchitecturePrep(),
@@ -100,9 +105,7 @@ describe('architecture templates', () => {
   });
 
   it('reports missing component requirements before applying (05 §12, AC-05-10)', () => {
-    const bare = component({
-      thermal_spec: { ...emptyThermalSpec(), limit_type: 'Unknown' },
-    });
+    const bare = component({ thermal_spec: emptyThermalSpec() });
     const missing = missingRequirements(bare, getTemplate('BOTTOM_COOL_COIN')!);
     expect(missing.map((field) => field.label)).toEqual(
       expect.arrayContaining(['Rjc', 'Contact area', 'TIM k']),
@@ -325,9 +328,7 @@ describe('shared structure (05 §13, §14, §15)', () => {
     const small = structure.nodes.find((node) => node.type === 'small_base')!;
     const main = structure.nodes.find((node) => node.type === 'main_base')!;
 
-    const direct = structure.edges.find(
-      (edge) => edge.from === small.id && edge.to === main.id,
-    );
+    const direct = structure.edges.find((edge) => edge.from === small.id && edge.to === main.id);
     const viaHeatPipe = structure.edges.some((edge) => edge.type === 'heat_pipe');
     expect(direct).toBeDefined();
     expect(viaHeatPipe).toBe(true);
@@ -442,8 +443,16 @@ describe('graph validation (05 §33, §34, §35)', () => {
   });
 
   it('allows convection and radiation between the same pair (05 §35)', () => {
-    const convection = { ...link('E1', 'A', 'B'), type: 'convection' as const, method: 'convection_hA' as const };
-    const radiation = { ...link('E2', 'A', 'B'), type: 'radiation' as const, method: 'radiation_hA' as const };
+    const convection = {
+      ...link('E1', 'A', 'B'),
+      type: 'convection' as const,
+      method: 'convection_hA' as const,
+    };
+    const radiation = {
+      ...link('E2', 'A', 'B'),
+      type: 'radiation' as const,
+      method: 'radiation_hA' as const,
+    };
     const result = validateGraph(toNetwork([passive('A'), passive('B')], [convection, radiation]));
     expect(result.issues.some((issue) => issue.code === 'POSSIBLE_DUPLICATE_EDGE')).toBe(false);
   });

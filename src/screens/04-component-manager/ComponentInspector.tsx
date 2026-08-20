@@ -17,6 +17,7 @@ import {
   BOARD_TYPES,
   COMPONENT_CATEGORIES,
   LIMIT_TYPES,
+  LIMIT_TYPE_LABELS,
   PACKAGE_TYPES,
   QTY_MODELS,
   QTY_MODEL_LABELS,
@@ -195,7 +196,7 @@ export function ComponentInspector({
   const score = completenessScore(completeness);
 
   const patchSpec = (patch: Partial<Component['thermal_spec']>, fields: string[]) =>
-    onPatch(component.id, { thermal_spec: { ...spec, ...patch }, }, fields);
+    onPatch(component.id, { thermal_spec: { ...spec, ...patch } }, fields);
 
   const patchGeometry = (patch: Partial<ComponentGeometry>) =>
     patchSpec({ geometry: { ...spec.geometry, ...patch } }, ['geometry']);
@@ -340,17 +341,31 @@ export function ComponentInspector({
                 />
                 <Select
                   id="ins-limit-type"
-                  options={LIMIT_TYPES}
+                  items={LIMIT_TYPES.map((type) => ({
+                    value: type,
+                    label: `${type} — ${LIMIT_TYPE_LABELS[type].en} / ${LIMIT_TYPE_LABELS[type].zh}`,
+                  }))}
                   value={spec.limit_type}
                   disabled={readOnly}
                   onChange={(event) =>
-                    patchSpec({ limit_type: event.target.value as LimitType }, ['limit_type'])
+                    patchSpec(
+                      // Picking it IS the confirmation.
+                      { limit_type: event.target.value as LimitType, limit_type_confirmed: true },
+                      ['limit_type'],
+                    )
                   }
                 />
-                <p className="text-[11px] text-ink-400">
-                  Tj / Tc / Ts are all valid. Nothing forces a case-limited part onto Tj.
-                  <span className="block">Tj / Tc / Ts 皆可，不會強制轉為 Tj。</span>
-                </p>
+                {spec.limit_type_confirmed ? (
+                  <p className="text-[11px] text-ink-400">
+                    Nothing forces a case-limited part onto Tj.
+                    <span className="block">不會強制把殼溫限制的元件轉為 Tj。</span>
+                  </p>
+                ) : (
+                  <p className="text-[11px] text-warn-600">
+                    Assumed from category — confirm against the datasheet.
+                    <span className="block">依類別推定，請對照規格書確認。</span>
+                  </p>
+                )}
               </div>
 
               <SourcedNumberField
@@ -567,7 +582,7 @@ export function ComponentInspector({
                 onChange={patchGeometry}
               />
 
-              <div className="grid grid-cols-3 gap-2.5">
+              <div className="grid grid-cols-2 gap-2.5">
                 <GeometryField
                   label="Board Thk"
                   zh="板厚"
@@ -580,14 +595,6 @@ export function ComponentInspector({
                   label="Coin Thk"
                   zh="Coin 厚"
                   field="coin_thickness_mm"
-                  geometry={spec.geometry}
-                  readOnly={readOnly}
-                  onChange={patchGeometry}
-                />
-                <GeometryField
-                  label="Custom Thk"
-                  zh="自訂厚度"
-                  field="custom_thickness_mm"
                   geometry={spec.geometry}
                   readOnly={readOnly}
                   onChange={patchGeometry}
@@ -644,7 +651,9 @@ export function ComponentInspector({
                                     parameters: {
                                       ...spec.board_path.parameters,
                                       [key]:
-                                        event.target.value === '' ? null : Number(event.target.value),
+                                        event.target.value === ''
+                                          ? null
+                                          : Number(event.target.value),
                                     },
                                   },
                                 },
@@ -683,7 +692,9 @@ export function ComponentInspector({
                                     parameters: {
                                       ...spec.board_path.parameters,
                                       [key]:
-                                        event.target.value === '' ? null : Number(event.target.value),
+                                        event.target.value === ''
+                                          ? null
+                                          : Number(event.target.value),
                                     },
                                   },
                                 },
@@ -704,16 +715,11 @@ export function ComponentInspector({
 
               {spec.geometry.needs_review && (
                 <p className="rounded-md border border-warn-500/30 bg-warn-100/60 p-2.5 text-[11px] leading-relaxed text-warn-600">
-                  Imported legacy geometry needs review — Height / Thickness / Pad may follow
-                  Volume Tool semantics.
+                  Imported legacy geometry needs review — Height / Thickness / Pad may follow Volume
+                  Tool semantics.
                   <span className="block">
                     匯入的舊版幾何資料需人工確認（可能沿用舊工具定義）。
                   </span>
-                  {spec.geometry.legacy_height_mm != null && (
-                    <span className="mt-1 block font-mono">
-                      legacy Height(mm) = {spec.geometry.legacy_height_mm}
-                    </span>
-                  )}
                 </p>
               )}
             </>
@@ -794,8 +800,8 @@ export function ComponentInspector({
 
               {/* 04 §19 / AC-04-12/13/14 — the whole point of this tab. */}
               <p className="rounded-md border border-accent-600/25 bg-accent-50 p-2.5 text-[11px] leading-relaxed text-accent-700">
-                These are modelling preferences only. No thermal nodes, edges or base-zone nodes
-                are created by this screen — Screen 05 Thermal Path Builder does that.
+                These are modelling preferences only. No thermal nodes, edges or base-zone nodes are
+                created by this screen — Screen 05 Thermal Path Builder does that.
                 <span className="mt-0.5 block">
                   以上僅為建模偏好，本頁不會建立任何 Node、Edge 或基座節點；實際拓樸由 Screen 05
                   建立。

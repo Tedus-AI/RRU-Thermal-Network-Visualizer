@@ -11,6 +11,7 @@ import {
   emptyExternalMappings,
   emptyGeometry,
   emptyTim,
+  inferLimitType,
   type Component,
   type ComponentProvenance,
   type ThermalSpec,
@@ -21,8 +22,12 @@ import type { ApplyResult, DuplicatePolicy, ImportSourceDescriptor, StagingRow }
 
 function specFromRow(row: StagingRow): ThermalSpec {
   return {
-    limit_type: 'Unknown',
-    limit_C: row.limit_C == null ? null : sourced(row.limit_C, 'Imported', { confidence: 'medium' }),
+    // No source this tool imports from records WHICH surface the limit belongs
+    // to, so it is inferred and left unconfirmed for Screen 04 to settle.
+    limit_type: inferLimitType(row.category ?? 'Other', row.name),
+    limit_type_confirmed: false,
+    limit_C:
+      row.limit_C == null ? null : sourced(row.limit_C, 'Imported', { confidence: 'medium' }),
     r_jc_C_per_W:
       row.r_jc_C_per_W == null
         ? null
@@ -33,10 +38,8 @@ function specFromRow(row: StagingRow): ThermalSpec {
       pad_L_mm: row.pad_L_mm,
       pad_W_mm: row.pad_W_mm,
       board_thickness_mm: row.thickness_mm,
-      legacy_height_mm: row.height_mm,
       // 04 §30 — legacy geometry semantics must be confirmed, not assumed.
-      needs_review:
-        row.height_mm != null || row.thickness_mm != null || row.pad_L_mm != null || undefined,
+      needs_review: row.thickness_mm != null || row.pad_L_mm != null || undefined,
     },
     board_path: { type: row.board_type ?? 'None', parameters: {} },
     tim: { ...emptyTim(), type: row.tim_type ?? 'None', inheritance: 'component' },
@@ -138,34 +141,39 @@ export function applyImport({ existing, rows, sessionPolicy, source }: ApplyOpti
 
       const nextSpec: ThermalSpec =
         action === 'REPLACE'
-          ? { ...spec, limit_type: target.thermal_spec.limit_type, package_type: target.thermal_spec.package_type }
+          ? {
+              ...spec,
+              // A limit type an engineer already settled outranks a fresh guess.
+              limit_type: target.thermal_spec.limit_type,
+              limit_type_confirmed: target.thermal_spec.limit_type_confirmed,
+              package_type: target.thermal_spec.package_type,
+            }
           : {
               ...target.thermal_spec,
               limit_C: mergeSourced(spec.limit_C, target.thermal_spec.limit_C),
               r_jc_C_per_W: mergeSourced(spec.r_jc_C_per_W, target.thermal_spec.r_jc_C_per_W),
               geometry: {
                 ...target.thermal_spec.geometry,
-                pad_L_mm: mergeNonEmpty(spec.geometry.pad_L_mm, target.thermal_spec.geometry.pad_L_mm),
-                pad_W_mm: mergeNonEmpty(spec.geometry.pad_W_mm, target.thermal_spec.geometry.pad_W_mm),
+                pad_L_mm: mergeNonEmpty(
+                  spec.geometry.pad_L_mm,
+                  target.thermal_spec.geometry.pad_L_mm,
+                ),
+                pad_W_mm: mergeNonEmpty(
+                  spec.geometry.pad_W_mm,
+                  target.thermal_spec.geometry.pad_W_mm,
+                ),
                 board_thickness_mm: mergeNonEmpty(
                   spec.geometry.board_thickness_mm,
                   target.thermal_spec.geometry.board_thickness_mm,
                 ),
-                legacy_height_mm: mergeNonEmpty(
-                  spec.geometry.legacy_height_mm ?? null,
-                  target.thermal_spec.geometry.legacy_height_mm ?? null,
-                ),
               },
               board_path:
-                spec.board_path.type === 'None'
-                  ? target.thermal_spec.board_path
-                  : spec.board_path,
+                spec.board_path.type === 'None' ? target.thermal_spec.board_path : spec.board_path,
               tim: spec.tim.type === 'None' ? target.thermal_spec.tim : spec.tim,
             };
 
       const nextQty = row.qty ?? target.qty;
-      const nextPower =
-        row.power_W == null ? target.power_W : sourced(row.power_W, 'Imported');
+      const nextPower = row.power_W == null ? target.power_W : sourced(row.power_W, 'Imported');
 
       // 02 §24 / 04 §32 — did anything the solver depends on actually move?
       const before = [

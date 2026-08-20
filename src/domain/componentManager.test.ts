@@ -15,6 +15,7 @@ import {
   emptyArchitecturePrep,
   emptyExternalMappings,
   emptyThermalSpec,
+  inferLimitType,
   totalPowerW,
   type Component,
 } from './component';
@@ -56,6 +57,7 @@ function readyPA(): Component {
     thermal_spec: {
       ...emptyThermalSpec(),
       limit_type: 'Tj',
+      limit_type_confirmed: true,
       limit_C: sourced(180, 'Datasheet'),
       r_jc_C_per_W: sourced(0.35, 'Datasheet'),
       package_type: 'QFN',
@@ -69,6 +71,42 @@ function readyPA(): Component {
     },
   };
 }
+
+describe('limit type', () => {
+  // The Volume Tool decides this with `_src === 'PWR' || name includes 'ddr'`.
+  // Same rule, but the result is never presented as if it were sourced.
+  it('quotes power devices against the case and everything else against the junction', () => {
+    expect(inferLimitType('Power', 'DC-DC 12V')).toBe('Tc');
+    expect(inferLimitType('RF', 'Final PA')).toBe('Tj');
+    expect(inferLimitType('Digital', 'FPGA')).toBe('Tj');
+  });
+
+  it('recognises DDR as case limited whatever its category', () => {
+    expect(inferLimitType('Digital', 'DDR4 Bank A')).toBe('Tc');
+    expect(inferLimitType('Other', 'U500_DDR')).toBe('Tc');
+  });
+
+  it('does not match ddr inside an unrelated word', () => {
+    expect(inferLimitType('Digital', 'ADDRESS_BUFFER')).toBe('Tj');
+  });
+
+  it('leaves a new component unconfirmed, so nothing presents a guess as fact', () => {
+    const component = base();
+    expect(component.thermal_spec.limit_type).toBe('Tj');
+    expect(component.thermal_spec.limit_type_confirmed).toBe(false);
+    expect(completenessOf(component).Limit).toBe(false);
+    expect(
+      validateComponent(component).some(
+        (issue) => issue.field === 'limit_type' && issue.severity === 'warning',
+      ),
+    ).toBe(true);
+  });
+
+  it('clears the warning once a type is confirmed', () => {
+    const confirmed = readyPA();
+    expect(validateComponent(confirmed).some((issue) => issue.field === 'limit_type')).toBe(false);
+  });
+});
 
 // --- Readiness -------------------------------------------------------------
 
@@ -139,7 +177,12 @@ describe('component readiness', () => {
       contactAreaMm2({ ...geometry, pad_L_mm: 4, pad_W_mm: 5, contact_L_mm: 2, contact_W_mm: 3 }),
     ).toBe(6);
     expect(
-      contactAreaMm2({ ...geometry, contact_L_mm: 2, contact_W_mm: 3, custom_contact_area_mm2: 99 }),
+      contactAreaMm2({
+        ...geometry,
+        contact_L_mm: 2,
+        contact_W_mm: 3,
+        custom_contact_area_mm2: 99,
+      }),
     ).toBe(99);
   });
 
@@ -166,34 +209,50 @@ describe('component readiness', () => {
 describe('downstream invalidation (04 §32)', () => {
   it('marks both network review and solver dirty for topology-shaping fields', () => {
     for (const field of ['category', 'qty', 'tim.type', 'board_path.type', 'geometry']) {
-      expect(effectOfChange(field, false)).toMatchObject({ networkReview: true, solverDirty: true });
+      expect(effectOfChange(field, false)).toMatchObject({
+        networkReview: true,
+        solverDirty: true,
+      });
     }
   });
 
   it('marks only the solver dirty for power and Rjc', () => {
     for (const field of ['power_W', 'r_jc_C_per_W']) {
-      expect(effectOfChange(field, false)).toMatchObject({ networkReview: false, solverDirty: true });
+      expect(effectOfChange(field, false)).toMatchObject({
+        networkReview: false,
+        solverDirty: true,
+      });
     }
     expect(effectOfChange('power_W', false).dirtyReasons).toEqual(['component_power_changed']);
-    expect(effectOfChange('r_jc_C_per_W', false).dirtyReasons).toEqual([
-      'component_rth_changed',
-    ]);
+    expect(effectOfChange('r_jc_C_per_W', false).dirtyReasons).toEqual(['component_rth_changed']);
   });
 
   it('does not invalidate the physical solve for limit changes', () => {
     for (const field of ['limit_C', 'limit_type']) {
-      expect(effectOfChange(field, false)).toEqual({ networkReview: false, solverDirty: false, dirtyReasons: [] });
+      expect(effectOfChange(field, false)).toEqual({
+        networkReview: false,
+        solverDirty: false,
+        dirtyReasons: [],
+      });
     }
   });
 
   it('invalidates nothing for provenance or a FloTHERM alias', () => {
     for (const field of ['provenance', 'external_mappings', 'flotherm_alias', 'notes']) {
-      expect(effectOfChange(field, false)).toEqual({ networkReview: false, solverDirty: false, dirtyReasons: [] });
+      expect(effectOfChange(field, false)).toEqual({
+        networkReview: false,
+        solverDirty: false,
+        dirtyReasons: [],
+      });
     }
   });
 
   it('makes a rename consequential only once the component is mapped', () => {
-    expect(effectOfChange('name', false)).toEqual({ networkReview: false, solverDirty: false, dirtyReasons: [] });
+    expect(effectOfChange('name', false)).toEqual({
+      networkReview: false,
+      solverDirty: false,
+      dirtyReasons: [],
+    });
     expect(effectOfChange('name', true)).toMatchObject({ networkReview: true, solverDirty: true });
   });
 
@@ -264,9 +323,7 @@ describe('03 FloTHERM deferred contract (04 §28)', () => {
       },
     };
 
-    expect(component.external_mappings.flotherm?.object_aliases).toEqual([
-      'RF_Board/PA1/Package',
-    ]);
+    expect(component.external_mappings.flotherm?.object_aliases).toEqual(['RF_Board/PA1/Package']);
     // No temperature, no heat flow, no column assumption was derived from it.
     expect(component.external_mappings.flotherm).not.toHaveProperty('temperature');
     expect(component.external_mappings.flotherm?.mapping_status).toBe('unmapped');
@@ -395,16 +452,32 @@ describe('legacy compatibility (04 §30)', () => {
   it('does not silently reinterpret legacy geometry (04 §30)', () => {
     const component = adapt();
     expect(component.thermal_spec.geometry.needs_review).toBe(true);
-    expect(component.thermal_spec.geometry.legacy_height_mm).toBe(250);
-    // Height was NOT assumed to be package height.
     expect(component.thermal_spec.geometry.package_H_mm).toBeNull();
     expect(validateComponent(component).some((i) => i.message.includes('legacy geometry'))).toBe(
       true,
     );
   });
 
+  // Height is a vertical POSITION in the Volume Tool, feeding its local-ambient
+  // correction. It is not package geometry and this tool models no such
+  // correction, so it survives as metadata rather than as a geometry field.
+  it('keeps legacy Height as metadata rather than geometry', () => {
+    const component = adapt();
+    expect(component.metadata?.['Height(mm)']).toBe(250);
+    expect(component.thermal_spec.geometry).not.toHaveProperty('legacy_height_mm');
+  });
+
+  it('infers the limit surface the legacy schema never recorded', () => {
+    const component = adapt();
+    // An RF part is quoted against the junction — but it is only a guess.
+    expect(component.thermal_spec.limit_type).toBe('Tj');
+    expect(component.thermal_spec.limit_type_confirmed).toBe(false);
+  });
+
   it('does not claim a limit type the legacy schema never stated', () => {
-    expect(adapt().thermal_spec.limit_type).toBe('Unknown');
+    // The schema has no such column, so the surface is inferred, and inferring
+    // it is recorded as unconfirmed rather than presented as fact.
+    expect(adapt().thermal_spec.limit_type_confirmed).toBe(false);
   });
 
   it('preserves unknown legacy fields through a round trip (AC-04-18, 04 §38 case H)', () => {

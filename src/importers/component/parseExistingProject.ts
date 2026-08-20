@@ -53,7 +53,6 @@ const HEADERS = [
   'Limit(C)',
   'Board_Type',
   'TIM_Type',
-  'Height(mm)',
   'Pad_L',
   'Pad_W',
   'Thick(mm)',
@@ -69,10 +68,7 @@ export interface ExistingProjectScope {
   includeHidden: boolean;
 }
 
-export function parseExistingProject(
-  projectId: string,
-  scope: ExistingProjectScope,
-): ParsedTable {
+export function parseExistingProject(projectId: string, scope: ExistingProjectScope): ParsedTable {
   const components = loadComponents(projectId).filter((component) => {
     if (!scope.categories.includes(component.category)) return false;
     // Disabled components are the tool's own "hidden / excluded" set (02 §6).
@@ -90,7 +86,6 @@ export function parseExistingProject(
     text(component.thermal_spec.limit_C?.value),
     text(component.thermal_spec.board_path.type),
     text(component.thermal_spec.tim.type),
-    text(component.thermal_spec.geometry.legacy_height_mm),
     text(component.thermal_spec.geometry.pad_L_mm),
     text(component.thermal_spec.geometry.pad_W_mm),
     text(component.thermal_spec.geometry.board_thickness_mm),
