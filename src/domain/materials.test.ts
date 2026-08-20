@@ -13,6 +13,24 @@ import { sourced } from './sourcedValue';
 
 const tim = (patch: Partial<TimSpec> = {}): TimSpec => ({ ...emptyTim(), ...patch });
 
+/**
+ * Every SourcedValue is stamped with the moment it was built, so two separately
+ * constructed default sets differ by whatever milliseconds elapsed between
+ * them. That is real behaviour and worth keeping, but it is not what these
+ * assertions are about — comparing shapes means comparing them without it.
+ */
+function withoutTimestamps<T>(value: T): T {
+  if (Array.isArray(value)) return value.map(withoutTimestamps) as unknown as T;
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .filter(([key]) => key !== 'updated_at')
+        .map(([key, entry]) => [key, withoutTimestamps(entry)]),
+    ) as T;
+  }
+  return value;
+}
+
 describe('shipped defaults', () => {
   it('ships a value for every material constant, marked Assumed', () => {
     const materials = defaultMaterials();
@@ -100,8 +118,9 @@ describe('resolveTim', () => {
 
 describe('normalizeMaterials', () => {
   it('returns the shipped set for a project written before this section existed', () => {
-    expect(normalizeMaterials(undefined)).toEqual(defaultMaterials());
-    expect(normalizeMaterials(null)).toEqual(defaultMaterials());
+    const expected = withoutTimestamps(defaultMaterials());
+    expect(withoutTimestamps(normalizeMaterials(undefined))).toEqual(expected);
+    expect(withoutTimestamps(normalizeMaterials(null))).toEqual(expected);
   });
 
   it('fills a partial record rather than leaving holes', () => {
@@ -136,6 +155,10 @@ describe('normalizeMaterials', () => {
 
   it('round trips its own output', () => {
     const materials = defaultMaterials();
-    expect(normalizeMaterials(JSON.parse(JSON.stringify(materials)))).toEqual(materials);
+    const reloaded = normalizeMaterials(JSON.parse(JSON.stringify(materials)));
+    expect(reloaded).toEqual(materials);
+    // The stamp is part of the payload here, so a round trip must preserve it
+    // rather than restamp the value as if it had just been decided.
+    expect(reloaded.tim.Grease.k_W_mK.updated_at).toBe(materials.tim.Grease.k_W_mK.updated_at);
   });
 });
