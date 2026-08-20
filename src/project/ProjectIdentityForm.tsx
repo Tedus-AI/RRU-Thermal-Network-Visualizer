@@ -4,8 +4,11 @@ import { Lock } from 'lucide-react';
 import { Field, SectionCard, Select, TextArea, TextInput } from '@/ui/primitives';
 import { PROJECT_STAGES, suggestProjectId } from '@/domain/project';
 import { useProjectStore } from '@/data/projectStore';
-import { useFormTouch, useVisibleError } from './formTouch';
+import { useFormTouch, useSectionAlert, useVisibleError } from './formTouch';
 import type { ProjectStage } from '@/domain/project';
+
+/** The fields this section can fail validation on — see `useSectionAlert`. */
+const IDENTITY_FIELDS = ['project_name', 'project_id'] as const;
 
 export function ProjectIdentityForm({
   errors,
@@ -20,6 +23,7 @@ export function ProjectIdentityForm({
   const patchContext = useProjectStore((s) => s.patchContext);
   const touch = useFormTouch((s) => s.touch);
   const visibleError = useVisibleError(errors);
+  const alert = useSectionAlert(errors, IDENTITY_FIELDS);
 
   if (!draft) return null;
 
@@ -42,7 +46,19 @@ export function ProjectIdentityForm({
   };
 
   return (
-    <SectionCard step={1} title="Project Identity" subtitle="專案識別">
+    <SectionCard
+      step={1}
+      title="Project Identity"
+      subtitle="專案識別"
+      collapsible
+      alert={alert}
+      summary={
+        <>
+          {draft.project_name.trim() || 'Untitled / 未命名'} ·{' '}
+          {draft.project_id.trim() || 'no ID'} · {draft.project_context.project_stage}
+        </>
+      }
+    >
       <div className="grid grid-cols-1 gap-x-6 gap-y-4 lg:grid-cols-2">
         <Field
           label="Project Name"

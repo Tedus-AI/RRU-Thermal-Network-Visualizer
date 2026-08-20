@@ -50,7 +50,21 @@ export function ProductThermalContextForm({ readOnly }: { readOnly: boolean }) {
   const allowedDeployments = DEPLOYMENTS_BY_PRODUCT[context.product_type];
 
   return (
-    <SectionCard step={2} title="Product & Thermal Context" subtitle="產品與熱設計背景">
+    <SectionCard
+      step={2}
+      title="Product & Thermal Context"
+      subtitle="產品與熱設計背景"
+      collapsible
+      summary={
+        <>
+          {context.product_type} · {DEPLOYMENT_ZH[context.deployment]} · {context.frequency_range} ·{' '}
+          {ENCLOSURE_ZH[context.enclosure_type]} ·{' '}
+          {context.cooling_architecture.length === 0
+            ? 'no cooling selected / 未選散熱方式'
+            : context.cooling_architecture.join('、')}
+        </>
+      }
+    >
       <div className="grid grid-cols-1 gap-x-6 gap-y-4 lg:grid-cols-3">
         <Field label="Product Type" zh="產品類型" htmlFor="product_type">
           <Select

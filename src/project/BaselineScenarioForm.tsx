@@ -10,7 +10,16 @@ import { SCENARIO_LIMITS, type Scenario } from '@/domain/project';
 import { useScenarioStore } from '@/data/scenarioStore';
 import { useProjectStore } from '@/data/projectStore';
 import { useBoundaryStore } from '@/data/boundaryStore';
-import { useFormTouch, useVisibleError } from './formTouch';
+import { useFormTouch, useSectionAlert, useVisibleError } from './formTouch';
+
+/** The fields this section can fail validation on — see `useSectionAlert`. */
+const SCENARIO_FIELDS = [
+  'scenario_name',
+  'ambient_C',
+  'wind_mps',
+  'solar_W_m2',
+  'power_scale',
+] as const;
 
 export function BaselineScenarioForm({
   scenario,
@@ -25,10 +34,17 @@ export function BaselineScenarioForm({
   const markDirty = useProjectStore((s) => s.markDirty);
   const touch = useFormTouch((s) => s.touch);
   const visibleError = useVisibleError(errors);
+  const alert = useSectionAlert(errors, SCENARIO_FIELDS);
 
   if (!scenario) {
     return (
-      <SectionCard step={3} title="Default Scenario" subtitle="預設情境">
+      <SectionCard
+        step={3}
+        title="Default Scenario"
+        subtitle="預設情境"
+        collapsible
+        summary="Created on first save / 首次儲存時建立"
+      >
         <p className="text-[13px] text-ink-500">
           A Baseline scenario will be created automatically when this project is first saved.
         </p>
@@ -59,7 +75,19 @@ export function BaselineScenarioForm({
   const numeric = (value: string) => (value === '' ? Number.NaN : Number(value));
 
   return (
-    <SectionCard step={3} title="Default Scenario" subtitle={`預設情境 — ${scenario.id}`}>
+    <SectionCard
+      step={3}
+      title="Default Scenario"
+      subtitle={`預設情境 — ${scenario.id}`}
+      collapsible
+      alert={alert}
+      summary={
+        <>
+          {scenario.name} · {scenario.ambient_C} °C · {scenario.wind_mps} m/s ·{' '}
+          {scenario.solar_W_m2} W/m² · ×{scenario.power_scale}
+        </>
+      }
+    >
       <div className="grid grid-cols-2 gap-x-6 gap-y-4 lg:grid-cols-5">
         <Field label="Scenario Name" zh="情境名稱" htmlFor="scenario_name" error={visibleError('scenario_name')}>
           <TextInput

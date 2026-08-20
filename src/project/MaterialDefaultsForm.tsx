@@ -76,7 +76,7 @@ function MaterialNumber({
 export function MaterialDefaultsForm({
   readOnly,
   step,
-  defaultOpen = false,
+  defaultOpen = true,
 }: {
   readOnly: boolean;
   step?: number;
