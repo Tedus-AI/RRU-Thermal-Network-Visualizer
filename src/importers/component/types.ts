@@ -7,12 +7,7 @@
  * Nothing in this pipeline may touch componentStore before Apply (02 §8, §34).
  */
 
-import type {
-  ComponentCategory,
-  HeatPathType,
-  ImportSourceType,
-  TimType,
-} from '@/domain/component';
+import type { ComponentCategory, HeatPathType, ImportSourceType } from '@/domain/component';
 
 /** Target fields a source column can be mapped onto — 02 §11. */
 export const CANONICAL_FIELDS = [
@@ -24,7 +19,6 @@ export const CANONICAL_FIELDS = [
   'R_jc',
   'Heat_Path',
   'TIM_Type',
-  'TIM_k',
   'TIM_BLT',
   'Source_L',
   'Source_W',
@@ -52,7 +46,7 @@ export const RECOMMENDED_FIELDS: CanonicalField[] = [
  * Fields that override a project-level default rather than stating a fact the
  * source owns. Blank is the normal case, so they never raise a warning.
  */
-export const OVERRIDE_FIELDS: CanonicalField[] = ['Spread_L', 'Spread_W', 'TIM_k', 'TIM_BLT'];
+export const OVERRIDE_FIELDS: CanonicalField[] = ['Spread_L', 'Spread_W', 'TIM_BLT'];
 
 /** Raw tabular data straight out of a parser, before any mapping. */
 export interface ParsedTable {
@@ -95,9 +89,14 @@ export interface StagingRow {
   r_jc_C_per_W: number | null;
   limit_C: number | null;
   heat_path: HeatPathType | null;
-  tim_type: TimType | null;
-  tim_k_W_mK: number | null;
-  tim_thickness_mm: number | null;
+  /**
+   * The material's NAME as the source spells it. It is matched against the
+   * project's TIM library on apply — a name that matches nothing is reported
+   * rather than turned into a new material, since a typo would otherwise grow
+   * the library silently.
+   */
+  tim_name: string | null;
+  tim_blt_mm: number | null;
   source_L_mm: number | null;
   source_W_mm: number | null;
   spread_L_mm: number | null;

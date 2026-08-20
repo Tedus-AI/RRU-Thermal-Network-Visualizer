@@ -82,24 +82,6 @@ export function inferHeatPath(category: ComponentCategory): HeatPathType {
 }
 
 /**
- * Thermal interface material — 04 §11.
- * Solder and PCM are first-class here; naming a TIM still does not create an
- * edge, that stays Screen 05's decision (04 §11).
- */
-export const TIM_TYPES = [
-  'Grease',
-  'Pad',
-  'Pad2',
-  'Putty',
-  'PCM',
-  'Gap Filler',
-  'Solder',
-  'None',
-  'Custom',
-] as const;
-export type TimType = (typeof TIM_TYPES)[number];
-
-/**
  * 04 §11: nothing may force every component onto Tj — a DDR case limit is a case
  * limit, and the margin has to be measured against the surface the datasheet
  * actually specifies.
@@ -259,12 +241,24 @@ export interface HeatPathSpec {
   parameters: Record<string, number | string | boolean | null>;
 }
 
-/** 04 §18 — TIM can inherit the project default or be overridden per component. */
+/**
+ * 04 §18 — which of the project's TIMs this component uses.
+ *
+ * The material itself is defined once, in the project library (01 §4). A
+ * component picks one; it cannot invent a new one here, because a project uses
+ * a handful of interface materials and defining them per component meant
+ * hundreds of copies of the same two numbers.
+ *
+ * `blt_mm` is the one thing a component may still say for itself. Bond line is
+ * a build outcome, not a material property — the same grease ends up thinner
+ * under screws than under a clip — so two components can share a material and
+ * still have different thicknesses. Left null it uses the material's default.
+ */
 export interface TimSpec {
-  type: TimType;
-  inheritance: 'project' | 'component';
-  k_W_mK: SourcedValue<number> | null;
-  thickness_mm: SourcedValue<number> | null;
+  /** A `TimMaterial.id`, or null for no TIM at all (direct contact). */
+  tim_id: string | null;
+  /** Overrides the material's default bond line for this component only. */
+  blt_mm: SourcedValue<number> | null;
   contact_area_mode: 'derived' | 'custom';
 }
 
@@ -361,14 +355,8 @@ export function emptyHeatPath(type: HeatPathType = 'Board'): HeatPathSpec {
   return { type, parameters: {} };
 }
 
-export function emptyTim(): TimSpec {
-  return {
-    type: 'None',
-    inheritance: 'project',
-    k_W_mK: null,
-    thickness_mm: null,
-    contact_area_mode: 'derived',
-  };
+export function emptyTim(timId: string | null = null): TimSpec {
+  return { tim_id: timId, blt_mm: null, contact_area_mode: 'derived' };
 }
 
 export function emptyThermalSpec(

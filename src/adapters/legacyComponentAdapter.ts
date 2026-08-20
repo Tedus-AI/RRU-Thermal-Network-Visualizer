@@ -28,9 +28,9 @@ import {
   type Component,
   type ComponentCategory,
   type ComponentProvenance,
-  type TimType,
 } from '@/domain/component';
 import { sourced, unknownValue } from '@/domain/sourcedValue';
+import { findTimMaterial, type MaterialDefaults } from '@/domain/materials';
 
 export interface LegacyComponentRow {
   Component: string;
@@ -84,7 +84,8 @@ export function legacyComponentToCanonical(
     id: string;
     provenance: ComponentProvenance;
     normalizeHeatPath: (value: unknown) => HeatPathType | null;
-    normalizeTim: (value: unknown) => TimType | null;
+    /** Turns the legacy TIM name into an id in the project's library. */
+    resolveTimId: (value: unknown) => string | null;
   },
 ): Component {
   const metadata: Record<string, unknown> = {};
@@ -133,11 +134,7 @@ export function legacyComponentToCanonical(
       },
       heat_path: { type: heatPath, parameters: {} },
       heat_path_confirmed: statedHeatPath != null,
-      tim: {
-        ...emptyTim(),
-        type: options.normalizeTim(row.TIM_Type) ?? 'None',
-        inheritance: 'component',
-      },
+      tim: emptyTim(options.resolveTimId(row.TIM_Type)),
     },
 
     architecture_prep: emptyArchitecturePrep(),
@@ -163,8 +160,16 @@ const CANONICAL_TO_LEGACY_CATEGORY: Record<ComponentCategory, string> = {
   Other: 'other',
 };
 
-export function canonicalComponentToLegacy(component: Component): LegacyComponentRow {
+/**
+ * `materials` supplies the TIM's NAME, which is what the Volume Evaluation Tool
+ * reads — the id this tool stores means nothing over there.
+ */
+export function canonicalComponentToLegacy(
+  component: Component,
+  materials?: MaterialDefaults,
+): LegacyComponentRow {
   const spec = component.thermal_spec;
+  const tim = materials ? findTimMaterial(materials, spec.tim.tim_id) : null;
   return {
     // Unknown fields first so an owned column can never be shadowed.
     ...(component.metadata ?? {}),
@@ -177,7 +182,7 @@ export function canonicalComponentToLegacy(component: Component): LegacyComponen
     Board_Type: LEGACY_BOARD_TYPE[spec.heat_path.type],
     'Limit(C)': spec.limit_C?.value ?? null,
     R_jc: spec.r_jc_C_per_W?.value ?? null,
-    TIM_Type: spec.tim.type,
+    TIM_Type: tim?.name ?? 'None',
     category: CANONICAL_TO_LEGACY_CATEGORY[component.category],
   };
 }

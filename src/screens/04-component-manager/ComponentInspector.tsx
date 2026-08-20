@@ -24,7 +24,6 @@ import {
   QTY_MODEL_LABELS,
   SOURCE_FACE_LABELS,
   TEMPLATE_FOR_HEAT_PATH,
-  TIM_TYPES,
   componentTotalPowerW,
   isHeatSource,
   sourceAreaMm2,
@@ -38,9 +37,8 @@ import {
   type LimitType,
   type PackageType,
   type QtyModel,
-  type TimType,
 } from '@/domain/component';
-import { sourced, withValue, type SourcedValue } from '@/domain/sourcedValue';
+import { withValue, type SourcedValue } from '@/domain/sourcedValue';
 import { coinAreaMm2, defaultMaterials, resolveTim } from '@/domain/materials';
 import { useProjectStore } from '@/data/projectStore';
 import { DATA_SOURCES, type DataSource } from '@/thermal/types';
@@ -223,35 +221,6 @@ export function ComponentInspector({
             ? 'Needs the project coin size (Screen 01) / 需先設定專案銅塊尺寸'
             : 'From the project coin size / 取自專案銅塊尺寸'
           : 'No spreading on this path / 此路徑無擴散，等於熱源面';
-
-  /**
-   * Switching to Project Default CLEARS the overrides rather than hiding them.
-   * A stored number that no longer applies is a trap: `resolveTim` uses any
-   * value it finds, so leaving one behind greyed out would keep it in the
-   * answer while the UI said it was inherited.
-   */
-  const setTimInheritance = (mode: 'project' | 'component') => {
-    if (mode === 'project') {
-      patchSpec({ tim: { ...spec.tim, inheritance: mode, k_W_mK: null, thickness_mm: null } }, [
-        'tim',
-      ]);
-      return;
-    }
-    // Seed an override from what it was inheriting, so editing starts from the
-    // value that was already in effect instead of from an empty box.
-    patchSpec(
-      {
-        tim: {
-          ...spec.tim,
-          inheritance: mode,
-          k_W_mK: resolvedTim.k_W_mK == null ? null : sourced(resolvedTim.k_W_mK, 'Assumed'),
-          thickness_mm:
-            resolvedTim.thickness_mm == null ? null : sourced(resolvedTim.thickness_mm, 'Assumed'),
-        },
-      },
-      ['tim'],
-    );
-  };
 
   const patchPrep = (patch: Partial<Component['architecture_prep']>) =>
     onPatch(component.id, { architecture_prep: { ...prep, ...patch } }, ['architecture_prep']);
@@ -460,132 +429,77 @@ export function ComponentInspector({
                 />
               </div>
 
-              {/* --- TIM: project default vs component override (04 §18) --- */}
+              {/* --- TIM: picked from the project library (04 §18) --- */}
               <fieldset className="rounded-md border border-line p-3">
                 <legend className="px-1 text-[12px] font-semibold text-ink-700">
                   TIM / 熱介面材料
                 </legend>
                 <div className="flex flex-col gap-3">
-                  <div className="flex gap-2">
-                    {(['project', 'component'] as const).map((mode) => (
-                      <label
-                        key={mode}
-                        className={`flex flex-1 cursor-pointer items-center gap-1.5 rounded border px-2 py-1.5 text-[12px] ${
-                          spec.tim.inheritance === mode
-                            ? 'border-accent-600 bg-accent-50 text-accent-700'
-                            : 'border-line text-ink-500'
-                        }`}
-                      >
-                        <input
-                          type="radio"
-                          name="tim-inheritance"
-                          className="size-3.5 accent-[var(--color-accent-600)]"
-                          checked={spec.tim.inheritance === mode}
-                          disabled={readOnly}
-                          onChange={() => setTimInheritance(mode)}
-                        />
-                        <BilingualTooltip
-                          zh={
-                            mode === 'project'
-                              ? (tip('Project Default') ?? '')
-                              : (tip('Component Override') ?? '')
-                          }
-                        >
-                          {mode === 'project' ? 'Project Default' : 'Component Override'}
-                        </BilingualTooltip>
-                      </label>
-                    ))}
-                  </div>
-
                   <div className="flex flex-col gap-1.5">
-                    <FieldLabel label="TIM Type" zh="材料" htmlFor="ins-tim" tooltip={tip('TIM')} />
+                    <FieldLabel label="Material" zh="材料" htmlFor="ins-tim" tooltip={tip('TIM')} />
                     <Select
                       id="ins-tim"
-                      options={TIM_TYPES}
-                      value={spec.tim.type}
+                      items={[
+                        { value: '', label: 'None / 無' },
+                        ...materials.tim.map((material) => ({
+                          value: material.id,
+                          label: `${material.name} — k ${material.k_W_mK.value ?? '?'} W/m·K`,
+                        })),
+                      ]}
+                      value={spec.tim.tim_id ?? ''}
                       disabled={readOnly}
                       onChange={(event) =>
-                        patchSpec({ tim: { ...spec.tim, type: event.target.value as TimType } }, [
-                          'tim.type',
-                        ])
+                        patchSpec(
+                          { tim: { ...spec.tim, tim_id: event.target.value || null } },
+                          ['tim.tim_id'],
+                        )
                       }
                     />
+                    <p className="text-[11px] leading-relaxed text-ink-400">
+                      Materials are defined once for the project, in Screen 01. This picks one.
+                      <span className="block">材料在 Screen 01 統一建立，這裡只是選用。</span>
+                    </p>
                   </div>
 
-                  <SourcedNumberField
-                    label="TIM k"
-                    zh="導熱係數"
-                    unit="W/m·K"
-                    value={spec.tim.k_W_mK}
-                    placeholder={
-                      resolvedTim.k_W_mK == null ? '—' : `${resolvedTim.k_W_mK} (project)`
-                    }
-                    step="0.1"
-                    readOnly={readOnly || spec.tim.inheritance === 'project'}
-                    onChange={(next) => patchSpec({ tim: { ...spec.tim, k_W_mK: next } }, ['tim'])}
-                  />
-                  <SourcedNumberField
-                    label="TIM Thickness"
-                    zh="厚度 (BLT)"
-                    unit="mm"
-                    value={spec.tim.thickness_mm}
-                    placeholder={
-                      resolvedTim.thickness_mm == null
-                        ? '—'
-                        : `${resolvedTim.thickness_mm} (project)`
-                    }
-                    step="0.01"
-                    readOnly={readOnly || spec.tim.inheritance === 'project'}
-                    onChange={(next) =>
-                      patchSpec({ tim: { ...spec.tim, thickness_mm: next } }, ['tim'])
-                    }
-                  />
-                  {spec.tim.inheritance === 'project' && resolvedTim.k_W_mK == null && (
-                    <p className="text-[11px] leading-relaxed text-warn-600">
-                      {spec.tim.type} has no project properties to inherit, so the TIM edge cannot
-                      resolve.
+                  {/* A dangling reference is not the same as "no TIM", so it says so. */}
+                  {resolvedTim.missing && (
+                    <p className="text-[11px] leading-relaxed text-danger-600">
+                      This component points at a material the project no longer has. Pick another.
                       <span className="block">
-                        {spec.tim.type} 沒有可繼承的專案材料屬性，TIM 熱阻將無法解出。
+                        此元件指向的材料已不存在於專案清單中，請重新選擇。
                       </span>
                     </p>
                   )}
+
+                  <SourcedNumberField
+                    label="Bond Line (BLT)"
+                    zh="壓合厚度"
+                    unit="mm"
+                    value={spec.tim.blt_mm}
+                    placeholder={
+                      resolvedTim.thickness_mm == null
+                        ? '—'
+                        : `${resolvedTim.thickness_mm} (from material)`
+                    }
+                    step="0.01"
+                    readOnly={readOnly || spec.tim.tim_id == null}
+                    onChange={(next) => patchSpec({ tim: { ...spec.tim, blt_mm: next } }, ['tim'])}
+                  />
+                  <p className="text-[11px] leading-relaxed text-ink-400">
+                    Bond line is a build outcome, not a material property — the same material ends
+                    up thinner under screws than under a clip. Leave it empty to use the material's
+                    default; k always comes from the material.
+                    <span className="block">
+                      壓合厚度取決於組裝方式而非材料本身，故可個別覆寫；留空則沿用材料預設。k
+                      一律取自材料。
+                    </span>
+                  </p>
                   <p className="text-[11px] leading-relaxed text-ink-400">
                     Specifying a TIM does not create a thermal edge — Screen 05 decides that.
                     <span className="block">指定 TIM 不代表建立獨立 Edge，由 Screen 05 決定。</span>
                   </p>
                 </div>
               </fieldset>
-            </>
-          )}
-
-          {tab === 'geometry' && (
-            <>
-              <div className="grid grid-cols-3 gap-2.5">
-                <GeometryField
-                  label="Package L"
-                  zh="長"
-                  field="package_L_mm"
-                  geometry={spec.geometry}
-                  readOnly={readOnly}
-                  onChange={patchGeometry}
-                />
-                <GeometryField
-                  label="Package W"
-                  zh="寬"
-                  field="package_W_mm"
-                  geometry={spec.geometry}
-                  readOnly={readOnly}
-                  onChange={patchGeometry}
-                />
-                <GeometryField
-                  label="Package H"
-                  zh="高"
-                  field="package_H_mm"
-                  geometry={spec.geometry}
-                  readOnly={readOnly}
-                  onChange={patchGeometry}
-                />
-              </div>
 
               {/* --- Heat path (04 §17) --- */}
               <fieldset className="rounded-md border border-line p-3">

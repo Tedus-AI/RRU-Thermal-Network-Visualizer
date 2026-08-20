@@ -1,3 +1,4 @@
+import { BUILTIN_TIM_IDS } from '@/domain/materials';
 import { defaultMaterials } from '@/domain/materials';
 import { describe, expect, it } from 'vitest';
 
@@ -42,9 +43,8 @@ function component(overrides: Partial<Component> = {}): Component {
       },
       tim: {
         ...emptyThermalSpec().tim,
-        type: 'Grease',
-        k_W_mK: sourced(3, 'Vendor'),
-        thickness_mm: sourced(0.1, 'Vendor'),
+        tim_id: BUILTIN_TIM_IDS.grease,
+        blt_mm: sourced(0.1, 'Vendor'),
       },
     },
     architecture_prep: {
@@ -306,7 +306,7 @@ describe('analytical edge resistance (05 §21)', () => {
     const inherited = component({
       thermal_spec: {
         ...component().thermal_spec,
-        tim: { ...emptyTim(), type: 'Grease', inheritance: 'project' },
+        tim: { ...emptyTim(BUILTIN_TIM_IDS.grease) },
       },
     });
     const graph = buildComponentSubgraph(inherited, {
@@ -324,11 +324,15 @@ describe('analytical edge resistance (05 §21)', () => {
     const inherited = component({
       thermal_spec: {
         ...component().thermal_spec,
-        tim: { ...emptyTim(), type: 'Grease', inheritance: 'project' },
+        tim: { ...emptyTim(BUILTIN_TIM_IDS.grease) },
       },
     });
     const stiffer = defaultMaterials();
-    stiffer.tim.Grease = { ...stiffer.tim.Grease, k_W_mK: sourced(6, 'Vendor') };
+    stiffer.tim = stiffer.tim.map((material) =>
+      material.id === BUILTIN_TIM_IDS.grease
+        ? { ...material, k_W_mK: sourced(6, 'Vendor') }
+        : material,
+    );
     const graph = buildComponentSubgraph(inherited, {
       materials: stiffer,
       templateId: 'BOTTOM_COOL_COIN',
@@ -338,11 +342,13 @@ describe('analytical edge resistance (05 §21)', () => {
     expect(activeRth(tim.rth)).toBeCloseTo(0.05 / 1000 / (6 * (250.56 / 1e6)), 6);
   });
 
+  // A component pointing at a deleted material is NOT the same as one with no
+  // TIM, and neither may borrow another material's numbers.
   it('leaves a TIM the project cannot describe unresolved rather than guessing', () => {
     const custom = component({
       thermal_spec: {
         ...component().thermal_spec,
-        tim: { ...emptyTim(), type: 'Custom', inheritance: 'project' },
+        tim: emptyTim('TIM_DELETED'),
       },
     });
     const graph = buildComponentSubgraph(custom, {
@@ -692,7 +698,7 @@ describe('end-to-end resolution per heat path', () => {
         thermal_spec: {
           ...component().thermal_spec,
           heat_path: { type: path, parameters: {} },
-          tim: { ...emptyTim(), type: 'Grease', inheritance: 'project' },
+          tim: { ...emptyTim(BUILTIN_TIM_IDS.grease) },
         },
       }),
       { materials: materials(), templateId, qtyModel: 'AGGREGATE' },

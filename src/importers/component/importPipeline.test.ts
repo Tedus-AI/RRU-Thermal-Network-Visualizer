@@ -1,3 +1,4 @@
+import { BUILTIN_TIM_IDS, defaultMaterials } from '@/domain/materials';
 import { describe, expect, it } from 'vitest';
 
 import { detectDelimiter, parseDelimitedText, splitDelimitedLine } from './parseTable';
@@ -5,7 +6,7 @@ import { autoMapColumns, matchCanonicalField } from './autoMapColumns';
 import {
   normalizeHeatPath,
   normalizeCategory,
-  normalizeTim,
+  normalizeTimName,
   parseNumericCell,
 } from './normalizeComponent';
 import { buildStagingRows, duplicateKey } from './buildStagingRows';
@@ -187,9 +188,9 @@ describe('enum normalization', () => {
 
   it('keeps Solder and Gap Filler as first-class TIM types (04 §11)', () => {
     // Naming a TIM still never promotes it into graph topology (02 §16).
-    expect(normalizeTim('Solder')).toBe('Solder');
-    expect(normalizeTim('Gap Filler')).toBe('Gap Filler');
-    expect(normalizeTim('PCM')).toBe('PCM');
+    expect(normalizeTimName('Solder')).toBe('Solder');
+    expect(normalizeTimName('Gap Filler')).toBe('Gap Filler');
+    expect(normalizeTimName('PCM')).toBe('PCM');
   });
 });
 
@@ -277,6 +278,7 @@ describe('duplicate handling', () => {
 
   it('SKIP keeps the existing component untouched', () => {
     const { components, result } = applyImport({
+      materials: defaultMaterials(),
       existing,
       rows: stage(csv, existing),
       sessionPolicy: 'SKIP',
@@ -289,6 +291,7 @@ describe('duplicate handling', () => {
 
   it('REPLACE overwrites owned fields but preserves unknown metadata', () => {
     const { components, result } = applyImport({
+      materials: defaultMaterials(),
       existing,
       rows: stage(csv, existing),
       sessionPolicy: 'REPLACE',
@@ -305,6 +308,7 @@ describe('duplicate handling', () => {
 
   it('MERGE_NON_EMPTY keeps the existing value where the import is empty', () => {
     const { components } = applyImport({
+      materials: defaultMaterials(),
       existing,
       rows: stage(csv, existing),
       sessionPolicy: 'MERGE_NON_EMPTY',
@@ -318,6 +322,7 @@ describe('duplicate handling', () => {
 
   it('NEW_VARIANT adds a separate component', () => {
     const { components, result } = applyImport({
+      materials: defaultMaterials(),
       existing,
       rows: stage(csv, existing),
       sessionPolicy: 'NEW_VARIANT',
@@ -331,6 +336,7 @@ describe('duplicate handling', () => {
   it('honours a per-row override of the session policy', () => {
     const rows = stage(csv, existing).map((row) => ({ ...row, duplicate_action: 'SKIP' as const }));
     const { components, result } = applyImport({
+      materials: defaultMaterials(),
       existing,
       rows,
       sessionPolicy: 'REPLACE',
@@ -354,6 +360,7 @@ describe('apply', () => {
   it('blocks error rows and imports the rest', () => {
     const rows = stage(csv);
     const { components, result } = applyImport({
+      materials: defaultMaterials(),
       existing: [],
       rows,
       sessionPolicy: 'MERGE_NON_EMPTY',
@@ -367,6 +374,7 @@ describe('apply', () => {
   it('never creates thermal topology', () => {
     // 02 §34 / AC-02-16.
     const { components } = applyImport({
+      materials: defaultMaterials(),
       existing: [],
       rows: stage(csv),
       sessionPolicy: 'MERGE_NON_EMPTY',
@@ -383,6 +391,7 @@ describe('apply', () => {
 
   it('records provenance on every imported component', () => {
     const { components } = applyImport({
+      materials: defaultMaterials(),
       existing: [],
       rows: stage(csv),
       sessionPolicy: 'MERGE_NON_EMPTY',
@@ -396,6 +405,7 @@ describe('apply', () => {
   it('keeps unmapped source columns as component metadata', () => {
     const rows = stage('Component,Qty,Power(W),Supplier PN\nPA,4,52.13,ACME-123');
     const { components } = applyImport({
+      materials: defaultMaterials(),
       existing: [],
       rows,
       sessionPolicy: 'MERGE_NON_EMPTY',
@@ -406,6 +416,7 @@ describe('apply', () => {
 
   it('flags solver invalidation and network review for new components', () => {
     const { result } = applyImport({
+      materials: defaultMaterials(),
       existing: [],
       rows: stage(csv),
       sessionPolicy: 'MERGE_NON_EMPTY',
@@ -427,7 +438,7 @@ describe('apply', () => {
           ...emptyThermalSpec(),
           r_jc_C_per_W: sourced(0.35, 'Datasheet'),
           limit_C: sourced(180, 'Datasheet'),
-          tim: { ...emptyThermalSpec().tim, type: 'Grease' },
+          tim: { ...emptyThermalSpec().tim, tim_id: BUILTIN_TIM_IDS.grease },
         },
       }),
     ];
@@ -436,6 +447,7 @@ describe('apply', () => {
       existing,
     );
     const { result } = applyImport({
+      materials: defaultMaterials(),
       existing,
       rows,
       sessionPolicy: 'REPLACE',
@@ -516,7 +528,7 @@ describe('legacy adapter', () => {
         imported_at: '2026-01-01T00:00:00Z',
       },
       normalizeHeatPath,
-      normalizeTim,
+      resolveTimId: () => BUILTIN_TIM_IDS.grease,
     });
 
     expect(canonical.name).toBe('Final PA');

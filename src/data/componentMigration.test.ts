@@ -1,3 +1,4 @@
+import { BUILTIN_TIM_IDS } from '@/domain/materials';
 import { describe, expect, it } from 'vitest';
 import { migrateComponent, migrateComponents } from './componentMigration';
 
@@ -60,8 +61,7 @@ describe('pre-04 component migration', () => {
   });
 
   it('moves the flat TIM type into a TIM spec', () => {
-    expect(migrated.thermal_spec.tim.type).toBe('Grease');
-    expect(migrated.thermal_spec.tim.k_W_mK).toBeNull();
+    expect(migrated.thermal_spec.tim.tim_id).toBe(BUILTIN_TIM_IDS.grease);
   });
 
   it('moves the flat geometry fields and flags them for review', () => {
@@ -114,7 +114,7 @@ describe('migration robustness', () => {
     const again = migrateComponent(current, 0)!;
     expect(again.power_W.value).toBeCloseTo(52.13);
     expect(again.thermal_spec.heat_path.type).toBe('Coin');
-    expect(again.thermal_spec.tim.type).toBe('Grease');
+    expect(again.thermal_spec.tim.tim_id).toBe(BUILTIN_TIM_IDS.grease);
     expect(again.enabled).toBe(true);
   });
 
@@ -141,7 +141,7 @@ describe('migration robustness', () => {
     // Nothing to migrate means nothing to trust: inferred, and flagged as such.
     expect(bare.thermal_spec.heat_path.type).toBe('Board');
     expect(bare.thermal_spec.heat_path_confirmed).toBe(false);
-    expect(bare.thermal_spec.tim.type).toBe('None');
+    expect(bare.thermal_spec.tim.tim_id).toBeNull();
     expect(bare.thermal_spec.geometry.source_L_mm).toBeNull();
   });
 });

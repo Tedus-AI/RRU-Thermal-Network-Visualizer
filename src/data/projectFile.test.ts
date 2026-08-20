@@ -245,7 +245,7 @@ describe('material defaults survive the folder round trip', () => {
     localStorage.setItem('tnv.projects', JSON.stringify(raw));
 
     const reopened = loadProject('MAT_B')!;
-    expect(reopened.materials.tim.Grease.k_W_mK.value).toBe(3.0);
+    expect(reopened.materials.tim[0].k_W_mK.value).toBe(3.0);
     expect(reopened.materials.coin_L_mm).toBeNull();
   });
 });

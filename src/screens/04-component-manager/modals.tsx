@@ -1,5 +1,7 @@
 /** Add Component and Bulk Edit dialogs — 04 §24, §25. */
 
+import { defaultMaterials } from '@/domain/materials';
+import { useProjectStore } from '@/data/projectStore';
 import { useState } from 'react';
 import { Button, Field, Modal, NumberInput, Select, TextInput } from '@/ui/primitives';
 import {
@@ -9,14 +11,12 @@ import {
   HEAT_PATH_TYPES,
   COMPONENT_CATEGORIES,
   LIMIT_TYPES,
-  TIM_TYPES,
   type ArchitectureTemplate,
   type BaseZone,
   type HeatPathType,
   type Component,
   type ComponentCategory,
   type LimitType,
-  type TimType,
 } from '@/domain/component';
 import { sourced } from '@/domain/sourcedValue';
 
@@ -152,7 +152,7 @@ export interface BulkEditValues {
   category?: ComponentCategory;
   limit_type?: LimitType;
   heat_path?: HeatPathType;
-  tim_type?: TimType;
+  tim_id?: string;
   template?: ArchitectureTemplate;
   base_zone?: BaseZone;
   enabled?: boolean;
@@ -174,6 +174,8 @@ export function BulkEditModal({
   onApply: (values: BulkEditValues) => void;
 }) {
   const [values, setValues] = useState<Record<string, string>>({});
+  // The TIM choices are the project's own materials, not a fixed vocabulary.
+  const materials = useProjectStore((s) => s.draft?.materials) ?? defaultMaterials();
 
   const pick = (key: string) => values[key] ?? UNCHANGED;
   const setPick = (key: string, value: string) => setValues({ ...values, [key]: value });
@@ -183,7 +185,7 @@ export function BulkEditModal({
     if (pick('category') !== UNCHANGED) out.category = pick('category') as ComponentCategory;
     if (pick('limit_type') !== UNCHANGED) out.limit_type = pick('limit_type') as LimitType;
     if (pick('heat_path') !== UNCHANGED) out.heat_path = pick('heat_path') as HeatPathType;
-    if (pick('tim_type') !== UNCHANGED) out.tim_type = pick('tim_type') as TimType;
+    if (pick('tim_id') !== UNCHANGED) out.tim_id = pick('tim_id') as string;
     if (pick('template') !== UNCHANGED) out.template = pick('template') as ArchitectureTemplate;
     if (pick('base_zone') !== UNCHANGED) out.base_zone = pick('base_zone') as BaseZone;
     if (pick('enabled') !== UNCHANGED) out.enabled = pick('enabled') === 'true';
@@ -235,7 +237,13 @@ export function BulkEditModal({
         {row('category', 'Category', '分類', COMPONENT_CATEGORIES)}
         {row('limit_type', 'Limit Type', '限制類型', LIMIT_TYPES)}
         {row('heat_path', 'Heat Path', '散熱路徑', HEAT_PATH_TYPES)}
-        {row('tim_type', 'TIM', '導熱介質', TIM_TYPES)}
+        {row(
+          'tim_id',
+          'TIM',
+          '熱介面材料',
+          materials.tim.map((material) => material.id),
+          (value) => materials.tim.find((material) => material.id === value)?.name ?? value,
+        )}
         {row(
           'template',
           'Architecture Template',
@@ -261,7 +269,7 @@ export function bulkPatchFor(values: BulkEditValues) {
     if (values.category) patch.category = values.category;
     if (values.enabled != null) patch.enabled = values.enabled;
 
-    if (values.limit_type || values.heat_path || values.tim_type) {
+    if (values.limit_type || values.heat_path || values.tim_id) {
       patch.thermal_spec = {
         ...spec,
         limit_type: values.limit_type ?? spec.limit_type,
@@ -272,7 +280,7 @@ export function bulkPatchFor(values: BulkEditValues) {
           : spec.heat_path,
         // Choosing a path in bulk edit is a decision, so it counts as confirmed.
         heat_path_confirmed: values.heat_path ? true : spec.heat_path_confirmed,
-        tim: values.tim_type ? { ...spec.tim, type: values.tim_type } : spec.tim,
+        tim: values.tim_id ? { ...spec.tim, tim_id: values.tim_id } : spec.tim,
       };
     }
 
@@ -294,7 +302,7 @@ export function bulkFieldsFor(values: BulkEditValues): string[] {
   if (values.enabled != null) fields.push('enabled');
   if (values.limit_type) fields.push('limit_type');
   if (values.heat_path) fields.push('heat_path.type');
-  if (values.tim_type) fields.push('tim.type');
+  if (values.tim_id) fields.push('tim.tim_id');
   if (values.template || values.base_zone) fields.push('architecture_prep');
   return fields;
 }
