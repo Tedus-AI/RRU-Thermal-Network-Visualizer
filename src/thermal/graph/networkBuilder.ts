@@ -7,6 +7,7 @@
  *   3. an input the component does not have leaves the edge UNRESOLVED, never 0.
  */
 
+import { coinAreaMm2, resolveTim, type MaterialDefaults } from '@/domain/materials';
 import {
   powerWOf,
   sourceAreaMm2,
@@ -37,7 +38,11 @@ export interface Subgraph {
 }
 
 /** Reads a dotted path out of a component, unwrapping SourcedValue as needed. */
-export function readComponentField(component: Component, path: string): number | null {
+export function readComponentField(
+  component: Component,
+  path: string,
+  materials: MaterialDefaults,
+): number | null {
   // Virtual paths: derived areas that are not stored fields.
   //
   // `contact_area` is the name templates and already-stored networks use; it
@@ -45,14 +50,22 @@ export function readComponentField(component: Component, path: string): number |
   // paths are new, and PR-follow-up work moves the templates onto them.
   const geometry = component.thermal_spec.geometry;
   const heatPath = component.thermal_spec.heat_path.type;
+  const coinArea = coinAreaMm2(materials);
   switch (path) {
     case 'thermal_spec.geometry.contact_area':
     case 'thermal_spec.geometry.source_area':
       return sourceAreaMm2(geometry);
     case 'thermal_spec.geometry.spread_area':
-      return spreadAreaMm2(geometry, heatPath);
+      return spreadAreaMm2(geometry, heatPath, coinArea);
     case 'thermal_spec.geometry.spreading_area':
-      return spreadingAreaMm2(geometry, heatPath);
+      return spreadingAreaMm2(geometry, heatPath, coinArea);
+    // TIM properties go through inheritance, so a component that never states
+    // k or BLT still resolves against the project's material table. Reading the
+    // stored field directly would have left every inherited TIM unresolved.
+    case 'thermal_spec.tim.k_W_mK':
+      return resolveTim(component.thermal_spec.tim, materials).k_W_mK;
+    case 'thermal_spec.tim.thickness_mm':
+      return resolveTim(component.thermal_spec.tim, materials).thickness_mm;
   }
 
   const parts = path.split('.');
@@ -74,9 +87,10 @@ export function readComponentField(component: Component, path: string): number |
 export function missingRequirements(
   component: Component,
   template: ThermalTemplate,
+  materials: MaterialDefaults,
 ): Array<{ path: string; label: string; labelZh: string }> {
   return template.requiredComponentFields.filter(
-    (field) => readComponentField(component, field.path) == null,
+    (field) => readComponentField(component, field.path, materials) == null,
   );
 }
 
@@ -101,6 +115,10 @@ export function buildComponentSubgraph(
     groupCount?: number;
     /** Suggested shared node for the primary port, from 04's preferred zone. */
     suggestedZoneNodeId?: string | null;
+    /** Project constants the component inherits from. Required, never defaulted:
+     *  falling back to the shipped values would quietly ignore a project that
+     *  had changed them. */
+    materials: MaterialDefaults;
   },
 ): Subgraph | null {
   const template = getTemplate(options.templateId);
@@ -183,7 +201,7 @@ export function buildComponentSubgraph(
       // Seed parameters from the component wherever the template links them.
       const parameters: EdgeParameters = {};
       for (const [param, path] of Object.entries(proto.parameterLinks ?? {})) {
-        const value = readComponentField(component, path);
+        const value = readComponentField(component, path, options.materials);
         if (value != null) parameters[param] = value;
       }
 
@@ -247,7 +265,10 @@ export interface GeneratePreview {
 }
 
 /** Dry run for the "Generate from Component Preferences" flow (05 §49). */
-export function previewGeneration(components: Component[]): GeneratePreview {
+export function previewGeneration(
+  components: Component[],
+  materials: MaterialDefaults,
+): GeneratePreview {
   let nodes = 0;
   let edges = 0;
   let ports = 0;
@@ -268,6 +289,7 @@ export function previewGeneration(components: Component[]): GeneratePreview {
     }
 
     const subgraph = buildComponentSubgraph(component, {
+      materials,
       templateId: template.id,
       qtyModel:
         component.architecture_prep.qty_model_preference === 'DECIDE_LATER'
@@ -284,7 +306,7 @@ export function previewGeneration(components: Component[]): GeneratePreview {
     edges += subgraph.edges.length;
     ports += subgraph.nodes.reduce((sum, node) => sum + (node.ports?.length ?? 0), 0);
 
-    const missing = missingRequirements(component, template);
+    const missing = missingRequirements(component, template, materials);
     if (missing.length > 0) {
       needsReview.push({
         component: component.name,

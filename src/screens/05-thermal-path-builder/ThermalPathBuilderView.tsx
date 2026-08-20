@@ -40,6 +40,7 @@ import { useScenarioStore } from '@/data/scenarioStore';
 import { useSolverStore } from '@/data/solverStore';
 
 import { powerWOf, type Component } from '@/domain/component';
+import { defaultMaterials } from '@/domain/materials';
 import { createRth } from '@/thermal/rth';
 import { networkKpis, type GraphIssue } from '@/thermal/graph/graphValidation';
 import {
@@ -201,6 +202,9 @@ export function ThermalPathBuilderView() {
   const draft = useProjectStore((s) => s.draft);
   const projectStatus = useProjectStore((s) => s.status);
   const readOnly = useProjectStore((s) => s.isReadOnly());
+  // Template links resolve against the project's material constants, so every
+  // build path here has to be given them rather than assuming the defaults.
+  const materials = useProjectStore((s) => s.draft?.materials) ?? defaultMaterials();
 
   const components = useComponentStore((s) => s.components);
   const network = useNetworkStore((s) => s.network);
@@ -352,6 +356,7 @@ export function ThermalPathBuilderView() {
     if (!component || !pref) return;
 
     const subgraph = buildComponentSubgraph(component, {
+      materials,
       templateId: pref.templateId,
       qtyModel: pref.qtyModel,
       groupCount: pref.groupCount,
@@ -412,6 +417,7 @@ export function ThermalPathBuilderView() {
     for (const component of enabledComponents) {
       const pref = prefs[component.id] ?? defaultPrefFor(component);
       const subgraph = buildComponentSubgraph(component, {
+        materials,
         templateId: pref.templateId,
         qtyModel: pref.qtyModel,
         groupCount: pref.groupCount,
@@ -1105,6 +1111,7 @@ export function ThermalPathBuilderView() {
                   component.architecture_prep.qty_model_preference) as Component['architecture_prep']['qty_model_preference'],
               },
             })),
+            materials,
           )}
           structurePreset={structurePreset}
           onCancel={() => setShowGenerate(false)}

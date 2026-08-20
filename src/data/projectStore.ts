@@ -12,6 +12,7 @@ import {
   type ProjectContext,
   type ProjectStatus,
 } from '@/domain/project';
+import type { MaterialDefaults } from '@/domain/materials';
 import { createRevision } from '@/domain/revision';
 import { markSavePending } from './saveStatus';
 import {
@@ -42,6 +43,7 @@ interface ProjectStoreState {
 
   patchProject: (patch: Partial<Pick<Project, 'project_id' | 'project_name'>>) => void;
   patchContext: (patch: Partial<ProjectContext>) => void;
+  patchMaterials: (patch: Partial<MaterialDefaults>) => void;
   setActiveScenarioId: (scenarioId: string | null) => void;
   setStatus: (status: ProjectStatus) => void;
 
@@ -141,6 +143,29 @@ export const useProjectStore = create<ProjectStoreState>((set, get) => ({
         ...draft,
         revision: createRevision('project'),
         project_context: { ...draft.project_context, ...patch },
+      },
+      dirty: true,
+    });
+    get().scheduleAutoCommit();
+  },
+
+  /**
+   * Material and process constants. They are inputs to the resistance
+   * calculators, so a change here changes the answer — the solver-invalidation
+   * that follows from the project revision is exactly what should happen.
+   */
+  patchMaterials: (patch) => {
+    const draft = get().draft;
+    if (!draft || get().isReadOnly()) return;
+    const changed = Object.entries(patch).some(
+      ([key, value]) => !Object.is(draft.materials[key as keyof MaterialDefaults], value),
+    );
+    if (!changed) return;
+    set({
+      draft: {
+        ...draft,
+        revision: createRevision('project'),
+        materials: { ...draft.materials, ...patch },
       },
       dirty: true,
     });

@@ -6,6 +6,7 @@
  * solver invalidation.
  */
 
+import { defaultMaterials } from '@/domain/materials';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useNetworkStore } from './networkStore';
@@ -74,6 +75,7 @@ describe('component subgraph rebuild (05 §40, AC-05-11)', () => {
   it('preserves manual objects when only the generated ones are replaced', () => {
     const component = pa();
     const first = buildComponentSubgraph(component, {
+      materials: defaultMaterials(),
       templateId: 'BOTTOM_COOL_COIN',
       qtyModel: 'AGGREGATE',
     })!;
@@ -89,6 +91,7 @@ describe('component subgraph rebuild (05 §40, AC-05-11)', () => {
     });
 
     const rebuilt = buildComponentSubgraph(component, {
+      materials: defaultMaterials(),
       templateId: 'BOTTOM_COOL_VIA',
       qtyModel: 'AGGREGATE',
     })!;
@@ -106,6 +109,7 @@ describe('component subgraph rebuild (05 §40, AC-05-11)', () => {
   it('replaces everything when the engineer explicitly asks for it', () => {
     const component = pa();
     const first = buildComponentSubgraph(component, {
+      materials: defaultMaterials(),
       templateId: 'BOTTOM_COOL_COIN',
       qtyModel: 'AGGREGATE',
     })!;
@@ -115,6 +119,7 @@ describe('component subgraph rebuild (05 §40, AC-05-11)', () => {
       .upsertEdge(manualEdge('EDGE_MANUAL_1', first.nodes[0].id, first.nodes[1].id));
 
     const rebuilt = buildComponentSubgraph(component, {
+      materials: defaultMaterials(),
       templateId: 'BARE_DIE',
       qtyModel: 'AGGREGATE',
     })!;
@@ -133,6 +138,7 @@ describe('port connection (05 §16)', () => {
       zones: structure.zones,
     });
     const subgraph = buildComponentSubgraph(pa(), {
+      materials: defaultMaterials(),
       templateId: 'BOTTOM_COOL_COIN',
       qtyModel: 'AGGREGATE',
     })!;
@@ -162,6 +168,7 @@ describe('port connection (05 §16)', () => {
 describe('undo / redo (05 §41, AC-05-27)', () => {
   it('restores the graph across add, connect and delete', () => {
     const subgraph = buildComponentSubgraph(pa(), {
+      materials: defaultMaterials(),
       templateId: 'BOTTOM_COOL_COIN',
       qtyModel: 'AGGREGATE',
     })!;
@@ -180,6 +187,7 @@ describe('undo / redo (05 §41, AC-05-27)', () => {
 
   it('does not record a node move as a solver-invalidating change (05 §48)', () => {
     const subgraph = buildComponentSubgraph(pa(), {
+      materials: defaultMaterials(),
       templateId: 'BARE_DIE',
       qtyModel: 'AGGREGATE',
     })!;
@@ -197,6 +205,7 @@ describe('undo / redo (05 §41, AC-05-27)', () => {
   it('restores nested port state as well as the generated connection edge', () => {
     const structure = buildSharedStructure('FUNCTIONAL_ZONES');
     const subgraph = buildComponentSubgraph(pa(), {
+      materials: defaultMaterials(),
       templateId: 'BOTTOM_COOL_COIN',
       qtyModel: 'AGGREGATE',
     })!;
@@ -241,6 +250,7 @@ describe('persistent network review state', () => {
 describe('solver invalidation (05 §48, AC-05-48)', () => {
   it('marks the solver stale on any topology change', () => {
     const subgraph = buildComponentSubgraph(pa(), {
+      materials: defaultMaterials(),
       templateId: 'TOP_COOL_LID',
       qtyModel: 'AGGREGATE',
     })!;
@@ -254,6 +264,7 @@ describe('network status (05 §37)', () => {
     expect(useNetworkStore.getState().network!.status).toBe('EMPTY');
 
     const subgraph = buildComponentSubgraph(pa(), {
+      materials: defaultMaterials(),
       templateId: 'BOTTOM_COOL_COIN',
       qtyModel: 'AGGREGATE',
     })!;
@@ -266,6 +277,7 @@ describe('network status (05 §37)', () => {
 
   it('ignores a disabled node when looking for orphan heat sources (05 §51)', () => {
     const subgraph = buildComponentSubgraph(pa(), {
+      materials: defaultMaterials(),
       templateId: 'BARE_DIE',
       qtyModel: 'AGGREGATE',
     })!;

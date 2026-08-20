@@ -40,7 +40,9 @@ import {
   type QtyModel,
   type TimType,
 } from '@/domain/component';
-import { withValue, type SourcedValue } from '@/domain/sourcedValue';
+import { sourced, withValue, type SourcedValue } from '@/domain/sourcedValue';
+import { coinAreaMm2, defaultMaterials, resolveTim } from '@/domain/materials';
+import { useProjectStore } from '@/data/projectStore';
 import { DATA_SOURCES, type DataSource } from '@/thermal/types';
 import {
   COMPLETENESS_ITEMS,
@@ -183,6 +185,7 @@ export function ComponentInspector({
   onSaveToLibrary,
 }: InspectorProps) {
   const [tab, setTab] = useState<Tab>('overview');
+  const projectMaterials = useProjectStore((s) => s.draft?.materials);
 
   if (!component) {
     return (
@@ -195,6 +198,7 @@ export function ComponentInspector({
 
   const spec = component.thermal_spec;
   const prep = component.architecture_prep;
+  const materials = projectMaterials ?? defaultMaterials();
   const issues = validateComponent(component);
   const completeness = completenessOf(component);
   const score = completenessScore(completeness);
@@ -206,18 +210,48 @@ export function ComponentInspector({
     patchSpec({ geometry: { ...spec.geometry, ...patch } }, ['geometry']);
 
   const heatPath = spec.heat_path.type;
+  const resolvedTim = resolveTim(spec.tim, materials);
   const sourceArea = sourceAreaMm2(spec.geometry);
-  // Screen 01's project coin size arrives in a follow-up; until then a coin
-  // spread face has to be stated per component or it stays unresolved.
-  const spreadArea = spreadAreaMm2(spec.geometry, heatPath);
+  const spreadArea = spreadAreaMm2(spec.geometry, heatPath, coinAreaMm2(materials));
   const spreadOrigin =
     spec.geometry.custom_spread_area_mm2 != null || spec.geometry.spread_L_mm != null
       ? 'Stated on this component / 由此元件指定'
       : heatPath === 'Board'
         ? 'Derived: (L + board thickness) × (W + board thickness) / 由 45° 擴散推導'
         : heatPath === 'Coin'
-          ? 'Needs a coin size — state Spread L × W / 需指定銅塊尺寸'
+          ? coinAreaMm2(materials) == null
+            ? 'Needs the project coin size (Screen 01) / 需先設定專案銅塊尺寸'
+            : 'From the project coin size / 取自專案銅塊尺寸'
           : 'No spreading on this path / 此路徑無擴散，等於熱源面';
+
+  /**
+   * Switching to Project Default CLEARS the overrides rather than hiding them.
+   * A stored number that no longer applies is a trap: `resolveTim` uses any
+   * value it finds, so leaving one behind greyed out would keep it in the
+   * answer while the UI said it was inherited.
+   */
+  const setTimInheritance = (mode: 'project' | 'component') => {
+    if (mode === 'project') {
+      patchSpec({ tim: { ...spec.tim, inheritance: mode, k_W_mK: null, thickness_mm: null } }, [
+        'tim',
+      ]);
+      return;
+    }
+    // Seed an override from what it was inheriting, so editing starts from the
+    // value that was already in effect instead of from an empty box.
+    patchSpec(
+      {
+        tim: {
+          ...spec.tim,
+          inheritance: mode,
+          k_W_mK: resolvedTim.k_W_mK == null ? null : sourced(resolvedTim.k_W_mK, 'Assumed'),
+          thickness_mm:
+            resolvedTim.thickness_mm == null ? null : sourced(resolvedTim.thickness_mm, 'Assumed'),
+        },
+      },
+      ['tim'],
+    );
+  };
 
   const patchPrep = (patch: Partial<Component['architecture_prep']>) =>
     onPatch(component.id, { architecture_prep: { ...prep, ...patch } }, ['architecture_prep']);
@@ -448,9 +482,7 @@ export function ComponentInspector({
                           className="size-3.5 accent-[var(--color-accent-600)]"
                           checked={spec.tim.inheritance === mode}
                           disabled={readOnly}
-                          onChange={() =>
-                            patchSpec({ tim: { ...spec.tim, inheritance: mode } }, ['tim'])
-                          }
+                          onChange={() => setTimInheritance(mode)}
                         />
                         <BilingualTooltip
                           zh={
@@ -485,21 +517,38 @@ export function ComponentInspector({
                     zh="導熱係數"
                     unit="W/m·K"
                     value={spec.tim.k_W_mK}
+                    placeholder={
+                      resolvedTim.k_W_mK == null ? '—' : `${resolvedTim.k_W_mK} (project)`
+                    }
                     step="0.1"
                     readOnly={readOnly || spec.tim.inheritance === 'project'}
                     onChange={(next) => patchSpec({ tim: { ...spec.tim, k_W_mK: next } }, ['tim'])}
                   />
                   <SourcedNumberField
                     label="TIM Thickness"
-                    zh="厚度"
+                    zh="厚度 (BLT)"
                     unit="mm"
                     value={spec.tim.thickness_mm}
+                    placeholder={
+                      resolvedTim.thickness_mm == null
+                        ? '—'
+                        : `${resolvedTim.thickness_mm} (project)`
+                    }
                     step="0.01"
                     readOnly={readOnly || spec.tim.inheritance === 'project'}
                     onChange={(next) =>
                       patchSpec({ tim: { ...spec.tim, thickness_mm: next } }, ['tim'])
                     }
                   />
+                  {spec.tim.inheritance === 'project' && resolvedTim.k_W_mK == null && (
+                    <p className="text-[11px] leading-relaxed text-warn-600">
+                      {spec.tim.type} has no project properties to inherit, so the TIM edge cannot
+                      resolve.
+                      <span className="block">
+                        {spec.tim.type} 沒有可繼承的專案材料屬性，TIM 熱阻將無法解出。
+                      </span>
+                    </p>
+                  )}
                   <p className="text-[11px] leading-relaxed text-ink-400">
                     Specifying a TIM does not create a thermal edge — Screen 05 decides that.
                     <span className="block">指定 TIM 不代表建立獨立 Edge，由 Screen 05 決定。</span>

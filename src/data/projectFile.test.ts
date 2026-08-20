@@ -2,7 +2,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { seedDemoProject } from '@/mock/seed';
 import { DEMO_PROJECT_ID } from '@/mock/demoProject';
-import { loadComponents, loadProject, loadScenarios, loadSolutions } from './persistence';
+import {
+  loadComponents,
+  loadProject,
+  loadScenarios,
+  loadSolutions,
+  saveProject,
+} from './persistence';
+import { createEmptyProject } from '@/domain/project';
+import { coinAreaMm2 } from '@/domain/materials';
+import { sourced } from '@/domain/sourcedValue';
 import {
   PROJECT_FILE_FORMAT,
   PROJECT_FILE_VERSION,
@@ -200,5 +209,43 @@ describe('projectFilename', () => {
     expect(projectFilename('a/b:c*d', new Date('2026-01-02T03:04:05Z'))).toBe(
       'a_b_c_d_20260102030405.tnv.json',
     );
+  });
+});
+
+
+describe('material defaults survive the folder round trip', () => {
+  it('carries a stated coin size and a changed constant back out of a file', () => {
+    const project = { ...createEmptyProject(), project_id: 'MAT_A', project_name: 'Materials' };
+    project.materials = {
+      ...project.materials,
+      copper_k_W_mK: sourced(400, 'Vendor'),
+      coin_L_mm: sourced(55, 'Manual'),
+      coin_W_mm: sourced(35, 'Manual'),
+    };
+    saveProject(project);
+
+    const file = collectProject('MAT_A', 'test')!;
+    const parsed = parseProjectFile(serializeProjectFile(file));
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+
+    const materials = parsed.file.data.project.materials;
+    expect(materials.copper_k_W_mK.value).toBe(400);
+    expect(coinAreaMm2(materials)).toBe(1925);
+    // Untouched entries still read as shipped rather than as decisions.
+    expect(materials.via_efficiency.source).toBe('Assumed');
+  });
+
+  // Opening an older project must not fail, and must not invent a coin size.
+  it('opens a project file written before the section existed', () => {
+    const project = { ...createEmptyProject(), project_id: 'MAT_B', project_name: 'Legacy' };
+    saveProject(project);
+    const raw = JSON.parse(localStorage.getItem('tnv.projects')!);
+    delete raw.MAT_B.materials;
+    localStorage.setItem('tnv.projects', JSON.stringify(raw));
+
+    const reopened = loadProject('MAT_B')!;
+    expect(reopened.materials.tim.Grease.k_W_mK.value).toBe(3.0);
+    expect(reopened.materials.coin_L_mm).toBeNull();
   });
 });

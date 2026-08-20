@@ -1,3 +1,4 @@
+import { defaultMaterials } from '@/domain/materials';
 import { describe, expect, it } from 'vitest';
 
 import { buildComponentSubgraph, missingRequirements, previewGeneration } from './networkBuilder';
@@ -16,6 +17,7 @@ import {
   type Component,
 } from '@/domain/component';
 import { sourced } from '@/domain/sourcedValue';
+import { emptyTim } from '@/domain/component';
 
 function component(overrides: Partial<Component> = {}): Component {
   return {
@@ -106,7 +108,11 @@ describe('architecture templates', () => {
 
   it('reports missing component requirements before applying (05 §12, AC-05-10)', () => {
     const bare = component({ thermal_spec: emptyThermalSpec() });
-    const missing = missingRequirements(bare, getTemplate('BOTTOM_COOL_COIN')!);
+    const missing = missingRequirements(
+      bare,
+      getTemplate('BOTTOM_COOL_COIN')!,
+      defaultMaterials(),
+    );
     expect(missing.map((field) => field.label)).toEqual(
       expect.arrayContaining(['Rjc', 'Contact area', 'TIM k']),
     );
@@ -118,6 +124,7 @@ describe('architecture templates', () => {
 describe('quantity representation (05 §7)', () => {
   it('AGGREGATE makes one source carrying the whole component power', () => {
     const graph = buildComponentSubgraph(component(), {
+      materials: defaultMaterials(),
       templateId: 'BOTTOM_COOL_COIN',
       qtyModel: 'AGGREGATE',
     })!;
@@ -128,6 +135,7 @@ describe('quantity representation (05 §7)', () => {
 
   it('INDIVIDUAL makes one subgraph per device, each at the per-device power', () => {
     const graph = buildComponentSubgraph(component(), {
+      materials: defaultMaterials(),
       templateId: 'BOTTOM_COOL_COIN',
       qtyModel: 'INDIVIDUAL',
     })!;
@@ -139,6 +147,7 @@ describe('quantity representation (05 §7)', () => {
 
   it('GROUPED splits the devices across groups without losing any power', () => {
     const graph = buildComponentSubgraph(component({ qty: 5 }), {
+      materials: defaultMaterials(),
       templateId: 'BOTTOM_COOL_COIN',
       qtyModel: 'GROUPED',
       groupCount: 2,
@@ -152,6 +161,7 @@ describe('quantity representation (05 §7)', () => {
   it('accounts for every device in each representation', () => {
     for (const model of ['AGGREGATE', 'INDIVIDUAL', 'GROUPED'] as const) {
       const graph = buildComponentSubgraph(component(), {
+      materials: defaultMaterials(),
         templateId: 'BOTTOM_COOL_COIN',
         qtyModel: model,
       })!;
@@ -162,10 +172,12 @@ describe('quantity representation (05 §7)', () => {
 
   it('produces stable ids that survive a rebuild (05 §38, AC-05-23)', () => {
     const first = buildComponentSubgraph(component(), {
+      materials: defaultMaterials(),
       templateId: 'BOTTOM_COOL_COIN',
       qtyModel: 'INDIVIDUAL',
     })!;
     const second = buildComponentSubgraph(component(), {
+      materials: defaultMaterials(),
       templateId: 'BOTTOM_COOL_COIN',
       qtyModel: 'INDIVIDUAL',
     })!;
@@ -188,6 +200,7 @@ describe('quantity representation (05 §7)', () => {
 describe('template ports (05 §10, §16)', () => {
   it('ends the subgraph at a port, unconnected until Step 4', () => {
     const graph = buildComponentSubgraph(component(), {
+      materials: defaultMaterials(),
       templateId: 'BOTTOM_COOL_COIN',
       qtyModel: 'AGGREGATE',
     })!;
@@ -200,6 +213,7 @@ describe('template ports (05 §10, §16)', () => {
 
   it('Small Base + Heat Pipe exposes two parallel outputs (05 §11, AC-05-18)', () => {
     const graph = buildComponentSubgraph(component(), {
+      materials: defaultMaterials(),
       templateId: 'SMALL_BASE_HEAT_PIPE',
       qtyModel: 'AGGREGATE',
     })!;
@@ -208,7 +222,10 @@ describe('template ports (05 §10, §16)', () => {
   });
 
   it('previews generation before anything is committed (05 §49, AC-05-02)', () => {
-    const preview = previewGeneration([component(), component({ id: 'CMP_X', name: 'X', qty: 1 })]);
+    const preview = previewGeneration(
+      [component(), component({ id: 'CMP_X', name: 'X', qty: 1 })],
+      defaultMaterials(),
+    );
     expect(preview.components_modeled).toBe(2);
     expect(preview.nodes).toBeGreaterThan(0);
     expect(preview.edges).toBeGreaterThan(0);
@@ -253,6 +270,7 @@ describe('analytical edge resistance (05 §21)', () => {
 
   it('seeds package Rjc straight from the component (AC-05-28)', () => {
     const graph = buildComponentSubgraph(component(), {
+      materials: defaultMaterials(),
       templateId: 'BOTTOM_COOL_COIN',
       qtyModel: 'AGGREGATE',
     })!;
@@ -263,6 +281,7 @@ describe('analytical edge resistance (05 §21)', () => {
 
   it('leaves the TIM edge resolved when the component supplies k, t and area', () => {
     const graph = buildComponentSubgraph(component(), {
+      materials: defaultMaterials(),
       templateId: 'BOTTOM_COOL_COIN',
       qtyModel: 'AGGREGATE',
     })!;
@@ -271,11 +290,91 @@ describe('analytical edge resistance (05 §21)', () => {
     expect(activeRth(tim.rth)).toBeCloseTo(0.16667, 4);
   });
 
+  /**
+   * The reason the project material table exists. Before it, a component that
+   * simply said "Grease" produced an unresolved TIM edge every time, because
+   * nothing supplied k or BLT — the Project Default switch in Screen 04 was
+   * wired to a table that did not exist.
+   */
+  it('resolves an inherited TIM from the project materials', () => {
+    const inherited = component({
+      thermal_spec: {
+        ...component().thermal_spec,
+        tim: { ...emptyTim(), type: 'Grease', inheritance: 'project' },
+      },
+    });
+    const graph = buildComponentSubgraph(inherited, {
+      materials: defaultMaterials(),
+      templateId: 'BOTTOM_COOL_COIN',
+      qtyModel: 'AGGREGATE',
+    })!;
+    const tim = graph.edges.find((edge) => edge.type === 'tim')!;
+    // Grease ships k = 3.0 and BLT = 0.05 mm over a 200 mm² face.
+    expect(tim.resolution).toBe('resolved');
+    expect(activeRth(tim.rth)).toBeCloseTo(0.05 / 1000 / (3 * (200 / 1e6)), 6);
+  });
+
+  it('follows a project material change into the edge', () => {
+    const inherited = component({
+      thermal_spec: {
+        ...component().thermal_spec,
+        tim: { ...emptyTim(), type: 'Grease', inheritance: 'project' },
+      },
+    });
+    const stiffer = defaultMaterials();
+    stiffer.tim.Grease = { ...stiffer.tim.Grease, k_W_mK: sourced(6, 'Vendor') };
+    const graph = buildComponentSubgraph(inherited, {
+      materials: stiffer,
+      templateId: 'BOTTOM_COOL_COIN',
+      qtyModel: 'AGGREGATE',
+    })!;
+    const tim = graph.edges.find((edge) => edge.type === 'tim')!;
+    expect(activeRth(tim.rth)).toBeCloseTo(0.05 / 1000 / (6 * (200 / 1e6)), 6);
+  });
+
+  it('leaves a TIM the project cannot describe unresolved rather than guessing', () => {
+    const custom = component({
+      thermal_spec: {
+        ...component().thermal_spec,
+        tim: { ...emptyTim(), type: 'Custom', inheritance: 'project' },
+      },
+    });
+    const graph = buildComponentSubgraph(custom, {
+      materials: defaultMaterials(),
+      templateId: 'BOTTOM_COOL_COIN',
+      qtyModel: 'AGGREGATE',
+    })!;
+    const tim = graph.edges.find((edge) => edge.type === 'tim')!;
+    expect(activeRth(tim.rth)).toBeNull();
+    expect(tim.resolution).toBe('unresolved');
+  });
+
+  it('resolves a coin spread face from the project coin size', () => {
+    const materials = defaultMaterials();
+    materials.coin_L_mm = sourced(55, 'Manual');
+    materials.coin_W_mm = sourced(35, 'Manual');
+    const coin = component({
+      thermal_spec: {
+        ...component().thermal_spec,
+        heat_path: { type: 'Coin', parameters: {} },
+      },
+    });
+    // TIM area follows the coin's heatsink face, not the 20 x 10 joint face.
+    const graph = buildComponentSubgraph(coin, {
+      materials,
+      templateId: 'BOTTOM_COOL_COIN',
+      qtyModel: 'AGGREGATE',
+    })!;
+    const tim = graph.edges.find((edge) => edge.type === 'tim')!;
+    expect(tim.parameters?.area_mm2).toBe(200);
+  });
+
   it('leaves a component without Rjc unresolved rather than zero (05 §59 case F)', () => {
     const noRjc = component({
       thermal_spec: { ...component().thermal_spec, r_jc_C_per_W: null },
     });
     const graph = buildComponentSubgraph(noRjc, {
+      materials: defaultMaterials(),
       templateId: 'BOTTOM_COOL_COIN',
       qtyModel: 'AGGREGATE',
     })!;
@@ -476,6 +575,7 @@ describe('graph validation (05 §33, §34, §35)', () => {
 
   it('counts the readiness KPIs (05 §36)', () => {
     const graph = buildComponentSubgraph(component(), {
+      materials: defaultMaterials(),
       templateId: 'BOTTOM_COOL_COIN',
       qtyModel: 'INDIVIDUAL',
     })!;
@@ -493,6 +593,7 @@ describe('graph validation (05 §33, §34, §35)', () => {
 describe('03 FloTHERM deferred contract (05 §1)', () => {
   it('keeps multi-source Rth slots on every generated edge (AC-05-51)', () => {
     const graph = buildComponentSubgraph(component(), {
+      materials: defaultMaterials(),
       templateId: 'BOTTOM_COOL_COIN',
       qtyModel: 'AGGREGATE',
     })!;
@@ -506,6 +607,7 @@ describe('03 FloTHERM deferred contract (05 §1)', () => {
 
   it('never invents an edge heat flow (AC-05-46, AC-05-47)', () => {
     const graph = buildComponentSubgraph(component(), {
+      materials: defaultMaterials(),
       templateId: 'BOTTOM_COOL_COIN',
       qtyModel: 'AGGREGATE',
     })!;
@@ -520,6 +622,7 @@ describe('03 FloTHERM deferred contract (05 §1)', () => {
 
   it('does not solve node temperatures (AC-05-45)', () => {
     const graph = buildComponentSubgraph(component(), {
+      materials: defaultMaterials(),
       templateId: 'BOTTOM_COOL_COIN',
       qtyModel: 'AGGREGATE',
     })!;

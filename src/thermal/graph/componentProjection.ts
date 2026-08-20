@@ -4,6 +4,7 @@ import type { Component } from '@/domain/component';
 import { powerWOf } from '@/domain/component';
 import { valueOf } from '@/domain/sourcedValue';
 
+import { defaultMaterials, type MaterialDefaults } from '@/domain/materials';
 import { setRthFromSource } from '../rth';
 import { computeRth, type EdgeParameters } from '../resistance/calculators';
 import type { ThermalEdge, ThermalNetwork, ThermalNode } from '../types';
@@ -41,12 +42,16 @@ function representedDevices(
   return 1;
 }
 
-function updateLinkedEdge(edge: ThermalEdge, component: Component): void {
+function updateLinkedEdge(
+  edge: ThermalEdge,
+  component: Component,
+  materials: MaterialDefaults,
+): void {
   if (!edge.parameter_links || Object.keys(edge.parameter_links).length === 0) return;
 
   const parameters: EdgeParameters = { ...(edge.parameters ?? {}) };
   for (const [parameter, componentPath] of Object.entries(edge.parameter_links)) {
-    const value = readComponentField(component, componentPath);
+    const value = readComponentField(component, componentPath, materials);
     if (value == null) delete parameters[parameter];
     else parameters[parameter] = value;
   }
@@ -75,6 +80,7 @@ export interface ComponentProjectionOptions {
 export function projectComponentMaster(
   network: ThermalNetwork,
   components: Component[],
+  materials: MaterialDefaults,
   options: ComponentProjectionOptions = { physics: true, limits: true },
 ): ThermalNetwork {
   const clone = structuredClone(network);
@@ -104,17 +110,23 @@ export function projectComponentMaster(
       const component = componentId ? byId.get(componentId) : undefined;
       if (!component) continue;
       if (!component.enabled) edge.enabled = false;
-      else updateLinkedEdge(edge, component);
+      else updateLinkedEdge(edge, component, materials);
     }
   }
 
   return clone;
 }
 
-/** Result-side projection changes interpretation only, never the physics. */
+/**
+ * Result-side projection changes interpretation only, never the physics — so it
+ * needs no material constants; nothing on this path reads them.
+ */
 export function projectComponentLimits(
   network: ThermalNetwork,
   components: Component[],
 ): ThermalNetwork {
-  return projectComponentMaster(network, components, { physics: false, limits: true });
+  return projectComponentMaster(network, components, defaultMaterials(), {
+    physics: false,
+    limits: true,
+  });
 }

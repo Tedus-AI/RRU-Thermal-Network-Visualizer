@@ -14,6 +14,7 @@
 
 import type { Project, ProjectContext, Scenario } from '@/domain/project';
 import { SCHEMA_VERSION, normalizeProjectContext } from '@/domain/project';
+import { normalizeMaterials } from '@/domain/materials';
 import {
   hydrateComponentRevisionSet,
   hydrateRevision,
@@ -60,6 +61,7 @@ const OWNED_PROJECT_KEYS = [
   'project_name',
   'revision',
   'project_context',
+  'materials',
   'active_scenario_id',
   'status',
   'meta',
@@ -178,6 +180,9 @@ function hydrateProject(raw: RawDoc): Project {
     // written by an older build is mapped forward rather than shown as a value
     // its own dropdown can no longer offer.
     project_context: normalizeProjectContext(context),
+    // A file written before this section existed still opens: every field
+    // falls back to the shipped default rather than to null.
+    materials: normalizeMaterials(raw.materials),
     active_scenario_id: (raw.active_scenario_id as string | null) ?? null,
     status: raw.status === 'archived' ? 'archived' : 'active',
     meta: {
@@ -215,6 +220,7 @@ export function saveProject(project: Project): Project {
     project_name: project.project_name,
     revision: project.revision,
     project_context: project.project_context,
+    materials: project.materials,
     active_scenario_id: project.active_scenario_id,
     status: project.status,
     meta: { ...project.meta, updated_at: new Date().toISOString() },
