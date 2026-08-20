@@ -11,6 +11,8 @@
  * inputs the Screen 05 templates read when they resolve an edge.
  */
 
+import { useState } from 'react';
+
 import { NumberInput, SectionCard } from '@/ui/primitives';
 import { FieldLabel } from '@/ui/FieldLabel';
 import {
@@ -29,6 +31,24 @@ import { useProjectStore } from '@/data/projectStore';
  * A number whose provenance is visible: a value still carrying the shipped
  * constant reads as muted, a stated one as normal weight. An engineer reviewing
  * a report needs to see at a glance which numbers anybody actually chose.
+ *
+ * The box holds its own text while it is being edited and commits on BLUR, for
+ * two reasons that both bite when a value is retyped rather than typed:
+ *
+ *  - A controlled numeric input driven straight from the stored value cannot
+ *    pass THROUGH empty. Delete the last digit and the parent has nothing to
+ *    store, re-renders the old number, and the field looks like it refuses to
+ *    be cleared.
+ *  - Committing every keystroke stores the half-deleted numbers on the way.
+ *    Backspacing 425 would write 42, then 4, so abandoning the edit left 4
+ *    behind rather than 425 — and each of those wrote a project revision to
+ *    disk for a number nobody meant.
+ *
+ * `allowEmpty` decides what an empty box means on blur. The coin size is
+ * genuinely optional, so empty stores null. Every other constant is required —
+ * Screen 04 inherits from them — so an empty box reverts to the value that was
+ * there, not to the shipped default: putting back a number the engineer never
+ * chose would be a silent edit.
  */
 function MaterialNumber({
   id,
@@ -38,6 +58,7 @@ function MaterialNumber({
   value,
   readOnly,
   placeholder = '—',
+  allowEmpty = false,
   onChange,
 }: {
   id: string;
@@ -47,27 +68,45 @@ function MaterialNumber({
   value: SourcedValue<number> | null;
   readOnly: boolean;
   placeholder?: string;
+  allowEmpty?: boolean;
   onChange: (next: SourcedValue<number> | null) => void;
 }) {
+  /** Text being edited. null means "show whatever is stored". */
+  const [text, setText] = useState<string | null>(null);
   const isAssumed = value?.source === 'Assumed';
+
+  const commit = () => {
+    if (text == null) return;
+    const raw = text.trim();
+    setText(null);
+    if (raw === '') {
+      if (allowEmpty) onChange(null);
+      return;
+    }
+    const parsed = Number(raw);
+    // Typing a value is what turns a shipped constant into a decision.
+    if (Number.isFinite(parsed) && parsed !== value?.value) {
+      onChange(withValue(value, parsed, 'Manual'));
+    }
+  };
+
   return (
     <div className="flex flex-col gap-1.5">
       <FieldLabel label={label} zh={zh} unit={unit} htmlFor={id} />
       <NumberInput
         id={id}
         step="any"
-        className={isAssumed ? 'text-ink-500' : undefined}
-        value={value?.value ?? ''}
+        className={isAssumed && text == null ? 'text-ink-500' : undefined}
+        value={text ?? value?.value ?? ''}
         placeholder={placeholder}
         disabled={readOnly}
-        onChange={(event) =>
-          onChange(
-            event.target.value === ''
-              ? null
-              : // Typing a value is what turns a shipped constant into a decision.
-                withValue(value, Number(event.target.value), 'Manual'),
-          )
-        }
+        onChange={(event) => setText(event.target.value)}
+        onBlur={commit}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') event.currentTarget.blur();
+          // Escape abandons the edit and puts the stored value back.
+          if (event.key === 'Escape') setText(null);
+        }}
       />
     </div>
   );
@@ -90,10 +129,14 @@ export function MaterialDefaultsForm({
   const coinArea = coinAreaMm2(materials);
   const assumed = assumedCount(materials);
 
-  const setTim = (type: TimMaterialType, key: 'k_W_mK' | 'blt_mm') => (next: SourcedValue<number> | null) => {
-    if (next == null) return;
-    patchMaterials({ tim: { ...materials.tim, [type]: { ...materials.tim[type], [key]: next } } });
-  };
+  // Required constants: the field only ever hands back a real number, so there
+  // is no null case to drop here — dropping one was what stopped the box being
+  // cleared in the first place.
+  const setTim =
+    (type: TimMaterialType, key: 'k_W_mK' | 'blt_mm') => (next: SourcedValue<number> | null) => {
+      if (next == null) return;
+      patchMaterials({ tim: { ...materials.tim, [type]: { ...materials.tim[type], [key]: next } } });
+    };
 
   const setProcess = (field: ProcessField) => (next: SourcedValue<number> | null) => {
     if (next == null) return;
@@ -207,6 +250,7 @@ export function MaterialDefaultsForm({
               unit="mm"
               value={materials.coin_L_mm}
               readOnly={readOnly}
+              allowEmpty
               placeholder="e.g. 55"
               onChange={(next) => patchMaterials({ coin_L_mm: next })}
             />
@@ -217,6 +261,7 @@ export function MaterialDefaultsForm({
               unit="mm"
               value={materials.coin_W_mm}
               readOnly={readOnly}
+              allowEmpty
               placeholder="e.g. 35"
               onChange={(next) => patchMaterials({ coin_W_mm: next })}
             />
