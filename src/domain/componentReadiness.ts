@@ -55,7 +55,7 @@ export function completenessOf(component: Component): CompletenessMap {
     Rjc: valueOf(spec.r_jc_C_per_W) != null,
     'Contact Geometry': sourceAreaMm2(spec.geometry) != null,
     'Heat Path': spec.heat_path_confirmed,
-    TIM: spec.tim.type != null && spec.tim.type !== 'Custom',
+    TIM: spec.tim.tim_id != null,
     'Architecture Prep': component.architecture_prep.template_preference !== 'UNASSIGNED',
   };
 }
@@ -201,12 +201,14 @@ export function validateComponent(component: Component): ComponentIssue[] {
     });
   }
 
-  if (spec.tim.type === 'Custom') {
+  // No TIM is a legitimate answer for a bolted part, so this is a warning that
+  // names the consequence rather than an error.
+  if (spec.tim.tim_id == null) {
     issues.push({
       severity: 'warning',
-      field: 'tim.type',
-      message: 'TIM is unresolved (Custom).',
-      message_zh: '熱介面材料尚未確認（Custom）。',
+      field: 'tim.tim_id',
+      message: 'No TIM assigned — the interface resistance cannot be computed.',
+      message_zh: '未指定熱介面材料，介面熱阻將無法計算。',
     });
   }
 

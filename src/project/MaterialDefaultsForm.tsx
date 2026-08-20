@@ -11,24 +11,48 @@
  * inputs the Screen 05 templates read when they resolve an edge.
  */
 
-import { NumberInput, SectionCard } from '@/ui/primitives';
+import { useState } from 'react';
+
+import { Plus, Trash2 } from 'lucide-react';
+
+import { Button, NumberInput, SectionCard, TextInput } from '@/ui/primitives';
 import { FieldLabel } from '@/ui/FieldLabel';
 import {
   PROCESS_FIELDS,
-  TIM_MATERIAL_TYPES,
   assumedCount,
   coinAreaMm2,
+  nextTimId,
+  timUsageCount,
   type MaterialDefaults,
   type ProcessField,
-  type TimMaterialType,
+  type TimMaterial,
 } from '@/domain/materials';
-import { withValue, type SourcedValue } from '@/domain/sourcedValue';
+import { sourced, withValue, type SourcedValue } from '@/domain/sourcedValue';
 import { useProjectStore } from '@/data/projectStore';
+import { useComponentStore } from '@/data/componentStore';
 
 /**
  * A number whose provenance is visible: a value still carrying the shipped
  * constant reads as muted, a stated one as normal weight. An engineer reviewing
  * a report needs to see at a glance which numbers anybody actually chose.
+ *
+ * The box holds its own text while it is being edited and commits on BLUR, for
+ * two reasons that both bite when a value is retyped rather than typed:
+ *
+ *  - A controlled numeric input driven straight from the stored value cannot
+ *    pass THROUGH empty. Delete the last digit and the parent has nothing to
+ *    store, re-renders the old number, and the field looks like it refuses to
+ *    be cleared.
+ *  - Committing every keystroke stores the half-deleted numbers on the way.
+ *    Backspacing 425 would write 42, then 4, so abandoning the edit left 4
+ *    behind rather than 425 — and each of those wrote a project revision to
+ *    disk for a number nobody meant.
+ *
+ * `allowEmpty` decides what an empty box means on blur. The coin size is
+ * genuinely optional, so empty stores null. Every other constant is required —
+ * Screen 04 inherits from them — so an empty box reverts to the value that was
+ * there, not to the shipped default: putting back a number the engineer never
+ * chose would be a silent edit.
  */
 function MaterialNumber({
   id,
@@ -38,6 +62,7 @@ function MaterialNumber({
   value,
   readOnly,
   placeholder = '—',
+  allowEmpty = false,
   onChange,
 }: {
   id: string;
@@ -47,27 +72,45 @@ function MaterialNumber({
   value: SourcedValue<number> | null;
   readOnly: boolean;
   placeholder?: string;
+  allowEmpty?: boolean;
   onChange: (next: SourcedValue<number> | null) => void;
 }) {
+  /** Text being edited. null means "show whatever is stored". */
+  const [text, setText] = useState<string | null>(null);
   const isAssumed = value?.source === 'Assumed';
+
+  const commit = () => {
+    if (text == null) return;
+    const raw = text.trim();
+    setText(null);
+    if (raw === '') {
+      if (allowEmpty) onChange(null);
+      return;
+    }
+    const parsed = Number(raw);
+    // Typing a value is what turns a shipped constant into a decision.
+    if (Number.isFinite(parsed) && parsed !== value?.value) {
+      onChange(withValue(value, parsed, 'Manual'));
+    }
+  };
+
   return (
     <div className="flex flex-col gap-1.5">
       <FieldLabel label={label} zh={zh} unit={unit} htmlFor={id} />
       <NumberInput
         id={id}
         step="any"
-        className={isAssumed ? 'text-ink-500' : undefined}
-        value={value?.value ?? ''}
+        className={isAssumed && text == null ? 'text-ink-500' : undefined}
+        value={text ?? value?.value ?? ''}
         placeholder={placeholder}
         disabled={readOnly}
-        onChange={(event) =>
-          onChange(
-            event.target.value === ''
-              ? null
-              : // Typing a value is what turns a shipped constant into a decision.
-                withValue(value, Number(event.target.value), 'Manual'),
-          )
-        }
+        onChange={(event) => setText(event.target.value)}
+        onBlur={commit}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') event.currentTarget.blur();
+          // Escape abandons the edit and puts the stored value back.
+          if (event.key === 'Escape') setText(null);
+        }}
       />
     </div>
   );
@@ -84,15 +127,49 @@ export function MaterialDefaultsForm({
 }) {
   const draft = useProjectStore((s) => s.draft);
   const patchMaterials = useProjectStore((s) => s.patchMaterials);
+  // Deleting a material has to know who is using it, so the components are read
+  // here rather than the guard being left to the caller.
+  const components = useComponentStore((s) => s.components);
 
   if (!draft) return null;
   const materials = draft.materials;
   const coinArea = coinAreaMm2(materials);
   const assumed = assumedCount(materials);
 
-  const setTim = (type: TimMaterialType, key: 'k_W_mK' | 'blt_mm') => (next: SourcedValue<number> | null) => {
+  const patchLibrary = (next: TimMaterial[]) => patchMaterials({ tim: next });
+
+  // Required constants: the field only ever hands back a real number, so there
+  // is no null case to drop here — dropping one was what stopped the box being
+  // cleared in the first place.
+  const setTim = (id: string, key: 'k_W_mK' | 'blt_mm') => (next: SourcedValue<number> | null) => {
     if (next == null) return;
-    patchMaterials({ tim: { ...materials.tim, [type]: { ...materials.tim[type], [key]: next } } });
+    patchLibrary(
+      materials.tim.map((material) =>
+        material.id === id ? { ...material, [key]: next } : material,
+      ),
+    );
+  };
+
+  /** Renaming is safe: components reference the id, not the name. */
+  const renameTim = (id: string, name: string) =>
+    patchLibrary(materials.tim.map((m) => (m.id === id ? { ...m, name } : m)));
+
+  const addTim = () =>
+    patchLibrary([
+      ...materials.tim,
+      {
+        id: nextTimId(materials),
+        name: 'New material',
+        k_W_mK: sourced(3, 'Assumed', { confidence: 'low' }),
+        blt_mm: sourced(0.1, 'Assumed', { confidence: 'low' }),
+      },
+    ]);
+
+  const removeTim = (id: string) => {
+    // Belt and braces: the button is disabled while a material is in use, but
+    // the guard lives here too so no caller can orphan a component.
+    if (timUsageCount(components, id) > 0) return;
+    patchLibrary(materials.tim.filter((material) => material.id !== id));
   };
 
   const setProcess = (field: ProcessField) => (next: SourcedValue<number> | null) => {
@@ -110,7 +187,7 @@ export function MaterialDefaultsForm({
       // Folded, this still has to show the one thing that needs a decision.
       summary={
         <>
-          {assumed} shipped defaults in use
+          {materials.tim.length} TIM materials · {assumed} shipped defaults in use
           {coinArea == null ? ' · ⚠ coin size not set / 銅塊尺寸未設定' : ''}
         </>
       }
@@ -124,53 +201,105 @@ export function MaterialDefaultsForm({
           </span>
         </p>
 
-        {/* --- TIM materials --- */}
+        {/* --- TIM library --- */}
         <fieldset>
           <legend className="mb-2 text-[12px] font-semibold text-ink-700">
             Thermal Interface Materials / 熱介面材料
           </legend>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[420px] text-[13px]">
+            <table className="w-full min-w-[520px] text-[13px]">
               <thead>
                 <tr className="border-b border-line text-left text-[12px] text-ink-500">
                   <th className="py-1.5 pr-3 font-semibold">Material / 材料</th>
                   <th className="py-1.5 pr-3 font-semibold">k (W/m·K)</th>
-                  <th className="py-1.5 font-semibold">BLT (mm)</th>
+                  <th className="py-1.5 pr-3 font-semibold">BLT (mm)</th>
+                  <th className="py-1.5 font-semibold">Used / 使用中</th>
+                  <th className="w-8 py-1.5" />
                 </tr>
               </thead>
               <tbody>
-                {TIM_MATERIAL_TYPES.map((type) => (
-                  <tr key={type} className="border-b border-line/60">
-                    <td className="py-1.5 pr-3 font-medium text-ink-700">{type}</td>
-                    <td className="py-1.5 pr-3">
-                      <MaterialNumber
-                        id={`tim-${type}-k`}
-                        label={`${type} k`}
-                        zh="導熱係數"
-                        value={materials.tim[type].k_W_mK}
-                        readOnly={readOnly}
-                        onChange={setTim(type, 'k_W_mK')}
-                      />
-                    </td>
-                    <td className="py-1.5">
-                      <MaterialNumber
-                        id={`tim-${type}-blt`}
-                        label={`${type} BLT`}
-                        zh="壓合厚度"
-                        value={materials.tim[type].blt_mm}
-                        readOnly={readOnly}
-                        onChange={setTim(type, 'blt_mm')}
-                      />
+                {materials.tim.map((material) => {
+                  const used = timUsageCount(components, material.id);
+                  return (
+                    <tr key={material.id} className="border-b border-line/60">
+                      <td className="py-1.5 pr-3">
+                        <TextInput
+                          aria-label={`Name for ${material.name}`}
+                          className="h-9"
+                          value={material.name}
+                          disabled={readOnly}
+                          onChange={(event) => renameTim(material.id, event.target.value)}
+                        />
+                      </td>
+                      <td className="py-1.5 pr-3">
+                        <MaterialNumber
+                          id={`tim-${material.id}-k`}
+                          label={`${material.name} k`}
+                          zh="導熱係數"
+                          value={material.k_W_mK}
+                          readOnly={readOnly}
+                          onChange={setTim(material.id, 'k_W_mK')}
+                        />
+                      </td>
+                      <td className="py-1.5 pr-3">
+                        <MaterialNumber
+                          id={`tim-${material.id}-blt`}
+                          label={`${material.name} BLT`}
+                          zh="壓合厚度"
+                          value={material.blt_mm}
+                          readOnly={readOnly}
+                          onChange={setTim(material.id, 'blt_mm')}
+                        />
+                      </td>
+                      <td className="tabular py-1.5 text-[12px] text-ink-500">
+                        {used === 0 ? '—' : used}
+                      </td>
+                      <td className="py-1.5">
+                        <button
+                          type="button"
+                          aria-label={`Delete ${material.name}`}
+                          className="rounded p-1 text-ink-400 hover:text-danger-600 disabled:cursor-not-allowed disabled:opacity-40"
+                          disabled={readOnly || used > 0}
+                          // A material in use is never deletable: the components
+                          // pointing at it would be left with a dangling
+                          // reference and their TIM edges would go unresolved
+                          // without anybody being told.
+                          title={
+                            used > 0
+                              ? `${used} 顆元件正在使用，請先改指定到其他材料`
+                              : 'Delete / 刪除'
+                          }
+                          onClick={() => removeTim(material.id)}
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+                {materials.tim.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="py-3 text-[12px] text-ink-400">
+                      No materials yet — add the ones this project uses.
+                      <span className="block">尚未建立材料，請新增本專案會用到的項目。</span>
                     </td>
                   </tr>
-                ))}
+                )}
               </tbody>
             </table>
           </div>
-          <p className="mt-2 text-[11px] text-ink-400">
-            BLT is what the material compresses to in the build, not its as-supplied thickness.
-            <span className="block">BLT 為鎖附壓合後的實際厚度，非供應狀態的厚度。</span>
-          </p>
+          <div className="mt-2 flex items-center gap-3">
+            <Button icon={<Plus size={14} />} disabled={readOnly} onClick={addTim}>
+              Add material / 新增材料
+            </Button>
+            <p className="text-[11px] text-ink-400">
+              BLT is what the material compresses to in the build, not its as-supplied thickness. A
+              component may override it; k always comes from here.
+              <span className="block">
+                BLT 為鎖附壓合後的實際厚度，非供應狀態厚度。元件可覆寫 BLT，k 一律取自本表。
+              </span>
+            </p>
+          </div>
         </fieldset>
 
         {/* --- Process constants --- */}
@@ -207,6 +336,7 @@ export function MaterialDefaultsForm({
               unit="mm"
               value={materials.coin_L_mm}
               readOnly={readOnly}
+              allowEmpty
               placeholder="e.g. 55"
               onChange={(next) => patchMaterials({ coin_L_mm: next })}
             />
@@ -217,6 +347,7 @@ export function MaterialDefaultsForm({
               unit="mm"
               value={materials.coin_W_mm}
               readOnly={readOnly}
+              allowEmpty
               placeholder="e.g. 35"
               onChange={(next) => patchMaterials({ coin_W_mm: next })}
             />

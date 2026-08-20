@@ -9,6 +9,7 @@
  * component metadata, preserving provenance (02 §6, §27).
  */
 
+import { defaultMaterials, findTimMaterial, type MaterialDefaults } from '@/domain/materials';
 import type { Component } from '@/domain/component';
 import { loadComponents } from '@/data/persistence';
 import type { ComponentCategory } from '@/domain/component';
@@ -53,7 +54,6 @@ const HEADERS = [
   'Limit(C)',
   'Heat_Path',
   'TIM_Type',
-  'TIM_k',
   'TIM_BLT',
   'Source_L',
   'Source_W',
@@ -72,7 +72,12 @@ export interface ExistingProjectScope {
   includeHidden: boolean;
 }
 
-export function parseExistingProject(projectId: string, scope: ExistingProjectScope): ParsedTable {
+export function parseExistingProject(
+  projectId: string,
+  scope: ExistingProjectScope,
+  /** The SOURCE project's library, so a TIM exports under its own name. */
+  materials: MaterialDefaults = defaultMaterials(),
+): ParsedTable {
   const components = loadComponents(projectId).filter((component) => {
     if (!scope.categories.includes(component.category)) return false;
     // Disabled components are the tool's own "hidden / excluded" set (02 §6).
@@ -89,19 +94,12 @@ export function parseExistingProject(projectId: string, scope: ExistingProjectSc
     text(component.thermal_spec.r_jc_C_per_W?.value),
     text(component.thermal_spec.limit_C?.value),
     text(component.thermal_spec.heat_path.type),
-    text(component.thermal_spec.tim.type),
-    // Only a component-level override is worth re-exporting; a value inherited
-    // from the project would turn into a per-component decision on re-import.
-    text(
-      component.thermal_spec.tim.inheritance === 'component'
-        ? component.thermal_spec.tim.k_W_mK?.value
-        : null,
-    ),
-    text(
-      component.thermal_spec.tim.inheritance === 'component'
-        ? component.thermal_spec.tim.thickness_mm?.value
-        : null,
-    ),
+    // The material's NAME, since that is what another project can match on —
+    // an id is meaningless outside this project's library.
+    text(findTimMaterial(materials, component.thermal_spec.tim.tim_id)?.name),
+    // Only a component's own bond line is re-exported; the material's default
+    // would turn an inherited value into a per-component decision on re-import.
+    text(component.thermal_spec.tim.blt_mm?.value),
     text(component.thermal_spec.geometry.source_L_mm),
     text(component.thermal_spec.geometry.source_W_mm),
     text(component.thermal_spec.geometry.spread_L_mm),

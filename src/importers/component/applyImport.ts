@@ -18,10 +18,11 @@ import {
   type ThermalSpec,
 } from '@/domain/component';
 import { sourced, unknownValue, type SourcedValue } from '@/domain/sourcedValue';
+import type { MaterialDefaults } from '@/domain/materials';
 import { duplicateKey, effectiveDuplicateAction } from './buildStagingRows';
 import type { ApplyResult, DuplicatePolicy, ImportSourceDescriptor, StagingRow } from './types';
 
-function specFromRow(row: StagingRow): ThermalSpec {
+function specFromRow(row: StagingRow, materials: MaterialDefaults): ThermalSpec {
   // No heat path stated means it is inferred, which must not read as a decision.
   const heatPath = row.heat_path ?? inferHeatPath(row.category ?? 'Other');
   return {
@@ -52,20 +53,25 @@ function specFromRow(row: StagingRow): ThermalSpec {
     heat_path: { type: heatPath, parameters: {} },
     heat_path_confirmed: row.heat_path != null,
     tim: {
-      ...emptyTim(),
-      type: row.tim_type ?? 'None',
-      // A source that states k or BLT has overridden the project default.
-      inheritance: row.tim_k_W_mK != null || row.tim_thickness_mm != null ? 'component' : 'project',
-      k_W_mK:
-        row.tim_k_W_mK == null
-          ? null
-          : sourced(row.tim_k_W_mK, 'Imported', { confidence: 'medium' }),
-      thickness_mm:
-        row.tim_thickness_mm == null
-          ? null
-          : sourced(row.tim_thickness_mm, 'Imported', { confidence: 'medium' }),
+      ...emptyTim(matchTimId(row.tim_name, materials)),
+      // A stated bond line is a build measurement, so it overrides the
+      // material's default for this component only.
+      blt_mm:
+        row.tim_blt_mm == null ? null : sourced(row.tim_blt_mm, 'Imported', { confidence: 'medium' }),
     },
   };
+}
+
+/** Keeps a TIM name the library could not match, so it is recoverable. */
+function buildMetadata(
+  row: StagingRow,
+  materials: MaterialDefaults,
+): Record<string, unknown> | undefined {
+  const extra: Record<string, unknown> = { ...row.extra };
+  if (row.tim_name && matchTimId(row.tim_name, materials) == null) {
+    extra._unmatched_tim = row.tim_name;
+  }
+  return Object.keys(extra).length > 0 ? extra : undefined;
 }
 
 function provenanceFor(source: ImportSourceDescriptor, row: StagingRow): ComponentProvenance {
@@ -100,6 +106,21 @@ export interface ApplyOptions {
   rows: StagingRow[];
   sessionPolicy: DuplicatePolicy;
   source: ImportSourceDescriptor;
+  /** The project's TIM library, which a row's material name is matched against. */
+  materials: MaterialDefaults;
+}
+
+/**
+ * A source names its TIM; the project owns the material. Matching is by name,
+ * case-insensitively, and a name the library does not have resolves to NO TIM
+ * rather than to a new library row — a spreadsheet typo must not quietly grow
+ * the project's material list. The unmatched name survives in `metadata`, and
+ * Screen 04 shows the component as having no TIM so it is visible.
+ */
+function matchTimId(name: string | null, materials: MaterialDefaults): string | null {
+  if (!name) return null;
+  const wanted = name.trim().toLowerCase();
+  return materials.tim.find((material) => material.name.toLowerCase() === wanted)?.id ?? null;
 }
 
 function slugId(name: string, taken: Set<string>): string {
@@ -118,7 +139,7 @@ function slugId(name: string, taken: Set<string>): string {
   return `${base}_${suffix}`;
 }
 
-export function applyImport({ existing, rows, sessionPolicy, source }: ApplyOptions): {
+export function applyImport({ existing, rows, sessionPolicy, source, materials }: ApplyOptions): {
   components: Component[];
   result: ApplyResult;
 } {
@@ -159,7 +180,7 @@ export function applyImport({ existing, rows, sessionPolicy, source }: ApplyOpti
 
     if (existingIndex != null && (action === 'REPLACE' || action === 'MERGE_NON_EMPTY')) {
       const target = components[existingIndex];
-      const spec = specFromRow(row);
+      const spec = specFromRow(row, materials);
 
       const nextSpec: ThermalSpec =
         action === 'REPLACE'
@@ -207,7 +228,7 @@ export function applyImport({ existing, rows, sessionPolicy, source }: ApplyOpti
               },
               heat_path: row.heat_path == null ? target.thermal_spec.heat_path : spec.heat_path,
               heat_path_confirmed: row.heat_path != null || target.thermal_spec.heat_path_confirmed,
-              tim: spec.tim.type === 'None' ? target.thermal_spec.tim : spec.tim,
+              tim: spec.tim.tim_id == null ? target.thermal_spec.tim : spec.tim,
             };
 
       const nextQty = row.qty ?? target.qty;
@@ -219,7 +240,7 @@ export function applyImport({ existing, rows, sessionPolicy, source }: ApplyOpti
         target.qty,
         target.thermal_spec.r_jc_C_per_W?.value ?? null,
         target.thermal_spec.limit_C?.value ?? null,
-        target.thermal_spec.tim.type,
+        target.thermal_spec.tim.tim_id,
         target.thermal_spec.heat_path.type,
       ];
       const after = [
@@ -227,7 +248,7 @@ export function applyImport({ existing, rows, sessionPolicy, source }: ApplyOpti
         nextQty,
         nextSpec.r_jc_C_per_W?.value ?? null,
         nextSpec.limit_C?.value ?? null,
-        nextSpec.tim.type,
+        nextSpec.tim.tim_id,
         nextSpec.heat_path.type,
       ];
       if (before.some((value, index) => value !== after[index])) {
@@ -268,12 +289,12 @@ export function applyImport({ existing, rows, sessionPolicy, source }: ApplyOpti
       qty: row.qty ?? 0,
       power_W:
         row.power_W == null ? unknownValue<number>('Imported') : sourced(row.power_W, 'Imported'),
-      thermal_spec: specFromRow(row),
+      thermal_spec: specFromRow(row, materials),
       // 02 §34 / 04 §40 — importing never creates graph topology or preferences.
       architecture_prep: emptyArchitecturePrep(),
       provenance: provenanceFor(source, row),
       external_mappings: emptyExternalMappings(),
-      metadata: Object.keys(row.extra).length > 0 ? { ...row.extra } : undefined,
+      metadata: buildMetadata(row, materials),
     };
 
     components.push(component);

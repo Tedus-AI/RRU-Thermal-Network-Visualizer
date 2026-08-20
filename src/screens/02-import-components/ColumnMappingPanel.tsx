@@ -23,7 +23,6 @@ const FIELD_ZH: Record<string, string> = {
   R_jc: '熱阻',
   Heat_Path: '散熱路徑',
   TIM_Type: '導熱介質',
-  TIM_k: 'TIM 導熱係數',
   TIM_BLT: 'TIM 厚度',
   Source_L: '熱源面長',
   Source_W: '熱源面寬',

@@ -13,14 +13,14 @@ import {
   COMPONENT_CATEGORIES,
   LIMIT_TYPES,
   componentTotalPowerW,
-  TIM_TYPES,
   type HeatPathType,
   type Component,
   type ComponentCategory,
   type LimitType,
-  type TimType,
 } from '@/domain/component';
 import { withValue } from '@/domain/sourcedValue';
+import { defaultMaterials } from '@/domain/materials';
+import { useProjectStore } from '@/data/projectStore';
 import { statusOf, type ComponentStatus } from '@/domain/componentReadiness';
 import { tip, ZH } from '@/i18n/componentManagerCopy';
 
@@ -54,6 +54,8 @@ export function ComponentTable({
   onPatch: (id: string, patch: Partial<Component>, fields: string[]) => void;
   readOnly: boolean;
 }) {
+  // The TIM column offers the project's own materials, so it has to read them.
+  const materials = useProjectStore((s) => s.draft?.materials) ?? defaultMaterials();
   const patchSpec = (
     component: Component,
     spec: Partial<Component['thermal_spec']>,
@@ -366,19 +368,20 @@ export function ComponentTable({
                     aria-label={`TIM for ${component.name}`}
                     onClick={(event) => event.stopPropagation()}
                     className={`${CELL} w-24`}
-                    value={spec.tim.type}
+                    value={spec.tim.tim_id ?? ''}
                     disabled={readOnly}
                     onChange={(event) =>
                       patchSpec(
                         component,
-                        { tim: { ...spec.tim, type: event.target.value as TimType } },
-                        ['tim.type'],
+                        { tim: { ...spec.tim, tim_id: event.target.value || null } },
+                        ['tim.tim_id'],
                       )
                     }
                   >
-                    {TIM_TYPES.map((type) => (
-                      <option key={type} value={type}>
-                        {type}
+                    <option value="">None</option>
+                    {materials.tim.map((material) => (
+                      <option key={material.id} value={material.id}>
+                        {material.name}
                       </option>
                     ))}
                   </select>

@@ -8,7 +8,7 @@
 
 import type { Project, Scenario } from '@/domain/project';
 import { SCHEMA_VERSION } from '@/domain/project';
-import { defaultMaterials } from '@/domain/materials';
+import { BUILTIN_TIM_IDS, defaultMaterials } from '@/domain/materials';
 import {
   emptyExternalMappings,
   emptyThermalSpec,
@@ -19,7 +19,6 @@ import {
   type ComponentProvenance,
   type LimitType,
   type PackageType,
-  type TimType,
   type HeatPathType,
 } from '@/domain/component';
 import type { SourceRevision } from '@/domain/revision';
@@ -137,7 +136,7 @@ interface Seed {
   limit_type: LimitType;
   package_type: PackageType;
   heat_path: HeatPathType;
-  tim: TimType;
+  tim: string;
   contact: [number, number];
   template: ArchitectureTemplate;
   zone: BaseZone;
@@ -185,10 +184,9 @@ function buildReadyComponents(seeds: Seed[]): Component[] {
         heat_path_confirmed: true,
         tim: {
           ...spec.tim,
-          type: seed.tim,
-          inheritance: 'component',
-          k_W_mK: demoSourced(3, 'Datasheet', 'Synthetic TIM data sheet'),
-          thickness_mm: demoSourced(0.15, 'Datasheet', 'Synthetic TIM data sheet'),
+          tim_id: seed.tim,
+          // A measured bond line, which is the one thing a component may state.
+          blt_mm: demoSourced(0.15, 'Datasheet', 'Synthetic build measurement'),
         },
       },
       architecture_prep: {
@@ -218,7 +216,7 @@ export function demoComponents(): Component[] {
       limit_type: 'Tj',
       package_type: 'QFN',
       heat_path: 'Coin',
-      tim: 'Grease',
+      tim: BUILTIN_TIM_IDS.grease,
       contact: [18, 12],
       template: 'BOTTOM_COOL_COIN',
       zone: 'RF Left',
@@ -234,7 +232,7 @@ export function demoComponents(): Component[] {
       limit_type: 'Tj',
       package_type: 'QFN',
       heat_path: 'Board',
-      tim: 'Pad',
+      tim: BUILTIN_TIM_IDS.pad,
       contact: [8, 8],
       template: 'BOTTOM_COOL_VIA',
       zone: 'RF Right',
@@ -250,7 +248,7 @@ export function demoComponents(): Component[] {
       limit_type: 'Tc',
       package_type: 'Shielded Module',
       heat_path: 'DirectMetal',
-      tim: 'Pad',
+      tim: BUILTIN_TIM_IDS.pad,
       contact: [30, 18],
       template: 'DIRECT_METAL',
       zone: 'RF Left',
@@ -266,7 +264,7 @@ export function demoComponents(): Component[] {
       limit_type: 'Tj',
       package_type: 'BGA',
       heat_path: 'Board',
-      tim: 'Putty',
+      tim: BUILTIN_TIM_IDS.putty,
       contact: [28, 28],
       template: 'BOTTOM_COOL_VIA',
       zone: 'Digital',
@@ -282,7 +280,7 @@ export function demoComponents(): Component[] {
       limit_type: 'Tc',
       package_type: 'Module',
       heat_path: 'DirectMetal',
-      tim: 'Grease',
+      tim: BUILTIN_TIM_IDS.grease,
       contact: [24, 20],
       template: 'DIRECT_METAL',
       zone: 'Power',
@@ -304,7 +302,7 @@ export function demoSourceComponents(): Component[] {
       limit_type: 'Tj',
       package_type: 'QFN',
       heat_path: 'Coin',
-      tim: 'Grease',
+      tim: BUILTIN_TIM_IDS.grease,
       contact: [18, 12],
       template: 'BOTTOM_COOL_COIN',
       zone: 'RF Left',
@@ -320,7 +318,7 @@ export function demoSourceComponents(): Component[] {
       limit_type: 'Tj',
       package_type: 'BGA',
       heat_path: 'Board',
-      tim: 'Putty',
+      tim: BUILTIN_TIM_IDS.putty,
       contact: [28, 28],
       template: 'BOTTOM_COOL_VIA',
       zone: 'Digital',
@@ -336,7 +334,7 @@ export function demoSourceComponents(): Component[] {
       limit_type: 'Tj',
       package_type: 'QFN',
       heat_path: 'Board',
-      tim: 'Pad',
+      tim: BUILTIN_TIM_IDS.pad,
       contact: [5, 5],
       template: 'BOTTOM_COOL_VIA',
       zone: 'RF Left',

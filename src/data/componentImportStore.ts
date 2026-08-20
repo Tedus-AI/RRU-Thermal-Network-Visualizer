@@ -5,6 +5,8 @@
  * componentStore until `applyImport()` is called, and Cancel drops it all.
  */
 
+import { normalizeMaterials } from '@/domain/materials';
+import { loadProject } from './persistence';
 import { create } from 'zustand';
 import type { Component, ComponentCategory } from '@/domain/component';
 import { buildStagingRows, revalidateRow } from '@/importers/component/buildStagingRows';
@@ -247,6 +249,8 @@ export const useComponentImportStore = create<ImportState>((set, get) => ({
       rows,
       sessionPolicy,
       source,
+      // An imported TIM name is matched against THIS project's library.
+      materials: normalizeMaterials(loadProject(projectId)?.materials),
     });
 
     useComponentStore.getState().setComponents(projectId, components);

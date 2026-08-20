@@ -1,3 +1,4 @@
+import { BUILTIN_TIM_IDS } from '@/domain/materials';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -30,7 +31,7 @@ import {
   canonicalComponentToLegacy,
   legacyComponentToCanonical,
 } from '@/adapters/legacyComponentAdapter';
-import { normalizeHeatPath, normalizeTim } from '@/importers/component/normalizeComponent';
+import { normalizeHeatPath } from '@/importers/component/normalizeComponent';
 import { toLibraryEntry, fromLibraryEntry } from '@/data/componentLibraryStore';
 
 function base(overrides: Partial<Component> = {}): Component {
@@ -68,7 +69,7 @@ function readyPA(): Component {
       geometry: { ...emptyThermalSpec().geometry, source_L_mm: 20, source_W_mm: 10 },
       heat_path: { type: 'Coin', parameters: {} },
       heat_path_confirmed: true,
-      tim: { ...emptyThermalSpec().tim, type: 'Grease', inheritance: 'component' },
+      tim: { ...emptyThermalSpec().tim, tim_id: BUILTIN_TIM_IDS.grease },
     },
     architecture_prep: {
       ...emptyArchitecturePrep(),
@@ -510,7 +511,7 @@ describe('legacy compatibility (04 §30)', () => {
         imported_at: '2026-01-01T00:00:00Z',
       },
       normalizeHeatPath,
-      normalizeTim,
+      resolveTimId: () => BUILTIN_TIM_IDS.grease,
     });
 
   it('reads the current tool data correctly (AC-04-17)', () => {
@@ -521,7 +522,7 @@ describe('legacy compatibility (04 §30)', () => {
     expect(component.power_W.value).toBeCloseTo(52.13);
     expect(component.thermal_spec.r_jc_C_per_W?.value).toBe(0.35);
     expect(component.thermal_spec.heat_path.type).toBe('Coin');
-    expect(component.thermal_spec.tim.type).toBe('Grease');
+    expect(component.thermal_spec.tim.tim_id).toBe(BUILTIN_TIM_IDS.grease);
   });
 
   it('does not silently reinterpret legacy geometry (04 §30)', () => {

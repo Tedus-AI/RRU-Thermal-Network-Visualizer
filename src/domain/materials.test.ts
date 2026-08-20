@@ -1,12 +1,15 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  TIM_MATERIAL_TYPES,
+  BUILTIN_TIM_IDS,
   assumedCount,
   coinAreaMm2,
   defaultMaterials,
+  findTimMaterial,
+  nextTimId,
   normalizeMaterials,
   resolveTim,
+  timUsageCount,
 } from './materials';
 import { emptyTim, type TimSpec } from './component';
 import { sourced } from './sourcedValue';
@@ -34,10 +37,13 @@ function withoutTimestamps<T>(value: T): T {
 describe('shipped defaults', () => {
   it('ships a value for every material constant, marked Assumed', () => {
     const materials = defaultMaterials();
-    for (const type of TIM_MATERIAL_TYPES) {
-      expect(materials.tim[type].k_W_mK.value).toBeGreaterThan(0);
-      expect(materials.tim[type].blt_mm.value).toBeGreaterThan(0);
-      expect(materials.tim[type].k_W_mK.source).toBe('Assumed');
+    expect(materials.tim.length).toBe(7);
+    for (const material of materials.tim) {
+      expect(material.id).toBeTruthy();
+      expect(material.name).toBeTruthy();
+      expect(material.k_W_mK.value).toBeGreaterThan(0);
+      expect(material.blt_mm.value).toBeGreaterThan(0);
+      expect(material.k_W_mK.source).toBe('Assumed');
     }
     expect(materials.copper_k_W_mK.value).toBe(380);
     expect(materials.copper_k_W_mK.source).toBe('Assumed');
@@ -48,7 +54,7 @@ describe('shipped defaults', () => {
    * anyone having visited Screen 01 first.
    */
   it('resolves a TIM straight out of the box', () => {
-    const resolved = resolveTim(tim({ type: 'Grease' }), defaultMaterials());
+    const resolved = resolveTim(tim({ tim_id: BUILTIN_TIM_IDS.grease }), defaultMaterials());
     expect(resolved.k_W_mK).toBe(3.0);
     expect(resolved.thickness_mm).toBe(0.05);
     expect(resolved.inherited).toBe(true);
@@ -83,36 +89,29 @@ describe('shipped defaults', () => {
 });
 
 describe('resolveTim', () => {
-  it('lets a component value win over the project one', () => {
+  it('lets a component override the bond line but not the conductivity', () => {
     const resolved = resolveTim(
-      tim({ type: 'Grease', inheritance: 'component', k_W_mK: sourced(8, 'Measurement') }),
+      tim({ tim_id: BUILTIN_TIM_IDS.grease, blt_mm: sourced(0.02, 'Measurement') }),
       defaultMaterials(),
     );
-    expect(resolved.k_W_mK).toBe(8);
-    // The BLT was not overridden, so it still comes from the project.
-    expect(resolved.thickness_mm).toBe(0.05);
+    // Bond line is a build outcome, so the component's measurement wins.
+    expect(resolved.thickness_mm).toBe(0.02);
+    // Conductivity is a material property; there is no way to override it.
+    expect(resolved.k_W_mK).toBe(3.0);
     expect(resolved.inherited).toBe(false);
   });
 
-  /**
-   * The flag drives the UI; it must not decide resolution. A measured number
-   * that was saved would otherwise be silently dropped for a shipped constant
-   * because of a checkbox nobody had touched.
-   */
-  it('honours a stored value even when the flag says inherit', () => {
-    const resolved = resolveTim(
-      tim({ type: 'Grease', inheritance: 'project', thickness_mm: sourced(0.02, 'Measurement') }),
-      defaultMaterials(),
-    );
-    expect(resolved.thickness_mm).toBe(0.02);
+  it('uses the material default when the component states no bond line', () => {
+    const resolved = resolveTim(tim({ tim_id: BUILTIN_TIM_IDS.grease }), defaultMaterials());
+    expect(resolved.thickness_mm).toBe(0.05);
+    expect(resolved.inherited).toBe(true);
   });
 
-  it('resolves nothing for None or Custom rather than borrowing another material', () => {
-    for (const type of ['None', 'Custom'] as const) {
-      const resolved = resolveTim(tim({ type }), defaultMaterials());
-      expect(resolved.k_W_mK).toBeNull();
-      expect(resolved.thickness_mm).toBeNull();
-    }
+  it('resolves nothing when no material is chosen', () => {
+    const resolved = resolveTim(tim({ tim_id: null }), defaultMaterials());
+    expect(resolved.k_W_mK).toBeNull();
+    expect(resolved.thickness_mm).toBeNull();
+    expect(resolved.missing).toBe(false);
   });
 });
 
@@ -127,7 +126,7 @@ describe('normalizeMaterials', () => {
     const materials = normalizeMaterials({ copper_k_W_mK: { value: 400, source: 'Vendor' } });
     expect(materials.copper_k_W_mK.value).toBe(400);
     expect(materials.copper_k_W_mK.source).toBe('Vendor');
-    expect(materials.tim.Grease.k_W_mK.value).toBe(3.0);
+    expect(findTimMaterial(materials, BUILTIN_TIM_IDS.grease)!.k_W_mK.value).toBe(3.0);
     expect(materials.via_efficiency.value).toBe(0.9);
   });
 
@@ -159,6 +158,76 @@ describe('normalizeMaterials', () => {
     expect(reloaded).toEqual(materials);
     // The stamp is part of the payload here, so a round trip must preserve it
     // rather than restamp the value as if it had just been decided.
-    expect(reloaded.tim.Grease.k_W_mK.updated_at).toBe(materials.tim.Grease.k_W_mK.updated_at);
+    expect(reloaded.tim[0].k_W_mK.updated_at).toBe(materials.tim[0].k_W_mK.updated_at);
+  });
+});
+
+describe('the library as a list', () => {
+  const spec = (id: string | null) => ({ thermal_spec: { tim: tim({ tim_id: id }) } });
+
+  it('counts what points at a material, which is what guards deletion', () => {
+    const components = [
+      spec(BUILTIN_TIM_IDS.grease),
+      spec(BUILTIN_TIM_IDS.grease),
+      spec(BUILTIN_TIM_IDS.putty),
+      spec(null),
+    ];
+    expect(timUsageCount(components, BUILTIN_TIM_IDS.grease)).toBe(2);
+    expect(timUsageCount(components, BUILTIN_TIM_IDS.pcm)).toBe(0);
+  });
+
+  it('never hands out an id the library already uses', () => {
+    const materials = defaultMaterials();
+    expect(materials.tim.some((material) => material.id === nextTimId(materials))).toBe(false);
+  });
+
+  // Components reference the id, so renaming must not disturb resolution.
+  it('resolves through a rename', () => {
+    const materials = defaultMaterials();
+    materials.tim = materials.tim.map((material) =>
+      material.id === BUILTIN_TIM_IDS.grease ? { ...material, name: 'Shin-Etsu G777' } : material,
+    );
+    const resolved = resolveTim(tim({ tim_id: BUILTIN_TIM_IDS.grease }), materials);
+    expect(resolved.k_W_mK).toBe(3.0);
+    expect(resolved.material?.name).toBe('Shin-Etsu G777');
+  });
+
+  /**
+   * A dangling reference and "no TIM" both resolve to nothing, but they are
+   * different situations: one is a decision, the other needs fixing. The UI can
+   * only say so if the model tells them apart.
+   */
+  it('distinguishes a deleted material from no TIM at all', () => {
+    const deleted = resolveTim(tim({ tim_id: 'TIM_GONE' }), defaultMaterials());
+    expect(deleted.k_W_mK).toBeNull();
+    expect(deleted.missing).toBe(true);
+
+    const none = resolveTim(tim({ tim_id: null }), defaultMaterials());
+    expect(none.missing).toBe(false);
+  });
+
+  it('reads a library written by an older build as a keyed object', () => {
+    const materials = normalizeMaterials({
+      tim: { Grease: { k_W_mK: { value: 4.2, source: 'Vendor' }, blt_mm: 0.08 } },
+    });
+    expect(materials.tim).toHaveLength(1);
+    // The builtin id is reused, so components already pointing at it still work.
+    expect(materials.tim[0].id).toBe(BUILTIN_TIM_IDS.grease);
+    expect(materials.tim[0].k_W_mK.value).toBe(4.2);
+  });
+
+  it('keeps a deliberately empty library empty', () => {
+    expect(normalizeMaterials({ tim: [] }).tim).toEqual([]);
+  });
+
+  it('drops a duplicate id rather than leaving one unreachable', () => {
+    const materials = normalizeMaterials({
+      tim: [
+        { id: 'TIM_X', name: 'One', k_W_mK: 3, blt_mm: 0.1 },
+        { id: 'TIM_X', name: 'Two', k_W_mK: 5, blt_mm: 0.2 },
+      ],
+    });
+    expect(materials.tim).toHaveLength(1);
+    expect(materials.tim[0].name).toBe('One');
   });
 });

@@ -9,10 +9,8 @@
 import {
   COMPONENT_CATEGORIES,
   HEAT_PATH_TYPES,
-  TIM_TYPES,
   type ComponentCategory,
   type HeatPathType,
-  type TimType,
 } from '@/domain/component';
 
 export interface NumericParse {
@@ -158,11 +156,16 @@ export function unrecognisedHeatPath(raw: unknown, normalized: HeatPathType | nu
 }
 
 /**
- * TIM vocabulary — widened by 04 §11 to include PCM, Gap Filler and Solder as
- * first-class types. Naming a TIM still does NOT create a thermal edge; that
- * decision belongs to Screen 05 (02 §16, 04 §11).
+ * TIM vocabulary.
+ *
+ * This no longer maps onto a fixed enum: the materials a project uses are its
+ * own list (01 §4). All this does is tidy a source's spelling into the NAME the
+ * shipped library uses, so a column saying "thermal grease" finds the row
+ * called "Grease". Anything unrecognised is returned as typed, and the caller
+ * matches it against the project's library by name — a spreadsheet typo must
+ * not silently become a new material.
  */
-const TIM_ALIASES: Record<string, TimType> = {
+const TIM_ALIASES: Record<string, string> = {
   grease: 'Grease',
   'thermal grease': 'Grease',
   paste: 'Grease',
@@ -180,25 +183,16 @@ const TIM_ALIASES: Record<string, TimType> = {
   'phase change': 'PCM',
   solder: 'Solder',
   'die attach': 'Solder',
-  none: 'None',
-  na: 'None',
-  '-': 'None',
 };
 
-export function normalizeTim(raw: unknown): TimType | null {
+/** Blank, "none" or "n/a" all mean the component has no TIM at all. */
+const NO_TIM = new Set(['', 'none', 'na', 'n/a', '-', '—', '無']);
+
+export function normalizeTimName(raw: unknown): string | null {
   if (raw == null) return null;
   const text = String(raw).trim();
-  if (!text) return null;
-
-  const exact = TIM_TYPES.find((t) => t.toLowerCase() === text.toLowerCase());
-  if (exact) return exact;
-
-  return TIM_ALIASES[text.toLowerCase()] ?? 'Custom';
+  if (NO_TIM.has(text.toLowerCase())) return null;
+  return TIM_ALIASES[text.toLowerCase()] ?? text;
 }
 
-/** True when the raw text was present but had to fall back to Custom. */
-export function fellBackToCustom(raw: unknown, normalized: string | null): boolean {
-  if (normalized !== 'Custom') return false;
-  const text = raw == null ? '' : String(raw).trim();
-  return text.length > 0 && text.toLowerCase() !== 'custom';
-}
+

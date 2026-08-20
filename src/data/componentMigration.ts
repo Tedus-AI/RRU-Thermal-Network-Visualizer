@@ -14,7 +14,6 @@ import {
   emptyArchitecturePrep,
   emptyExternalMappings,
   emptyGeometry,
-  emptyThermalSpec,
   inferHeatPath,
   inferLimitType,
   type Component,
@@ -23,9 +22,9 @@ import {
   type HeatPathType,
   type LimitType,
   type PackageType,
-  type TimType,
 } from '@/domain/component';
 import { sourced, unknownValue, type SourcedValue } from '@/domain/sourcedValue';
+import { BUILTIN_TIM_IDS } from '@/domain/materials';
 import type { DataSource } from '@/thermal/types';
 
 type Raw = Record<string, unknown>;
@@ -165,6 +164,54 @@ function migrateLimitType(
   return { limit_type: inferLimitType(category, name), limit_type_confirmed: false };
 }
 
+/**
+ * A component used to carry its own TIM: a type from a fixed enum plus its own
+ * k and thickness. Materials now live in the project's library (01 §4), so the
+ * type becomes a reference to one of the shipped rows.
+ *
+ * `None` and `Custom` both become "no TIM": one meant it, and the other meant
+ * nobody had decided, which is the same thing to a resistance calculation.
+ *
+ * A stored thickness becomes the component's bond-line override, since a build
+ * measurement is exactly what that field is for. A stored `k` has nowhere to go
+ * — k is the material's now — so rather than drop it silently it is preserved
+ * in `metadata` and `validateComponent` asks for it to be folded into a
+ * project material.
+ */
+const LEGACY_TIM_ID: Record<string, string> = {
+  Grease: BUILTIN_TIM_IDS.grease,
+  Pad: BUILTIN_TIM_IDS.pad,
+  Pad2: BUILTIN_TIM_IDS.pad2,
+  Putty: BUILTIN_TIM_IDS.putty,
+  PCM: BUILTIN_TIM_IDS.pcm,
+  'Gap Filler': BUILTIN_TIM_IDS.gapFiller,
+  Solder: BUILTIN_TIM_IDS.solder,
+};
+
+function migrateTim(timRaw: Raw | null, specRaw: Raw): Component['thermal_spec']['tim'] {
+  // Already in the current shape.
+  if (timRaw && 'tim_id' in timRaw) {
+    return {
+      tim_id: typeof timRaw.tim_id === 'string' ? timRaw.tim_id : null,
+      blt_mm: toSourced(timRaw.blt_mm),
+      contact_area_mode: timRaw.contact_area_mode === 'custom' ? 'custom' : 'derived',
+    };
+  }
+
+  const legacyType = (timRaw?.type ?? specRaw.tim_type) as string | undefined;
+  return {
+    tim_id: legacyType ? (LEGACY_TIM_ID[legacyType] ?? null) : null,
+    blt_mm: toSourced(timRaw?.thickness_mm),
+    contact_area_mode: timRaw?.contact_area_mode === 'custom' ? 'custom' : 'derived',
+  };
+}
+
+/** A per-component k the library cannot hold; kept so it is never lost silently. */
+function legacyTimK(timRaw: Raw | null): number | null {
+  if (!timRaw || 'tim_id' in timRaw) return null;
+  return toSourced(timRaw.k_W_mK)?.value ?? null;
+}
+
 export function migrateComponent(raw: unknown, index: number): Component | null {
   if (!isObject(raw)) return null;
 
@@ -172,11 +219,8 @@ export function migrateComponent(raw: unknown, index: number): Component | null 
   if (!name && !raw.id) return null;
 
   const specRaw = isObject(raw.thermal_spec) ? raw.thermal_spec : {};
-  const base = emptyThermalSpec();
 
   const timRaw = isObject(specRaw.tim) ? specRaw.tim : null;
-  const timType =
-    (timRaw?.type as TimType | undefined) ?? (specRaw.tim_type as TimType | undefined);
 
   const architecture = isObject(raw.architecture_prep) ? raw.architecture_prep : {};
   const category = (raw.category as ComponentCategory) ?? 'Other';
@@ -207,14 +251,7 @@ export function migrateComponent(raw: unknown, index: number): Component | null 
       ...heat,
       // Built field by field rather than spread, so a dropped field (such as the
       // never-solved `compression_pct`) cannot ride back in from stored data.
-      tim: {
-        type: timType ?? base.tim.type,
-        inheritance: (timRaw?.inheritance as 'project' | 'component') ?? 'component',
-        k_W_mK: toSourced(timRaw?.k_W_mK),
-        thickness_mm: toSourced(timRaw?.thickness_mm),
-        contact_area_mode:
-          timRaw?.contact_area_mode === 'custom' ? 'custom' : base.tim.contact_area_mode,
-      },
+      tim: migrateTim(timRaw, specRaw),
     },
 
     architecture_prep: { ...emptyArchitecturePrep(), ...architecture },
@@ -231,8 +268,17 @@ export function migrateComponent(raw: unknown, index: number): Component | null 
       : emptyExternalMappings(),
 
     notes: typeof raw.notes === 'string' ? raw.notes : undefined,
-    metadata: isObject(raw.metadata) ? raw.metadata : undefined,
+    metadata: withLegacyTimK(isObject(raw.metadata) ? raw.metadata : undefined, timRaw),
   };
+}
+
+function withLegacyTimK(
+  metadata: Raw | undefined,
+  timRaw: Raw | null,
+): Record<string, unknown> | undefined {
+  const k = legacyTimK(timRaw);
+  if (k == null) return metadata;
+  return { ...(metadata ?? {}), _legacy_tim_k_W_mK: k };
 }
 
 export function migrateComponents(raw: unknown): Component[] {

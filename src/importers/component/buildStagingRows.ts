@@ -5,10 +5,9 @@
 
 import type { Component } from '@/domain/component';
 import {
-  fellBackToCustom,
   normalizeCategory,
   normalizeHeatPath,
-  normalizeTim,
+  normalizeTimName,
   parseNumericCell,
   unrecognisedHeatPath,
 } from './normalizeComponent';
@@ -80,13 +79,12 @@ export function buildStagingRows({
     const spreadL = parseNumericCell(cellFor(cells, mapping, 'Spread_L'));
     const spreadW = parseNumericCell(cellFor(cells, mapping, 'Spread_W'));
     const thickness = parseNumericCell(cellFor(cells, mapping, 'Thick(mm)'));
-    const timK = parseNumericCell(cellFor(cells, mapping, 'TIM_k'));
     const timBlt = parseNumericCell(cellFor(cells, mapping, 'TIM_BLT'));
 
     const rawHeatPath = cellFor(cells, mapping, 'Heat_Path');
     const rawTim = cellFor(cells, mapping, 'TIM_Type');
     const heatPath = normalizeHeatPath(rawHeatPath);
-    const tim = normalizeTim(rawTim);
+    const tim = normalizeTimName(rawTim);
 
     const duplicate = existingByKey.get(duplicateKey(name, category));
 
@@ -100,9 +98,8 @@ export function buildStagingRows({
       r_jc_C_per_W: rjc.value,
       limit_C: limit.value,
       heat_path: heatPath,
-      tim_type: tim,
-      tim_k_W_mK: timK.value,
-      tim_thickness_mm: timBlt.value,
+      tim_name: tim,
+      tim_blt_mm: timBlt.value,
       source_L_mm: sourceL.value,
       source_W_mm: sourceW.value,
       spread_L_mm: spreadL.value,
@@ -126,12 +123,10 @@ export function buildStagingRows({
         Source_W: sourceW.invalid,
         Spread_L: spreadL.invalid,
         Spread_W: spreadW.invalid,
-        TIM_k: timK.invalid,
         TIM_BLT: timBlt.invalid,
         'Thick(mm)': thickness.invalid,
       },
       heatPathUnrecognised: unrecognisedHeatPath(rawHeatPath, heatPath),
-      timFallback: fellBackToCustom(rawTim, tim),
       unmappedRequired: REQUIRED_FIELDS.filter((field) => !mapping.includes(field)),
     });
   });
@@ -140,7 +135,6 @@ export function buildStagingRows({
 export interface ValidateContext {
   invalidNumerics?: Partial<Record<CanonicalField, boolean>>;
   heatPathUnrecognised?: boolean;
-  timFallback?: boolean;
   unmappedRequired?: CanonicalField[];
 }
 
@@ -270,12 +264,12 @@ export function validateStagingRow(row: StagingRow, context: ValidateContext = {
     });
   }
 
-  if (!row.tim_type) {
+  if (!row.tim_name) {
     issues.push({
       severity: 'warning',
       field: 'TIM_Type',
-      message: 'TIM type is missing.',
-      message_zh: '缺少熱介面材料資訊。',
+      message: 'No TIM named — the component will import with none assigned.',
+      message_zh: '未指定熱介面材料，將以「無」匯入。',
     });
   }
 
@@ -303,15 +297,6 @@ export function validateStagingRow(row: StagingRow, context: ValidateContext = {
       field: 'Source_L',
       message: 'Source face size is missing — spreading and TIM resistance cannot be computed.',
       message_zh: '缺少熱源面尺寸，將無法計算擴散與 TIM 熱阻。',
-    });
-  }
-
-  if (context.timFallback) {
-    issues.push({
-      severity: 'warning',
-      field: 'TIM_Type',
-      message: `Unrecognised TIM "${row.raw.TIM_Type ?? ''}" mapped to Custom.`,
-      message_zh: `無法辨識的熱介面材料「${row.raw.TIM_Type ?? ''}」，已對應為 Custom。`,
     });
   }
 

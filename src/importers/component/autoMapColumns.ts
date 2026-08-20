@@ -148,7 +148,6 @@ const ALIASES: Record<CanonicalField, string[]> = {
   ],
   Spread_L: ['spread_l', 'spread l', 'spread length', 'base_l', 'base l', '擴散面長', '底面長'],
   Spread_W: ['spread_w', 'spread w', 'spread width', 'base_w', 'base w', '擴散面寬', '底面寬'],
-  TIM_k: ['tim_k', 'tim k', 'k_tim', 'tim conductivity', 'tim 導熱係數', 'tim 熱傳導率'],
   TIM_BLT: ['tim_blt', 'tim blt', 'blt', 'bond line thickness', 'tim thickness', 'tim 厚度'],
   'Thick(mm)': ['thick', 'thick(mm)', 'thickness', 'thickness(mm)', 'thk', '厚度', '板厚'],
 };

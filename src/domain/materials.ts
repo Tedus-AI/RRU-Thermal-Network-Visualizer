@@ -23,32 +23,45 @@
  */
 
 import { sourced, type SourcedValue } from './sourcedValue';
-import type { TimSpec, TimType } from './component';
+import type { TimSpec } from './component';
 
-/** TIM types that name an actual material, so have properties to look up. */
-export const TIM_MATERIAL_TYPES = [
-  'Grease',
-  'Pad',
-  'Pad2',
-  'Putty',
-  'PCM',
-  'Gap Filler',
-  'Solder',
-] as const;
-export type TimMaterialType = (typeof TIM_MATERIAL_TYPES)[number];
-
-export function isTimMaterialType(type: TimType): type is TimMaterialType {
-  return (TIM_MATERIAL_TYPES as readonly string[]).includes(type);
-}
-
+/**
+ * One TIM the project uses.
+ *
+ * A project works with a handful of interface materials, not a fixed
+ * vocabulary, so this is a LIST the engineer edits rather than an enum. Two
+ * consequences follow from that, and both matter:
+ *
+ *  - Components reference `id`, never `name`. Renaming Grease to the part
+ *    number actually on the BOM must not orphan every component that uses it.
+ *  - `k` belongs here because it is a property of the material. `blt_mm` is the
+ *    project's DEFAULT bond line, not a property: the same grease compresses to
+ *    a different thickness under screws than under a clip, so a component may
+ *    override the thickness — and only the thickness.
+ */
 export interface TimMaterial {
+  /** Stable. Components reference this, so it must survive a rename. */
+  id: string;
+  name: string;
   k_W_mK: SourcedValue<number>;
-  /** Bond line thickness — what the TIM compresses to in the build, not as supplied. */
+  /** Default bond line thickness — what it compresses to, not as supplied. */
   blt_mm: SourcedValue<number>;
 }
 
+/** Ids of the materials a new project starts with. */
+export const BUILTIN_TIM_IDS = {
+  grease: 'TIM_GREASE',
+  pad: 'TIM_PAD',
+  pad2: 'TIM_PAD2',
+  putty: 'TIM_PUTTY',
+  pcm: 'TIM_PCM',
+  gapFiller: 'TIM_GAP_FILLER',
+  solder: 'TIM_SOLDER',
+} as const;
+
 export interface MaterialDefaults {
-  tim: Record<TimMaterialType, TimMaterial>;
+  /** The project's TIM library. Order is the order Screen 01 shows. */
+  tim: TimMaterial[];
 
   /** Copper coin bulk conductivity. */
   copper_k_W_mK: SourcedValue<number>;
@@ -76,15 +89,20 @@ const assumed = (value: number) => sourced(value, 'Assumed', { confidence: 'medi
 /** Typical values, all `Assumed` — see rule 1 at the top of this file. */
 export function defaultMaterials(): MaterialDefaults {
   return {
-    tim: {
-      Grease: { k_W_mK: assumed(3.0), blt_mm: assumed(0.05) },
-      Pad: { k_W_mK: assumed(3.0), blt_mm: assumed(0.5) },
-      Pad2: { k_W_mK: assumed(5.0), blt_mm: assumed(1.0) },
-      Putty: { k_W_mK: assumed(3.5), blt_mm: assumed(0.3) },
-      PCM: { k_W_mK: assumed(4.0), blt_mm: assumed(0.1) },
-      'Gap Filler': { k_W_mK: assumed(3.0), blt_mm: assumed(1.0) },
-      Solder: { k_W_mK: assumed(58), blt_mm: assumed(0.3) },
-    },
+    tim: [
+      { id: BUILTIN_TIM_IDS.grease, name: 'Grease', k_W_mK: assumed(3.0), blt_mm: assumed(0.05) },
+      { id: BUILTIN_TIM_IDS.pad, name: 'Pad', k_W_mK: assumed(3.0), blt_mm: assumed(0.5) },
+      { id: BUILTIN_TIM_IDS.pad2, name: 'Pad2', k_W_mK: assumed(5.0), blt_mm: assumed(1.0) },
+      { id: BUILTIN_TIM_IDS.putty, name: 'Putty', k_W_mK: assumed(3.5), blt_mm: assumed(0.3) },
+      { id: BUILTIN_TIM_IDS.pcm, name: 'PCM', k_W_mK: assumed(4.0), blt_mm: assumed(0.1) },
+      {
+        id: BUILTIN_TIM_IDS.gapFiller,
+        name: 'Gap Filler',
+        k_W_mK: assumed(3.0),
+        blt_mm: assumed(1.0),
+      },
+      { id: BUILTIN_TIM_IDS.solder, name: 'Solder', k_W_mK: assumed(58), blt_mm: assumed(0.3) },
+    ],
     copper_k_W_mK: assumed(380),
     via_effective_k_W_mK: assumed(30),
     via_efficiency: assumed(0.9),
@@ -133,6 +151,60 @@ function readOptional(raw: unknown): SourcedValue<number> | null {
 }
 
 /**
+ * The TIM library, from a list OR from the keyed object earlier builds wrote.
+ *
+ * The keyed shape is read by name, which is exactly why the shape changed: an
+ * engineer renaming a material would have orphaned every component using it.
+ * Reading it here converts those keys into ids once, on open.
+ *
+ * An empty library is legal — an engineer may genuinely have deleted every
+ * material — so an explicit empty list stays empty. Only a missing or unusable
+ * `tim` falls back to the shipped set.
+ */
+function normalizeTimLibrary(raw: unknown, fallback: TimMaterial[]): TimMaterial[] {
+  if (Array.isArray(raw)) {
+    const seen = new Set<string>();
+    const list: TimMaterial[] = [];
+    raw.forEach((entry, index) => {
+      if (!isObject(entry)) return;
+      const name = typeof entry.name === 'string' && entry.name.trim() ? entry.name.trim() : null;
+      const id =
+        typeof entry.id === 'string' && entry.id.trim()
+          ? entry.id.trim()
+          : `TIM_${index + 1}_${(name ?? 'MATERIAL').toUpperCase().replace(/[^A-Z0-9]+/g, '_')}`;
+      // A duplicate id would make one of the two unreachable from a component.
+      if (seen.has(id)) return;
+      seen.add(id);
+      list.push({
+        id,
+        name: name ?? id,
+        k_W_mK: readSourced(entry.k_W_mK, sourced(1, 'Assumed', { confidence: 'low' })),
+        blt_mm: readSourced(entry.blt_mm, sourced(0.1, 'Assumed', { confidence: 'low' })),
+      });
+    });
+    return list;
+  }
+
+  if (isObject(raw)) {
+    const byName = new Map(fallback.map((material) => [material.name, material]));
+    const list: TimMaterial[] = [];
+    for (const [name, entry] of Object.entries(raw)) {
+      if (!isObject(entry)) continue;
+      const builtin = byName.get(name);
+      list.push({
+        id: builtin?.id ?? `TIM_${name.toUpperCase().replace(/[^A-Z0-9]+/g, '_')}`,
+        name,
+        k_W_mK: readSourced(entry.k_W_mK, builtin?.k_W_mK ?? sourced(1, 'Assumed')),
+        blt_mm: readSourced(entry.blt_mm, builtin?.blt_mm ?? sourced(0.1, 'Assumed')),
+      });
+    }
+    if (list.length > 0) return list;
+  }
+
+  return fallback;
+}
+
+/**
  * A project file may predate this section, be hand-edited, or come from a build
  * that shipped different defaults. Every field falls back to the factory value
  * rather than to null, so a partial record still yields a usable set.
@@ -141,15 +213,7 @@ export function normalizeMaterials(raw: unknown): MaterialDefaults {
   const base = defaultMaterials();
   if (!isObject(raw)) return base;
 
-  const timRaw = isObject(raw.tim) ? raw.tim : {};
-  const tim = { ...base.tim };
-  for (const type of TIM_MATERIAL_TYPES) {
-    const entry = isObject(timRaw[type]) ? (timRaw[type] as Record<string, unknown>) : {};
-    tim[type] = {
-      k_W_mK: readSourced(entry.k_W_mK, base.tim[type].k_W_mK),
-      blt_mm: readSourced(entry.blt_mm, base.tim[type].blt_mm),
-    };
-  }
+  const tim = normalizeTimLibrary(raw.tim, base.tim);
 
   return {
     tim,
@@ -179,37 +243,71 @@ export function coinAreaMm2(materials: MaterialDefaults): number | null {
 export interface ResolvedTim {
   k_W_mK: number | null;
   thickness_mm: number | null;
-  /** True when the numbers came from the project rather than the component. */
+  /** The material the component points at, or null when it points at nothing. */
+  material: TimMaterial | null;
+  /** True when the BLT came from the material rather than from the component. */
   inherited: boolean;
+  /**
+   * The component references a material this project no longer has. Distinct
+   * from "no TIM": one is a decision, the other is a dangling reference that an
+   * engineer has to resolve, so the UI must be able to tell them apart.
+   */
+  missing: boolean;
+}
+
+export function findTimMaterial(
+  materials: MaterialDefaults,
+  id: string | null,
+): TimMaterial | null {
+  if (!id) return null;
+  return materials.tim.find((material) => material.id === id) ?? null;
 }
 
 /**
  * The TIM properties an edge should actually use.
  *
- * `None` conducts nothing to look up, and `Custom` means the engineer has not
- * said what it is — neither may borrow another material's numbers, so both stay
- * null and the edge stays unresolved.
+ * `k` always comes from the material — that is the point of the library, and
+ * why a component can no longer define one of its own. The BLT comes from the
+ * component when it states one, because bond line is a build outcome rather
+ * than a material property: the same grease ends up thinner under screws than
+ * under a clip.
  *
- * A stored value always wins, whatever `inheritance` says. The flag drives the
- * UI — whether the fields are editable, and clearing them when the user chooses
- * to inherit — but it must not decide this, because a number somebody measured
- * and saved would then be silently dropped in favour of a shipped constant. If
- * a value is not meant to apply, it is removed, not overruled.
- *
- * Each property resolves on its own. Filling in just the BLT because it was
- * measured is normal, and must not blank out the k that would be inherited.
+ * A component with no TIM, or one pointing at a material that has been deleted,
+ * resolves to nothing rather than borrowing another material's numbers, and the
+ * edge stays unresolved.
  */
 export function resolveTim(tim: TimSpec, materials: MaterialDefaults): ResolvedTim {
-  const material = isTimMaterialType(tim.type) ? materials.tim[tim.type] : null;
+  const material = findTimMaterial(materials, tim.tim_id);
+  const missing = tim.tim_id != null && material == null;
 
-  const ownK = tim.k_W_mK?.value ?? null;
-  const ownThickness = tim.thickness_mm?.value ?? null;
+  if (!material) {
+    return { k_W_mK: null, thickness_mm: null, material: null, inherited: false, missing };
+  }
 
+  const ownBlt = tim.blt_mm?.value ?? null;
   return {
-    k_W_mK: ownK ?? material?.k_W_mK.value ?? null,
-    thickness_mm: ownThickness ?? material?.blt_mm.value ?? null,
-    inherited: ownK == null && ownThickness == null,
+    k_W_mK: material.k_W_mK.value,
+    thickness_mm: ownBlt ?? material.blt_mm.value,
+    material,
+    inherited: ownBlt == null,
+    missing: false,
   };
+}
+
+/** How many enabled-or-not components point at a material — the delete guard. */
+export function timUsageCount(
+  components: Array<{ thermal_spec: { tim: TimSpec } }>,
+  id: string,
+): number {
+  return components.filter((component) => component.thermal_spec.tim.tim_id === id).length;
+}
+
+/** A new material gets an id nothing else in the library is using. */
+export function nextTimId(materials: MaterialDefaults): string {
+  const taken = new Set(materials.tim.map((material) => material.id));
+  let index = materials.tim.length + 1;
+  while (taken.has(`TIM_CUSTOM_${index}`)) index++;
+  return `TIM_CUSTOM_${index}`;
 }
 
 /** Numeric labels for the non-TIM rows, so the panel and its tests agree. */
@@ -227,9 +325,9 @@ export type ProcessField = (typeof PROCESS_FIELDS)[number][0];
 /** How many entries still carry the shipped value rather than a stated one. */
 export function assumedCount(materials: MaterialDefaults): number {
   let count = 0;
-  for (const type of TIM_MATERIAL_TYPES) {
-    if (materials.tim[type].k_W_mK.source === 'Assumed') count++;
-    if (materials.tim[type].blt_mm.source === 'Assumed') count++;
+  for (const material of materials.tim) {
+    if (material.k_W_mK.source === 'Assumed') count++;
+    if (material.blt_mm.source === 'Assumed') count++;
   }
   for (const [field] of PROCESS_FIELDS) {
     if (materials[field].source === 'Assumed') count++;

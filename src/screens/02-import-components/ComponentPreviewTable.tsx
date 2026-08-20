@@ -380,7 +380,7 @@ export function ComponentPreviewTable() {
                     />
                   </td>
                   <td className="tabular px-2 py-1.5 whitespace-nowrap">{row.heat_path ?? '—'}</td>
-                  <td className="tabular px-2 py-1.5 whitespace-nowrap">{row.tim_type ?? '—'}</td>
+                  <td className="tabular px-2 py-1.5 whitespace-nowrap">{row.tim_name ?? '—'}</td>
                   <td className="tabular px-2 py-1.5 text-right whitespace-nowrap">
                     {numberCell(row.source_L_mm, 1)} / {numberCell(row.source_W_mm, 1)}
                   </td>
