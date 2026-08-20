@@ -21,7 +21,7 @@
  * Screen 06 left it.
  */
 
-import { defaultMaterials, type MaterialDefaults } from '@/domain/materials';
+import type { MaterialDefaults } from '@/domain/materials';
 import { buildAllPreviews } from '../boundary/validation';
 import { edgeResistance } from '../rth';
 import { projectComponentMaster } from '../graph/componentProjection';
@@ -83,12 +83,12 @@ export interface BuildSolveInputOptions {
   network: ThermalNetwork;
   components?: Component[];
   /**
-   * Project material constants. Required whenever `components` is given: the
-   * component projection resolves inherited TIM properties and the coin spread
-   * area through them, and silently falling back to the shipped values would
-   * ignore a project that had changed them.
+   * Project material constants. REQUIRED, not optional-with-a-default: the
+   * component projection resolves inherited TIM properties, the coin spread
+   * area and the via array constants through them, so quietly falling back to
+   * the shipped values would solve a project against numbers it had changed.
    */
-  materials?: MaterialDefaults;
+  materials: MaterialDefaults;
   boundarySet: ScenarioBoundaryConditionSet | null;
   ports: BoundaryPort[];
   scenarioId: string;
@@ -150,7 +150,7 @@ export function buildSolveInput(options: BuildSolveInputOptions): SolveInput {
   const powerScale = options.powerScale ?? 1;
 
   const clone = options.components
-    ? projectComponentMaster(network, options.components, options.materials ?? defaultMaterials(), {
+    ? projectComponentMaster(network, options.components, options.materials, {
         physics: true,
         limits: true,
       })

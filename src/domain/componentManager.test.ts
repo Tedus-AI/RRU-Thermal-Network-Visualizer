@@ -226,8 +226,15 @@ describe('component readiness', () => {
     it('cannot spread without the inputs, and never invents them', () => {
       const bare = { ...emptyThermalSpec().geometry, source_L_mm: 10, source_W_mm: 10 };
       expect(spreadAreaMm2(bare, 'Board')).toBeNull();
-      // Conduction still has the source face to fall back on.
-      expect(spreadingAreaMm2(bare, 'Board')).toBe(100);
+      // Not even a conservative fall-back: an unknown far face means an unknown
+      // area, and a resolved-looking guess would reorder the bottleneck ranking.
+      expect(spreadingAreaMm2(bare, 'Board')).toBeNull();
+    });
+
+    it('still resolves where the path genuinely does not spread', () => {
+      const bare = { ...emptyThermalSpec().geometry, source_L_mm: 10, source_W_mm: 10 };
+      expect(spreadingAreaMm2(bare, 'TopSurface')).toBe(100);
+      expect(spreadingAreaMm2(bare, 'DirectMetal')).toBe(100);
     });
   });
 

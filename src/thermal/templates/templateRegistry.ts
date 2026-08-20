@@ -43,15 +43,25 @@ const BOTTOM_COOL_COIN: ThermalTemplate = {
       parameterLinks: { R_C_per_W: 'thermal_spec.r_jc_C_per_W' },
       requiredParameters: ['R_C_per_W'],
     },
+    // The preform between the package base and the coin. Voiding derates the
+    // joint area, so this is not plain conduction.
     {
       fromRole: 'CASE',
       toRole: 'SOLDER',
       type: 'solder',
-      method: 'conduction_LkA',
+      method: 'solder_voiding',
       label: 'Solder',
       labelZh: '焊料層',
-      requiredParameters: ['length_mm', 'k_W_mK', 'area_mm2'],
+      parameterLinks: {
+        thickness_mm: 'materials.solder_thickness_mm',
+        k_W_mK: 'materials.solder_k_W_mK',
+        area_mm2: 'thermal_spec.geometry.source_area',
+        voiding: 'materials.solder_voiding',
+      },
+      requiredParameters: ['thickness_mm', 'k_W_mK', 'area_mm2'],
     },
+    // Through the coin itself: heat enters the joint face and leaves the wider
+    // heatsink face, so the effective area is the mean of the two.
     {
       fromRole: 'SOLDER',
       toRole: 'COIN',
@@ -59,7 +69,11 @@ const BOTTOM_COOL_COIN: ThermalTemplate = {
       method: 'conduction_LkA',
       label: 'Coin conduction',
       labelZh: '銅幣導熱',
-      parameterLinks: { area_mm2: 'thermal_spec.geometry.contact_area' },
+      parameterLinks: {
+        length_mm: 'thermal_spec.geometry.coin_thickness_mm',
+        k_W_mK: 'materials.copper_k_W_mK',
+        area_mm2: 'thermal_spec.geometry.spreading_area',
+      },
       requiredParameters: ['length_mm', 'k_W_mK', 'area_mm2'],
     },
     {
@@ -72,7 +86,8 @@ const BOTTOM_COOL_COIN: ThermalTemplate = {
       parameterLinks: {
         thickness_mm: 'thermal_spec.tim.thickness_mm',
         k_W_mK: 'thermal_spec.tim.k_W_mK',
-        area_mm2: 'thermal_spec.geometry.contact_area',
+        // The TIM sits under the coin's heatsink face, not under the joint.
+        area_mm2: 'thermal_spec.geometry.spread_area',
       },
       requiredParameters: ['thickness_mm', 'k_W_mK', 'area_mm2'],
     },
@@ -89,7 +104,9 @@ const BOTTOM_COOL_COIN: ThermalTemplate = {
   ports: [HEAT_OUT_PORT],
   requiredComponentFields: [
     { path: 'thermal_spec.r_jc_C_per_W', label: 'Rjc', labelZh: '接面熱阻' },
-    { path: 'thermal_spec.geometry.contact_area', label: 'Contact area', labelZh: '接觸面積' },
+    { path: 'thermal_spec.geometry.source_area', label: 'Source area', labelZh: '熱源面積' },
+    { path: 'thermal_spec.geometry.spread_area', label: 'Coin area', labelZh: '銅塊面積' },
+    { path: 'thermal_spec.geometry.coin_thickness_mm', label: 'Coin thickness', labelZh: '銅塊厚度' },
     { path: 'thermal_spec.tim.k_W_mK', label: 'TIM k', labelZh: 'TIM 導熱係數' },
     { path: 'thermal_spec.tim.thickness_mm', label: 'TIM thickness', labelZh: 'TIM 厚度' },
   ],
@@ -130,7 +147,10 @@ const BOTTOM_COOL_VIA: ThermalTemplate = {
       labelZh: '導熱孔陣列',
       parameterLinks: {
         thickness_mm: 'thermal_spec.geometry.board_thickness_mm',
-        area_mm2: 'thermal_spec.geometry.contact_area',
+        // The array spreads as it conducts, so neither face alone is right.
+        area_mm2: 'thermal_spec.geometry.spreading_area',
+        effective_k_W_mK: 'materials.via_effective_k_W_mK',
+        via_efficiency: 'materials.via_efficiency',
       },
       requiredParameters: ['thickness_mm', 'effective_k_W_mK', 'area_mm2'],
     },
@@ -144,7 +164,7 @@ const BOTTOM_COOL_VIA: ThermalTemplate = {
       parameterLinks: {
         thickness_mm: 'thermal_spec.tim.thickness_mm',
         k_W_mK: 'thermal_spec.tim.k_W_mK',
-        area_mm2: 'thermal_spec.geometry.contact_area',
+        area_mm2: 'thermal_spec.geometry.spread_area',
       },
       requiredParameters: ['thickness_mm', 'k_W_mK', 'area_mm2'],
     },
@@ -162,7 +182,7 @@ const BOTTOM_COOL_VIA: ThermalTemplate = {
   requiredComponentFields: [
     { path: 'thermal_spec.r_jc_C_per_W', label: 'Rjc', labelZh: '接面熱阻' },
     { path: 'thermal_spec.geometry.board_thickness_mm', label: 'PCB thickness', labelZh: '板厚' },
-    { path: 'thermal_spec.geometry.contact_area', label: 'Contact area', labelZh: '接觸面積' },
+    { path: 'thermal_spec.geometry.source_area', label: 'E-PAD area', labelZh: 'E-PAD 面積' },
   ],
 };
 
@@ -202,7 +222,7 @@ const TOP_COOL_LID: ThermalTemplate = {
       parameterLinks: {
         thickness_mm: 'thermal_spec.tim.thickness_mm',
         k_W_mK: 'thermal_spec.tim.k_W_mK',
-        area_mm2: 'thermal_spec.geometry.contact_area',
+        area_mm2: 'thermal_spec.geometry.spread_area',
       },
       requiredParameters: ['thickness_mm', 'k_W_mK', 'area_mm2'],
     },
@@ -257,7 +277,7 @@ const BARE_DIE: ThermalTemplate = {
       parameterLinks: {
         thickness_mm: 'thermal_spec.tim.thickness_mm',
         k_W_mK: 'thermal_spec.tim.k_W_mK',
-        area_mm2: 'thermal_spec.geometry.contact_area',
+        area_mm2: 'thermal_spec.geometry.spread_area',
       },
       requiredParameters: ['thickness_mm', 'k_W_mK', 'area_mm2'],
     },
@@ -283,7 +303,7 @@ const BARE_DIE: ThermalTemplate = {
   ports: [HEAT_OUT_PORT],
   requiredComponentFields: [
     { path: 'thermal_spec.tim.k_W_mK', label: 'TIM k', labelZh: 'TIM 導熱係數' },
-    { path: 'thermal_spec.geometry.contact_area', label: 'Contact area', labelZh: '接觸面積' },
+    { path: 'thermal_spec.geometry.source_area', label: 'Source area', labelZh: '熱源面積' },
   ],
 };
 
@@ -327,7 +347,7 @@ const SMALL_BASE_HEAT_PIPE: ThermalTemplate = {
       parameterLinks: {
         thickness_mm: 'thermal_spec.tim.thickness_mm',
         k_W_mK: 'thermal_spec.tim.k_W_mK',
-        area_mm2: 'thermal_spec.geometry.contact_area',
+        area_mm2: 'thermal_spec.geometry.spread_area',
       },
       requiredParameters: ['thickness_mm', 'k_W_mK', 'area_mm2'],
     },

@@ -19,6 +19,7 @@
  * from a temperature drop and a component's total power.
  */
 
+import type { MaterialDefaults } from '@/domain/materials';
 import { solveNetwork } from '../networkSolver';
 import { edgeResistance } from '../rth';
 import { DEFAULT_SOLVER_SETTINGS, type SolverSettings } from '../types';
@@ -48,6 +49,8 @@ import {
 export interface SolveScenarioOptions {
   network: ThermalNetwork;
   components?: Component[];
+  /** Project material constants — see BuildSolveInputOptions. */
+  materials: MaterialDefaults;
   boundarySet: ScenarioBoundaryConditionSet | null;
   ports: BoundaryPort[];
   scenarioId: string;
@@ -116,6 +119,7 @@ export function checkScenario(options: SolveScenarioOptions): {
   const input = buildSolveInput({
     network: options.network,
     components: options.components,
+    materials: options.materials,
     boundarySet: options.boundarySet,
     ports: options.ports,
     scenarioId: options.scenarioId,

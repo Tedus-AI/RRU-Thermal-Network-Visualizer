@@ -8,7 +8,7 @@ import { defaultMaterials, type MaterialDefaults } from '@/domain/materials';
 import { setRthFromSource } from '../rth';
 import { computeRth, type EdgeParameters } from '../resistance/calculators';
 import type { ThermalEdge, ThermalNetwork, ThermalNode } from '../types';
-import { readComponentField } from './networkBuilder';
+import { readLinkedInput } from './networkBuilder';
 
 function followsComponentPower(node: ThermalNode): boolean {
   if (node.metadata?.component_power_linked === true) return true;
@@ -51,7 +51,7 @@ function updateLinkedEdge(
 
   const parameters: EdgeParameters = { ...(edge.parameters ?? {}) };
   for (const [parameter, componentPath] of Object.entries(edge.parameter_links)) {
-    const value = readComponentField(component, componentPath, materials);
+    const value = readLinkedInput(component, componentPath, materials);
     if (value == null) delete parameters[parameter];
     else parameters[parameter] = value;
   }

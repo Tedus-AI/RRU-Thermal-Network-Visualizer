@@ -14,6 +14,7 @@
  * shown greyed out, never as the current answer (07 §38).
  */
 
+import { normalizeMaterials } from '@/domain/materials';
 import { create } from 'zustand';
 
 import {
@@ -89,6 +90,9 @@ function gather(scenarioId: string | null) {
       componentState.loaded_project_id === network.project_id
         ? componentState.components
         : loadComponents(network.project_id),
+    // The edges resolve against the project's own constants, so a solve must
+    // carry them rather than fall back to the shipped ones.
+    materials: normalizeMaterials(loadProject(network.project_id)?.materials),
     boundarySet: boundary.current(),
     ports: boundary.ports,
     scenarioId,

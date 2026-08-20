@@ -37,17 +37,44 @@ export interface Subgraph {
   binding: ComponentTemplateBinding;
 }
 
-/** Reads a dotted path out of a component, unwrapping SourcedValue as needed. */
-export function readComponentField(
+/**
+ * Resolves one template parameter link to a number.
+ *
+ * A link names either a field on the component, a value DERIVED from it, or a
+ * project constant the component inherits — a copper coin's conductivity is not
+ * a property of the part, but the edge through the coin still needs it. All
+ * three arrive by the same string path so `parameterLinks` stays a flat map.
+ *
+ * Was `readComponentField`, which stopped being true once project constants
+ * became linkable.
+ */
+export function readLinkedInput(
   component: Component,
   path: string,
   materials: MaterialDefaults,
 ): number | null {
-  // Virtual paths: derived areas that are not stored fields.
+  // --- Project constants -------------------------------------------------
+  switch (path) {
+    case 'materials.copper_k_W_mK':
+      return materials.copper_k_W_mK.value;
+    case 'materials.via_effective_k_W_mK':
+      return materials.via_effective_k_W_mK.value;
+    case 'materials.via_efficiency':
+      return materials.via_efficiency.value;
+    case 'materials.solder_k_W_mK':
+      return materials.solder_k_W_mK.value;
+    case 'materials.solder_thickness_mm':
+      return materials.solder_thickness_mm.value;
+    case 'materials.solder_voiding':
+      return materials.solder_voiding.value;
+  }
+
+  // --- Derived component values ------------------------------------------
   //
-  // `contact_area` is the name templates and already-stored networks use; it
-  // resolves to the source face, which is what it always meant. The two spread
-  // paths are new, and PR-follow-up work moves the templates onto them.
+  // `contact_area` is the name already-stored networks use; it resolves to the
+  // source face, which is what it always meant. Templates now name the face
+  // they actually need, because a TIM crosses the spread face and a conduction
+  // edge through a spreader sees neither face but the mean of the two.
   const geometry = component.thermal_spec.geometry;
   const heatPath = component.thermal_spec.heat_path.type;
   const coinArea = coinAreaMm2(materials);
@@ -90,7 +117,7 @@ export function missingRequirements(
   materials: MaterialDefaults,
 ): Array<{ path: string; label: string; labelZh: string }> {
   return template.requiredComponentFields.filter(
-    (field) => readComponentField(component, field.path, materials) == null,
+    (field) => readLinkedInput(component, field.path, materials) == null,
   );
 }
 
@@ -201,7 +228,7 @@ export function buildComponentSubgraph(
       // Seed parameters from the component wherever the template links them.
       const parameters: EdgeParameters = {};
       for (const [param, path] of Object.entries(proto.parameterLinks ?? {})) {
-        const value = readComponentField(component, path, options.materials);
+        const value = readLinkedInput(component, path, options.materials);
         if (value != null) parameters[param] = value;
       }
 

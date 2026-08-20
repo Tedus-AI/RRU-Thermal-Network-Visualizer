@@ -53,7 +53,12 @@ const METHODS: Array<{ value: EdgeMethod; label: string }> = [
 const METHOD_PARAMETERS: Record<EdgeMethod, Array<{ key: string; label: string; zh: string; unit: string }>> = {
   direct_rth: [{ key: 'R_C_per_W', label: 'Rth', zh: '熱阻', unit: '°C/W' }],
   contact_area: [{ key: 'R_C_per_W', label: 'Contact Rth', zh: '接觸熱阻', unit: '°C/W' }],
-  solder_voiding: [{ key: 'R_C_per_W', label: 'Solder Rth', zh: '焊料熱阻', unit: '°C/W' }],
+  solder_voiding: [
+    { key: 'thickness_mm', label: 'Solder thickness', zh: '焊料厚度', unit: 'mm' },
+    { key: 'k_W_mK', label: 'Conductivity k', zh: '熱傳導率', unit: 'W/m·K' },
+    { key: 'area_mm2', label: 'Joint area', zh: '焊接面積', unit: 'mm²' },
+    { key: 'voiding', label: 'Effective area', zh: '有效面積率', unit: '—' },
+  ],
   conduction_LkA: [
     { key: 'length_mm', label: 'Length', zh: '長度', unit: 'mm' },
     { key: 'k_W_mK', label: 'Conductivity k', zh: '熱傳導率', unit: 'W/m·K' },
