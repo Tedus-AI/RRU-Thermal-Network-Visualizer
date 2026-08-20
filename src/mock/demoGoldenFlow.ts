@@ -173,7 +173,10 @@ function positionNetworkNodes(nodes: ThermalNode[]): Record<string, { x: number;
 }
 
 /** Screen 05 topology generated from the Screen 04 component preferences. */
-export function demoNetwork(components = demoComponents()): ThermalNetwork {
+export function demoNetwork(
+  components = demoComponents(),
+  materials = demoProject().materials,
+): ThermalNetwork {
   const structure = buildSharedStructure('FUNCTIONAL_ZONES');
   const filterZoneId = zoneNodeId('FILTER');
   const nodes = structure.nodes.filter((node) => node.id !== filterZoneId);
@@ -214,6 +217,7 @@ export function demoNetwork(components = demoComponents()): ThermalNetwork {
           ? 'AGGREGATE'
           : component.architecture_prep.qty_model_preference,
       suggestedZoneNodeId: zoneId,
+      materials,
     });
     if (!subgraph) throw new Error(`Golden Demo template failed for ${component.id}.`);
 

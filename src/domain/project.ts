@@ -6,6 +6,7 @@
  * 5G RRU Quick Volume Evaluation Tool keeps on the same project document.
  */
 
+import { defaultMaterials, type MaterialDefaults } from './materials';
 import { createRevision, type RevisionId } from './revision';
 
 export const PROJECT_STAGES = ['Prototype', 'EVT', 'DVT', 'PVT'] as const;
@@ -107,6 +108,12 @@ export interface Project {
    */
   revision?: RevisionId;
   project_context: ProjectContext;
+  /**
+   * Material and process constants every component inherits from — 01 §4.
+   * They live at project level because they describe the DESIGN, not any one
+   * part, which is the same split the Volume Evaluation Tool makes.
+   */
+  materials: MaterialDefaults;
   active_scenario_id: string | null;
   status: ProjectStatus;
   meta: ProjectMeta;
@@ -167,6 +174,7 @@ export function createEmptyProject(): Project {
     project_name: '',
     revision: createRevision('project'),
     project_context: defaultProjectContext(),
+    materials: defaultMaterials(),
     active_scenario_id: null,
     status: 'active',
     meta: { created_at: now, updated_at: now, schema_version: SCHEMA_VERSION },

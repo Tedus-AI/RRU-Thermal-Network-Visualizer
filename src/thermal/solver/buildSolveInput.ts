@@ -21,6 +21,7 @@
  * Screen 06 left it.
  */
 
+import { defaultMaterials, type MaterialDefaults } from '@/domain/materials';
 import { buildAllPreviews } from '../boundary/validation';
 import { edgeResistance } from '../rth';
 import { projectComponentMaster } from '../graph/componentProjection';
@@ -81,6 +82,13 @@ export interface SolveInput {
 export interface BuildSolveInputOptions {
   network: ThermalNetwork;
   components?: Component[];
+  /**
+   * Project material constants. Required whenever `components` is given: the
+   * component projection resolves inherited TIM properties and the coin spread
+   * area through them, and silently falling back to the shipped values would
+   * ignore a project that had changed them.
+   */
+  materials?: MaterialDefaults;
   boundarySet: ScenarioBoundaryConditionSet | null;
   ports: BoundaryPort[];
   scenarioId: string;
@@ -142,7 +150,10 @@ export function buildSolveInput(options: BuildSolveInputOptions): SolveInput {
   const powerScale = options.powerScale ?? 1;
 
   const clone = options.components
-    ? projectComponentMaster(network, options.components, { physics: true, limits: true })
+    ? projectComponentMaster(network, options.components, options.materials ?? defaultMaterials(), {
+        physics: true,
+        limits: true,
+      })
     : cloneNetwork(network);
 
   // 05 §51 — a disabled node keeps its data but leaves the ACTIVE network, and

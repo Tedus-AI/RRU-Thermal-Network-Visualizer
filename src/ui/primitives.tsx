@@ -7,7 +7,7 @@
  */
 
 import { useId, useState, type ReactNode } from 'react';
-import { HelpCircle } from 'lucide-react';
+import { ChevronDown, ChevronUp, HelpCircle } from 'lucide-react';
 
 // --- Button ----------------------------------------------------------------
 
@@ -55,13 +55,28 @@ export function SectionCard({
   subtitle,
   children,
   actions,
+  collapsible = false,
+  defaultOpen = true,
+  summary,
 }: {
   step?: number;
   title: string;
   subtitle?: string;
   children: ReactNode;
   actions?: ReactNode;
+  /** Long, mostly-defaulted sections fold away so they do not crowd a form. */
+  collapsible?: boolean;
+  defaultOpen?: boolean;
+  /**
+   * Shown on the header while collapsed. A folded section must still say what
+   * is inside it — above all, anything the reader still has to act on.
+   */
+  summary?: ReactNode;
 }) {
+  const [open, setOpen] = useState(defaultOpen);
+  const bodyId = `section-${title.replace(/\s+/g, '-').toLowerCase()}`;
+  const expanded = !collapsible || open;
+
   return (
     <section className="rounded-lg border border-line bg-surface">
       <header className="flex items-center gap-2.5 border-b border-line px-4 py-3">
@@ -72,9 +87,30 @@ export function SectionCard({
         )}
         <h2 className="text-[15px] font-bold text-ink-900">{title}</h2>
         {subtitle && <span className="text-[12px] text-ink-400">{subtitle}</span>}
-        <div className="ml-auto">{actions}</div>
+        {collapsible && !open && summary && (
+          <span className="min-w-0 truncate text-[12px] text-ink-500">{summary}</span>
+        )}
+        <div className="ml-auto flex items-center gap-2">
+          {actions}
+          {collapsible && (
+            <button
+              type="button"
+              className="flex items-center gap-1 rounded border border-line px-2 py-1 text-[12px] font-semibold text-ink-500 hover:text-ink-900"
+              aria-expanded={open}
+              aria-controls={bodyId}
+              onClick={() => setOpen((value) => !value)}
+            >
+              {open ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+              {open ? 'Collapse / 收合' : 'Expand / 展開'}
+            </button>
+          )}
+        </div>
       </header>
-      <div className="p-4">{children}</div>
+      {expanded && (
+        <div id={bodyId} className="p-4">
+          {children}
+        </div>
+      )}
     </section>
   );
 }

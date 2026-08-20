@@ -37,6 +37,7 @@ import { ImportSourceCards } from './ImportSourceCards';
 import { ColumnMappingPanel } from './ColumnMappingPanel';
 import { ComponentPreviewTable } from './ComponentPreviewTable';
 import { DuplicatePolicyPanel } from './DuplicatePolicyPanel';
+import { MaterialDefaultsForm } from '@/project/MaterialDefaultsForm';
 import { ImportSummaryPanel, ProjectImpactPanel, ValidationPanel } from './ImportSummaryPanel';
 
 function ActionBar({
@@ -290,6 +291,12 @@ export function ImportComponentsView() {
             <ComponentPreviewTable />
           </div>
           <DuplicatePolicyPanel />
+          {/*
+            The same project-level form Screen 01 owns. Importing is the first
+            moment these numbers matter — an imported TIM inherits from them —
+            so they are editable here rather than one screen back.
+          */}
+          <MaterialDefaultsForm readOnly={false} />
         </>
       )}
 

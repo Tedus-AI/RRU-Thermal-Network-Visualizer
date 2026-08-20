@@ -25,6 +25,7 @@ import { toast } from '@/ui/toast';
 import { ProjectIdentityForm } from './ProjectIdentityForm';
 import { ProductThermalContextForm } from './ProductThermalContextForm';
 import { BaselineScenarioForm } from './BaselineScenarioForm';
+import { MaterialDefaultsForm } from './MaterialDefaultsForm';
 import { ProjectNotes } from './ProjectNotes';
 import { ProjectOverviewPanel } from './ProjectOverviewPanel';
 import { ProjectHealthPanel } from './ProjectHealthPanel';
@@ -290,6 +291,8 @@ export function ProjectInfoView() {
       <ProjectIdentityForm errors={errors} readOnly={readOnly} />
       <ProductThermalContextForm readOnly={readOnly} />
       <BaselineScenarioForm scenario={scenario} errors={errors} readOnly={readOnly} />
+      {/* Collapsed by default: 11 fields, 10 of which already have a value. */}
+      <MaterialDefaultsForm step={4} readOnly={readOnly} />
       <ProjectNotes readOnly={readOnly} />
 
       {showDuplicate && (

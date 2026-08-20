@@ -20,6 +20,8 @@ import type { Component } from '@/domain/component';
 import { TEMPLATE_LIST } from '@/thermal/templates/templateRegistry';
 import type { ThermalTemplate } from '@/thermal/templates/types';
 import { missingRequirements } from '@/thermal/graph/networkBuilder';
+import { useProjectStore } from '@/data/projectStore';
+import { defaultMaterials } from '@/domain/materials';
 import type { QtyModel } from '@/thermal/graph/networkBuilder';
 import { QTY_MODELS, type BuilderPref } from './ComponentPalette';
 
@@ -85,7 +87,10 @@ export function TemplatePalette({
 }) {
   const template =
     TEMPLATE_LIST.find((entry) => entry.id === pref?.templateId) ?? TEMPLATE_LIST[0];
-  const missing = component ? missingRequirements(component, template) : [];
+  // Requirements are judged against the project's own constants, so a TIM that
+  // inherits its k does not read as missing.
+  const materials = useProjectStore((s) => s.draft?.materials) ?? defaultMaterials();
+  const missing = component ? missingRequirements(component, template, materials) : [];
 
   return (
     <div className="flex flex-col gap-2.5">

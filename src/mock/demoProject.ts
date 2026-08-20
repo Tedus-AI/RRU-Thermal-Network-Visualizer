@@ -8,6 +8,7 @@
 
 import type { Project, Scenario } from '@/domain/project';
 import { SCHEMA_VERSION } from '@/domain/project';
+import { defaultMaterials } from '@/domain/materials';
 import {
   emptyExternalMappings,
   emptyThermalSpec,
@@ -45,6 +46,13 @@ export function demoProject(): Project {
     project_id: DEMO_PROJECT_ID,
     project_name: 'FR1 RRU Golden Demo',
     revision: DEMO_SOURCE_REVISION.project_revision,
+    // The demo states its coin size so its RF parts resolve end to end; the
+    // rest of the constants are the shipped values.
+    materials: {
+      ...defaultMaterials(),
+      coin_L_mm: { value: 55, source: 'Manual', updated_at: DEMO_TIMESTAMP },
+      coin_W_mm: { value: 35, source: 'Manual', updated_at: DEMO_TIMESTAMP },
+    },
     project_context: {
       customer: 'Synthetic Demo Program',
       owner: 'Thermal Engineering Demo',
