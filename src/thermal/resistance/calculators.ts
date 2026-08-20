@@ -90,6 +90,42 @@ export function viaArrayRth(params: EdgeParameters): RthComputation {
   return { value, resolution: 'resolved', missing: [] };
 }
 
+/**
+ * A solder joint, derated for voiding.
+ *
+ * A reflowed preform is never fully solid: voids take a fraction of the joint
+ * out of the conduction path. `voiding` is the fraction that IS solder, so 0.75
+ * means a quarter of the nominal area carries no heat.
+ *
+ * Modelling this as plain conduction over the nominal area would understate the
+ * resistance by exactly that fraction — 33% at 0.75 — which is why it has its
+ * own method rather than borrowing `conduction_LkA`.
+ */
+export function solderVoidingRth(params: EdgeParameters): RthComputation {
+  const t = numeric(params, 'thickness_mm');
+  const k = numeric(params, 'k_W_mK');
+  const A = numeric(params, 'area_mm2');
+
+  const missing: string[] = [];
+  if (t == null) missing.push('thickness_mm');
+  if (k == null) missing.push('k_W_mK');
+  if (A == null) missing.push('area_mm2');
+  if (missing.length > 0) return unresolved(missing);
+
+  if (k! <= 0 || A! <= 0) return unresolved([], 'Conductivity and area must be positive.');
+
+  // Absent, a joint is assumed void-free rather than unresolvable — that is the
+  // nominal case, and it errs towards a LOWER resistance, so it can never hide
+  // a hot component behind a pessimistic guess.
+  const voiding = numeric(params, 'voiding') ?? 1;
+  if (voiding <= 0 || voiding > 1) {
+    return unresolved([], 'Effective solder area must be a fraction between 0 and 1.');
+  }
+
+  const value = t! / 1000 / (k! * (A! / 1e6) * voiding);
+  return { value, resolution: 'resolved', missing: [] };
+}
+
 /** A directly quoted resistance: package Rjc, vendor heat pipe, manual value. */
 export function directRth(params: EdgeParameters): RthComputation {
   const R = numeric(params, 'R_C_per_W');
@@ -140,9 +176,10 @@ export function computeRth(method: EdgeMethod, params: EdgeParameters): RthCompu
       return timRth(params);
     case 'via_array':
       return viaArrayRth(params);
+    case 'solder_voiding':
+      return solderVoidingRth(params);
     case 'direct_rth':
     case 'contact_area':
-    case 'solder_voiding':
       return directRth(params);
     case 'convection_hA':
     case 'radiation_hA':

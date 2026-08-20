@@ -7,6 +7,7 @@
  * Screen 03 remains metadata-only and is not involved in this flow.
  */
 
+import { defaultMaterials } from '@/domain/materials';
 import type { Component } from '@/domain/component';
 import { valueOf } from '@/domain/sourcedValue';
 import type { ComponentRevisionSet } from '@/domain/revision';
@@ -450,6 +451,7 @@ export async function buildDemoGoldenFlow(): Promise<DemoGoldenFlow> {
   const boundary = demoBoundarySet(network);
   const ports = deriveBoundaryPorts(network);
   const solve = solveScenario({
+    materials: defaultMaterials(),
     network,
     components,
     boundarySet: boundary,

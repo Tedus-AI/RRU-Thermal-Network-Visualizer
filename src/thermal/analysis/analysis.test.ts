@@ -6,6 +6,7 @@
  * required to rank the small shared resistance above it.
  */
 
+import { defaultMaterials } from '@/domain/materials';
 import { describe, expect, it } from 'vitest';
 
 import { createRth } from '../rth';
@@ -112,7 +113,7 @@ function analysisInputFor(
     ambient_C,
   });
   const ports = deriveBoundaryPorts(net);
-  const outcome = solveScenario({ network: net, boundarySet, ports, scenarioId });
+  const outcome = solveScenario({ materials: defaultMaterials(), network: net, boundarySet, ports, scenarioId });
 
   return {
     project_id: 'TEST',

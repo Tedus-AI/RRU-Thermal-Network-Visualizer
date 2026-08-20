@@ -3,6 +3,7 @@
  * pre-solve checks of 07 §4 and the Screen 06 hand-over of 07 §12.
  */
 
+import { defaultMaterials } from '@/domain/materials';
 import { describe, expect, it } from 'vitest';
 
 import { createRth } from '../rth';
@@ -87,6 +88,7 @@ function ambientOnly(scenarioId: string, ambient_C: number): ScenarioBoundaryCon
 
 function solve(net: ThermalNetwork, ambient_C = 20, scenarioId = 'SCN_A', powerScale?: number) {
   return solveScenario({
+    materials: defaultMaterials(),
     network: net,
     boundarySet: ambientOnly(scenarioId, ambient_C),
     ports: deriveBoundaryPorts(net),
@@ -114,6 +116,7 @@ describe('Phase 1 solution provenance', () => {
       [edge('E1', 'SRC', 'AMB', 1)],
     );
     const outcome = solveScenario({
+    materials: defaultMaterials(),
       network: net,
       boundarySet: ambientOnly('SCN_A', 20),
       ports: deriveBoundaryPorts(net),
@@ -131,6 +134,7 @@ describe('Phase 1 solution provenance', () => {
       [edge('E1', 'SRC', 'AMB', 1)],
     );
     const first = solveScenario({
+    materials: defaultMaterials(),
       network: net,
       boundarySet: ambientOnly('SCN_A', 20),
       ports: deriveBoundaryPorts(net),
@@ -138,6 +142,7 @@ describe('Phase 1 solution provenance', () => {
       sourceRevision: source,
     });
     const afterLimitEdit = solveScenario({
+    materials: defaultMaterials(),
       network: net,
       boundarySet: ambientOnly('SCN_A', 20),
       ports: deriveBoundaryPorts(net),
@@ -187,6 +192,7 @@ describe('Phase 1 solution provenance', () => {
     const net = network([sourceNode, node('AMB', { ambient: true })], [linkedEdge]);
 
     const first = solveScenario({
+    materials: defaultMaterials(),
       network: net,
       components: [component],
       boundarySet: ambientOnly('SCN_A', 20),
@@ -205,6 +211,7 @@ describe('Phase 1 solution provenance', () => {
       },
     };
     const second = solveScenario({
+    materials: defaultMaterials(),
       network: net,
       components: [changed],
       boundarySet: ambientOnly('SCN_A', 20),
@@ -508,6 +515,7 @@ describe('Pre-solve checks (07 §4)', () => {
       [edge('E1', 'SRC', 'AMB', 1)],
     );
     const outcome = solveScenario({
+    materials: defaultMaterials(),
       network: net,
       boundarySet: createBoundarySet({
         projectId: 'TEST',
@@ -654,7 +662,7 @@ describe('Scenario boundary conditions feed the solve (07 §12)', () => {
     // h = 10, A = 0.5 → R = 0.2 °C/W.
     const set = withConvection('SCN_A', 20, 10, 0.5, finPort);
 
-    const outcome = solveScenario({ network: net, boundarySet: set, ports, scenarioId: 'SCN_A' });
+    const outcome = solveScenario({ materials: defaultMaterials(), network: net, boundarySet: set, ports, scenarioId: 'SCN_A' });
     expect(outcome.checks.can_solve).toBe(true);
     close(outcome.solution.edge_results.E_BOUNDARY.active_rth_C_per_W, 0.2, 1e-12);
     expect(outcome.solution.edge_results.E_BOUNDARY.rth_origin).toBe('boundary_scenario');
@@ -669,12 +677,14 @@ describe('Scenario boundary conditions feed the solve (07 §12)', () => {
     const finPort = ports.find((port) => port.connected_node_id === 'FIN') as BoundaryPort;
 
     const still = solveScenario({
+    materials: defaultMaterials(),
       network: net,
       boundarySet: withConvection('SCN_STILL', 20, 5, 0.5, finPort),
       ports,
       scenarioId: 'SCN_STILL',
     });
     const windy = solveScenario({
+    materials: defaultMaterials(),
       network: net,
       boundarySet: withConvection('SCN_WIND', 20, 25, 0.5, finPort),
       ports,
@@ -714,6 +724,7 @@ describe('Scenario boundary conditions feed the solve (07 §12)', () => {
     set.assignments[0].profile_ids = ['P_CONV', 'P_SOLAR'];
 
     const outcome = solveScenario({
+    materials: defaultMaterials(),
       network: net,
       boundarySet: set,
       ports,
@@ -745,7 +756,7 @@ describe('Scenario boundary conditions feed the solve (07 §12)', () => {
     });
     set.assignments[0].profile_ids = ['P_CONV', 'P_FIX'];
 
-    const outcome = solveScenario({ network: net, boundarySet: set, ports, scenarioId: 'SCN_FIX' });
+    const outcome = solveScenario({ materials: defaultMaterials(), network: net, boundarySet: set, ports, scenarioId: 'SCN_FIX' });
     close(outcome.solution.node_temperatures_C.FIN, 60, 1e-9);
     close(outcome.solution.node_temperatures_C.SRC, 70, 1e-9);
   });
@@ -776,7 +787,7 @@ describe('Scenario boundary conditions feed the solve (07 §12)', () => {
       },
     ];
 
-    const input = buildSolveInput({ network: net, boundarySet: set, ports, scenarioId: 'SCN_ADIA' });
+    const input = buildSolveInput({ materials: defaultMaterials(), network: net, boundarySet: set, ports, scenarioId: 'SCN_ADIA' });
     expect(input.adiabatic_edge_ids).toContain('E_BOUNDARY');
     expect(input.network.edges.E_BOUNDARY.enabled).toBe(false);
 
@@ -864,6 +875,7 @@ describe('checkScenario (07 §9 Pre-Solve Check)', () => {
       [edge('E1', 'SRC', 'AMB', 1)],
     );
     const { checks, input, signature } = checkScenario({
+    materials: defaultMaterials(),
       network: net,
       boundarySet: ambientOnly('SCN_A', 20),
       ports: deriveBoundaryPorts(net),

@@ -33,7 +33,13 @@ function component(overrides: Partial<Component> = {}): Component {
       limit_C: sourced(180, 'Datasheet'),
       r_jc_C_per_W: sourced(0.35, 'Datasheet'),
       package_type: 'QFN',
-      geometry: { ...emptyThermalSpec().geometry, source_L_mm: 20, source_W_mm: 10 },
+      geometry: {
+        ...emptyThermalSpec().geometry,
+        source_L_mm: 20,
+        source_W_mm: 10,
+        board_thickness_mm: 1.6,
+        coin_thickness_mm: 2.0,
+      },
       tim: {
         ...emptyThermalSpec().tim,
         type: 'Grease',
@@ -108,13 +114,9 @@ describe('architecture templates', () => {
 
   it('reports missing component requirements before applying (05 §12, AC-05-10)', () => {
     const bare = component({ thermal_spec: emptyThermalSpec() });
-    const missing = missingRequirements(
-      bare,
-      getTemplate('BOTTOM_COOL_COIN')!,
-      defaultMaterials(),
-    );
+    const missing = missingRequirements(bare, getTemplate('BOTTOM_COOL_COIN')!, defaultMaterials());
     expect(missing.map((field) => field.label)).toEqual(
-      expect.arrayContaining(['Rjc', 'Contact area', 'TIM k']),
+      expect.arrayContaining(['Rjc', 'Source area', 'Coin area', 'Coin thickness']),
     );
   });
 });
@@ -286,8 +288,12 @@ describe('analytical edge resistance (05 §21)', () => {
       qtyModel: 'AGGREGATE',
     })!;
     const tim = graph.edges.find((edge) => edge.type === 'tim')!;
-    // 0.1 mm / (3 W/mK × 200 mm²) ≈ 0.1667 °C/W.
-    expect(activeRth(tim.rth)).toBeCloseTo(0.16667, 4);
+    // The TIM sits on the SPREAD face, not the E-PAD: a 20 x 10 pad on a 1.6 mm
+    // board spreads to 21.6 x 11.6 = 250.56 mm². Using the 200 mm² source face
+    // here — as this did before the two faces were separated — overstated the
+    // resistance by 25%.
+    expect(tim.parameters?.area_mm2).toBeCloseTo(250.56, 6);
+    expect(activeRth(tim.rth)).toBeCloseTo(0.1 / 1000 / (3 * (250.56 / 1e6)), 6);
   });
 
   /**
@@ -309,9 +315,9 @@ describe('analytical edge resistance (05 §21)', () => {
       qtyModel: 'AGGREGATE',
     })!;
     const tim = graph.edges.find((edge) => edge.type === 'tim')!;
-    // Grease ships k = 3.0 and BLT = 0.05 mm over a 200 mm² face.
+    // Grease ships k = 3.0 and BLT = 0.05 mm over the 250.56 mm² spread face.
     expect(tim.resolution).toBe('resolved');
-    expect(activeRth(tim.rth)).toBeCloseTo(0.05 / 1000 / (3 * (200 / 1e6)), 6);
+    expect(activeRth(tim.rth)).toBeCloseTo(0.05 / 1000 / (3 * (250.56 / 1e6)), 6);
   });
 
   it('follows a project material change into the edge', () => {
@@ -329,7 +335,7 @@ describe('analytical edge resistance (05 §21)', () => {
       qtyModel: 'AGGREGATE',
     })!;
     const tim = graph.edges.find((edge) => edge.type === 'tim')!;
-    expect(activeRth(tim.rth)).toBeCloseTo(0.05 / 1000 / (6 * (200 / 1e6)), 6);
+    expect(activeRth(tim.rth)).toBeCloseTo(0.05 / 1000 / (6 * (250.56 / 1e6)), 6);
   });
 
   it('leaves a TIM the project cannot describe unresolved rather than guessing', () => {
@@ -359,14 +365,28 @@ describe('analytical edge resistance (05 §21)', () => {
         heat_path: { type: 'Coin', parameters: {} },
       },
     });
-    // TIM area follows the coin's heatsink face, not the 20 x 10 joint face.
     const graph = buildComponentSubgraph(coin, {
       materials,
       templateId: 'BOTTOM_COOL_COIN',
       qtyModel: 'AGGREGATE',
     })!;
+    // The TIM lies under the coin's heatsink face (55 x 35), not under the
+    // 20 x 10 face the package is soldered to.
     const tim = graph.edges.find((edge) => edge.type === 'tim')!;
-    expect(tim.parameters?.area_mm2).toBe(200);
+    expect(tim.parameters?.area_mm2).toBe(1925);
+    // The solder joint is the other way round: it IS the joint face, derated.
+    const solder = graph.edges.find((edge) => edge.type === 'solder')!;
+    expect(solder.parameters?.area_mm2).toBe(200);
+    expect(solder.parameters?.voiding).toBe(0.75);
+    expect(activeRth(solder.rth)).toBeCloseTo(0.3 / 1000 / (58 * (200 / 1e6) * 0.75), 8);
+    // And the coin itself sees the mean of the two faces.
+    const coinEdge = graph.edges.find((edge) => edge.type === 'conduction')!;
+    expect(coinEdge.parameters?.area_mm2).toBeCloseTo(Math.sqrt(200 * 1925), 6);
+    expect(coinEdge.parameters?.k_W_mK).toBe(380);
+    expect(activeRth(coinEdge.rth)).toBeCloseTo(
+      2.0 / 1000 / (380 * (Math.sqrt(200 * 1925) / 1e6)),
+      8,
+    );
   });
 
   it('leaves a component without Rjc unresolved rather than zero (05 §59 case F)', () => {
@@ -644,5 +664,106 @@ describe('spreading edges (05 §43)', () => {
     const edge = createSpreadingEdge('NODE_A', 'NODE_B', { R_C_per_W: 0.4 });
     expect(activeRth(edge.rth)).toBe(0.4);
     expect(edge.resolution).toBe('resolved');
+  });
+});
+
+
+/**
+ * The point of linking the templates: a component carrying its own measurements,
+ * in a project carrying its own constants, produces a chain the solver can use
+ * without anybody opening Screen 05 to hand-enter a resistance.
+ *
+ * What stays unresolved is deliberate. The trailing edges are MECHANICAL — a
+ * pedestal, a base contact, the bolt-down to metal — and belong to the structure
+ * the engineer builds in Screen 05, not to the component. 05 §61: an unknown
+ * stays unknown rather than being filled with a plausible number.
+ */
+describe('end-to-end resolution per heat path', () => {
+  const materials = () => {
+    const m = defaultMaterials();
+    m.coin_L_mm = sourced(55, 'Manual');
+    m.coin_W_mm = sourced(35, 'Manual');
+    return m;
+  };
+
+  const withPath = (path: 'Coin' | 'Board' | 'TopSurface', templateId: string) =>
+    buildComponentSubgraph(
+      component({
+        thermal_spec: {
+          ...component().thermal_spec,
+          heat_path: { type: path, parameters: {} },
+          tim: { ...emptyTim(), type: 'Grease', inheritance: 'project' },
+        },
+      }),
+      { materials: materials(), templateId, qtyModel: 'AGGREGATE' },
+    )!;
+
+  it('resolves every component-owned edge of a copper coin chain', () => {
+    const graph = withPath('Coin', 'BOTTOM_COOL_COIN');
+    const byType = Object.fromEntries(graph.edges.map((edge) => [edge.type, edge]));
+
+    expect(byType.package_rjc.resolution).toBe('resolved');
+    expect(byType.solder.resolution).toBe('resolved');
+    expect(byType.conduction.resolution).toBe('resolved');
+    expect(byType.tim.resolution).toBe('resolved');
+
+    // Nothing trails off unresolved: the chain ends at a PORT, which Screen 05
+    // wires to whichever base zone the engineer chooses (05 §10).
+    expect(graph.edges.every((edge) => edge.resolution === 'resolved')).toBe(true);
+    expect(graph.nodes.flatMap((node) => node.ports ?? []).map((port) => port.kind)).toContain(
+      'HEAT_OUT',
+    );
+  });
+
+  it('resolves every component-owned edge of a board via chain', () => {
+    const graph = withPath('Board', 'BOTTOM_COOL_VIA');
+    const byType = Object.fromEntries(graph.edges.map((edge) => [edge.type, edge]));
+
+    expect(byType.package_rjc.resolution).toBe('resolved');
+    expect(byType.thermal_via.resolution).toBe('resolved');
+    expect(byType.tim.resolution).toBe('resolved');
+    expect(graph.edges.every((edge) => edge.resolution === 'resolved')).toBe(true);
+  });
+
+  it('resolves the package and TIM of a top-cooled chain', () => {
+    const graph = withPath('TopSurface', 'TOP_COOL_LID');
+    const byType = Object.fromEntries(graph.edges.map((edge) => [edge.type, edge]));
+
+    expect(byType.package_rjc.resolution).toBe('resolved');
+    expect(byType.tim.resolution).toBe('resolved');
+    // Nothing spreads on this path, so the TIM crosses the case face itself.
+    expect(byType.tim.parameters?.area_mm2).toBe(200);
+    // The pedestal is a mechanical part; its geometry is not the component's.
+    expect(byType.conduction.resolution).toBe('unresolved');
+  });
+
+  it('reads the via array constants from the project, not from the component', () => {
+    const graph = withPath('Board', 'BOTTOM_COOL_VIA');
+    const via = graph.edges.find((edge) => edge.type === 'thermal_via')!;
+    expect(via.parameters?.effective_k_W_mK).toBe(30);
+    expect(via.parameters?.via_efficiency).toBe(0.9);
+    // Before this, both were editable in Screen 04 but never reached the graph,
+    // so the array could not resolve however carefully they were filled in.
+    expect(via.resolution).toBe('resolved');
+  });
+
+  it('stops at the coin when the project has no coin size, rather than guessing', () => {
+    const graph = buildComponentSubgraph(
+      component({
+        thermal_spec: {
+          ...component().thermal_spec,
+          heat_path: { type: 'Coin', parameters: {} },
+        },
+      }),
+      { materials: defaultMaterials(), templateId: 'BOTTOM_COOL_COIN', qtyModel: 'AGGREGATE' },
+    )!;
+    const byType = Object.fromEntries(graph.edges.map((edge) => [edge.type, edge]));
+
+    // The joint face is known, so the solder still resolves ...
+    expect(byType.solder.resolution).toBe('resolved');
+    // ... but nothing downstream of the missing coin face can.
+    expect(byType.conduction.resolution).toBe('unresolved');
+    expect(byType.tim.resolution).toBe('unresolved');
+    expect(activeRth(byType.tim.rth)).toBeNull();
   });
 });

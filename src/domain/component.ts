@@ -504,6 +504,16 @@ export function spreadAreaMm2(
  * Neither face on its own is right: heat enters across the source face and
  * leaves across the spread face, so the effective area is the geometric mean
  * — the same approximation the Volume Evaluation Tool makes.
+ *
+ * Both faces are required. Falling back to the source face when the spread one
+ * is unknown would return a plausible, conservative, RESOLVED-looking number
+ * built on a guess about how far heat spreads — and being conservative is no
+ * defence, because a wrong resistance reorders the bottleneck ranking whichever
+ * way it errs. A path with no known far face has no known area.
+ *
+ * Note this is not the same as "no spreading": for a top-cooled or bolted part
+ * `spreadAreaMm2` returns the source face itself, so the mean is that face and
+ * the edge resolves normally.
  */
 export function spreadingAreaMm2(
   geometry: ComponentGeometry,
@@ -513,6 +523,6 @@ export function spreadingAreaMm2(
   const source = sourceAreaMm2(geometry);
   const spread = spreadAreaMm2(geometry, heatPath, projectCoinAreaMm2);
   if (source == null || source <= 0) return null;
-  if (spread == null || spread <= 0) return source;
+  if (spread == null || spread <= 0) return null;
   return Math.sqrt(source * spread);
 }
