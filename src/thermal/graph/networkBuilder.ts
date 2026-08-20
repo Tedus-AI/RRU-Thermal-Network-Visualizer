@@ -7,7 +7,13 @@
  *   3. an input the component does not have leaves the edge UNRESOLVED, never 0.
  */
 
-import { contactAreaMm2, powerWOf, type Component } from '@/domain/component';
+import {
+  powerWOf,
+  sourceAreaMm2,
+  spreadAreaMm2,
+  spreadingAreaMm2,
+  type Component,
+} from '@/domain/component';
 import { valueOf } from '@/domain/sourcedValue';
 import { createRth } from '../rth';
 import { computeRth, type EdgeParameters } from '../resistance/calculators';
@@ -32,8 +38,21 @@ export interface Subgraph {
 
 /** Reads a dotted path out of a component, unwrapping SourcedValue as needed. */
 export function readComponentField(component: Component, path: string): number | null {
-  if (path === 'thermal_spec.geometry.contact_area') {
-    return contactAreaMm2(component.thermal_spec.geometry);
+  // Virtual paths: derived areas that are not stored fields.
+  //
+  // `contact_area` is the name templates and already-stored networks use; it
+  // resolves to the source face, which is what it always meant. The two spread
+  // paths are new, and PR-follow-up work moves the templates onto them.
+  const geometry = component.thermal_spec.geometry;
+  const heatPath = component.thermal_spec.heat_path.type;
+  switch (path) {
+    case 'thermal_spec.geometry.contact_area':
+    case 'thermal_spec.geometry.source_area':
+      return sourceAreaMm2(geometry);
+    case 'thermal_spec.geometry.spread_area':
+      return spreadAreaMm2(geometry, heatPath);
+    case 'thermal_spec.geometry.spreading_area':
+      return spreadingAreaMm2(geometry, heatPath);
   }
 
   const parts = path.split('.');

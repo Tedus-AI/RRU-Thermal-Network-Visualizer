@@ -52,9 +52,11 @@ describe('pre-04 component migration', () => {
     expect(migrated.thermal_spec.limit_C?.value).toBe(180);
   });
 
-  it('moves the flat board type into a board path spec', () => {
-    expect(migrated.thermal_spec.board_path.type).toBe('Copper Coin');
-    expect(migrated.thermal_spec.board_path.parameters).toEqual({});
+  it('moves the flat board type onto the heat path it describes', () => {
+    expect(migrated.thermal_spec.heat_path.type).toBe('Coin');
+    expect(migrated.thermal_spec.heat_path.parameters).toEqual({});
+    // A stated board type is a decision, so the migrated path is not a guess.
+    expect(migrated.thermal_spec.heat_path_confirmed).toBe(true);
   });
 
   it('moves the flat TIM type into a TIM spec', () => {
@@ -64,8 +66,8 @@ describe('pre-04 component migration', () => {
 
   it('moves the flat geometry fields and flags them for review', () => {
     const geometry = migrated.thermal_spec.geometry;
-    expect(geometry.pad_L_mm).toBe(20);
-    expect(geometry.pad_W_mm).toBe(10);
+    expect(geometry.source_L_mm).toBe(20);
+    expect(geometry.source_W_mm).toBe(10);
     expect(geometry.board_thickness_mm).toBe(2.5);
     // 04 §30 — legacy semantics are confirmed by a human, never assumed.
     expect(geometry.needs_review).toBe(true);
@@ -111,7 +113,7 @@ describe('migration robustness', () => {
     const current = migrateComponent(PRE_04_RECORD, 0)!;
     const again = migrateComponent(current, 0)!;
     expect(again.power_W.value).toBeCloseTo(52.13);
-    expect(again.thermal_spec.board_path.type).toBe('Copper Coin');
+    expect(again.thermal_spec.heat_path.type).toBe('Coin');
     expect(again.thermal_spec.tim.type).toBe('Grease');
     expect(again.enabled).toBe(true);
   });
@@ -136,9 +138,11 @@ describe('migration robustness', () => {
 
   it('survives a record with no thermal_spec at all', () => {
     const bare = migrateComponent({ id: 'B', name: 'Bare', qty: 2, power_W: 3 }, 0)!;
-    expect(bare.thermal_spec.board_path.type).toBe('None');
+    // Nothing to migrate means nothing to trust: inferred, and flagged as such.
+    expect(bare.thermal_spec.heat_path.type).toBe('Board');
+    expect(bare.thermal_spec.heat_path_confirmed).toBe(false);
     expect(bare.thermal_spec.tim.type).toBe('None');
-    expect(bare.thermal_spec.geometry.pad_L_mm).toBeNull();
+    expect(bare.thermal_spec.geometry.source_L_mm).toBeNull();
   });
 });
 
@@ -178,5 +182,34 @@ describe('limit type migration', () => {
     expect(
       migrate({ limit_type: 'Tc', limit_type_confirmed: true }).thermal_spec.limit_type_confirmed,
     ).toBe(true);
+  });
+});
+
+describe('heat path migration', () => {
+  const migrate = (spec: Record<string, unknown>, category = 'Digital') =>
+    migrateComponent({ name: 'X', category, thermal_spec: spec }, 0)!.thermal_spec;
+
+  it('maps each stored board type onto the path it described', () => {
+    expect(migrate({ board_path: { type: 'Copper Coin' } }).heat_path.type).toBe('Coin');
+    expect(migrate({ board_path: { type: 'Thermal Via' } }).heat_path.type).toBe('Board');
+    expect(migrate({ board_path: { type: 'PCB Only' } }).heat_path.type).toBe('Board');
+    expect(migrate({ board_path: { type: 'Direct Metal' } }).heat_path.type).toBe('DirectMetal');
+  });
+
+  // `None` never meant "no path" — those rows conduct straight out of the
+  // package top. Reading it as an absence would delete a real thermal route.
+  it('reads None as top-surface cooling, not as an absent path', () => {
+    expect(migrate({ board_path: { type: 'None' } }).heat_path.type).toBe('TopSurface');
+  });
+
+  it('treats Custom as undecided and infers from the category', () => {
+    const spec = migrate({ board_path: { type: 'Custom' } }, 'RF');
+    expect(spec.heat_path.type).toBe('Coin');
+    expect(spec.heat_path_confirmed).toBe(false);
+  });
+
+  it('keeps the parameters the stored path carried', () => {
+    const spec = migrate({ board_path: { type: 'Thermal Via', parameters: { via_count: 24 } } });
+    expect(spec.heat_path.parameters).toEqual({ via_count: 24 });
   });
 });

@@ -7,7 +7,12 @@
  * Nothing in this pipeline may touch componentStore before Apply (02 §8, §34).
  */
 
-import type { BoardType, ComponentCategory, ImportSourceType, TimType } from '@/domain/component';
+import type {
+  ComponentCategory,
+  HeatPathType,
+  ImportSourceType,
+  TimType,
+} from '@/domain/component';
 
 /** Target fields a source column can be mapped onto — 02 §11. */
 export const CANONICAL_FIELDS = [
@@ -17,10 +22,14 @@ export const CANONICAL_FIELDS = [
   'Category',
   'Limit(C)',
   'R_jc',
-  'Board_Type',
+  'Heat_Path',
   'TIM_Type',
-  'Pad_L',
-  'Pad_W',
+  'TIM_k',
+  'TIM_BLT',
+  'Source_L',
+  'Source_W',
+  'Spread_L',
+  'Spread_W',
   'Thick(mm)',
 ] as const;
 export type CanonicalField = (typeof CANONICAL_FIELDS)[number];
@@ -30,7 +39,20 @@ export type MappingTarget = CanonicalField | typeof IGNORE_COLUMN;
 
 /** 02 §13. */
 export const REQUIRED_FIELDS: CanonicalField[] = ['Component', 'Qty', 'Power(W)'];
-export const RECOMMENDED_FIELDS: CanonicalField[] = ['Category', 'Limit(C)', 'R_jc'];
+export const RECOMMENDED_FIELDS: CanonicalField[] = [
+  'Category',
+  'Limit(C)',
+  'R_jc',
+  'Heat_Path',
+  'Source_L',
+  'Source_W',
+];
+
+/**
+ * Fields that override a project-level default rather than stating a fact the
+ * source owns. Blank is the normal case, so they never raise a warning.
+ */
+export const OVERRIDE_FIELDS: CanonicalField[] = ['Spread_L', 'Spread_W', 'TIM_k', 'TIM_BLT'];
 
 /** Raw tabular data straight out of a parser, before any mapping. */
 export interface ParsedTable {
@@ -72,10 +94,14 @@ export interface StagingRow {
 
   r_jc_C_per_W: number | null;
   limit_C: number | null;
-  board_type: BoardType | null;
+  heat_path: HeatPathType | null;
   tim_type: TimType | null;
-  pad_L_mm: number | null;
-  pad_W_mm: number | null;
+  tim_k_W_mK: number | null;
+  tim_thickness_mm: number | null;
+  source_L_mm: number | null;
+  source_W_mm: number | null;
+  spread_L_mm: number | null;
+  spread_W_mm: number | null;
   thickness_mm: number | null;
 
   /** Original cell text per canonical field, for error reporting. */

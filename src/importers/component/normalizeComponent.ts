@@ -7,11 +7,11 @@
  */
 
 import {
-  BOARD_TYPES,
   COMPONENT_CATEGORIES,
+  HEAT_PATH_TYPES,
   TIM_TYPES,
-  type BoardType,
   type ComponentCategory,
+  type HeatPathType,
   type TimType,
 } from '@/domain/component';
 
@@ -91,38 +91,70 @@ export function normalizeCategory(raw: unknown): ComponentCategory | null {
   return CATEGORY_ALIASES[text.toLowerCase()] ?? null;
 }
 
-/** 02 §15 — unrecognised values become Custom (and the caller raises a warning). */
-const BOARD_TYPE_ALIASES: Record<string, BoardType> = {
-  via: 'Thermal Via',
-  vias: 'Thermal Via',
-  'thermal via': 'Thermal Via',
-  'thermal vias': 'Thermal Via',
-  'via array': 'Thermal Via',
-  'cu coin': 'Copper Coin',
-  'copper coin': 'Copper Coin',
-  'copper slug': 'Copper Coin',
-  coin: 'Copper Coin',
-  'direct metal': 'Direct Metal',
-  'metal mount': 'Direct Metal',
-  'main base': 'Direct Metal',
-  'small base': 'Direct Metal',
-  'pcb only': 'PCB Only',
-  pcb: 'PCB Only',
-  none: 'None',
-  'no board path': 'None',
-  na: 'None',
-  '-': 'None',
+/**
+ * 02 §15 — heat path vocabulary, including the names this tool used to store
+ * and the ones the Volume Evaluation Tool writes.
+ *
+ * `None` deserves a note: in the Volume Evaluation Tool it does NOT mean "no
+ * path". Those rows carry `Thick(mm) = 0` and get `R_int = 0`, with the TIM
+ * sitting straight on the package — which is top-surface cooling. Reading it as
+ * "no path" would drop a real conduction route.
+ */
+const HEAT_PATH_ALIASES: Record<string, HeatPathType> = {
+  // Copper coin, i.e. a Final PA soldered to a slug.
+  coin: 'Coin',
+  'cu coin': 'Coin',
+  'copper coin': 'Coin',
+  'copper slug': 'Coin',
+  'bottom cool coin': 'Coin',
+
+  // Down through the board.
+  board: 'Board',
+  via: 'Board',
+  vias: 'Board',
+  'thermal via': 'Board',
+  'thermal vias': 'Board',
+  'via array': 'Board',
+  'pcb only': 'Board',
+  pcb: 'Board',
+  'board vias': 'Board',
+
+  // Up through the package top.
+  none: 'TopSurface',
+  na: 'TopSurface',
+  '-': 'TopSurface',
+  'top surface': 'TopSurface',
+  topsurface: 'TopSurface',
+  top: 'TopSurface',
+  'top cool': 'TopSurface',
+
+  // Bolted to metal, no board path at all.
+  'direct metal': 'DirectMetal',
+  directmetal: 'DirectMetal',
+  'metal mount': 'DirectMetal',
+  'main base': 'DirectMetal',
+  'small base': 'DirectMetal',
 };
 
-export function normalizeBoardType(raw: unknown): BoardType | null {
+/**
+ * Returns null for blank OR unrecognised text. There is no "Custom" heat path
+ * to hide an unknown in any more, so the caller warns and infers instead.
+ */
+export function normalizeHeatPath(raw: unknown): HeatPathType | null {
   if (raw == null) return null;
   const text = String(raw).trim();
   if (!text) return null;
 
-  const exact = BOARD_TYPES.find((b) => b.toLowerCase() === text.toLowerCase());
+  const exact = HEAT_PATH_TYPES.find((b) => b.toLowerCase() === text.toLowerCase());
   if (exact) return exact;
 
-  return BOARD_TYPE_ALIASES[text.toLowerCase()] ?? 'Custom';
+  return HEAT_PATH_ALIASES[text.toLowerCase()] ?? null;
+}
+
+/** True when heat path text was present but could not be recognised. */
+export function unrecognisedHeatPath(raw: unknown, normalized: HeatPathType | null): boolean {
+  if (normalized != null) return false;
+  return (raw == null ? '' : String(raw).trim()).length > 0;
 }
 
 /**

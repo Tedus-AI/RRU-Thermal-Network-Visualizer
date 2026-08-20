@@ -8,12 +8,13 @@
 import { AlertTriangle, CircleCheck, CircleSlash, XCircle } from 'lucide-react';
 import { ColumnLabel } from '@/ui/FieldLabel';
 import {
-  BOARD_TYPES,
+  HEAT_PATH_LABELS,
+  HEAT_PATH_TYPES,
   COMPONENT_CATEGORIES,
   LIMIT_TYPES,
   componentTotalPowerW,
   TIM_TYPES,
-  type BoardType,
+  type HeatPathType,
   type Component,
   type ComponentCategory,
   type LimitType,
@@ -103,7 +104,7 @@ export function ComponentTable({
               <ColumnLabel label="Package" zh={ZH.Package} tooltip={tip('Package')} />
             </th>
             <th scope="col" className="px-2 py-2">
-              <ColumnLabel label="Board Type" zh={ZH['Board Type']} tooltip={tip('Board Type')} />
+              <ColumnLabel label="Heat Path" zh={ZH['Heat Path']} tooltip={tip('Heat Path')} />
             </th>
             <th scope="col" className="px-2 py-2">
               <ColumnLabel label="TIM" zh={ZH.TIM} tooltip={tip('TIM')} />
@@ -327,27 +328,35 @@ export function ComponentTable({
                 </td>
                 <td className="px-2 py-1.5">
                   <select
-                    aria-label={`Board type for ${component.name}`}
+                    aria-label={`Heat path for ${component.name}`}
                     onClick={(event) => event.stopPropagation()}
-                    className={`${CELL} w-28`}
-                    value={spec.board_path.type}
+                    // Amber while the path is still this tool's guess.
+                    className={`${CELL} w-28 ${spec.heat_path_confirmed ? '' : 'text-warn-600'}`}
+                    title={
+                      spec.heat_path_confirmed
+                        ? undefined
+                        : `推定值（${spec.heat_path.type}），它決定整條熱阻鏈，請確認。`
+                    }
+                    value={spec.heat_path.type}
                     disabled={readOnly}
                     onChange={(event) =>
                       patchSpec(
                         component,
                         {
-                          board_path: {
-                            ...spec.board_path,
-                            type: event.target.value as BoardType,
+                          heat_path: {
+                            ...spec.heat_path,
+                            type: event.target.value as HeatPathType,
                           },
+                          // Picking it IS the confirmation.
+                          heat_path_confirmed: true,
                         },
-                        ['board_path.type'],
+                        ['heat_path.type'],
                       )
                     }
                   >
-                    {BOARD_TYPES.map((type) => (
+                    {HEAT_PATH_TYPES.map((type) => (
                       <option key={type} value={type}>
-                        {type}
+                        {HEAT_PATH_LABELS[type].zh}
                       </option>
                     ))}
                   </select>

@@ -12,15 +12,15 @@
 
 import {
   emptyArchitecturePrep,
-  emptyBoardPath,
   emptyExternalMappings,
   emptyGeometry,
   emptyThermalSpec,
+  inferHeatPath,
   inferLimitType,
-  type BoardType,
   type Component,
   type ComponentCategory,
   type ComponentGeometry,
+  type HeatPathType,
   type LimitType,
   type PackageType,
   type TimType,
@@ -29,6 +29,8 @@ import { sourced, unknownValue, type SourcedValue } from '@/domain/sourcedValue'
 import type { DataSource } from '@/thermal/types';
 
 type Raw = Record<string, unknown>;
+
+const HEAT_PATH_TYPES_SET = new Set<HeatPathType>(['Coin', 'Board', 'TopSurface', 'DirectMetal']);
 
 const isObject = (value: unknown): value is Raw =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -70,9 +72,22 @@ function migrateGeometry(spec: Raw): ComponentGeometry {
   }
   if (typeof existing.needs_review === 'boolean') geometry.needs_review = existing.needs_review;
 
-  // Flat pre-04 geometry fields lived directly on thermal_spec.
-  geometry.pad_L_mm = geometry.pad_L_mm ?? num(spec.pad_L_mm);
-  geometry.pad_W_mm = geometry.pad_W_mm ?? num(spec.pad_W_mm);
+  // The source face used to be stored twice: a `contact_*` pair and a `pad_*`
+  // pair. `contactAreaMm2` preferred contact, so that order is preserved here
+  // and no stored component changes area across the rename. Flat pre-04 fields
+  // sat directly on thermal_spec, which is the last place to look.
+  geometry.source_L_mm =
+    geometry.source_L_mm ??
+    num(existing.contact_L_mm) ??
+    num(existing.pad_L_mm) ??
+    num(spec.pad_L_mm);
+  geometry.source_W_mm =
+    geometry.source_W_mm ??
+    num(existing.contact_W_mm) ??
+    num(existing.pad_W_mm) ??
+    num(spec.pad_W_mm);
+  geometry.custom_source_area_mm2 =
+    geometry.custom_source_area_mm2 ?? num(existing.custom_contact_area_mm2);
   geometry.board_thickness_mm = geometry.board_thickness_mm ?? num(spec.thickness_mm);
 
   // 04 §30 — legacy geometry semantics must be confirmed, not assumed.
@@ -84,6 +99,52 @@ function migrateGeometry(spec: Raw): ComponentGeometry {
   // copies keys the current shape declares, so both are dropped on read; a
   // stored Height is preserved as component metadata by the import that wrote it.
   return geometry;
+}
+
+/**
+ * Board types collapse onto heat paths.
+ *
+ * `None` becomes TopSurface, not "no path": in the Volume Evaluation Tool those
+ * rows still conduct, straight from the package top into the TIM. `PCB Only`
+ * and `Thermal Via` were two names for heat going down through the board.
+ * `Custom` was never a path, so it infers and stays unconfirmed.
+ */
+const HEAT_PATH_FOR_BOARD_TYPE: Record<string, HeatPathType> = {
+  'Copper Coin': 'Coin',
+  'Thermal Via': 'Board',
+  'PCB Only': 'Board',
+  None: 'TopSurface',
+  'Direct Metal': 'DirectMetal',
+};
+
+function migrateHeatPath(
+  spec: Raw,
+  category: ComponentCategory,
+): { heat_path: Component['thermal_spec']['heat_path']; heat_path_confirmed: boolean } {
+  const raw = isObject(spec.heat_path)
+    ? spec.heat_path
+    : isObject(spec.board_path)
+      ? spec.board_path
+      : null;
+  const storedType = (raw?.type ?? spec.board_type) as string | undefined;
+  const parameters =
+    raw && isObject(raw.parameters)
+      ? (raw.parameters as Component['thermal_spec']['heat_path']['parameters'])
+      : {};
+
+  const known = HEAT_PATH_TYPES_SET.has(storedType as HeatPathType)
+    ? (storedType as HeatPathType)
+    : storedType
+      ? HEAT_PATH_FOR_BOARD_TYPE[storedType]
+      : undefined;
+
+  const confirmed =
+    typeof spec.heat_path_confirmed === 'boolean' ? spec.heat_path_confirmed : known != null;
+
+  return {
+    heat_path: { type: known ?? inferHeatPath(category), parameters },
+    heat_path_confirmed: confirmed && known != null,
+  };
 }
 
 /**
@@ -113,10 +174,6 @@ export function migrateComponent(raw: unknown, index: number): Component | null 
   const specRaw = isObject(raw.thermal_spec) ? raw.thermal_spec : {};
   const base = emptyThermalSpec();
 
-  const boardTypeRaw = isObject(specRaw.board_path)
-    ? (specRaw.board_path.type as BoardType)
-    : (specRaw.board_type as BoardType | undefined);
-
   const timRaw = isObject(specRaw.tim) ? specRaw.tim : null;
   const timType =
     (timRaw?.type as TimType | undefined) ?? (specRaw.tim_type as TimType | undefined);
@@ -130,6 +187,7 @@ export function migrateComponent(raw: unknown, index: number): Component | null 
           limit_type_confirmed: specRaw.limit_type_confirmed,
         }
       : migrateLimitType(specRaw.limit_type, category, name);
+  const heat = migrateHeatPath(specRaw, category);
 
   return {
     id: typeof raw.id === 'string' && raw.id ? raw.id : `CMP_MIGRATED_${index + 1}`,
@@ -146,16 +204,7 @@ export function migrateComponent(raw: unknown, index: number): Component | null 
       r_jc_C_per_W: toSourced(specRaw.r_jc_C_per_W),
       package_type: (specRaw.package_type as PackageType) ?? null,
       geometry: migrateGeometry(specRaw),
-      board_path: boardTypeRaw
-        ? {
-            type: boardTypeRaw,
-            parameters:
-              isObject(specRaw.board_path) && isObject(specRaw.board_path.parameters)
-                ? (specRaw.board_path
-                    .parameters as Component['thermal_spec']['board_path']['parameters'])
-                : {},
-          }
-        : emptyBoardPath(),
+      ...heat,
       // Built field by field rather than spread, so a dropped field (such as the
       // never-solved `compression_pct`) cannot ride back in from stored data.
       tim: {

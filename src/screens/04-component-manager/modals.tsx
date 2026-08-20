@@ -6,13 +6,13 @@ import {
   ARCHITECTURE_TEMPLATES,
   ARCHITECTURE_TEMPLATE_LABELS,
   BASE_ZONES,
-  BOARD_TYPES,
+  HEAT_PATH_TYPES,
   COMPONENT_CATEGORIES,
   LIMIT_TYPES,
   TIM_TYPES,
   type ArchitectureTemplate,
   type BaseZone,
-  type BoardType,
+  type HeatPathType,
   type Component,
   type ComponentCategory,
   type LimitType,
@@ -151,7 +151,7 @@ export function AddComponentModal({
 export interface BulkEditValues {
   category?: ComponentCategory;
   limit_type?: LimitType;
-  board_type?: BoardType;
+  heat_path?: HeatPathType;
   tim_type?: TimType;
   template?: ArchitectureTemplate;
   base_zone?: BaseZone;
@@ -182,7 +182,7 @@ export function BulkEditModal({
     const out: BulkEditValues = {};
     if (pick('category') !== UNCHANGED) out.category = pick('category') as ComponentCategory;
     if (pick('limit_type') !== UNCHANGED) out.limit_type = pick('limit_type') as LimitType;
-    if (pick('board_type') !== UNCHANGED) out.board_type = pick('board_type') as BoardType;
+    if (pick('heat_path') !== UNCHANGED) out.heat_path = pick('heat_path') as HeatPathType;
     if (pick('tim_type') !== UNCHANGED) out.tim_type = pick('tim_type') as TimType;
     if (pick('template') !== UNCHANGED) out.template = pick('template') as ArchitectureTemplate;
     if (pick('base_zone') !== UNCHANGED) out.base_zone = pick('base_zone') as BaseZone;
@@ -234,7 +234,7 @@ export function BulkEditModal({
       <div className="grid grid-cols-2 gap-3.5">
         {row('category', 'Category', '分類', COMPONENT_CATEGORIES)}
         {row('limit_type', 'Limit Type', '限制類型', LIMIT_TYPES)}
-        {row('board_type', 'Board Type', '板材類型', BOARD_TYPES)}
+        {row('heat_path', 'Heat Path', '散熱路徑', HEAT_PATH_TYPES)}
         {row('tim_type', 'TIM', '導熱介質', TIM_TYPES)}
         {row(
           'template',
@@ -261,15 +261,17 @@ export function bulkPatchFor(values: BulkEditValues) {
     if (values.category) patch.category = values.category;
     if (values.enabled != null) patch.enabled = values.enabled;
 
-    if (values.limit_type || values.board_type || values.tim_type) {
+    if (values.limit_type || values.heat_path || values.tim_type) {
       patch.thermal_spec = {
         ...spec,
         limit_type: values.limit_type ?? spec.limit_type,
         // Choosing a type in bulk edit is a decision, so it counts as confirmed.
         limit_type_confirmed: values.limit_type ? true : spec.limit_type_confirmed,
-        board_path: values.board_type
-          ? { ...spec.board_path, type: values.board_type }
-          : spec.board_path,
+        heat_path: values.heat_path
+          ? { ...spec.heat_path, type: values.heat_path }
+          : spec.heat_path,
+        // Choosing a path in bulk edit is a decision, so it counts as confirmed.
+        heat_path_confirmed: values.heat_path ? true : spec.heat_path_confirmed,
         tim: values.tim_type ? { ...spec.tim, type: values.tim_type } : spec.tim,
       };
     }
@@ -291,7 +293,7 @@ export function bulkFieldsFor(values: BulkEditValues): string[] {
   if (values.category) fields.push('category');
   if (values.enabled != null) fields.push('enabled');
   if (values.limit_type) fields.push('limit_type');
-  if (values.board_type) fields.push('board_path.type');
+  if (values.heat_path) fields.push('heat_path.type');
   if (values.tim_type) fields.push('tim.type');
   if (values.template || values.base_zone) fields.push('architecture_prep');
   return fields;

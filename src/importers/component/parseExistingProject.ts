@@ -51,10 +51,14 @@ const HEADERS = [
   'Power(W)',
   'R_jc',
   'Limit(C)',
-  'Board_Type',
+  'Heat_Path',
   'TIM_Type',
-  'Pad_L',
-  'Pad_W',
+  'TIM_k',
+  'TIM_BLT',
+  'Source_L',
+  'Source_W',
+  'Spread_L',
+  'Spread_W',
   'Thick(mm)',
   '_ref_origin_project',
   '_ref_origin_id',
@@ -84,11 +88,28 @@ export function parseExistingProject(projectId: string, scope: ExistingProjectSc
     text(component.power_W.value),
     text(component.thermal_spec.r_jc_C_per_W?.value),
     text(component.thermal_spec.limit_C?.value),
-    text(component.thermal_spec.board_path.type),
+    text(component.thermal_spec.heat_path.type),
     text(component.thermal_spec.tim.type),
-    text(component.thermal_spec.geometry.pad_L_mm),
-    text(component.thermal_spec.geometry.pad_W_mm),
-    text(component.thermal_spec.geometry.board_thickness_mm),
+    // Only a component-level override is worth re-exporting; a value inherited
+    // from the project would turn into a per-component decision on re-import.
+    text(
+      component.thermal_spec.tim.inheritance === 'component'
+        ? component.thermal_spec.tim.k_W_mK?.value
+        : null,
+    ),
+    text(
+      component.thermal_spec.tim.inheritance === 'component'
+        ? component.thermal_spec.tim.thickness_mm?.value
+        : null,
+    ),
+    text(component.thermal_spec.geometry.source_L_mm),
+    text(component.thermal_spec.geometry.source_W_mm),
+    text(component.thermal_spec.geometry.spread_L_mm),
+    text(component.thermal_spec.geometry.spread_W_mm),
+    text(
+      component.thermal_spec.geometry.coin_thickness_mm ??
+        component.thermal_spec.geometry.board_thickness_mm,
+    ),
     // Keep the original lineage if the source already had one, else point here.
     text(component.provenance.ref_origin_project ?? projectId),
     text(component.provenance.ref_origin_id ?? component.id),
