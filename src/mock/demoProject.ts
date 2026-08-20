@@ -135,11 +135,7 @@ interface Seed {
   zone: BaseZone;
 }
 
-function demoSourced<T>(
-  value: T,
-  source: ThermalDataSource,
-  reference: string,
-): SourcedValue<T> {
+function demoSourced<T>(value: T, source: ThermalDataSource, reference: string): SourcedValue<T> {
   return {
     ...sourced(value, source, { confidence: 'high', reference }),
     updated_at: DEMO_TIMESTAMP,
@@ -155,24 +151,15 @@ function buildReadyComponents(seeds: Seed[]): Component[] {
       category: seed.category,
       enabled: true,
       qty: seed.qty,
-      power_W: demoSourced(
-        seed.power_W,
-        'Imported',
-        'Synthetic FR1 Golden Demo power budget',
-      ),
+      power_W: demoSourced(seed.power_W, 'Imported', 'Synthetic FR1 Golden Demo power budget'),
       thermal_spec: {
         ...spec,
         limit_type: seed.limit_type,
-        limit_C: demoSourced(
-          seed.limit_C,
-          'Datasheet',
-          'Synthetic component qualification limit',
-        ),
-        r_jc_C_per_W: demoSourced(
-          seed.r_jc,
-          'Datasheet',
-          'Synthetic component thermal profile',
-        ),
+        // The demo's limits come from (synthetic) datasheets, so the surface
+        // they refer to is known rather than inferred.
+        limit_type_confirmed: true,
+        limit_C: demoSourced(seed.limit_C, 'Datasheet', 'Synthetic component qualification limit'),
+        r_jc_C_per_W: demoSourced(seed.r_jc, 'Datasheet', 'Synthetic component thermal profile'),
         package_type: seed.package_type,
         geometry: {
           ...spec.geometry,

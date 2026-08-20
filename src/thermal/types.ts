@@ -1,5 +1,7 @@
 import type { EdgeRthSet, ExternalMappings, TemperatureResultSet } from './resultValue';
 import type { RevisionId } from '@/domain/revision';
+// Type-only, so this does not create a runtime cycle with the component model.
+import type { LimitType } from '@/domain/component';
 
 /**
  * Thermal Graph data model.
@@ -107,7 +109,7 @@ export interface ThermalNode {
   temperature_results?: TemperatureResultSet;
 
   limit_C?: number | null;
-  limit_type?: 'Tj' | 'Tc' | 'Ts' | 'Custom' | null;
+  limit_type?: LimitType | null;
 
   boundary_type: BoundaryType;
   fixed_temperature_C?: number | null;

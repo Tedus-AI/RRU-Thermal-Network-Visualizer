@@ -16,6 +16,7 @@ import { TOOLTIPS_ZH } from './tooltips';
 
 import { activeRth } from '@/thermal/rth';
 import { NODE_TYPES, type NodeType, type ThermalNetwork, type ThermalNode } from '@/thermal/types';
+import { LIMIT_TYPES } from '@/domain/component';
 
 const TABS = [
   { id: 'overview', label: 'Overview', zh: '總覽' },
@@ -119,7 +120,9 @@ export function NodeInspector({
               {component ?? <span className="text-ink-400">—</span>}
             </Row>
             <Row label="Zone" zh="區域">
-              {node.zone_id ? network.nodes[node.zone_id]?.name ?? node.zone_id : (
+              {node.zone_id ? (
+                (network.nodes[node.zone_id]?.name ?? node.zone_id)
+              ) : (
                 <span className="text-ink-400">—</span>
               )}
             </Row>
@@ -144,7 +147,11 @@ export function NodeInspector({
             </Row>
 
             <div className="mt-3 flex gap-2">
-              <Button className="h-8" icon={<Crosshair size={13} />} onClick={() => onFocus(node.id)}>
+              <Button
+                className="h-8"
+                icon={<Crosshair size={13} />}
+                onClick={() => onFocus(node.id)}
+              >
                 Center / 置中
               </Button>
               <Button
@@ -193,9 +200,9 @@ export function NodeInspector({
             <Select
               id="node-limit-type"
               className="mt-1 mb-2 h-8 !text-[12px]"
-              value={node.limit_type ?? 'Custom'}
+              value={node.limit_type ?? 'Tj'}
               disabled={readOnly}
-              options={['Tj', 'Tc', 'Ts', 'Custom']}
+              options={LIMIT_TYPES}
               onChange={(event) =>
                 onPatch({ limit_type: event.target.value as ThermalNode['limit_type'] })
               }

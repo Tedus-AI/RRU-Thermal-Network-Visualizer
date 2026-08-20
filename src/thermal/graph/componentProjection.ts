@@ -94,7 +94,7 @@ export function projectComponentMaster(
 
     if (options.limits && followsComponentLimit(node)) {
       node.limit_C = valueOf(component.thermal_spec.limit_C);
-      node.limit_type = component.thermal_spec.limit_type as ThermalNode['limit_type'];
+      node.limit_type = component.thermal_spec.limit_type;
     }
   }
 

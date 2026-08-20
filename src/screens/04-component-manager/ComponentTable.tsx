@@ -180,11 +180,9 @@ export function ComponentTable({
                     value={component.category}
                     disabled={readOnly}
                     onChange={(event) =>
-                      onPatch(
-                        component.id,
-                        { category: event.target.value as ComponentCategory },
-                        ['category'],
-                      )
+                      onPatch(component.id, { category: event.target.value as ComponentCategory }, [
+                        'category',
+                      ])
                     }
                   >
                     {COMPONENT_CATEGORIES.map((category) => (
@@ -248,13 +246,25 @@ export function ComponentTable({
                   <select
                     aria-label={`Limit type for ${component.name}`}
                     onClick={(event) => event.stopPropagation()}
-                    className={`${CELL} w-24 ${spec.limit_type === 'Unknown' ? 'text-warn-600' : ''}`}
+                    // Amber while the type is still this tool's guess.
+                    className={`${CELL} w-24 ${spec.limit_type_confirmed ? '' : 'text-warn-600'}`}
+                    title={
+                      spec.limit_type_confirmed
+                        ? undefined
+                        : `推定值（${spec.limit_type}），請對照規格書確認。`
+                    }
                     value={spec.limit_type}
                     disabled={readOnly}
                     onChange={(event) =>
-                      patchSpec(component, { limit_type: event.target.value as LimitType }, [
-                        'limit_type',
-                      ])
+                      patchSpec(
+                        component,
+                        {
+                          limit_type: event.target.value as LimitType,
+                          // Picking it IS the confirmation.
+                          limit_type_confirmed: true,
+                        },
+                        ['limit_type'],
+                      )
                     }
                   >
                     {LIMIT_TYPES.map((type) => (

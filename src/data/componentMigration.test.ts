@@ -67,10 +67,15 @@ describe('pre-04 component migration', () => {
     expect(geometry.pad_L_mm).toBe(20);
     expect(geometry.pad_W_mm).toBe(10);
     expect(geometry.board_thickness_mm).toBe(2.5);
-    expect(geometry.legacy_height_mm).toBe(250);
     // 04 §30 — legacy semantics are confirmed by a human, never assumed.
     expect(geometry.needs_review).toBe(true);
     expect(geometry.package_H_mm).toBeNull();
+  });
+
+  it('drops geometry fields the model no longer has', () => {
+    const geometry = migrated.thermal_spec.geometry;
+    expect(geometry).not.toHaveProperty('legacy_height_mm');
+    expect(geometry).not.toHaveProperty('custom_thickness_mm');
   });
 
   it('adds the fields the old shape never had', () => {
@@ -81,7 +86,7 @@ describe('pre-04 component migration', () => {
   });
 
   it('does not claim a limit type the old record never stated', () => {
-    expect(migrated.thermal_spec.limit_type).toBe('Unknown');
+    expect(migrated.thermal_spec.limit_type_confirmed).toBe(false);
   });
 
   it('preserves provenance and unknown metadata', () => {
@@ -134,5 +139,44 @@ describe('migration robustness', () => {
     expect(bare.thermal_spec.board_path.type).toBe('None');
     expect(bare.thermal_spec.tim.type).toBe('None');
     expect(bare.thermal_spec.geometry.pad_L_mm).toBeNull();
+  });
+});
+
+describe('limit type migration', () => {
+  const migrate = (spec: Record<string, unknown>, extra: Record<string, unknown> = {}) =>
+    migrateComponent({ name: 'X', category: 'Digital', thermal_spec: spec, ...extra }, 0)!;
+
+  it('keeps a stated Tj or Tc and treats it as settled', () => {
+    expect(migrate({ limit_type: 'Tc' }).thermal_spec).toMatchObject({
+      limit_type: 'Tc',
+      limit_type_confirmed: true,
+    });
+  });
+
+  // Ts named the package exterior, which Tc already covers — but renaming a
+  // surface limit to a case limit is a reinterpretation, so it needs a human.
+  it('folds Ts onto Tc but leaves it unconfirmed', () => {
+    expect(migrate({ limit_type: 'Ts' }).thermal_spec).toMatchObject({
+      limit_type: 'Tc',
+      limit_type_confirmed: false,
+    });
+  });
+
+  it('treats Custom and Unknown as "nobody decided" and infers instead', () => {
+    for (const legacy of ['Custom', 'Unknown', undefined]) {
+      const spec = migrate({ limit_type: legacy }).thermal_spec;
+      expect(spec.limit_type).toBe('Tj');
+      expect(spec.limit_type_confirmed).toBe(false);
+    }
+  });
+
+  it('infers from the category the record already had', () => {
+    expect(migrate({}, { category: 'Power' }).thermal_spec.limit_type).toBe('Tc');
+  });
+
+  it('trusts a confirmation flag a newer record already carries', () => {
+    expect(
+      migrate({ limit_type: 'Tc', limit_type_confirmed: true }).thermal_spec.limit_type_confirmed,
+    ).toBe(true);
   });
 });

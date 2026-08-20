@@ -41,7 +41,7 @@ function node(
     type?: ThermalNode['type'];
     component?: string;
     limit?: number;
-    limitType?: 'Tj' | 'Tc' | 'Ts' | 'Custom';
+    limitType?: 'Tj' | 'Tc';
     zone?: string;
     ambient?: boolean;
   } = {},
@@ -92,10 +92,7 @@ function network(nodes: ThermalNode[]): ThermalNetwork {
   };
 }
 
-function solution(
-  temperatures: Record<string, number>,
-  scenarioId = 'SCN_A',
-): ThermalSolution {
+function solution(temperatures: Record<string, number>, scenarioId = 'SCN_A'): ThermalSolution {
   return {
     schema_version: '1.0',
     project_id: 'TEST',
@@ -423,14 +420,16 @@ describe('Scope and filters (09 §7, §9)', () => {
   });
 
   it('narrows to heat sources, shared structure and boundary nodes', () => {
-    expect(applyScope(rows, 'heat_sources_only', []).map((row) => row.node_id).sort()).toEqual([
-      'N_FPGA',
-      'N_PA',
-    ]);
-    expect(applyScope(rows, 'shared_structure', []).map((row) => row.node_id).sort()).toEqual([
-      'N_BASE',
-      'N_FIN',
-    ]);
+    expect(
+      applyScope(rows, 'heat_sources_only', [])
+        .map((row) => row.node_id)
+        .sort(),
+    ).toEqual(['N_FPGA', 'N_PA']);
+    expect(
+      applyScope(rows, 'shared_structure', [])
+        .map((row) => row.node_id)
+        .sort(),
+    ).toEqual(['N_BASE', 'N_FIN']);
     expect(applyScope(rows, 'boundary_nodes', []).map((row) => row.node_id)).toEqual(['AMB']);
     expect(applyScope(rows, 'all_solved_nodes', []).length).toBe(5);
     expect(applyScope(rows, 'custom_selection', ['N_FIN']).map((row) => row.node_id)).toEqual([
@@ -440,14 +439,16 @@ describe('Scope and filters (09 §7, §9)', () => {
 
   it('filters by category, zone and temperature range', () => {
     const base = emptyFilters();
+    expect(applyFilters(rows, { ...base, category: 'RF' }).map((row) => row.node_id)).toEqual([
+      'N_PA',
+    ]);
+    expect(applyFilters(rows, { ...base, zone: 'Digital' }).map((row) => row.node_id)).toEqual([
+      'N_FPGA',
+    ]);
     expect(
-      applyFilters(rows, { ...base, category: 'RF' }).map((row) => row.node_id),
-    ).toEqual(['N_PA']);
-    expect(
-      applyFilters(rows, { ...base, zone: 'Digital' }).map((row) => row.node_id),
-    ).toEqual(['N_FPGA']);
-    expect(
-      applyFilters(rows, { ...base, temperature_min_C: 90 }).map((row) => row.node_id).sort(),
+      applyFilters(rows, { ...base, temperature_min_C: 90 })
+        .map((row) => row.node_id)
+        .sort(),
     ).toEqual(['N_FPGA', 'N_PA']);
   });
 
@@ -516,7 +517,13 @@ describe('Temperature rank is not a bottleneck rank (09 §26)', () => {
 describe('CSV export (09 §43)', () => {
   it('writes the specified columns and leaves a missing limit blank', () => {
     const net = network([
-      node('N_PA', { name: 'PA1 Junction', component: 'CMP_PA', limit: 180, power: 52, zone: 'RF Left' }),
+      node('N_PA', {
+        name: 'PA1 Junction',
+        component: 'CMP_PA',
+        limit: 180,
+        power: 52,
+        zone: 'RF Left',
+      }),
       node('AMB', { name: 'Ambient', ambient: true }),
     ]);
     const rows = buildTemperatureDataset({

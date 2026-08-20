@@ -108,18 +108,9 @@ const ALIASES: Record<CanonicalField, string[]> = {
     '介面材料',
     '熱介面材料',
   ],
-  'Height(mm)': ['height', 'height(mm)', 'height mm', 'h(mm)', 'comp height', '高度', '元件高度'],
   Pad_L: ['pad_l', 'pad l', 'padl', 'pad length', 'pad_l(mm)', 'epad l', '長', '接觸面長'],
   Pad_W: ['pad_w', 'pad w', 'padw', 'pad width', 'pad_w(mm)', 'epad w', '寬', '接觸面寬'],
-  'Thick(mm)': [
-    'thick',
-    'thick(mm)',
-    'thickness',
-    'thickness(mm)',
-    'thk',
-    '厚度',
-    '板厚',
-  ],
+  'Thick(mm)': ['thick', 'thick(mm)', 'thickness', 'thickness(mm)', 'thk', '厚度', '板厚'],
 };
 
 /** Lower-case, strip punctuation and spacing so "Power (W)" == "power_w". */

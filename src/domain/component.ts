@@ -52,11 +52,36 @@ export const TIM_TYPES = [
 export type TimType = (typeof TIM_TYPES)[number];
 
 /**
- * 04 §11: a component's limit may be junction, case or surface. Nothing may force
- * every component onto Tj — a DDR case limit is a case limit.
+ * 04 §11: nothing may force every component onto Tj — a DDR case limit is a case
+ * limit, and the margin has to be measured against the surface the datasheet
+ * actually specifies.
+ *
+ * Only two survive. `Ts` was a third name for the package exterior, which `Tc`
+ * already covers, and `Custom` / `Unknown` were not limit types at all — they
+ * were a way of saying "nobody has decided yet". That state now lives in
+ * `limit_type_confirmed`, so the type itself is always answerable.
  */
-export const LIMIT_TYPES = ['Tj', 'Tc', 'Ts', 'Custom', 'Unknown'] as const;
+export const LIMIT_TYPES = ['Tj', 'Tc'] as const;
 export type LimitType = (typeof LIMIT_TYPES)[number];
+
+export const LIMIT_TYPE_LABELS: Record<LimitType, { en: string; zh: string }> = {
+  Tj: { en: 'Junction', zh: '接面溫度' },
+  Tc: { en: 'Case', zh: '殼溫' },
+};
+
+/**
+ * Best guess at which surface a datasheet limit refers to, used when a source
+ * does not say. Power devices and DDR are quoted against the case; everything
+ * else is quoted against the junction.
+ *
+ * A guess is never silently trusted — whoever calls this must leave
+ * `limit_type_confirmed` false so Screen 04 asks an engineer to check it.
+ */
+export function inferLimitType(category: ComponentCategory, name = ''): LimitType {
+  if (category === 'Power') return 'Tc';
+  // Underscore counts as a separator — `U500_DDR` is a DDR, `ADDRESS_BUF` is not.
+  return /(^|[^a-z0-9])ddr/i.test(name) ? 'Tc' : 'Tj';
+}
 
 export const PACKAGE_TYPES = [
   'QFN',
@@ -138,13 +163,11 @@ export interface ComponentGeometry {
   pad_W_mm: number | null;
   board_thickness_mm: number | null;
   coin_thickness_mm: number | null;
-  custom_thickness_mm: number | null;
   /**
-   * Legacy Height / Thick / Pad values may carry Volume-Tool-specific meaning.
+   * Legacy Thick / Pad values may carry Volume-Tool-specific meaning.
    * 04 §30 forbids silently reinterpreting them, so they are flagged instead.
    */
   needs_review?: boolean;
-  legacy_height_mm?: number | null;
 }
 
 /** 04 §17 — board path spec. Parameters differ per type; none of it is an edge. */
@@ -160,18 +183,18 @@ export interface TimSpec {
   k_W_mK: SourcedValue<number> | null;
   thickness_mm: SourcedValue<number> | null;
   contact_area_mode: 'derived' | 'custom';
-  /** Recorded for traceability; not used by the solver. */
-  compression_pct?: number | null;
 }
 
 export interface ThermalSpec {
   limit_type: LimitType;
+  /**
+   * False while `limit_type` is only this tool's inference from category or
+   * name. Screen 04 shows it as unconfirmed until an engineer agrees.
+   */
+  limit_type_confirmed: boolean;
   limit_C: SourcedValue<number> | null;
   /** Unknown stays null. 04 §11 / AC-04-06 forbid 0 as "unknown". */
   r_jc_C_per_W: SourcedValue<number> | null;
-  /** Reserved by 04 §15; not solved against yet. */
-  r_jb_C_per_W?: SourcedValue<number> | null;
-  r_ja_C_per_W?: SourcedValue<number> | null;
   package_type: PackageType | null;
   geometry: ComponentGeometry;
   board_path: BoardPathSpec;
@@ -241,7 +264,6 @@ export function emptyGeometry(): ComponentGeometry {
     pad_W_mm: null,
     board_thickness_mm: null,
     coin_thickness_mm: null,
-    custom_thickness_mm: null,
   };
 }
 
@@ -259,9 +281,10 @@ export function emptyTim(): TimSpec {
   };
 }
 
-export function emptyThermalSpec(): ThermalSpec {
+export function emptyThermalSpec(limitType: LimitType = 'Tj'): ThermalSpec {
   return {
-    limit_type: 'Unknown',
+    limit_type: limitType,
+    limit_type_confirmed: false,
     limit_C: null,
     r_jc_C_per_W: null,
     package_type: null,
@@ -292,15 +315,16 @@ export function createComponent(input: {
   power_W?: number | null;
   provenance: ComponentProvenance;
 }): Component {
+  const category = input.category ?? 'Other';
   return {
     id: input.id,
     name: input.name,
-    category: input.category ?? 'Other',
+    category,
     enabled: true,
     qty: input.qty ?? 1,
     power_W:
       input.power_W == null ? unknownValue<number>('Manual') : sourced(input.power_W, 'Manual'),
-    thermal_spec: emptyThermalSpec(),
+    thermal_spec: emptyThermalSpec(inferLimitType(category, input.name)),
     architecture_prep: emptyArchitecturePrep(),
     provenance: input.provenance,
     external_mappings: emptyExternalMappings(),

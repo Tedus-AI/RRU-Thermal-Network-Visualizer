@@ -7,11 +7,7 @@
  *   3. an input the component does not have leaves the edge UNRESOLVED, never 0.
  */
 
-import {
-  contactAreaMm2,
-  powerWOf,
-  type Component,
-} from '@/domain/component';
+import { contactAreaMm2, powerWOf, type Component } from '@/domain/component';
 import { valueOf } from '@/domain/sourcedValue';
 import { createRth } from '../rth';
 import { computeRth, type EdgeParameters } from '../resistance/calculators';
@@ -120,7 +116,7 @@ export function buildComponentSubgraph(
         temperature_C: null,
         temperature_source: null,
         limit_C: proto.heatSource ? valueOf(component.thermal_spec.limit_C) : null,
-        limit_type: proto.heatSource ? component.thermal_spec.limit_type as never : null,
+        limit_type: proto.heatSource ? component.thermal_spec.limit_type : null,
         boundary_type: null,
         zone_id: null,
         ports: [],
@@ -289,10 +285,7 @@ export function previewGeneration(components: Component[]): GeneratePreview {
 }
 
 /** Maps 04's preferred base zone onto a shared-structure zone node id. */
-export function suggestedZoneFor(
-  component: Component,
-  zoneIds: string[],
-): string | null {
+export function suggestedZoneFor(component: Component, zoneIds: string[]): string | null {
   const preferred = component.architecture_prep.preferred_base_zone;
   if (preferred === 'Unassigned' || preferred === 'Custom') return null;
   const key = preferred.toUpperCase().replace(/[^A-Z0-9]+/g, '_');

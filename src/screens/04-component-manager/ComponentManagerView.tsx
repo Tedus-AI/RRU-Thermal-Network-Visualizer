@@ -25,7 +25,13 @@ import { useScenarioStore } from '@/data/scenarioStore';
 import { useSolverStore } from '@/data/solverStore';
 
 import { createComponent, type Component } from '@/domain/component';
-import { completenessOf, completenessScore, statusOf, summarizeReadiness, validateComponent } from '@/domain/componentReadiness';
+import {
+  completenessOf,
+  completenessScore,
+  statusOf,
+  summarizeReadiness,
+  validateComponent,
+} from '@/domain/componentReadiness';
 
 import { ComponentReadinessCards } from './ComponentReadinessCards';
 import { ComponentTable } from './ComponentTable';
@@ -245,11 +251,7 @@ export function ComponentManagerView() {
           )}
 
           <div className="ml-auto flex gap-2">
-            <Button
-              icon={<Save size={15} />}
-              disabled={readOnly || !dirty}
-              onClick={handleSave}
-            >
+            <Button icon={<Save size={15} />} disabled={readOnly || !dirty} onClick={handleSave}>
               Save Changes / 儲存
             </Button>
             <Button
@@ -302,8 +304,8 @@ export function ComponentManagerView() {
           />
 
           <p className="text-[12px] text-ink-400">
-            Showing {visible.length} of {components.length} components / 顯示 {visible.length} 筆，共{' '}
-            {components.length} 筆
+            Showing {visible.length} of {components.length} components / 顯示 {visible.length}{' '}
+            筆，共 {components.length} 筆
           </p>
         </>
       )}
@@ -313,7 +315,10 @@ export function ComponentManagerView() {
           existingNames={components.map((component) => component.name)}
           onClose={() => setShowAdd(false)}
           onAdd={(newDraft: NewComponentDraft) => {
-            const id = `CMP_${newDraft.name.trim().toUpperCase().replace(/[^A-Z0-9]+/g, '_')}`;
+            const id = `CMP_${newDraft.name
+              .trim()
+              .toUpperCase()
+              .replace(/[^A-Z0-9]+/g, '_')}`;
             const component = useComponentStore.getState().addComponent({
               id,
               name: newDraft.name.trim(),
@@ -338,10 +343,16 @@ export function ComponentManagerView() {
                 thermal_spec: {
                   ...component.thermal_spec,
                   limit_type: newDraft.limit_type,
+                  // The user picked it in the dialog, so it is not a guess.
+                  limit_type_confirmed: true,
                   limit_C:
                     newDraft.limit_C == null
                       ? null
-                      : { value: newDraft.limit_C, source: 'Manual', updated_at: new Date().toISOString() },
+                      : {
+                          value: newDraft.limit_C,
+                          source: 'Manual',
+                          updated_at: new Date().toISOString(),
+                        },
                 },
               },
               ['power_W', 'limit_type', 'limit_C'],
@@ -420,9 +431,10 @@ export function ComponentManagerView() {
                 <li key={component.id} className="flex justify-between gap-3">
                   <span className="font-medium text-ink-900">{component.name}</span>
                   <span className="text-right text-ink-400">
-                    {validateComponent(component)
-                      .filter((issue) => issue.severity === 'warning')
-                      .length}{' '}
+                    {
+                      validateComponent(component).filter((issue) => issue.severity === 'warning')
+                        .length
+                    }{' '}
                     warnings
                   </span>
                 </li>

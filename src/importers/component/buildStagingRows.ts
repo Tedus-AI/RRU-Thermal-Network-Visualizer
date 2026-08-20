@@ -74,7 +74,6 @@ export function buildStagingRows({
     const power = parseNumericCell(cellFor(cells, mapping, 'Power(W)'));
     const rjc = parseNumericCell(cellFor(cells, mapping, 'R_jc'));
     const limit = parseNumericCell(cellFor(cells, mapping, 'Limit(C)'));
-    const height = parseNumericCell(cellFor(cells, mapping, 'Height(mm)'));
     const padL = parseNumericCell(cellFor(cells, mapping, 'Pad_L'));
     const padW = parseNumericCell(cellFor(cells, mapping, 'Pad_W'));
     const thickness = parseNumericCell(cellFor(cells, mapping, 'Thick(mm)'));
@@ -97,7 +96,6 @@ export function buildStagingRows({
       limit_C: limit.value,
       board_type: boardType,
       tim_type: tim,
-      height_mm: height.value,
       pad_L_mm: padL.value,
       pad_W_mm: padW.value,
       thickness_mm: thickness.value,
@@ -115,7 +113,6 @@ export function buildStagingRows({
         'Power(W)': power.invalid,
         R_jc: rjc.invalid,
         'Limit(C)': limit.invalid,
-        'Height(mm)': height.invalid,
         Pad_L: padL.invalid,
         Pad_W: padW.invalid,
         'Thick(mm)': thickness.invalid,

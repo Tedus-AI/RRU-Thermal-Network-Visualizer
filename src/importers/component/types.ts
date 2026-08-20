@@ -7,12 +7,7 @@
  * Nothing in this pipeline may touch componentStore before Apply (02 §8, §34).
  */
 
-import type {
-  BoardType,
-  ComponentCategory,
-  ImportSourceType,
-  TimType,
-} from '@/domain/component';
+import type { BoardType, ComponentCategory, ImportSourceType, TimType } from '@/domain/component';
 
 /** Target fields a source column can be mapped onto — 02 §11. */
 export const CANONICAL_FIELDS = [
@@ -24,7 +19,6 @@ export const CANONICAL_FIELDS = [
   'R_jc',
   'Board_Type',
   'TIM_Type',
-  'Height(mm)',
   'Pad_L',
   'Pad_W',
   'Thick(mm)',
@@ -80,7 +74,6 @@ export interface StagingRow {
   limit_C: number | null;
   board_type: BoardType | null;
   tim_type: TimType | null;
-  height_mm: number | null;
   pad_L_mm: number | null;
   pad_W_mm: number | null;
   thickness_mm: number | null;
