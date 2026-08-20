@@ -296,7 +296,10 @@ export function ImportComponentsView() {
             moment these numbers matter — an imported TIM inherits from them —
             so they are editable here rather than one screen back.
           */}
-          <MaterialDefaultsForm readOnly={false} />
+          {/* Folded here: the import is what this screen is for, and these
+              numbers only need a glance unless the coin size is missing —
+              which the collapsed header says. */}
+          <MaterialDefaultsForm readOnly={false} defaultOpen={false} />
         </>
       )}
 

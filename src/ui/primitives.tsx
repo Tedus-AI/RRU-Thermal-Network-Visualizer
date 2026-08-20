@@ -58,24 +58,37 @@ export function SectionCard({
   collapsible = false,
   defaultOpen = true,
   summary,
+  alert,
 }: {
   step?: number;
   title: string;
   subtitle?: string;
   children: ReactNode;
   actions?: ReactNode;
-  /** Long, mostly-defaulted sections fold away so they do not crowd a form. */
+  /**
+   * Lets the reader fold a section away once they are done with it, so a long
+   * form stops growing under them. Sections open by default — the exception is
+   * one that is almost entirely pre-filled and rarely touched.
+   */
   collapsible?: boolean;
   defaultOpen?: boolean;
   /**
    * Shown on the header while collapsed. A folded section must still say what
-   * is inside it — above all, anything the reader still has to act on.
+   * is inside it, or folding turns into hiding.
    */
   summary?: ReactNode;
+  /**
+   * Something the reader has to act on — a validation error. Shown in place of
+   * the summary while collapsed, and it FORCES the section open, because a
+   * collapsed section that quietly holds an error is worse than no collapsing
+   * at all: Save refuses and nothing on screen says why.
+   */
+  alert?: ReactNode;
 }) {
   const [open, setOpen] = useState(defaultOpen);
   const bodyId = `section-${title.replace(/\s+/g, '-').toLowerCase()}`;
-  const expanded = !collapsible || open;
+  const expanded = !collapsible || open || Boolean(alert);
+  const locked = Boolean(alert) && collapsible;
 
   return (
     <section className="rounded-lg border border-line bg-surface">
@@ -87,21 +100,30 @@ export function SectionCard({
         )}
         <h2 className="text-[15px] font-bold text-ink-900">{title}</h2>
         {subtitle && <span className="text-[12px] text-ink-400">{subtitle}</span>}
-        {collapsible && !open && summary && (
+        {collapsible && !expanded && summary && (
           <span className="min-w-0 truncate text-[12px] text-ink-500">{summary}</span>
+        )}
+        {/* Errors are text + icon, never colour alone (01 §31). */}
+        {alert && (
+          <span className="flex min-w-0 items-center gap-1 truncate text-[12px] font-medium text-danger-600">
+            <span aria-hidden>⚠</span>
+            {alert}
+          </span>
         )}
         <div className="ml-auto flex items-center gap-2">
           {actions}
           {collapsible && (
             <button
               type="button"
-              className="flex items-center gap-1 rounded border border-line px-2 py-1 text-[12px] font-semibold text-ink-500 hover:text-ink-900"
-              aria-expanded={open}
+              className="flex items-center gap-1 rounded border border-line px-2 py-1 text-[12px] font-semibold text-ink-500 hover:text-ink-900 disabled:cursor-not-allowed disabled:opacity-50"
+              aria-expanded={expanded}
               aria-controls={bodyId}
+              disabled={locked}
+              title={locked ? 'Resolve the errors in this section first. / 請先處理本區的錯誤。' : undefined}
               onClick={() => setOpen((value) => !value)}
             >
-              {open ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-              {open ? 'Collapse / 收合' : 'Expand / 展開'}
+              {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+              {expanded ? 'Collapse / 收合' : 'Expand / 展開'}
             </button>
           )}
         </div>

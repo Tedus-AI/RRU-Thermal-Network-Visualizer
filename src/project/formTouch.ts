@@ -34,3 +34,21 @@ export function useVisibleError(errors: Record<string, string>) {
   return (field: string): string | undefined =>
     touched[field] || submitAttempted ? errors[field] : undefined;
 }
+
+/**
+ * How many of a section's fields are showing an error right now.
+ *
+ * Counts VISIBLE errors only, on the same rule as `useVisibleError`: a blank
+ * new project is invalid by definition, and a section header that shouts about
+ * fields nobody has reached yet is the same noise the touch tracking exists to
+ * avoid.
+ */
+export function useSectionAlert(errors: Record<string, string>, fields: readonly string[]) {
+  const touched = useFormTouch((s) => s.touched);
+  const submitAttempted = useFormTouch((s) => s.submitAttempted);
+  const count = fields.filter(
+    (field) => errors[field] && (touched[field] || submitAttempted),
+  ).length;
+  if (count === 0) return undefined;
+  return `${count} ${count === 1 ? 'field needs' : 'fields need'} attention / ${count} 個欄位待處理`;
+}
