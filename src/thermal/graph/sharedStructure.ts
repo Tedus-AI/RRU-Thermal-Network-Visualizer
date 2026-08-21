@@ -38,6 +38,59 @@ export const FUNCTIONAL_ZONE_PRESETS = [
   { key: 'FILTER', name: 'Filter', zh: '濾波器' },
 ] as const;
 
+/**
+ * The zones each preset offers, as keys rather than display names.
+ *
+ * Screen 04 asks which shared structure a component attaches to, and until this
+ * existed it offered a hardcoded list of the FUNCTIONAL_ZONES names — so a
+ * project built on a single machined casting had no `Main Base` to pick, and
+ * four of the six presets could not be expressed at all. The match was also by
+ * name, upper-cased and punctuation-stripped, which silently failed the moment
+ * a zone was renamed.
+ *
+ * `sharedStructure.test.ts` asserts these keys are exactly the zones
+ * `buildSharedStructure` produces, so the picker and the graph cannot drift.
+ */
+export interface PresetZone {
+  /** Matches the tail of the zone node's id — see `zoneNodeId` / `structureNodeId`. */
+  key: string;
+  name: string;
+  zh: string;
+}
+
+const PRESET_ZONES: Record<StructurePreset, readonly PresetZone[]> = {
+  SINGLE_MAIN_BASE: [{ key: 'MAIN_BASE', name: 'Main Base', zh: '主基座' }],
+  THREE_ZONE: [
+    { key: 'BASE_TOP', name: 'Base Top', zh: '基座上段' },
+    { key: 'BASE_MID', name: 'Base Mid', zh: '基座中段' },
+    { key: 'BASE_BOTTOM', name: 'Base Bottom', zh: '基座下段' },
+  ],
+  FUNCTIONAL_ZONES: FUNCTIONAL_ZONE_PRESETS.map((zone) => ({
+    key: zone.key,
+    name: zone.name,
+    zh: zone.zh,
+  })),
+  SMALL_BASE_MAIN_BASE: [
+    { key: 'SMALL_BASE', name: 'Small Base', zh: '小基座' },
+    { key: 'MAIN_BASE', name: 'Main Base', zh: '主基座' },
+  ],
+  HEAT_PIPE_MAIN_BASE: [
+    { key: 'SMALL_BASE', name: 'Small Base', zh: '小基座' },
+    { key: 'MAIN_BASE', name: 'Main Base', zh: '主基座' },
+  ],
+  // Built by hand in Screen 05, so there is nothing to offer up front.
+  CUSTOM: [],
+};
+
+export function presetZones(preset: StructurePreset): readonly PresetZone[] {
+  return PRESET_ZONES[preset] ?? [];
+}
+
+/** The zone key a structure node id ends with, or null when it names no zone. */
+export function zoneKeyOf(nodeId: string, preset: StructurePreset): string | null {
+  return presetZones(preset).find((zone) => nodeId.endsWith(zone.key))?.key ?? null;
+}
+
 export interface StructureResult {
   nodes: ThermalNode[];
   edges: ThermalEdge[];

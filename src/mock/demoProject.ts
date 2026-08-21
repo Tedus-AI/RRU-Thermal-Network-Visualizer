@@ -63,6 +63,9 @@ export function demoProject(): Project {
       project_stage: 'EVT',
       cooling_architecture: ['Natural Convection', 'Die-casting Fin'],
       enclosure_type: 'Single-sided Cooling',
+      // The demo's four zones share one heat sink — the FUNCTIONAL_ZONES shape
+      // `demoGoldenFlow` builds.
+      base_structure: 'FUNCTIONAL_ZONES',
       notes: [
         'Synthetic engineering fixture only; no customer CAD or test data.',
         'Four thermal zones share one rear heat sink and one ambient boundary.',
@@ -218,7 +221,7 @@ export function demoComponents(): Component[] {
       tim: BUILTIN_TIM_IDS.grease,
       contact: [18, 12],
       template: 'BOTTOM_COOL_COIN',
-      zone: 'RF Left',
+      zone: 'RF_LEFT',
     },
     {
       id: 'CMP_DRIVER',
@@ -234,7 +237,7 @@ export function demoComponents(): Component[] {
       tim: BUILTIN_TIM_IDS.pad,
       contact: [8, 8],
       template: 'BOTTOM_COOL_VIA',
-      zone: 'RF Right',
+      zone: 'RF_RIGHT',
     },
     {
       id: 'CMP_FILTER',
@@ -250,7 +253,7 @@ export function demoComponents(): Component[] {
       tim: BUILTIN_TIM_IDS.pad,
       contact: [30, 18],
       template: 'DIRECT_METAL',
-      zone: 'RF Left',
+      zone: 'RF_LEFT',
     },
     {
       id: 'CMP_FPGA',
@@ -266,7 +269,7 @@ export function demoComponents(): Component[] {
       tim: BUILTIN_TIM_IDS.putty,
       contact: [28, 28],
       template: 'BOTTOM_COOL_VIA',
-      zone: 'Digital',
+      zone: 'DIGITAL',
     },
     {
       id: 'CMP_POWER_MODULE',
@@ -282,7 +285,7 @@ export function demoComponents(): Component[] {
       tim: BUILTIN_TIM_IDS.grease,
       contact: [24, 20],
       template: 'DIRECT_METAL',
-      zone: 'Power',
+      zone: 'POWER',
     },
   ]);
 }
@@ -304,7 +307,7 @@ export function demoSourceComponents(): Component[] {
       tim: BUILTIN_TIM_IDS.grease,
       contact: [18, 12],
       template: 'BOTTOM_COOL_COIN',
-      zone: 'RF Left',
+      zone: 'RF_LEFT',
     },
     {
       id: 'SRC_FPGA',
@@ -320,7 +323,7 @@ export function demoSourceComponents(): Component[] {
       tim: BUILTIN_TIM_IDS.putty,
       contact: [28, 28],
       template: 'BOTTOM_COOL_VIA',
-      zone: 'Digital',
+      zone: 'DIGITAL',
     },
     {
       id: 'SRC_LNA',
@@ -336,7 +339,7 @@ export function demoSourceComponents(): Component[] {
       tim: BUILTIN_TIM_IDS.pad,
       contact: [5, 5],
       template: 'BOTTOM_COOL_VIA',
-      zone: 'RF Left',
+      zone: 'RF_LEFT',
     },
   ]);
 }

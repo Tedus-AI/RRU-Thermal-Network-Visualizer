@@ -7,6 +7,7 @@
  */
 
 import { defaultMaterials, type MaterialDefaults } from './materials';
+import { STRUCTURE_PRESETS, type StructurePreset } from '@/thermal/graph/sharedStructure';
 import { createRevision, type RevisionId } from './revision';
 
 export const PROJECT_STAGES = ['Prototype', 'EVT', 'DVT', 'PVT'] as const;
@@ -90,6 +91,14 @@ export interface ProjectContext {
   /** The cooling solution as a set of elements; multi-select. */
   cooling_architecture: CoolingArchitecture[];
   enclosure_type: EnclosureType;
+  /**
+   * How the shared base is divided — 05 §13. It belongs here, beside the other
+   * two architecture answers, because it is one mechanical decision for the
+   * whole radio: it names the zones a component can attach to (Screen 04) and
+   * the structure Screen 05 builds. A single machined casting is the common
+   * case, so that is the default.
+   */
+  base_structure: StructurePreset;
   notes: string;
 }
 
@@ -163,6 +172,7 @@ export function defaultProjectContext(): ProjectContext {
     project_stage: 'Prototype',
     cooling_architecture: ['Natural Convection'],
     enclosure_type: 'Double-sided Cooling',
+    base_structure: 'SINGLE_MAIN_BASE',
     notes: '',
   };
 }
@@ -297,6 +307,9 @@ export function normalizeProjectContext(raw: Partial<ProjectContext>): ProjectCo
     enclosure_type: ENCLOSURE_TYPES.includes(raw.enclosure_type as EnclosureType)
       ? (raw.enclosure_type as EnclosureType)
       : LEGACY_ENCLOSURE[raw.enclosure_type as string] ?? base.enclosure_type,
+    base_structure: STRUCTURE_PRESETS.includes(raw.base_structure as StructurePreset)
+      ? (raw.base_structure as StructurePreset)
+      : base.base_structure,
   };
 }
 

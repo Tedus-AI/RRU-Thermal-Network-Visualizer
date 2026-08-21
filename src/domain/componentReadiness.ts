@@ -10,6 +10,7 @@ import {
   isHeatSource,
   powerWOf,
   sourceAreaMm2,
+  UNASSIGNED_ZONE,
   type Component,
 } from './component';
 import { valueOf } from './sourcedValue';
@@ -61,10 +62,12 @@ export function completenessOf(component: Component): CompletenessMap {
     Rjc: valueOf(spec.r_jc_C_per_W) != null,
     'Contact Geometry': sourceAreaMm2(spec.geometry, spec.heat_path.type) != null,
     'Heat Path': spec.heat_path_confirmed,
+    // Direct metal contact is an answer, not an absence — the interface still
+    // resolves, through the project's contact conductance.
     TIM: spec.tim.tim_id != null,
     // The template is no longer asked for — the heat path decides it. What is
     // still an open choice is which shared structure the part sits on.
-    'Base Zone': component.architecture_prep.preferred_base_zone !== 'Unassigned',
+    'Base Zone': component.architecture_prep.preferred_base_zone !== UNASSIGNED_ZONE,
   };
 }
 
@@ -250,7 +253,7 @@ export function validateComponent(component: Component): ComponentIssue[] {
     });
   }
 
-  if (component.architecture_prep.preferred_base_zone === 'Unassigned') {
+  if (component.architecture_prep.preferred_base_zone === UNASSIGNED_ZONE) {
     issues.push({
       severity: 'warning',
       field: 'architecture_prep',

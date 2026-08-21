@@ -237,6 +237,8 @@ export type EdgeMethod =
   | 'solder_voiding'
   | 'via_array'
   | 'contact_area'
+  /** Bare metal-to-metal joint: R = 1 / (h_c · A). No TIM in the gap. */
+  | 'contact_hc'
   | 'convection_hA'
   | 'radiation_hA'
   | 'imported';

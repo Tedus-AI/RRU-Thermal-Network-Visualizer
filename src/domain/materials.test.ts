@@ -82,9 +82,9 @@ describe('shipped defaults', () => {
 
   it('counts what is still on a shipped value', () => {
     const materials = defaultMaterials();
-    // 7 TIM materials x 2 properties, plus the 6 process constants.
-    expect(assumedCount(materials)).toBe(20);
-    expect(assumedCount({ ...materials, copper_k_W_mK: sourced(400, 'Manual') })).toBe(19);
+    // 7 TIM materials x 2 properties, plus the 7 process constants.
+    expect(assumedCount(materials)).toBe(21);
+    expect(assumedCount({ ...materials, copper_k_W_mK: sourced(400, 'Manual') })).toBe(20);
   });
 });
 

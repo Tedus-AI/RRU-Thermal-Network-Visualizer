@@ -21,7 +21,6 @@ import { CircleCheck, CircleDashed, Info, Link2, Ruler, Share2, Thermometer } fr
 import { Badge, Button, NumberInput, Select, TextArea, TextInput } from '@/ui/primitives';
 import { BilingualTooltip, FieldLabel } from '@/ui/FieldLabel';
 import {
-  BASE_ZONES,
   COMPONENT_CATEGORIES,
   HEAT_PATH_LABELS,
   HEAT_PATH_TYPES,
@@ -39,6 +38,7 @@ import {
   sourceFaceMm,
   spreadAreaMm2,
   spreadFaceMm,
+  UNASSIGNED_ZONE,
   type BaseZone,
   type Component,
   type ComponentCategory,
@@ -49,7 +49,12 @@ import {
   type QtyModel,
 } from '@/domain/component';
 import { withValue, type SourcedValue } from '@/domain/sourcedValue';
-import { coinAreaMm2, defaultMaterials, resolveTim } from '@/domain/materials';
+import {
+  DIRECT_CONTACT_TIM_ID,
+  coinAreaMm2,
+  defaultMaterials,
+  resolveTim,
+} from '@/domain/materials';
 import { useProjectStore } from '@/data/projectStore';
 import {
   DATA_SOURCE_LABELS,
@@ -64,6 +69,7 @@ import {
   validateComponent,
 } from '@/domain/componentReadiness';
 import { tip } from '@/i18n/componentManagerCopy';
+import { presetZones } from '@/thermal/graph/sharedStructure';
 import { confirmAction, issueTarget, type InspectorTab } from './issueTargets';
 
 type Tab = InspectorTab;
@@ -245,6 +251,7 @@ export function ComponentInspector({
   onSaveToLibrary,
 }: InspectorProps) {
   const projectMaterials = useProjectStore((s) => s.draft?.materials);
+  const projectContext = useProjectStore((s) => s.draft?.project_context);
   useFocusField(focus, tab);
 
   if (!component) {
@@ -271,6 +278,23 @@ export function ComponentInspector({
 
   const patchPrep = (patch: Partial<Component['architecture_prep']>) =>
     onPatch(component.id, { architecture_prep: { ...prep, ...patch } }, ['architecture_prep']);
+
+  const zones = presetZones(projectContext?.base_structure ?? 'SINGLE_MAIN_BASE');
+  const zoneOptions = [
+    { value: UNASSIGNED_ZONE, label: 'Unassigned / 未指定' },
+    ...zones.map((zone) => ({ value: zone.key, label: `${zone.name} / ${zone.zh}` })),
+  ];
+  // A structure change can orphan a zone a component still points at; showing
+  // it keeps the select honest about what the component actually says.
+  const zoneOrphaned =
+    prep.preferred_base_zone !== UNASSIGNED_ZONE &&
+    !zones.some((zone) => zone.key === prep.preferred_base_zone);
+  if (zoneOrphaned) {
+    zoneOptions.push({
+      value: prep.preferred_base_zone,
+      label: `${prep.preferred_base_zone} — not in this structure / 不屬於目前基座結構`,
+    });
+  }
 
   const heatPath = spec.heat_path.type;
   const rule = GEOMETRY_RULES[heatPath];
@@ -443,44 +467,26 @@ export function ComponentInspector({
                     </p>
                   )}
 
+                  {/* The via array's k and process derate are the project's
+                      (01 §4) — the template reads `materials.*`, so these were
+                      never per-component inputs, they only looked like it.
+                      Count and inner diameter are not in the formula at all. */}
                   {heatPath === 'Board' && (
                     <div className="grid grid-cols-2 gap-2.5">
-                      {(
-                        [
-                          ['effective_k_W_mK', 'Effective k', '等效導熱係數'],
-                          ['via_efficiency', 'Via Efficiency', 'Via 效率'],
-                          ['via_count', 'Via Count', 'Via 數量'],
-                          ['via_id_mm', 'Via ID', 'Via 內徑'],
-                        ] as const
-                      ).map(([key, label, zh]) => (
-                        <div key={key} className="flex flex-col gap-1.5">
-                          <FieldLabel label={label} zh={zh} htmlFor={`hp-${key}`} />
-                          <NumberInput
-                            id={`hp-${key}`}
-                            step="any"
-                            value={(spec.heat_path.parameters[key] as number) ?? ''}
-                            placeholder="—"
-                            disabled={readOnly}
-                            onChange={(event) =>
-                              patchSpec(
-                                {
-                                  heat_path: {
-                                    ...spec.heat_path,
-                                    parameters: {
-                                      ...spec.heat_path.parameters,
-                                      [key]:
-                                        event.target.value === ''
-                                          ? null
-                                          : Number(event.target.value),
-                                    },
-                                  },
-                                },
-                                ['heat_path'],
-                              )
-                            }
-                          />
-                        </div>
-                      ))}
+                      <DerivedField
+                        id="hp-effective_k_W_mK"
+                        label="Via effective k"
+                        zh="導熱孔等效 k"
+                        value={materials.via_effective_k_W_mK.value}
+                        from="Screen 01 / 專案設定"
+                      />
+                      <DerivedField
+                        id="hp-via_efficiency"
+                        label="Via efficiency"
+                        zh="導熱孔製程係數"
+                        value={materials.via_efficiency.value}
+                        from=""
+                      />
                     </div>
                   )}
                 </div>
@@ -574,7 +580,16 @@ export function ComponentInspector({
                     <Select
                       id="ins-tim"
                       items={[
-                        { value: '', label: 'None / 無' },
+                        { value: '', label: 'Not decided / 未指定' },
+                        // Not a material — a bolted joint with nothing in it,
+                        // which resolves through the project's contact
+                        // conductance rather than a k and a thickness.
+                        {
+                          value: DIRECT_CONTACT_TIM_ID,
+                          label: `Direct metal contact / 金屬硬接觸 — h ${
+                            materials.contact_conductance_W_m2K.value ?? '?'
+                          } W/m²·K`,
+                        },
                         ...materials.tim.map((material) => ({
                           value: material.id,
                           label: `${material.name} — k ${material.k_W_mK.value ?? '?'} W/m·K`,
@@ -600,6 +615,17 @@ export function ComponentInspector({
                     </p>
                   )}
 
+                  {resolvedTim.directContact && (
+                    <p className="rounded-md border border-line bg-surface-muted p-2.5 text-[11px] leading-relaxed text-ink-500">
+                      Bolted metal to metal, no TIM. The joint resistance is{' '}
+                      1 / (h · A) with h from Screen 01 — there is no bond line to state.
+                      <span className="block">
+                        金屬直接鎖附、無 TIM。介面熱阻為 1/(h·A)，h 取自 Screen 01，沒有壓合厚度。
+                      </span>
+                    </p>
+                  )}
+
+                  {!resolvedTim.directContact && (
                   <div className="flex flex-col gap-1.5">
                     <FieldLabel label="Bond Line (BLT)" zh="壓合厚度" unit="mm" htmlFor="ins-blt" />
                     <div
@@ -675,6 +701,7 @@ export function ComponentInspector({
                         : `From ${resolvedTim.material?.name ?? 'the project material'} in Screen 01. / 取自 Screen 01 的材料設定。`}
                     </p>
                   </div>
+                  )}
                 </div>
               </fieldset>
             </>
@@ -849,7 +876,9 @@ export function ComponentInspector({
                 />
                 <Select
                   id="ins-zone"
-                  options={BASE_ZONES}
+                  // The zones this project's base structure actually has (01 §2),
+                  // rather than a fixed list that fitted only one of the six.
+                  items={zoneOptions}
                   value={prep.preferred_base_zone}
                   disabled={readOnly}
                   onChange={(event) =>

@@ -169,6 +169,35 @@ export function boundaryDerivedRth(): RthComputation {
 }
 
 /**
+ * A bolted metal-to-metal joint with nothing in the gap — R = 1 / (h_c · A).
+ *
+ * Two solids pressed together touch only across their asperities, so the joint
+ * has a real resistance even with no TIM. It is conductance-based, not k/t:
+ * there is no material and no thickness to quote, only how well the two faces
+ * are made to meet. Faking it as a thin pseudo-TIM would put an invented
+ * thickness and an invented conductivity into the report.
+ *
+ * `h_c` is the least defensible number in any chain that uses it — it depends
+ * on flatness, surface finish, fastener pitch and preload, all of which vary
+ * per build. It therefore ships `Assumed` and says so.
+ */
+export function contactConductanceRth(params: EdgeParameters): RthComputation {
+  const h = numeric(params, 'h_c_W_m2K');
+  const A = numeric(params, 'area_mm2');
+
+  const missing: string[] = [];
+  if (h == null) missing.push('h_c_W_m2K');
+  if (A == null) missing.push('area_mm2');
+  if (missing.length > 0) return unresolved(missing);
+
+  if (h! <= 0 || A! <= 0) {
+    return unresolved([], 'Contact conductance and area must be positive.');
+  }
+
+  return { value: 1 / (h! * (A! / 1e6)), resolution: 'resolved', missing: [] };
+}
+
+/**
  * Scales one device's parameters to the N devices a chain stands for.
  *
  * A subgraph built with AGGREGATE or GROUPED carries N devices' dissipation on
@@ -203,7 +232,8 @@ export function scaleParametersForDevices(
     case 'tim_thickness_k':
     case 'via_array':
     case 'solder_voiding':
-    case 'contact_area': {
+    case 'contact_area':
+    case 'contact_hc': {
       const area = numeric(params, 'area_mm2');
       return area == null ? params : { ...params, area_mm2: area * devices };
     }
@@ -228,6 +258,8 @@ export function computeRth(method: EdgeMethod, params: EdgeParameters): RthCompu
       return viaArrayRth(params);
     case 'solder_voiding':
       return solderVoidingRth(params);
+    case 'contact_hc':
+      return contactConductanceRth(params);
     case 'direct_rth':
     case 'contact_area':
       return directRth(params);

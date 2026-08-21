@@ -72,18 +72,20 @@ import {
   demoScenario,
 } from './demoProject';
 
+// Keyed by the zone KEY a component stores, which is also what `zoneNodeId`
+// builds its id from — one vocabulary, not a display-name lookup beside it.
 const DEMO_ZONE_IDS = {
-  'RF Left': zoneNodeId('RF_LEFT'),
-  'RF Right': zoneNodeId('RF_RIGHT'),
-  Digital: zoneNodeId('DIGITAL'),
-  Power: zoneNodeId('POWER'),
+  RF_LEFT: zoneNodeId('RF_LEFT'),
+  RF_RIGHT: zoneNodeId('RF_RIGHT'),
+  DIGITAL: zoneNodeId('DIGITAL'),
+  POWER: zoneNodeId('POWER'),
 } as const;
 
 const ZONE_COLUMNS: Record<string, number> = {
-  [DEMO_ZONE_IDS['RF Left']]: 180,
-  [DEMO_ZONE_IDS['RF Right']]: 520,
-  [DEMO_ZONE_IDS.Digital]: 860,
-  [DEMO_ZONE_IDS.Power]: 1180,
+  [DEMO_ZONE_IDS.RF_LEFT]: 180,
+  [DEMO_ZONE_IDS.RF_RIGHT]: 520,
+  [DEMO_ZONE_IDS.DIGITAL]: 860,
+  [DEMO_ZONE_IDS.POWER]: 1180,
 };
 
 function demoRth(value: number, reference: string) {
@@ -156,10 +158,10 @@ function positionNetworkNodes(nodes: ThermalNode[]): Record<string, { x: number;
     }
 
     const sharedPosition: Record<string, { x: number; y: number }> = {
-      [DEMO_ZONE_IDS['RF Left']]: { x: 260, y: 620 },
-      [DEMO_ZONE_IDS['RF Right']]: { x: 560, y: 620 },
-      [DEMO_ZONE_IDS.Digital]: { x: 860, y: 620 },
-      [DEMO_ZONE_IDS.Power]: { x: 1160, y: 620 },
+      [DEMO_ZONE_IDS.RF_LEFT]: { x: 260, y: 620 },
+      [DEMO_ZONE_IDS.RF_RIGHT]: { x: 560, y: 620 },
+      [DEMO_ZONE_IDS.DIGITAL]: { x: 860, y: 620 },
+      [DEMO_ZONE_IDS.POWER]: { x: 1160, y: 620 },
       NODE_HSK_BASE: { x: 700, y: 760 },
       NODE_FIN_ROOT: { x: 700, y: 870 },
       NODE_FIN_SURFACE: { x: 700, y: 980 },
