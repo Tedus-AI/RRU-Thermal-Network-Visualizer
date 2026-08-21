@@ -1,4 +1,10 @@
-/** Top KPI / readiness cards — 04 §6. */
+/**
+ * Top KPI / readiness cards — 04 §6.
+ *
+ * Deliberately the same card shape and height as `CategoryTabs`, because the two
+ * sit side by side as one status row on a wide screen: one row of readiness on
+ * the left, one row of category filters on the right.
+ */
 
 import { AlertTriangle, Boxes, CircleCheck, Flame, PowerOff, XCircle, Zap } from 'lucide-react';
 import type { ReactNode } from 'react';
@@ -27,7 +33,7 @@ function Card({
 }) {
   const body = (
     <>
-      <div className="flex items-center gap-1.5 text-[11px] font-medium text-ink-500">
+      <span className="flex items-center gap-1.5 text-[13px] font-semibold text-ink-900">
         <span className="text-ink-400">{icon}</span>
         {tooltip ? (
           <BilingualTooltip zh={tooltip} align="left">
@@ -36,13 +42,13 @@ function Card({
         ) : (
           <span>{label}</span>
         )}
-      </div>
-      <div className={`tabular mt-1 text-[22px] leading-none font-bold ${tone}`}>{value}</div>
-      <div className="mt-1 text-[11px] text-ink-400">{zh}</div>
+        <span className={`tabular ml-auto pl-2 font-bold ${tone}`}>{value}</span>
+      </span>
+      <span className="mt-0.5 block text-[11px] text-ink-400">{zh}</span>
     </>
   );
 
-  const className = `rounded-lg border bg-surface px-3.5 py-3 text-left transition-colors ${
+  const className = `rounded-lg border bg-surface px-2 py-2 text-left transition-colors ${
     active ? 'border-accent-600 ring-1 ring-accent-600/30' : 'border-line'
   } ${onClick ? 'hover:border-ink-400' : ''}`;
 
@@ -65,7 +71,7 @@ export function ComponentReadinessCards({
   onStatusFilter: (status: 'ALL' | 'READY' | 'WARNING' | 'ERROR' | 'DISABLED') => void;
 }) {
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+    <div className="flex flex-wrap gap-1.5">
       <Card
         icon={<Boxes size={13} />}
         label="Components"

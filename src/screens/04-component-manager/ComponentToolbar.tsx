@@ -1,6 +1,6 @@
 /** Category tabs, filters and actions — 04 §8, §9. */
 
-import { Copy, Plus, RotateCcw, Trash2 } from 'lucide-react';
+import { Copy, Layers, Plus, RotateCcw, Trash2 } from 'lucide-react';
 import { Button } from '@/ui/primitives';
 import { COMPONENT_CATEGORIES, componentTotalPowerW, type Component, type ComponentCategory } from '@/domain/component';
 import { statusOf } from '@/domain/componentReadiness';
@@ -39,6 +39,7 @@ export function CategoryTabs({
 }) {
   const tabs: CategoryTab[] = ['All', ...COMPONENT_CATEGORIES];
 
+  // Same card metrics as ComponentReadinessCards — the two form one status row.
   return (
     <div role="tablist" aria-label="Component categories" className="flex flex-wrap gap-1.5">
       {tabs.map((tab) => {
@@ -61,7 +62,7 @@ export function CategoryTabs({
             type="button"
             aria-selected={selected}
             onClick={() => onChange(tab)}
-            className={`rounded-lg border px-3 py-2 text-left transition-colors ${
+            className={`rounded-lg border px-2 py-2 text-left transition-colors ${
               selected
                 ? 'border-accent-600 bg-accent-50'
                 : 'border-line bg-surface hover:border-ink-400'
@@ -76,8 +77,8 @@ export function CategoryTabs({
               <span className="tabular ml-1.5 font-normal text-ink-400">{scoped.length}</span>
             </span>
             <span className="tabular mt-0.5 block text-[11px] text-ink-400">
-              {power.toFixed(1)} W · {ready} ready
-              {attention > 0 && <span className="text-warn-600"> · {attention} to fix</span>}
+              {power.toFixed(1)} W · {ready} ✓
+              {attention > 0 && <span className="text-warn-600"> · {attention} ⚠</span>}
             </span>
           </button>
         );
@@ -86,26 +87,18 @@ export function CategoryTabs({
   );
 }
 
+/**
+ * Filters only. The row that acts on components is `ComponentActions`, which
+ * sits under the table where the rows it acts on are.
+ */
 export function ComponentToolbar({
   filters,
   onFilters,
   sources,
-  selectedCount,
-  readOnly,
-  onAdd,
-  onDuplicate,
-  onDelete,
-  onBulkEdit,
 }: {
   filters: Filters;
   onFilters: (next: Filters) => void;
   sources: string[];
-  selectedCount: number;
-  readOnly: boolean;
-  onAdd: () => void;
-  onDuplicate: () => void;
-  onDelete: () => void;
-  onBulkEdit: () => void;
 }) {
   const set = (patch: Partial<Filters>) => onFilters({ ...filters, ...patch });
 
@@ -182,32 +175,64 @@ export function ComponentToolbar({
       <Button className="h-8" icon={<RotateCcw size={13} />} onClick={() => onFilters(DEFAULT_FILTERS)}>
         Reset / 重設
       </Button>
+    </div>
+  );
+}
 
-      <div className="ml-auto flex flex-wrap gap-2">
-        <Button className="h-8" icon={<Plus size={14} />} disabled={readOnly} onClick={onAdd}>
-          Add Component / 新增
-        </Button>
-        <Button
-          className="h-8"
-          icon={<Copy size={13} />}
-          disabled={readOnly || selectedCount === 0}
-          onClick={onDuplicate}
-        >
-          Duplicate / 複製
-        </Button>
-        <Button className="h-8" disabled={readOnly || selectedCount === 0} onClick={onBulkEdit}>
-          Bulk Edit / 批次編輯
-        </Button>
-        <Button
-          className="h-8"
-          variant="danger"
-          icon={<Trash2 size={13} />}
-          disabled={readOnly || selectedCount === 0}
-          onClick={onDelete}
-        >
-          Delete / 刪除
-        </Button>
-      </div>
+/**
+ * Row actions, under the table. Duplicate and Delete act on the selected row;
+ * Bulk Edit acts on every row the filters currently show, so it says how many.
+ */
+export function ComponentActions({
+  selectedName,
+  visibleCount,
+  readOnly,
+  onAdd,
+  onDuplicate,
+  onDelete,
+  onBulkEdit,
+}: {
+  selectedName: string | null;
+  visibleCount: number;
+  readOnly: boolean;
+  onAdd: () => void;
+  onDuplicate: () => void;
+  onDelete: () => void;
+  onBulkEdit: () => void;
+}) {
+  const noSelection = selectedName == null;
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <Button icon={<Plus size={14} />} disabled={readOnly} onClick={onAdd}>
+        Add Component / 新增
+      </Button>
+      <Button
+        icon={<Copy size={13} />}
+        disabled={readOnly || noSelection}
+        title={noSelection ? 'Select a row first / 請先選取一列' : undefined}
+        onClick={onDuplicate}
+      >
+        Duplicate / 複製
+      </Button>
+      <Button icon={<Layers size={13} />} disabled={readOnly || visibleCount === 0} onClick={onBulkEdit}>
+        Bulk Edit / 批次編輯
+        <span className="ml-1 font-normal text-ink-400">({visibleCount})</span>
+      </Button>
+      <Button
+        variant="danger"
+        icon={<Trash2 size={13} />}
+        disabled={readOnly || noSelection}
+        title={noSelection ? 'Select a row first / 請先選取一列' : undefined}
+        onClick={onDelete}
+      >
+        Delete / 刪除
+      </Button>
+      {selectedName && (
+        <span className="text-[12px] text-ink-400">
+          Selected / 已選取：
+          <span className="font-medium text-ink-700">{selectedName}</span>
+        </span>
+      )}
     </div>
   );
 }

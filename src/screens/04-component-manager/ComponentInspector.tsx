@@ -1,11 +1,15 @@
 /**
- * Right inspector — 04 §13–§21, §27, §33.
+ * Component inspector — 04 §13–§21, §27, §33.
  *
  * Six tabs: Overview, Thermal Spec, Geometry, Architecture Prep, Source and
  * External Mapping. Nothing here creates a node or an edge (04 §19, §40).
+ *
+ * The screen owns the active tab rather than this component, because an issue
+ * elsewhere on the page has to be able to open the tab that fixes it. Every
+ * editable control carries the DOM id `issueTargets.ts` names for it.
  */
 
-import { useState } from 'react';
+import { useEffect } from 'react';
 import { CircleCheck, CircleDashed, Info, Link2, Ruler, Share2, Thermometer } from 'lucide-react';
 
 import { Badge, Button, NumberInput, Select, TextArea, TextInput } from '@/ui/primitives';
@@ -25,7 +29,6 @@ import {
   SOURCE_FACE_LABELS,
   TEMPLATE_FOR_HEAT_PATH,
   componentTotalPowerW,
-  isHeatSource,
   sourceAreaMm2,
   spreadAreaMm2,
   type ArchitectureTemplate,
@@ -50,8 +53,9 @@ import {
   validateComponent,
 } from '@/domain/componentReadiness';
 import { tip } from '@/i18n/componentManagerCopy';
+import { confirmAction, issueTarget, type InspectorTab } from './issueTargets';
 
-type Tab = 'overview' | 'thermal' | 'geometry' | 'architecture' | 'source' | 'external';
+type Tab = InspectorTab;
 
 const TABS: Array<{ id: Tab; label: string; zh: string; icon: typeof Info }> = [
   { id: 'overview', label: 'Overview', zh: '概要', icon: Info },
@@ -62,15 +66,28 @@ const TABS: Array<{ id: Tab; label: string; zh: string; icon: typeof Info }> = [
   { id: 'external', label: 'External Mapping', zh: '外部映射', icon: Link2 },
 ];
 
+/** A request to put the caret in one field; `nonce` lets the same field repeat. */
+export interface FocusRequest {
+  fieldId: string;
+  nonce: number;
+}
+
 export interface InspectorProps {
   component: Component | null;
   readOnly: boolean;
+  tab: Tab;
+  onTabChange: (tab: Tab) => void;
+  /** Set by an issue link elsewhere on the screen. */
+  focus?: FocusRequest | null;
+  /** Opens a tab AND puts the caret in one of its fields. */
+  onGoToField: (tab: Tab, fieldId: string) => void;
   onPatch: (id: string, patch: Partial<Component>, fields: string[]) => void;
   onSaveToLibrary: (component: Component) => void;
 }
 
 /** A SourcedValue editor: number plus its source, so provenance stays visible. */
 function SourcedNumberField({
+  id,
   label,
   zh,
   unit,
@@ -81,6 +98,7 @@ function SourcedNumberField({
   readOnly,
   onChange,
 }: {
+  id: string;
   label: string;
   zh: string;
   unit?: string;
@@ -91,7 +109,6 @@ function SourcedNumberField({
   readOnly: boolean;
   onChange: (next: SourcedValue<number> | null) => void;
 }) {
-  const id = `sv-${label.replace(/\s+/g, '-').toLowerCase()}`;
   return (
     <div className="flex flex-col gap-1.5">
       <FieldLabel label={label} zh={zh} unit={unit} tooltip={tooltip} htmlFor={id} />
@@ -176,14 +193,39 @@ function GeometryField({
   );
 }
 
+/**
+ * Puts the caret in the field an issue link named, and rings it briefly so the
+ * eye lands in the same place the focus did.
+ */
+function useFocusField(focus: FocusRequest | null | undefined, tab: Tab) {
+  useEffect(() => {
+    if (!focus) return;
+    // One frame, so the tab this field lives on has rendered first.
+    const timer = window.setTimeout(() => {
+      const element = document.getElementById(focus.fieldId);
+      if (!element) return;
+      element.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      (element as HTMLElement).focus({ preventScroll: true });
+      element.classList.add('ring-2', 'ring-accent-500');
+      window.setTimeout(() => element.classList.remove('ring-2', 'ring-accent-500'), 1600);
+    }, 0);
+    return () => window.clearTimeout(timer);
+    // `tab` is a dependency because the focus request switches it first.
+  }, [focus, tab]);
+}
+
 export function ComponentInspector({
   component,
   readOnly,
+  tab,
+  onTabChange,
+  focus,
+  onGoToField,
   onPatch,
   onSaveToLibrary,
 }: InspectorProps) {
-  const [tab, setTab] = useState<Tab>('overview');
   const projectMaterials = useProjectStore((s) => s.draft?.materials);
+  useFocusField(focus, tab);
 
   if (!component) {
     return (
@@ -229,23 +271,8 @@ export function ComponentInspector({
     <div className="flex flex-col gap-3">
       <section className="rounded-lg border border-line bg-surface">
         <header className="border-b border-line px-3.5 py-2.5">
-          <div className="flex items-start justify-between gap-2">
-            <div className="min-w-0">
-              <h3 className="truncate text-[14px] font-bold text-ink-900">{component.name}</h3>
-              <p className="text-[11px] text-ink-400">
-                {component.id} · {component.category}
-              </p>
-            </div>
-            {component.enabled ? (
-              <Badge tone={isHeatSource(component) ? 'danger' : 'neutral'}>
-                {isHeatSource(component) ? 'Heat Source / 熱源' : 'Passive / 被動'}
-              </Badge>
-            ) : (
-              <Badge tone="neutral">Disabled / 停用</Badge>
-            )}
-          </div>
-
-          <nav className="mt-2.5 flex flex-wrap gap-1" aria-label="Component inspector sections">
+          {/* The floating panel's own title bar carries the name and badge. */}
+          <nav className="flex flex-wrap gap-1" aria-label="Component inspector sections">
             {TABS.map((item) => {
               const Icon = item.icon;
               const active = tab === item.id;
@@ -254,7 +281,7 @@ export function ComponentInspector({
                   key={item.id}
                   type="button"
                   aria-current={active ? 'true' : undefined}
-                  onClick={() => setTab(item.id)}
+                  onClick={() => onTabChange(item.id)}
                   className={`flex items-center gap-1 rounded px-2 py-1 text-[11px] font-medium transition-colors ${
                     active
                       ? 'bg-accent-600 text-white'
@@ -310,6 +337,7 @@ export function ComponentInspector({
               </div>
 
               <SourcedNumberField
+                id="ins-power"
                 label="Power per Device"
                 zh="單顆功耗"
                 unit="W"
@@ -390,6 +418,7 @@ export function ComponentInspector({
               </div>
 
               <SourcedNumberField
+                id="ins-limit"
                 label="Thermal Limit"
                 zh="溫度上限"
                 unit="°C"
@@ -400,6 +429,7 @@ export function ComponentInspector({
               />
 
               <SourcedNumberField
+                id="ins-rjc"
                 label="Rjc"
                 zh="接面-外殼熱阻"
                 unit="°C/W"
@@ -472,6 +502,7 @@ export function ComponentInspector({
                   )}
 
                   <SourcedNumberField
+                    id="ins-blt"
                     label="Bond Line (BLT)"
                     zh="壓合厚度"
                     unit="mm"
@@ -508,6 +539,7 @@ export function ComponentInspector({
                 </legend>
                 <div className="flex flex-col gap-3">
                   <Select
+                    id="ins-heat-path"
                     aria-label="Heat path type"
                     items={HEAT_PATH_TYPES.map((type) => ({
                       value: type,
@@ -587,6 +619,46 @@ export function ComponentInspector({
                   )}
                 </div>
               </fieldset>
+
+              {/* Dimensions all live on the Geometry tab, so this one stays about
+                  the thermal chain: limit, Rjc, package, TIM, path. */}
+              <p className="rounded-md border border-line bg-surface-muted p-2.5 text-[11px] leading-relaxed text-ink-500">
+                Face sizes, thicknesses and the resulting areas are on the Geometry tab.
+                <span className="block">熱源面 / 擴散面尺寸、厚度與面積在「Geometry 幾何」分頁。</span>
+              </p>
+            </>
+          )}
+
+          {tab === 'geometry' && (
+            <>
+              {/* Package envelope. It feeds no resistance on its own, but it is
+                  validated, so it needs somewhere to be corrected. */}
+              <div className="grid grid-cols-3 gap-2.5">
+                <GeometryField
+                  label="Package L"
+                  zh="封裝長"
+                  field="package_L_mm"
+                  geometry={spec.geometry}
+                  readOnly={readOnly}
+                  onChange={patchGeometry}
+                />
+                <GeometryField
+                  label="Package W"
+                  zh="封裝寬"
+                  field="package_W_mm"
+                  geometry={spec.geometry}
+                  readOnly={readOnly}
+                  onChange={patchGeometry}
+                />
+                <GeometryField
+                  label="Package H"
+                  zh="封裝高"
+                  field="package_H_mm"
+                  geometry={spec.geometry}
+                  readOnly={readOnly}
+                  onChange={patchGeometry}
+                />
+              </div>
 
               {/* Source face — one measurement, named for the path it serves. */}
               <div className="grid grid-cols-2 gap-2.5">
@@ -687,13 +759,23 @@ export function ComponentInspector({
               )}
 
               {spec.geometry.needs_review && (
-                <p className="rounded-md border border-warn-500/30 bg-warn-100/60 p-2.5 text-[11px] leading-relaxed text-warn-600">
-                  Imported legacy geometry needs review — Thickness / Pad may follow Volume Tool
-                  semantics.
-                  <span className="block">
-                    匯入的舊版幾何資料需人工確認（可能沿用舊工具定義）。
-                  </span>
-                </p>
+                <div className="rounded-md border border-warn-500/30 bg-warn-100/60 p-2.5">
+                  <p className="text-[11px] leading-relaxed text-warn-600">
+                    Imported legacy geometry needs review — Thickness / Pad may follow Volume Tool
+                    semantics.
+                    <span className="block">
+                      匯入的舊版幾何資料需人工確認（可能沿用舊工具定義）。
+                    </span>
+                  </p>
+                  {/* The fix is a decision, not a value, so it is one click here. */}
+                  <Button
+                    className="mt-2 h-7"
+                    disabled={readOnly}
+                    onClick={() => patchGeometry({ needs_review: false })}
+                  >
+                    Mark reviewed / 標記為已確認
+                  </Button>
+                </div>
               )}
             </>
           )}
@@ -966,20 +1048,44 @@ export function ComponentInspector({
             <h3 className="text-[13px] font-bold text-ink-700">Issues / 待處理項目</h3>
           </header>
           <ul className="flex flex-col gap-1.5 p-3.5">
-            {issues.map((issue, index) => (
-              <li
-                key={`${issue.field}-${index}`}
-                className={`flex items-start gap-1.5 text-[12px] ${
-                  issue.severity === 'error' ? 'text-danger-600' : 'text-warn-600'
-                }`}
-              >
-                <span aria-hidden>{issue.severity === 'error' ? '✕' : '⚠'}</span>
-                <span>
-                  {issue.message}
-                  <span className="block text-[11px] text-ink-400">{issue.message_zh}</span>
-                </span>
-              </li>
-            ))}
+            {issues.map((issue, index) => {
+              const target = issueTarget(issue.field);
+              const confirm = target?.confirm ? confirmAction(component, target.confirm) : null;
+              return (
+                <li key={`${issue.field}-${index}`} className="flex items-start gap-1.5">
+                  <span
+                    aria-hidden
+                    className={
+                      issue.severity === 'error' ? 'text-danger-600' : 'text-warn-600'
+                    }
+                  >
+                    {issue.severity === 'error' ? '✕' : '⚠'}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    {/* Every issue is a link to the control that fixes it. */}
+                    <button
+                      type="button"
+                      disabled={!target}
+                      onClick={() => target && onGoToField(target.tab, target.fieldId)}
+                      className={`text-left text-[12px] ${
+                        issue.severity === 'error' ? 'text-danger-600' : 'text-warn-600'
+                      } ${target ? 'hover:underline' : 'cursor-default'}`}
+                    >
+                      {issue.message}
+                      <span className="block text-[11px] text-ink-400">{issue.message_zh}</span>
+                    </button>
+                    {confirm && !readOnly && (
+                      <Button
+                        className="mt-1 h-6"
+                        onClick={() => onPatch(component.id, confirm.patch, confirm.fields)}
+                      >
+                        {confirm.label} / {confirm.labelZh}
+                      </Button>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         </section>
       )}

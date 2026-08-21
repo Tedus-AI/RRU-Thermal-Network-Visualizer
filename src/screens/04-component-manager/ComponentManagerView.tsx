@@ -15,6 +15,7 @@ import { ScreenWorkspace } from '@/app/ScreenWorkspace';
 import { projectPath } from '@/app/navigation';
 import { useShellActions } from '@/app/shellActions';
 import { Badge, Button, Modal, Skeleton } from '@/ui/primitives';
+import { FloatingPanel } from '@/ui/FloatingPanel';
 import { toast } from '@/ui/toast';
 
 import { useProjectStore } from '@/data/projectStore';
@@ -24,7 +25,7 @@ import { useNetworkStore } from '@/data/networkStore';
 import { useScenarioStore } from '@/data/scenarioStore';
 import { useSolverStore } from '@/data/solverStore';
 
-import { createComponent, type Component } from '@/domain/component';
+import { createComponent, isHeatSource, type Component } from '@/domain/component';
 import {
   completenessOf,
   completenessScore,
@@ -35,9 +36,12 @@ import {
 
 import { ComponentReadinessCards } from './ComponentReadinessCards';
 import { ComponentTable } from './ComponentTable';
-import { ComponentInspector } from './ComponentInspector';
+import { ComponentInspector, type FocusRequest } from './ComponentInspector';
+import { IssueList } from './IssueList';
+import type { InspectorTab } from './issueTargets';
 import {
   CategoryTabs,
+  ComponentActions,
   ComponentToolbar,
   DEFAULT_FILTERS,
   filterComponents,
@@ -83,6 +87,8 @@ export function ComponentManagerView() {
   const [tab, setTab] = useState<CategoryTab>('All');
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [inspectorTab, setInspectorTab] = useState<InspectorTab>('overview');
+  const [focus, setFocus] = useState<FocusRequest | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [showBulk, setShowBulk] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
@@ -136,6 +142,18 @@ export function ComponentManagerView() {
   );
 
   const selected = components.find((component) => component.id === selectedId) ?? null;
+
+  /**
+   * The one path every issue link takes: select the component, open the tab that
+   * owns the field, and ask the inspector to focus it. The nonce makes clicking
+   * the same issue twice re-focus rather than do nothing.
+   */
+  const goToIssue = (componentId: string, tab: InspectorTab, fieldId: string) => {
+    setSelectedId(componentId);
+    setInspectorTab(tab);
+    setFocus({ fieldId, nonce: Date.now() });
+  };
+
   const blockingErrors = useMemo(
     () => components.filter((component) => statusOf(component) === 'ERROR').length,
     [components],
@@ -203,24 +221,22 @@ export function ComponentManagerView() {
     <ScreenWorkspace
       title="Component Manager"
       titleZh="元件管理"
-      description="Review and complete the thermal specification of every component. No thermal nodes or edges are created in this screen."
-      descriptionZh="檢視並補齊各元件的熱規格。本畫面不建立任何熱網路節點 (Node) 或邊 (Edge)。"
       badge={
         <div className="flex flex-wrap items-center gap-2">
           {readOnly && <Badge tone="accent">READ ONLY / 唯讀</Badge>}
-          {requiresReview && <Badge tone="warn">Network review required / 需重新檢視網路</Badge>}
+          {/* A warning you cannot act on is just noise, so it goes where it is
+              resolved: Screen 05 is the only place the network is reviewed. */}
+          {requiresReview && (
+            <button
+              type="button"
+              onClick={goToScreen05}
+              className="flex items-center gap-1 rounded-full border border-warn-500/40 bg-warn-100/60 px-2.5 py-0.5 text-[11px] font-semibold text-warn-600 hover:border-warn-500"
+            >
+              Network review required / 需重新檢視網路
+              <ArrowRight size={12} aria-hidden />
+            </button>
+          )}
         </div>
-      }
-      rightPanel={
-        <ComponentInspector
-          component={selected}
-          readOnly={readOnly}
-          onPatch={patchComponent}
-          onSaveToLibrary={(component) => {
-            useComponentLibraryStore.getState().saveComponent(component);
-            toast.success(`"${component.name}" saved to the component library / 已存入元件庫`);
-          }}
-        />
       }
       actionBar={
         <div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-line bg-surface px-6 py-3">
@@ -268,32 +284,29 @@ export function ComponentManagerView() {
     >
       {emptyState || (
         <>
-          <ComponentReadinessCards
-            summary={summary}
-            statusFilter={filters.status}
-            onStatusFilter={(status) => setFilters({ ...filters, status })}
-          />
+          {/* One status row: readiness left, category filters right. They share a
+              card shape so the two halves read as one band on a wide screen. */}
+          <div className="flex flex-col gap-2.5 2xl:flex-row 2xl:items-start 2xl:gap-3">
+            <ComponentReadinessCards
+              summary={summary}
+              statusFilter={filters.status}
+              onStatusFilter={(status) => setFilters({ ...filters, status })}
+            />
+            <div className="hidden w-px self-stretch bg-line 2xl:block" aria-hidden />
+            <div className="2xl:ml-auto">
+              <CategoryTabs components={components} active={tab} onChange={setTab} />
+            </div>
+          </div>
 
-          <CategoryTabs components={components} active={tab} onChange={setTab} />
-
-          <ComponentToolbar
-            filters={filters}
-            onFilters={setFilters}
-            sources={sources}
-            selectedCount={selected ? 1 : 0}
+          <IssueList
+            components={components}
+            validate={validateComponent}
             readOnly={readOnly}
-            onAdd={() => setShowAdd(true)}
-            onDuplicate={() => {
-              if (!selected) return;
-              const copy = useComponentStore.getState().duplicateComponent(selected.id);
-              if (copy) {
-                setSelectedId(copy.id);
-                toast.success(`Duplicated as "${copy.name}" / 已複製`);
-              }
-            }}
-            onDelete={() => setShowDelete(true)}
-            onBulkEdit={() => setShowBulk(true)}
+            onGoToIssue={goToIssue}
+            onPatch={patchComponent}
           />
+
+          <ComponentToolbar filters={filters} onFilters={setFilters} sources={sources} />
 
           <ComponentTable
             components={visible}
@@ -303,11 +316,64 @@ export function ComponentManagerView() {
             readOnly={readOnly}
           />
 
-          <p className="text-[12px] text-ink-400">
-            Showing {visible.length} of {components.length} components / 顯示 {visible.length}{' '}
-            筆，共 {components.length} 筆
-          </p>
+          {/* Actions live under the rows they act on, bottom left. */}
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <ComponentActions
+              selectedName={selected?.name ?? null}
+              visibleCount={visible.length}
+              readOnly={readOnly}
+              onAdd={() => setShowAdd(true)}
+              onDuplicate={() => {
+                if (!selected) return;
+                const copy = useComponentStore.getState().duplicateComponent(selected.id);
+                if (copy) {
+                  setSelectedId(copy.id);
+                  toast.success(`Duplicated as "${copy.name}" / 已複製`);
+                }
+              }}
+              onDelete={() => setShowDelete(true)}
+              onBulkEdit={() => setShowBulk(true)}
+            />
+            <p className="text-[12px] text-ink-400">
+              Showing {visible.length} of {components.length} components / 顯示 {visible.length}{' '}
+              筆，共 {components.length} 筆
+            </p>
+          </div>
         </>
+      )}
+
+      {/* The inspector floats so the table keeps the full window width. It is
+          non-modal on purpose: clicking another row retargets it in place. */}
+      {selected && (
+        <FloatingPanel
+          storageKey="tnv.04.inspector"
+          title={selected.name}
+          subtitle={`${selected.id} · ${selected.category}`}
+          badge={
+            selected.enabled ? (
+              <Badge tone={isHeatSource(selected) ? 'danger' : 'neutral'}>
+                {isHeatSource(selected) ? 'Heat Source / 熱源' : 'Passive / 被動'}
+              </Badge>
+            ) : (
+              <Badge tone="neutral">Disabled / 停用</Badge>
+            )
+          }
+          onClose={() => setSelectedId(null)}
+        >
+          <ComponentInspector
+            component={selected}
+            readOnly={readOnly}
+            tab={inspectorTab}
+            onTabChange={setInspectorTab}
+            focus={focus}
+            onGoToField={(nextTab, fieldId) => goToIssue(selected.id, nextTab, fieldId)}
+            onPatch={patchComponent}
+            onSaveToLibrary={(component) => {
+              useComponentLibraryStore.getState().saveComponent(component);
+              toast.success(`"${component.name}" saved to the component library / 已存入元件庫`);
+            }}
+          />
+        </FloatingPanel>
       )}
 
       {showAdd && (
