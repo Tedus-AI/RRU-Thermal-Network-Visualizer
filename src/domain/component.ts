@@ -62,6 +62,44 @@ export const SOURCE_FACE_LABELS: Record<HeatPathType, { en: string; zh: string }
 };
 
 /**
+ * Which geometry each heat path actually needs, and where it comes from.
+ *
+ * Read off the Volume Evaluation Tool's `calcThermalResistance`, where one
+ * `Pad_L/W` column and one `Thick` column mean different things per board type.
+ * Spelling that out here means a face is asked for exactly once, and never
+ * asked for at all when the path already determines it:
+ *
+ *   Coin         The part is reflowed onto the coin across its whole base, so
+ *                the joint face IS the package outline. The coin it spreads
+ *                into — footprint and thickness — is one mechanical decision
+ *                for the design, so it comes from the project (01 §4).
+ *   Board        The face is the IC's E-PAD, which nothing else knows, so it is
+ *                stated. Heat then spreads through the board at roughly 45°:
+ *                `(L + t) x (W + t)`, the tool's own approximation.
+ *   TopSurface   Heat leaves the case top into the TIM. The case top IS the
+ *                package outline, and nothing spreads on the way.
+ *   DirectMetal  A bolted part meets metal across a mounting face that may be
+ *                the whole base or only a pair of flanges — a mechanical choice
+ *                the package cannot answer — so it is stated. Nothing spreads;
+ *                the mount itself is an edge Screen 05 owns.
+ */
+export interface GeometryRule {
+  /** `package` means read-only, following the package outline. */
+  source: 'package' | 'stated';
+  /** `none` means heat leaves through the same face it entered. */
+  spread: 'project_coin' | 'board_spread' | 'none';
+  /** Which thickness, if any, this path conducts through. */
+  thickness: 'project_coin' | 'board' | 'none';
+}
+
+export const GEOMETRY_RULES: Record<HeatPathType, GeometryRule> = {
+  Coin: { source: 'package', spread: 'project_coin', thickness: 'project_coin' },
+  Board: { source: 'stated', spread: 'board_spread', thickness: 'board' },
+  TopSurface: { source: 'package', spread: 'none', thickness: 'none' },
+  DirectMetal: { source: 'stated', spread: 'none', thickness: 'none' },
+};
+
+/**
  * Best guess at a component's heat path, mirroring the category defaults the
  * Volume Evaluation Tool ships (RF parts on copper coins, digital parts on
  * thermal vias, power parts cooled from the top).
@@ -252,12 +290,9 @@ export interface ComponentGeometry {
   source_L_mm: number | null;
   source_W_mm: number | null;
   /**
-   * The face heat leaves the SPREADING structure through: the coin's heatsink
-   * side, or the board footprint the via array has spread into. Left null it is
-   * derived per heat path (see `spreadAreaMm2`); set, it wins.
+   * The board a via path conducts through. Coin thickness is NOT here: it is a
+   * project constant (01 §4), because one coin serves the whole design.
    */
-  spread_L_mm: number | null;
-  spread_W_mm: number | null;
   board_thickness_mm: number | null;
   /**
    * Legacy Thick / Pad values may carry Volume-Tool-specific meaning.
@@ -373,8 +408,6 @@ export function emptyGeometry(): ComponentGeometry {
     package_H_mm: null,
     source_L_mm: null,
     source_W_mm: null,
-    spread_L_mm: null,
-    spread_W_mm: null,
     board_thickness_mm: null,
   };
 }
@@ -482,8 +515,28 @@ export function sourceFaceMm(
   geometry: ComponentGeometry,
   heatPath: HeatPathType,
 ): { L: number | null; W: number | null } {
-  if (heatPath === 'Coin') return { L: geometry.package_L_mm, W: geometry.package_W_mm };
-  return { L: geometry.source_L_mm, W: geometry.source_W_mm };
+  return GEOMETRY_RULES[heatPath].source === 'package'
+    ? { L: geometry.package_L_mm, W: geometry.package_W_mm }
+    : { L: geometry.source_L_mm, W: geometry.source_W_mm };
+}
+
+/**
+ * The spread face as L and W, for display. Every path derives it — none is
+ * typed — so this and `spreadAreaMm2` must agree, and both read the same rule.
+ */
+export function spreadFaceMm(
+  geometry: ComponentGeometry,
+  heatPath: HeatPathType,
+  projectCoin: { L: number | null; W: number | null } = { L: null, W: null },
+): { L: number | null; W: number | null } {
+  const rule = GEOMETRY_RULES[heatPath];
+  if (rule.spread === 'project_coin') return projectCoin;
+  if (rule.spread === 'none') return sourceFaceMm(geometry, heatPath);
+
+  const { L, W } = sourceFaceMm(geometry, heatPath);
+  const t = geometry.board_thickness_mm;
+  if (L == null || W == null || t == null) return { L: null, W: null };
+  return { L: L + t, W: W + t };
 }
 
 export function sourceAreaMm2(
@@ -514,21 +567,14 @@ export function spreadAreaMm2(
   heatPath: HeatPathType,
   projectCoinAreaMm2: number | null = null,
 ): number | null {
-  // The project's coin size is the whole design's decision, so on a Coin path it
-  // wins over anything stated per component.
-  if (heatPath === 'Coin') return projectCoinAreaMm2;
+  const rule = GEOMETRY_RULES[heatPath];
+  // The coin is the project's, and it is the whole answer: nothing on the
+  // component may override a decision shared by every coin in the design.
+  if (rule.spread === 'project_coin') return projectCoinAreaMm2;
+  if (rule.spread === 'none') return sourceAreaMm2(geometry, heatPath);
 
-  if (geometry.spread_L_mm != null && geometry.spread_W_mm != null) {
-    return geometry.spread_L_mm * geometry.spread_W_mm;
-  }
-
-  if (heatPath === 'Board') {
-    const { source_L_mm: L, source_W_mm: W, board_thickness_mm: t } = geometry;
-    if (L == null || W == null || t == null) return null;
-    return (L + t) * (W + t);
-  }
-
-  return sourceAreaMm2(geometry, heatPath);
+  const { L, W } = spreadFaceMm(geometry, heatPath);
+  return L != null && W != null ? L * W : null;
 }
 
 /**

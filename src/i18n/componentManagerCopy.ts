@@ -7,8 +7,10 @@ export const MANAGER_TOOLTIPS_ZH: Record<string, string> = {
   Rjc: '接面到外殼熱阻；若封裝模型適用，後續可成為 package thermal edge。',
   'Limit Type': '指定 thermal limit 是 Tj、Tc、Ts 或自訂參考溫度。',
   'Thermal Profile': '供 Screen 05 建立熱網路使用的準備資料；本頁不建立 Node/Edge。',
-  'Preferred Base Zone': 'Network Builder 的區域提示，不等於已建立 Base thermal node。',
-  'Qty Modeling': '多顆同型元件在 Screen 05 中偏好的 Aggregate / Individual / Grouped 表示方式。',
+  'Preferred Base Zone':
+    '此元件的熱要交給哪一塊共用散熱結構。Screen 05 據此建議把元件的散熱出口接到哪個基座節點——接到不同區域＝走不同的散熱器＝到環境的路徑不同，會影響溫度。此處只是建議，不會自行建立節點。',
+  'Qty Modeling':
+    '數量大於 1 時，Screen 05 要把它們畫成幾條熱路徑。Aggregate＝一條，該節點承擔全部功耗（4 顆 45W 就是一個 180W 節點）；Individual＝每顆一條各 45W；Grouped＝分成幾組。Aggregate 最省節點但會低估單顆熱點溫度，Individual 才看得出單顆峰值。',
   'External Mapping':
     '預留給 FloTHERM 等外部模擬物件的 mapping；03 目前延後，本頁不解析 FloTHERM 格式。',
   'Total Power': 'Qty × Power 的元件功耗摘要，不是 Thermal Edge 的 Heat Flow Q。',

@@ -31,12 +31,14 @@ import {
   PACKAGE_TYPES,
   QTY_MODELS,
   QTY_MODEL_LABELS,
+  GEOMETRY_RULES,
   SOURCE_FACE_LABELS,
   componentTotalPowerW,
   heatPathPatch,
   sourceAreaMm2,
   sourceFaceMm,
   spreadAreaMm2,
+  spreadFaceMm,
   type BaseZone,
   type Component,
   type ComponentCategory,
@@ -49,7 +51,11 @@ import {
 import { withValue, type SourcedValue } from '@/domain/sourcedValue';
 import { coinAreaMm2, defaultMaterials, resolveTim } from '@/domain/materials';
 import { useProjectStore } from '@/data/projectStore';
-import { DATA_SOURCES, type DataSource } from '@/thermal/types';
+import {
+  DATA_SOURCE_LABELS,
+  SELECTABLE_DATA_SOURCES,
+  type DataSource,
+} from '@/thermal/types';
 import {
   COMPLETENESS_ITEMS,
   COMPLETENESS_ITEMS_ZH,
@@ -70,6 +76,16 @@ const TABS: Array<{ id: Tab; label: string; zh: string; icon: typeof Info }> = [
   { id: 'source', label: 'Source', zh: '來源', icon: CircleDashed },
   { id: 'external', label: 'External Mapping', zh: '外部映射', icon: Link2 },
 ];
+
+/** The five an engineer picks, plus whatever the field already says. */
+function sourceOptions(current: DataSource | undefined) {
+  const values: DataSource[] = [...SELECTABLE_DATA_SOURCES];
+  if (current && !values.includes(current)) values.unshift(current);
+  return values.map((value) => ({
+    value,
+    label: `${DATA_SOURCE_LABELS[value].en} / ${DATA_SOURCE_LABELS[value].zh}`,
+  }));
+}
 
 /** A request to put the caret in one field; `nonce` lets the same field repeat. */
 export interface FocusRequest {
@@ -257,24 +273,32 @@ export function ComponentInspector({
     onPatch(component.id, { architecture_prep: { ...prep, ...patch } }, ['architecture_prep']);
 
   const heatPath = spec.heat_path.type;
+  const rule = GEOMETRY_RULES[heatPath];
   const resolvedTim = resolveTim(spec.tim, materials);
+  const projectCoin = {
+    L: materials.coin_L_mm?.value ?? null,
+    W: materials.coin_W_mm?.value ?? null,
+  };
   const sourceFace = sourceFaceMm(spec.geometry, heatPath);
+  const spreadFace = spreadFaceMm(spec.geometry, heatPath, projectCoin);
   const sourceArea = sourceAreaMm2(spec.geometry, heatPath);
   const spreadArea = spreadAreaMm2(spec.geometry, heatPath, coinAreaMm2(materials));
   // Blank BLT means "use the material's"; a stored one means the build was
   // measured. The radio below is just that distinction, made visible.
   const bltCustom = spec.tim.blt_mm != null;
 
+  const SOURCE_ORIGIN = {
+    Coin: '= Package outline (soldered across its base) / 等於封裝外形（整個底面焊接）',
+    TopSurface: '= Package outline (the case top) / 等於封裝外形（Case 上表面）',
+  } as const;
   const spreadOrigin =
-    heatPath === 'Coin'
+    rule.spread === 'project_coin'
       ? coinAreaMm2(materials) == null
-        ? 'Set the coin size in Screen 01 / 請於 Screen 01 設定銅塊尺寸'
+        ? 'Needs the project coin size (Screen 01) / 需先於 Screen 01 設定銅塊尺寸'
         : 'From the project coin size / 取自專案銅塊尺寸'
-      : spec.geometry.spread_L_mm != null
-        ? 'Stated on this component / 由此元件指定'
-        : heatPath === 'Board'
-          ? 'Derived: (L + board thickness) × (W + board thickness) / 由 45° 擴散推導'
-          : 'No spreading on this path / 此路徑無擴散，等於熱源面';
+      : rule.spread === 'board_spread'
+        ? 'Derived: (L + board thickness) × (W + board thickness) / 由 45° 擴散推導'
+        : 'No spreading on this path — heat leaves the face it entered / 此路徑無擴散，等於熱源面';
 
   return (
     <div className="flex flex-col gap-3">
@@ -658,6 +682,8 @@ export function ComponentInspector({
 
           {tab === 'geometry' && (
             <>
+              {/* The package envelope is the one thing every path needs, and
+                  two of the four take their heat-leaving face straight from it. */}
               <div className="grid grid-cols-3 gap-2.5">
                 <GeometryField
                   label="Package L"
@@ -685,26 +711,24 @@ export function ComponentInspector({
                 />
               </div>
 
-              {/* Source face — one measurement, named for the path it serves.
-                  A coin-soldered part is joined across its whole package base,
-                  so on that path it follows the package rather than being typed
-                  a second time and left to drift. */}
+              {/* Source face — asked for only when the path does not already
+                  determine it (GEOMETRY_RULES). */}
               <div className="grid grid-cols-2 gap-2.5">
-                {heatPath === 'Coin' ? (
+                {rule.source === 'package' ? (
                   <>
                     <DerivedField
                       id="geo-source_L_mm"
-                      label="Coin joint face L"
-                      zh="銅塊接合面長"
+                      label={`${SOURCE_FACE_LABELS[heatPath].en} L`}
+                      zh={`${SOURCE_FACE_LABELS[heatPath].zh}長`}
                       value={sourceFace.L}
-                      from="= Package L / 等於封裝長"
+                      from={SOURCE_ORIGIN[heatPath as 'Coin' | 'TopSurface']}
                     />
                     <DerivedField
                       id="geo-source_W_mm"
-                      label="Coin joint face W"
-                      zh="銅塊接合面寬"
+                      label={`${SOURCE_FACE_LABELS[heatPath].en} W`}
+                      zh={`${SOURCE_FACE_LABELS[heatPath].zh}寬`}
                       value={sourceFace.W}
-                      from="= Package W / 等於封裝寬"
+                      from=""
                     />
                   </>
                 ) : (
@@ -729,54 +753,9 @@ export function ComponentInspector({
                 )}
               </div>
 
-              {/* Spread face — on a coin path it is the project's coin, which is
-                  one mechanical decision for the whole design. */}
-              <div className="grid grid-cols-2 gap-2.5">
-                {heatPath === 'Coin' ? (
-                  <>
-                    <DerivedField
-                      id="geo-spread_L_mm"
-                      label="Coin L"
-                      zh="銅塊長"
-                      value={materials.coin_L_mm?.value ?? null}
-                      from="Screen 01 / 專案設定"
-                    />
-                    <DerivedField
-                      id="geo-spread_W_mm"
-                      label="Coin W"
-                      zh="銅塊寬"
-                      value={materials.coin_W_mm?.value ?? null}
-                      from="Screen 01 / 專案設定"
-                    />
-                    <DerivedField
-                      id="geo-coin_thickness_mm"
-                      label="Coin Thickness"
-                      zh="銅塊厚度"
-                      value={materials.coin_thickness_mm?.value ?? null}
-                      from="Screen 01 / 專案設定"
-                    />
-                  </>
-                ) : (
-                  <>
-                    <GeometryField
-                      label="Spread L"
-                      zh="擴散面長"
-                      field="spread_L_mm"
-                      geometry={spec.geometry}
-                      readOnly={readOnly}
-                      onChange={patchGeometry}
-                    />
-                    <GeometryField
-                      label="Spread W"
-                      zh="擴散面寬"
-                      field="spread_W_mm"
-                      geometry={spec.geometry}
-                      readOnly={readOnly}
-                      onChange={patchGeometry}
-                    />
-                  </>
-                )}
-                {heatPath === 'Board' && (
+              {/* The one thickness this path conducts through, if any. */}
+              {rule.thickness === 'board' && (
+                <div className="grid grid-cols-2 gap-2.5">
                   <GeometryField
                     label="Board Thickness"
                     zh="板厚"
@@ -785,7 +764,37 @@ export function ComponentInspector({
                     readOnly={readOnly}
                     onChange={patchGeometry}
                   />
-                )}
+                </div>
+              )}
+              {rule.thickness === 'project_coin' && (
+                <div className="grid grid-cols-2 gap-2.5">
+                  <DerivedField
+                    id="geo-coin_thickness_mm"
+                    label="Coin Thickness"
+                    zh="銅塊厚度"
+                    value={materials.coin_thickness_mm?.value ?? null}
+                    from="Screen 01 / 專案設定"
+                  />
+                </div>
+              )}
+
+              {/* Spread face — never typed. Every path derives it, so showing
+                  it read-only is the only way it and the solver can agree. */}
+              <div className="grid grid-cols-2 gap-2.5">
+                <DerivedField
+                  id="geo-spread_L_mm"
+                  label={rule.spread === 'project_coin' ? 'Coin L' : 'Spread L'}
+                  zh={rule.spread === 'project_coin' ? '銅塊長' : '擴散面長'}
+                  value={spreadFace.L}
+                  from={spreadOrigin}
+                />
+                <DerivedField
+                  id="geo-spread_W_mm"
+                  label={rule.spread === 'project_coin' ? 'Coin W' : 'Spread W'}
+                  zh={rule.spread === 'project_coin' ? '銅塊寬' : '擴散面寬'}
+                  value={spreadFace.W}
+                  from=""
+                />
               </div>
 
               <div className="rounded-md border border-line bg-surface-muted px-3 py-2">
@@ -805,7 +814,6 @@ export function ComponentInspector({
                     {spreadArea == null ? '—' : `${spreadArea.toFixed(1)} mm²`}
                   </span>
                 </div>
-                <p className="mt-1 text-[11px] text-ink-400">{spreadOrigin}</p>
               </div>
 
               {spec.geometry.needs_review && (
@@ -939,7 +947,10 @@ export function ComponentInspector({
                       <Select
                         aria-label={`${label} data source`}
                         className="h-8 w-40 text-[12px]"
-                        options={DATA_SOURCES}
+                        // The stored value is always offered, even when the
+                        // app assigned it, so the picker never misreports what
+                        // a field currently claims.
+                        items={sourceOptions(sv?.source)}
                         value={sv?.source ?? 'Manual'}
                         disabled={readOnly}
                         onChange={(event) => {

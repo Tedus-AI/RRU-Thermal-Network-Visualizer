@@ -34,6 +34,39 @@ export const DATA_SOURCES = [
 ] as const;
 export type DataSource = (typeof DATA_SOURCES)[number];
 
+/**
+ * The sources a person picks, as opposed to the ones the app assigns.
+ *
+ * In practice a component number came from a datasheet, from the vendor, from
+ * the EE/RF team's own dissipation calculation, or from a bench measurement —
+ * and sometimes it is frankly a guess. Those five are the whole vocabulary an
+ * engineer needs, so those five are what the picker offers.
+ *
+ * `Imported`, `Library` and `Manual` are stamped by the importer, the library
+ * and a bare keystroke; `FloTHERM` waits on Screen 03, which is deferred and
+ * produces nothing yet. All four remain valid values — a stored one is always
+ * shown — they are simply not things to choose.
+ */
+export const SELECTABLE_DATA_SOURCES = [
+  'Datasheet',
+  'Vendor',
+  'Analytical',
+  'Measurement',
+  'Assumed',
+] as const satisfies readonly DataSource[];
+
+export const DATA_SOURCE_LABELS: Record<DataSource, { en: string; zh: string }> = {
+  Datasheet: { en: 'Datasheet', zh: '規格書' },
+  Vendor: { en: 'Vendor', zh: '原廠提供' },
+  Analytical: { en: 'Calculated (EE/RF)', zh: 'EE/RF 計算' },
+  Measurement: { en: 'Measured', zh: '實測' },
+  Assumed: { en: 'Assumed', zh: '推定值' },
+  Manual: { en: 'Typed in', zh: '手動輸入' },
+  Imported: { en: 'Imported', zh: '匯入' },
+  Library: { en: 'Library', zh: '元件庫' },
+  FloTHERM: { en: 'FloTHERM', zh: 'FloTHERM' },
+};
+
 export const CONFIDENCE_LEVELS = ['high', 'medium', 'low'] as const;
 export type Confidence = (typeof CONFIDENCE_LEVELS)[number];
 

@@ -47,8 +47,6 @@ describe('every issue leads somewhere', () => {
       package_H_mm: -1,
       source_L_mm: -1,
       source_W_mm: -1,
-      spread_L_mm: -1,
-      spread_W_mm: -1,
       board_thickness_mm: -1,
     };
 

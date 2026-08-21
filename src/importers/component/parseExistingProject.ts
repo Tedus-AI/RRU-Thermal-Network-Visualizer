@@ -102,8 +102,6 @@ export function parseExistingProject(
     text(component.thermal_spec.tim.blt_mm?.value),
     text(component.thermal_spec.geometry.source_L_mm),
     text(component.thermal_spec.geometry.source_W_mm),
-    text(component.thermal_spec.geometry.spread_L_mm),
-    text(component.thermal_spec.geometry.spread_W_mm),
     text(component.thermal_spec.geometry.board_thickness_mm),
     // Keep the original lineage if the source already had one, else point here.
     text(component.provenance.ref_origin_project ?? projectId),
