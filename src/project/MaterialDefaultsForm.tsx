@@ -326,9 +326,9 @@ export function MaterialDefaultsForm({
         {/* --- Copper coin --- */}
         <fieldset>
           <legend className="mb-2 text-[12px] font-semibold text-ink-700">
-            Copper Coin Size / 銅塊尺寸
+            Copper Coin / 銅塊
           </legend>
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             <MaterialNumber
               id="mat-coin-l"
               label="Coin L"
@@ -351,6 +351,17 @@ export function MaterialDefaultsForm({
               placeholder="e.g. 35"
               onChange={(next) => patchMaterials({ coin_W_mm: next })}
             />
+            <MaterialNumber
+              id="mat-coin-t"
+              label="Coin Thickness"
+              zh="銅塊厚度"
+              unit="mm"
+              value={materials.coin_thickness_mm}
+              readOnly={readOnly}
+              allowEmpty
+              placeholder="e.g. 2.0"
+              onChange={(next) => patchMaterials({ coin_thickness_mm: next })}
+            />
             <div className="flex flex-col justify-end">
               <span className="text-[12px] text-ink-500">Coin area / 銅塊面積</span>
               <span className="tabular text-[13px] font-bold">
@@ -365,11 +376,11 @@ export function MaterialDefaultsForm({
           >
             {coinArea == null
               ? 'Not set — copper-coin components cannot resolve their spreading area until this is stated. It is a mechanical decision with no safe default: a guessed size would move every PA’s margin without saying so.'
-              : 'The coin face that meets the heatsink. The face soldered to the part is the component’s own Source L × W.'}
+              : 'The coin face that meets the heatsink, and how thick it is. One coin serves the whole design, so components read these rather than restating them; the face soldered to the part is that part’s own package outline.'}
             <span className="block">
               {coinArea == null
                 ? '未設定 — 銅塊類元件的擴散面積將無法解出。此為機構決策，沒有安全的預設值：亂猜會無聲改變每顆 PA 的溫度餘裕。'
-                : '銅塊貼合散熱器那一面的尺寸。與元件焊接的那一面請填在元件的 Source L × W。'}
+                : '銅塊貼合散熱器那一面的尺寸與厚度。整個設計共用同一種銅塊，因此元件直接讀取此處；與元件焊接的那一面即該元件的封裝外形。'}
             </span>
           </p>
         </fieldset>

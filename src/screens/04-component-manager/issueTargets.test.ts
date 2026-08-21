@@ -50,9 +50,6 @@ describe('every issue leads somewhere', () => {
       spread_L_mm: -1,
       spread_W_mm: -1,
       board_thickness_mm: -1,
-      coin_thickness_mm: -1,
-      custom_source_area_mm2: -1,
-      custom_spread_area_mm2: -1,
     };
 
     const issues = validateComponent(broken);
@@ -144,6 +141,7 @@ describe('groupIssues', () => {
       geometry: { ...emptyGeometry(), source_L_mm: 10, source_W_mm: 10 },
     };
     subject.architecture_prep.template_preference = 'BOTTOM_COOL_VIA';
+    subject.architecture_prep.preferred_base_zone = 'Digital';
     return subject;
   };
 

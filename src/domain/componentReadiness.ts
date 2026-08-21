@@ -27,7 +27,7 @@ export const COMPLETENESS_ITEMS = [
   'Contact Geometry',
   'Heat Path',
   'TIM',
-  'Architecture Prep',
+  'Base Zone',
 ] as const;
 export type CompletenessItem = (typeof COMPLETENESS_ITEMS)[number];
 
@@ -40,7 +40,7 @@ export const COMPLETENESS_ITEMS_ZH: Record<CompletenessItem, string> = {
   'Contact Geometry': '熱源面幾何',
   'Heat Path': '散熱路徑',
   TIM: '熱介面材料',
-  'Architecture Prep': '架構準備',
+  'Base Zone': '基座區域',
 };
 
 export type CompletenessMap = Record<CompletenessItem, boolean>;
@@ -53,10 +53,12 @@ export function completenessOf(component: Component): CompletenessMap {
     Limit: spec.limit_type_confirmed && valueOf(spec.limit_C) != null,
     Package: spec.package_type != null && spec.package_type !== 'Unknown',
     Rjc: valueOf(spec.r_jc_C_per_W) != null,
-    'Contact Geometry': sourceAreaMm2(spec.geometry) != null,
+    'Contact Geometry': sourceAreaMm2(spec.geometry, spec.heat_path.type) != null,
     'Heat Path': spec.heat_path_confirmed,
     TIM: spec.tim.tim_id != null,
-    'Architecture Prep': component.architecture_prep.template_preference !== 'UNASSIGNED',
+    // The template is no longer asked for — the heat path decides it. What is
+    // still an open choice is which shared structure the part sits on.
+    'Base Zone': component.architecture_prep.preferred_base_zone !== 'Unassigned',
   };
 }
 
@@ -138,9 +140,6 @@ export function validateComponent(component: Component): ComponentIssue[] {
     ['spread_L_mm', 'Spread face L', '擴散面長'],
     ['spread_W_mm', 'Spread face W', '擴散面寬'],
     ['board_thickness_mm', 'Board thickness', '板厚'],
-    ['coin_thickness_mm', 'Coin thickness', 'Coin 厚度'],
-    ['custom_source_area_mm2', 'Source area', '熱源面積'],
-    ['custom_spread_area_mm2', 'Spread area', '擴散面積'],
   ];
   for (const [key, label, labelZh] of geometryFields) {
     const value = spec.geometry[key];
@@ -221,23 +220,35 @@ export function validateComponent(component: Component): ComponentIssue[] {
     });
   }
 
-  if (isHeatSource(component) && sourceAreaMm2(spec.geometry) == null) {
+  if (isHeatSource(component) && sourceAreaMm2(spec.geometry, spec.heat_path.type) == null) {
     issues.push({
       severity: 'warning',
       // Named to a real field so the issue can be a link to it, not just a
-      // sentence: plain `geometry` pointed at nothing the user could open.
-      field: 'geometry.source_L_mm',
+      // sentence: plain `geometry` pointed at nothing the user could open. On a
+      // coin path the joint face IS the package, so that is the field to fix.
+      field: spec.heat_path.type === 'Coin' ? 'geometry.package_L_mm' : 'geometry.source_L_mm',
       message: 'Source face size is missing.',
       message_zh: '缺少熱源面尺寸。',
     });
   }
 
-  if (component.architecture_prep.template_preference === 'UNASSIGNED') {
+  // Choosing "custom" bond line and then leaving it empty is not the same as
+  // inheriting: the user asked to override and has not said with what.
+  if (spec.tim.tim_id != null && spec.tim.blt_mm != null && spec.tim.blt_mm.value == null) {
+    issues.push({
+      severity: 'warning',
+      field: 'tim.blt_mm',
+      message: 'Bond line is set to custom but has no value.',
+      message_zh: '壓合厚度選了自訂但未輸入數值。',
+    });
+  }
+
+  if (component.architecture_prep.preferred_base_zone === 'Unassigned') {
     issues.push({
       severity: 'warning',
       field: 'architecture_prep',
-      message: 'Architecture template preference is unassigned.',
-      message_zh: '尚未指定架構模板偏好。',
+      message: 'No base zone chosen — Screen 05 cannot suggest where this part attaches.',
+      message_zh: '尚未指定基座區域，Screen 05 將無法建議此元件的連接位置。',
     });
   }
 

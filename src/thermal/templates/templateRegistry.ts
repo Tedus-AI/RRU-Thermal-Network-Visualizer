@@ -70,7 +70,7 @@ const BOTTOM_COOL_COIN: ThermalTemplate = {
       label: 'Coin conduction',
       labelZh: '銅幣導熱',
       parameterLinks: {
-        length_mm: 'thermal_spec.geometry.coin_thickness_mm',
+        length_mm: 'materials.coin_thickness_mm',
         k_W_mK: 'materials.copper_k_W_mK',
         area_mm2: 'thermal_spec.geometry.spreading_area',
       },
@@ -106,7 +106,7 @@ const BOTTOM_COOL_COIN: ThermalTemplate = {
     { path: 'thermal_spec.r_jc_C_per_W', label: 'Rjc', labelZh: '接面熱阻' },
     { path: 'thermal_spec.geometry.source_area', label: 'Source area', labelZh: '熱源面積' },
     { path: 'thermal_spec.geometry.spread_area', label: 'Coin area', labelZh: '銅塊面積' },
-    { path: 'thermal_spec.geometry.coin_thickness_mm', label: 'Coin thickness', labelZh: '銅塊厚度' },
+    { path: 'materials.coin_thickness_mm', label: 'Coin thickness', labelZh: '銅塊厚度' },
     { path: 'thermal_spec.tim.k_W_mK', label: 'TIM k', labelZh: 'TIM 導熱係數' },
     { path: 'thermal_spec.tim.thickness_mm', label: 'TIM thickness', labelZh: 'TIM 厚度' },
   ],

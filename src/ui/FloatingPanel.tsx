@@ -62,8 +62,10 @@ function defaultRect(width: number, height: number): PanelRect {
   const vw = window.innerWidth;
   const vh = window.innerHeight;
   const w = Math.min(width, vw - 32);
-  const h = Math.min(height, vh - 120);
-  return { x: Math.max(vw - w - 24, 16), y: 96, w, h };
+  // Reach for the full window height: the point of the panel is to hold a whole
+  // tab at once, and a form the user has to scroll is a form they misread.
+  const h = Math.min(height, vh - 96);
+  return { x: Math.max(vw - w - 24, 16), y: 72, w, h };
 }
 
 export function FloatingPanel({
@@ -71,8 +73,8 @@ export function FloatingPanel({
   subtitle,
   badge,
   storageKey,
-  defaultWidth = 420,
-  defaultHeight = 620,
+  defaultWidth = 560,
+  defaultHeight = 900,
   onClose,
   children,
 }: {

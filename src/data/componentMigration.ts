@@ -85,8 +85,6 @@ function migrateGeometry(spec: Raw): ComponentGeometry {
     num(existing.contact_W_mm) ??
     num(existing.pad_W_mm) ??
     num(spec.pad_W_mm);
-  geometry.custom_source_area_mm2 =
-    geometry.custom_source_area_mm2 ?? num(existing.custom_contact_area_mm2);
   geometry.board_thickness_mm = geometry.board_thickness_mm ?? num(spec.thickness_mm);
 
   // 04 §30 — legacy geometry semantics must be confirmed, not assumed.
@@ -94,9 +92,12 @@ function migrateGeometry(spec: Raw): ComponentGeometry {
     geometry.needs_review = true;
   }
 
-  // `legacy_height_mm` and `custom_thickness_mm` are gone. The loop above only
-  // copies keys the current shape declares, so both are dropped on read; a
-  // stored Height is preserved as component metadata by the import that wrote it.
+  // `legacy_height_mm`, `custom_thickness_mm`, the two `custom_*_area_mm2`
+  // overrides and `coin_thickness_mm` are all gone — the first two long since,
+  // the areas because a face is described by its L and W, and coin thickness
+  // because it is one decision for the whole design and now lives in the
+  // project's materials (01 §4). The loop above only copies keys the current
+  // shape declares, so every one of them is dropped on read.
   return geometry;
 }
 

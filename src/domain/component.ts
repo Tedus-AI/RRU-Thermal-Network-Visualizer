@@ -167,6 +167,36 @@ export const TEMPLATE_FOR_HEAT_PATH: Record<HeatPathType, ArchitectureTemplate> 
   DirectMetal: 'DIRECT_METAL',
 };
 
+/**
+ * Choosing a heat path IS choosing the resistance chain, and each chain has
+ * exactly one template — so Screen 04 no longer asks for the template
+ * separately. It is written here whenever the path is set, which keeps
+ * `networkBuilder` reading one field it can trust.
+ *
+ * Screen 05 can still override the template per component; the ones with no
+ * heat path of their own (BARE_DIE, SMALL_BASE_HEAT_PIPE, CUSTOM) are chosen
+ * there, where the topology they change is visible.
+ */
+export function heatPathPatch(
+  component: Component,
+  type: HeatPathType,
+): { thermal_spec: ThermalSpec; architecture_prep: ArchitecturePrep } {
+  return {
+    thermal_spec: {
+      ...component.thermal_spec,
+      heat_path: { ...component.thermal_spec.heat_path, type },
+      // Picking a path IS the confirmation.
+      heat_path_confirmed: true,
+    },
+    architecture_prep: {
+      ...component.architecture_prep,
+      template_preference: TEMPLATE_FOR_HEAT_PATH[type],
+    },
+  };
+}
+
+export const HEAT_PATH_PATCH_FIELDS = ['heat_path.type', 'architecture_prep'];
+
 /** 04 §20 — a placement hint, never an actual base node. */
 export const BASE_ZONES = [
   'Unassigned',
@@ -213,11 +243,14 @@ export interface ComponentGeometry {
   /**
    * The face heat LEAVES the component through. What it is called depends on
    * the heat path — see SOURCE_FACE_LABELS — but it is one measurement.
+   *
+   * On a Coin path it is not stated at all: a coin-soldered part is joined to
+   * the coin across its whole package base, so the joint face IS the package
+   * outline and `sourceFaceMm` reads it from there. Storing it twice would let
+   * the two disagree.
    */
   source_L_mm: number | null;
   source_W_mm: number | null;
-  /** Overrides the L × W product when the face is not rectangular. */
-  custom_source_area_mm2: number | null;
   /**
    * The face heat leaves the SPREADING structure through: the coin's heatsink
    * side, or the board footprint the via array has spread into. Left null it is
@@ -225,9 +258,7 @@ export interface ComponentGeometry {
    */
   spread_L_mm: number | null;
   spread_W_mm: number | null;
-  custom_spread_area_mm2: number | null;
   board_thickness_mm: number | null;
-  coin_thickness_mm: number | null;
   /**
    * Legacy Thick / Pad values may carry Volume-Tool-specific meaning.
    * 04 §30 forbids silently reinterpreting them, so they are flagged instead.
@@ -342,12 +373,9 @@ export function emptyGeometry(): ComponentGeometry {
     package_H_mm: null,
     source_L_mm: null,
     source_W_mm: null,
-    custom_source_area_mm2: null,
     spread_L_mm: null,
     spread_W_mm: null,
-    custom_spread_area_mm2: null,
     board_thickness_mm: null,
-    coin_thickness_mm: null,
   };
 }
 
@@ -442,12 +470,28 @@ export function isHeatSource(component: Component): boolean {
 }
 
 /** Source face area, mm² — a custom override wins, else L × W. */
-export function sourceAreaMm2(geometry: ComponentGeometry): number | null {
-  if (geometry.custom_source_area_mm2 != null) return geometry.custom_source_area_mm2;
-  if (geometry.source_L_mm != null && geometry.source_W_mm != null) {
-    return geometry.source_L_mm * geometry.source_W_mm;
-  }
-  return null;
+/**
+ * The face heat leaves the component through, as L and W.
+ *
+ * Every path but Coin states it directly. A coin-soldered part does not: it is
+ * reflowed onto the coin across its whole package base, so the joint face is
+ * the package outline — which is why those fields are read-only in the UI and
+ * follow the package rather than being typed a second time.
+ */
+export function sourceFaceMm(
+  geometry: ComponentGeometry,
+  heatPath: HeatPathType,
+): { L: number | null; W: number | null } {
+  if (heatPath === 'Coin') return { L: geometry.package_L_mm, W: geometry.package_W_mm };
+  return { L: geometry.source_L_mm, W: geometry.source_W_mm };
+}
+
+export function sourceAreaMm2(
+  geometry: ComponentGeometry,
+  heatPath: HeatPathType = 'Board',
+): number | null {
+  const { L, W } = sourceFaceMm(geometry, heatPath);
+  return L != null && W != null ? L * W : null;
 }
 
 /**
@@ -470,12 +514,13 @@ export function spreadAreaMm2(
   heatPath: HeatPathType,
   projectCoinAreaMm2: number | null = null,
 ): number | null {
-  if (geometry.custom_spread_area_mm2 != null) return geometry.custom_spread_area_mm2;
+  // The project's coin size is the whole design's decision, so on a Coin path it
+  // wins over anything stated per component.
+  if (heatPath === 'Coin') return projectCoinAreaMm2;
+
   if (geometry.spread_L_mm != null && geometry.spread_W_mm != null) {
     return geometry.spread_L_mm * geometry.spread_W_mm;
   }
-
-  if (heatPath === 'Coin') return projectCoinAreaMm2;
 
   if (heatPath === 'Board') {
     const { source_L_mm: L, source_W_mm: W, board_thickness_mm: t } = geometry;
@@ -483,7 +528,7 @@ export function spreadAreaMm2(
     return (L + t) * (W + t);
   }
 
-  return sourceAreaMm2(geometry);
+  return sourceAreaMm2(geometry, heatPath);
 }
 
 /**
@@ -508,7 +553,7 @@ export function spreadingAreaMm2(
   heatPath: HeatPathType,
   projectCoinAreaMm2: number | null = null,
 ): number | null {
-  const source = sourceAreaMm2(geometry);
+  const source = sourceAreaMm2(geometry, heatPath);
   const spread = spreadAreaMm2(geometry, heatPath, projectCoinAreaMm2);
   if (source == null || source <= 0) return null;
   if (spread == null || spread <= 0) return null;

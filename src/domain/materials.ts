@@ -82,6 +82,13 @@ export interface MaterialDefaults {
    */
   coin_L_mm: SourcedValue<number> | null;
   coin_W_mm: SourcedValue<number> | null;
+  /**
+   * How thick the coin is. A mechanical decision like its footprint, shared by
+   * every coin in the design, so it lives here rather than on each component —
+   * and like the footprint it ships empty, because there is no coin thickness
+   * that is right for an unknown build.
+   */
+  coin_thickness_mm: SourcedValue<number> | null;
 }
 
 const assumed = (value: number) => sourced(value, 'Assumed', { confidence: 'medium' });
@@ -111,6 +118,7 @@ export function defaultMaterials(): MaterialDefaults {
     solder_voiding: assumed(0.75),
     coin_L_mm: null,
     coin_W_mm: null,
+    coin_thickness_mm: null,
   };
 }
 
@@ -225,6 +233,7 @@ export function normalizeMaterials(raw: unknown): MaterialDefaults {
     solder_voiding: readSourced(raw.solder_voiding, base.solder_voiding),
     coin_L_mm: readOptional(raw.coin_L_mm),
     coin_W_mm: readOptional(raw.coin_W_mm),
+    coin_thickness_mm: readOptional(raw.coin_thickness_mm),
   };
 }
 
