@@ -17,7 +17,11 @@ import {
 } from '@/domain/component';
 import { valueOf } from '@/domain/sourcedValue';
 import { createRth } from '../rth';
-import { computeRth, type EdgeParameters } from '../resistance/calculators';
+import {
+  computeRth,
+  scaleParametersForDevices,
+  type EdgeParameters,
+} from '../resistance/calculators';
 import { getTemplate } from '../templates/templateRegistry';
 import type { ThermalTemplate } from '../templates/types';
 import { edgeId, instanceKeys, instanceMultiplier, nodeId } from './idFactory';
@@ -229,12 +233,16 @@ export function buildComponentSubgraph(
       const toId = roleToId.get(proto.toRole);
       if (!toId) continue;
 
-      // Seed parameters from the component wherever the template links them.
-      const parameters: EdgeParameters = {};
+      // Seed parameters from the component wherever the template links them,
+      // then widen them to however many devices this instance stands for: the
+      // source node already carries N devices' power, so the resistance beside
+      // it has to be N joints wide or the junction rise is N times too high.
+      const perDevice: EdgeParameters = {};
       for (const [param, path] of Object.entries(proto.parameterLinks ?? {})) {
         const value = readLinkedInput(component, path, options.materials);
-        if (value != null) parameters[param] = value;
+        if (value != null) perDevice[param] = value;
       }
+      const parameters = scaleParametersForDevices(proto.method, perDevice, multiplier);
 
       const computed = computeRth(proto.method, parameters);
 
@@ -263,6 +271,9 @@ export function buildComponentSubgraph(
           component_id: component.id,
           modified: false,
         },
+        // Re-projection re-reads the component's own numbers, so it has to know
+        // how many devices to widen them to all over again.
+        metadata: { devices_represented: multiplier },
       });
     }
 

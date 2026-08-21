@@ -168,6 +168,56 @@ export function boundaryDerivedRth(): RthComputation {
   };
 }
 
+/**
+ * Scales one device's parameters to the N devices a chain stands for.
+ *
+ * A subgraph built with AGGREGATE or GROUPED carries N devices' dissipation on
+ * its source node — `perDevicePower * multiplier`. Until this existed, the
+ * resistances beside it were still ONE device's, so four 45 W PAs were modelled
+ * as 180 W forced through a single PA's coin, solder joint and junction. That
+ * over-predicted the junction rise fourfold (50 °C instead of 12.5 °C on the
+ * Golden Demo's PA) — and "conservative" is no defence, because a wrong
+ * resistance reorders the bottleneck ranking whichever way it errs.
+ *
+ * N identical devices side by side are N resistances in parallel, so:
+ *   - anything of the form t/(k·A) scales by its AREA: N paths, N × the area
+ *   - a directly quoted resistance is simply divided
+ *
+ * Scaling the area rather than the result keeps the stored parameters honest:
+ * they still reproduce the resistance shown beside them, and they say plainly
+ * that this edge is four joints wide.
+ *
+ * The assumption is that an instance is a whole physical copy — its own coin,
+ * its own solder joint, its own TIM patch. A design where several devices share
+ * ONE spreader is a Screen 05 edit, not a qty model.
+ */
+export function scaleParametersForDevices(
+  method: EdgeMethod,
+  params: EdgeParameters,
+  devices: number,
+): EdgeParameters {
+  if (!Number.isFinite(devices) || devices <= 1) return params;
+
+  switch (method) {
+    case 'conduction_LkA':
+    case 'tim_thickness_k':
+    case 'via_array':
+    case 'solder_voiding':
+    case 'contact_area': {
+      const area = numeric(params, 'area_mm2');
+      return area == null ? params : { ...params, area_mm2: area * devices };
+    }
+    case 'direct_rth': {
+      const R = numeric(params, 'R_C_per_W');
+      return R == null ? params : { ...params, R_C_per_W: R / devices };
+    }
+    // Boundary and imported edges are never component-owned, so a device count
+    // has nothing to say about them.
+    default:
+      return params;
+  }
+}
+
 export function computeRth(method: EdgeMethod, params: EdgeParameters): RthComputation {
   switch (method) {
     case 'conduction_LkA':

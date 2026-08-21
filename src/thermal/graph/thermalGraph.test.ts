@@ -274,7 +274,9 @@ describe('analytical edge resistance (05 §21)', () => {
   });
 
   it('seeds package Rjc straight from the component (AC-05-28)', () => {
-    const graph = buildComponentSubgraph(component(), {
+    // qty 1, so this measures one device's resistance rather than the four-wide
+    // aggregate — the device count has its own tests below.
+    const graph = buildComponentSubgraph(component({ qty: 1 }), {
       materials: defaultMaterials(),
       templateId: 'BOTTOM_COOL_COIN',
       qtyModel: 'AGGREGATE',
@@ -285,7 +287,7 @@ describe('analytical edge resistance (05 §21)', () => {
   });
 
   it('leaves the TIM edge resolved when the component supplies k, t and area', () => {
-    const graph = buildComponentSubgraph(component(), {
+    const graph = buildComponentSubgraph(component({ qty: 1 }), {
       materials: defaultMaterials(),
       templateId: 'BOTTOM_COOL_COIN',
       qtyModel: 'AGGREGATE',
@@ -307,6 +309,7 @@ describe('analytical edge resistance (05 §21)', () => {
    */
   it('resolves an inherited TIM from the project materials', () => {
     const inherited = component({
+      qty: 1,
       thermal_spec: {
         ...component().thermal_spec,
         tim: { ...emptyTim(BUILTIN_TIM_IDS.grease) },
@@ -325,6 +328,7 @@ describe('analytical edge resistance (05 §21)', () => {
 
   it('follows a project material change into the edge', () => {
     const inherited = component({
+      qty: 1,
       thermal_spec: {
         ...component().thermal_spec,
         tim: { ...emptyTim(BUILTIN_TIM_IDS.grease) },
@@ -370,6 +374,7 @@ describe('analytical edge resistance (05 §21)', () => {
     materials.coin_W_mm = sourced(35, 'Manual');
     materials.coin_thickness_mm = sourced(2.0, 'Manual');
     const coin = component({
+      qty: 1,
       thermal_spec: {
         ...component().thermal_spec,
         heat_path: { type: 'Coin', parameters: {} },
@@ -700,6 +705,7 @@ describe('end-to-end resolution per heat path', () => {
   const withPath = (path: 'Coin' | 'Board' | 'TopSurface', templateId: string) =>
     buildComponentSubgraph(
       component({
+        qty: 1,
         thermal_spec: {
           ...component().thermal_spec,
           heat_path: { type: path, parameters: {} },
@@ -761,6 +767,7 @@ describe('end-to-end resolution per heat path', () => {
   it('stops at the coin when the project has no coin size, rather than guessing', () => {
     const graph = buildComponentSubgraph(
       component({
+        qty: 1,
         thermal_spec: {
           ...component().thermal_spec,
           heat_path: { type: 'Coin', parameters: {} },
@@ -776,5 +783,103 @@ describe('end-to-end resolution per heat path', () => {
     expect(byType.conduction.resolution).toBe('unresolved');
     expect(byType.tim.resolution).toBe('unresolved');
     expect(activeRth(byType.tim.rth)).toBeNull();
+  });
+});
+
+/**
+ * The qty model decides how many chains get DRAWN. It must not decide what
+ * temperature comes out.
+ *
+ * Before `scaleParametersForDevices`, the source node carried N devices' power
+ * while the resistances beside it were still one device's, so four 45 W PAs
+ * were solved as 180 W forced through a single PA's coin — a junction rise four
+ * times too high. Conservative is no defence: a wrong resistance reorders the
+ * bottleneck ranking whichever way it errs.
+ */
+describe('a qty model changes the drawing, not the answer', () => {
+  const materials = () => {
+    const m = defaultMaterials();
+    m.coin_L_mm = sourced(55, 'Manual');
+    m.coin_W_mm = sourced(35, 'Manual');
+    m.coin_thickness_mm = sourced(2.0, 'Manual');
+    return m;
+  };
+
+  const build = (qtyModel: 'AGGREGATE' | 'INDIVIDUAL' | 'GROUPED', qty = 4) =>
+    buildComponentSubgraph(
+      component({
+        qty,
+        thermal_spec: {
+          ...component().thermal_spec,
+          heat_path: { type: 'Coin', parameters: {} },
+          tim: { ...emptyTim(BUILTIN_TIM_IDS.grease) },
+        },
+      }),
+      { materials: materials(), templateId: 'BOTTOM_COOL_COIN', qtyModel },
+    )!;
+
+  /**
+   * Junction rise above the port, for one chain.
+   *
+   * Every chain a model builds is identical, so the total resistance divided by
+   * the number of chains is one chain's — no instance-suffix parsing needed.
+   */
+  const junctionRise = (graph: ReturnType<typeof build>) => {
+    const sources = graph.nodes.filter((node) => node.power_W > 0);
+    const totalRth = graph.edges.reduce((sum, edge) => sum + (activeRth(edge.rth) ?? 0), 0);
+    return sources[0].power_W * (totalRth / sources.length);
+  };
+
+  it('gives the same junction rise whichever model is chosen', () => {
+    const individual = junctionRise(build('INDIVIDUAL'));
+    expect(junctionRise(build('AGGREGATE'))).toBeCloseTo(individual, 9);
+    expect(junctionRise(build('GROUPED'))).toBeCloseTo(individual, 9);
+  });
+
+  it('widens an aggregated edge to N joints rather than leaving it one', () => {
+    const one = build('INDIVIDUAL').edges.find((edge) => edge.type === 'solder')!;
+    const four = build('AGGREGATE').edges.find((edge) => edge.type === 'solder')!;
+    expect(four.parameters?.area_mm2).toBeCloseTo(
+      (one.parameters?.area_mm2 as number) * 4,
+      6,
+    );
+    expect(activeRth(four.rth)).toBeCloseTo((activeRth(one.rth) as number) / 4, 9);
+  });
+
+  it('divides a directly quoted Rjc rather than scaling an area it has none of', () => {
+    const four = build('AGGREGATE').edges.find((edge) => edge.type === 'package_rjc')!;
+    expect(four.parameters?.R_C_per_W).toBeCloseTo(0.35 / 4, 9);
+  });
+
+  // Two groups of two, so each chain stands for two devices — not for four.
+  it('scales a group by what that group represents', () => {
+    const grouped = build('GROUPED').edges.find((edge) => edge.type === 'package_rjc')!;
+    expect(grouped.parameters?.R_C_per_W).toBeCloseTo(0.35 / 2, 9);
+  });
+
+  /** qty 5 in two groups is 3 and 2, so the two chains scale differently. */
+  it('handles a group split that does not divide evenly', () => {
+    const graph = build('GROUPED', 5);
+    const rjc = graph.edges
+      .filter((edge) => edge.type === 'package_rjc')
+      .map((edge) => edge.parameters?.R_C_per_W as number)
+      .sort((a, b) => a - b);
+    expect(rjc).toHaveLength(2);
+    expect(rjc[0]).toBeCloseTo(0.35 / 3, 9);
+    expect(rjc[1]).toBeCloseTo(0.35 / 2, 9);
+  });
+
+  it('records the device count so re-projection can reapply it', () => {
+    for (const edge of build('AGGREGATE').edges) {
+      expect(edge.metadata?.devices_represented).toBe(4);
+    }
+    for (const edge of build('INDIVIDUAL').edges) {
+      expect(edge.metadata?.devices_represented).toBe(1);
+    }
+  });
+
+  it('leaves a single device untouched', () => {
+    const one = build('AGGREGATE', 1).edges.find((edge) => edge.type === 'package_rjc')!;
+    expect(one.parameters?.R_C_per_W).toBeCloseTo(0.35, 9);
   });
 });
