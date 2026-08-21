@@ -11,6 +11,7 @@ import {
 import { combineEffects, effectOfChange, isMappedToNetwork } from './componentInvalidation';
 import {
   componentTotalPowerW,
+  GEOMETRY_RULES,
   sourceAreaMm2,
   heatPathPatch,
   sourceFaceMm,
@@ -22,6 +23,7 @@ import {
   inferHeatPath,
   inferLimitType,
   spreadAreaMm2,
+  spreadFaceMm,
   spreadingAreaMm2,
   totalPowerW,
   type Component,
@@ -216,7 +218,9 @@ describe('component readiness', () => {
     });
 
     it('does not spread a top-cooled or bolted part', () => {
-      expect(spreadAreaMm2(board, 'TopSurface')).toBe(100);
+      // A bolted part states its contact face; a top-cooled one leaves through
+      // the case top, which is the package outline — so each reads its own.
+      expect(spreadAreaMm2({ ...board, package_L_mm: 8, package_W_mm: 8 }, 'TopSurface')).toBe(64);
       expect(spreadAreaMm2(board, 'DirectMetal')).toBe(100);
     });
 
@@ -226,12 +230,20 @@ describe('component readiness', () => {
       expect(spreadAreaMm2(board, 'Coin', 55 * 35)).toBe(1925);
     });
 
-    it('prefers a stated spread face over any derivation', () => {
-      const stated = { ...board, spread_L_mm: 20, spread_W_mm: 20 };
-      expect(spreadAreaMm2(stated, 'Board')).toBe(400);
-      // On a coin path the project's coin still wins: its size is one mechanical
-      // decision for the whole design, not a per-component one.
-      expect(spreadAreaMm2(stated, 'Coin', 1925)).toBe(1925);
+    /**
+     * No path takes a stated spread face any more — every one derives it, which
+     * is the only way the field the user reads and the area the solver uses can
+     * be guaranteed to agree.
+     */
+    it('derives the spread face on every path, and says the same thing twice', () => {
+      for (const path of ['Board', 'TopSurface', 'DirectMetal'] as const) {
+        const face = spreadFaceMm(board, path);
+        const area = spreadAreaMm2(board, path);
+        expect(face.L != null && face.W != null ? face.L * face.W : null).toBe(area);
+      }
+      const coinFace = spreadFaceMm(board, 'Coin', { L: 55, W: 35 });
+      expect(coinFace).toEqual({ L: 55, W: 35 });
+      expect(spreadAreaMm2(board, 'Coin', 1925)).toBe(1925);
     });
 
     it('cannot spread without the inputs, and never invents them', () => {
@@ -244,7 +256,9 @@ describe('component readiness', () => {
 
     it('still resolves where the path genuinely does not spread', () => {
       const bare = { ...emptyThermalSpec().geometry, source_L_mm: 10, source_W_mm: 10 };
-      expect(spreadingAreaMm2(bare, 'TopSurface')).toBe(100);
+      expect(spreadingAreaMm2({ ...bare, package_L_mm: 10, package_W_mm: 10 }, 'TopSurface')).toBe(
+        100,
+      );
       expect(spreadingAreaMm2(bare, 'DirectMetal')).toBe(100);
     });
   });
@@ -613,8 +627,6 @@ describe('coin geometry follows the package and the project', () => {
       // Deliberately different, to prove they are not what a coin path reads.
       source_L_mm: 4,
       source_W_mm: 4,
-      spread_L_mm: 7,
-      spread_W_mm: 7,
     };
     return component;
   };
@@ -624,12 +636,18 @@ describe('coin geometry follows the package and the project', () => {
     expect(sourceAreaMm2(coin().thermal_spec.geometry, 'Coin')).toBe(216);
   });
 
-  it('still reads the source pair on every other path', () => {
-    expect(sourceAreaMm2(coin().thermal_spec.geometry, 'Board')).toBe(16);
-    expect(sourceAreaMm2(coin().thermal_spec.geometry, 'TopSurface')).toBe(16);
+  /**
+   * Two paths read the package and two read the stated pair — the split is
+   * `GEOMETRY_RULES`, not a special case for coins.
+   */
+  it('reads the package on a top-cooled part too, and the pair on the rest', () => {
+    const geometry = coin().thermal_spec.geometry;
+    expect(sourceAreaMm2(geometry, 'TopSurface')).toBe(216);
+    expect(sourceAreaMm2(geometry, 'Board')).toBe(16);
+    expect(sourceAreaMm2(geometry, 'DirectMetal')).toBe(16);
   });
 
-  it('takes the spread face from the project coin, overriding the component', () => {
+  it('takes the spread face from the project coin', () => {
     expect(spreadAreaMm2(coin().thermal_spec.geometry, 'Coin', 1925)).toBe(1925);
   });
 
@@ -668,5 +686,65 @@ describe('heatPathPatch', () => {
     const component = readyPA();
     component.architecture_prep.preferred_base_zone = 'RF Right';
     expect(heatPathPatch(component, 'Board').architecture_prep.preferred_base_zone).toBe('RF Right');
+  });
+});
+
+/**
+ * The rule table is the single answer to "which geometry does this path need",
+ * read by the inspector and by the solver alike. If they ever disagree the user
+ * edits one number and a different one is solved with, so it is pinned here.
+ */
+describe('GEOMETRY_RULES', () => {
+  const geometry = {
+    ...emptyThermalSpec().geometry,
+    package_L_mm: 18,
+    package_W_mm: 12,
+    source_L_mm: 6,
+    source_W_mm: 6,
+    board_thickness_mm: 1.6,
+  };
+
+  it('asks for a source face only where the package cannot answer', () => {
+    expect(GEOMETRY_RULES.Coin.source).toBe('package');
+    expect(GEOMETRY_RULES.TopSurface.source).toBe('package');
+    // An E-PAD and a bolt-down flange are both smaller than the outline, and
+    // nothing but the datasheet or the drawing knows by how much.
+    expect(GEOMETRY_RULES.Board.source).toBe('stated');
+    expect(GEOMETRY_RULES.DirectMetal.source).toBe('stated');
+  });
+
+  it('names exactly one thickness per path, or none', () => {
+    expect(GEOMETRY_RULES.Coin.thickness).toBe('project_coin');
+    expect(GEOMETRY_RULES.Board.thickness).toBe('board');
+    // Nothing conducts through a spreader on these two, so no thickness applies.
+    expect(GEOMETRY_RULES.TopSurface.thickness).toBe('none');
+    expect(GEOMETRY_RULES.DirectMetal.thickness).toBe('none');
+  });
+
+  it('derives the board spread face at 45 degrees, matching the Volume Tool', () => {
+    expect(spreadFaceMm(geometry, 'Board')).toEqual({ L: 7.6, W: 7.6 });
+  });
+
+  it('leaves a non-spreading path on the face heat entered', () => {
+    expect(spreadFaceMm(geometry, 'TopSurface')).toEqual({ L: 18, W: 12 });
+    expect(spreadFaceMm(geometry, 'DirectMetal')).toEqual({ L: 6, W: 6 });
+  });
+
+  it('cannot derive a board spread face without the thickness', () => {
+    const noThickness = { ...geometry, board_thickness_mm: null };
+    expect(spreadFaceMm(noThickness, 'Board')).toEqual({ L: null, W: null });
+    expect(spreadAreaMm2(noThickness, 'Board')).toBeNull();
+  });
+
+  /**
+   * Changing the path must change what is asked for, with no stale value left
+   * feeding the solver — the whole reason the spread pair stopped being stored.
+   */
+  it('switches cleanly between paths on one component', () => {
+    expect(sourceAreaMm2(geometry, 'Coin')).toBe(216);
+    expect(sourceAreaMm2(geometry, 'Board')).toBe(36);
+    expect(spreadAreaMm2(geometry, 'Board')).toBeCloseTo(7.6 * 7.6, 6);
+    expect(spreadAreaMm2(geometry, 'TopSurface')).toBe(216);
+    expect(spreadAreaMm2(geometry, 'DirectMetal')).toBe(36);
   });
 });

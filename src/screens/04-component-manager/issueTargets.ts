@@ -55,8 +55,6 @@ const TARGETS: Record<string, IssueTarget> = {
   'geometry.package_H_mm': { tab: 'geometry', fieldId: 'geo-package_H_mm' },
   'geometry.source_L_mm': { tab: 'geometry', fieldId: 'geo-source_L_mm' },
   'geometry.source_W_mm': { tab: 'geometry', fieldId: 'geo-source_W_mm' },
-  'geometry.spread_L_mm': { tab: 'geometry', fieldId: 'geo-spread_L_mm' },
-  'geometry.spread_W_mm': { tab: 'geometry', fieldId: 'geo-spread_W_mm' },
   'geometry.board_thickness_mm': { tab: 'geometry', fieldId: 'geo-board_thickness_mm' },
   'geometry.needs_review': {
     tab: 'geometry',

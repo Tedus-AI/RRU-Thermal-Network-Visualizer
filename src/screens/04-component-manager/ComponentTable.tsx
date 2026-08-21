@@ -197,10 +197,13 @@ export function ComponentTable({
                     ))}
                   </select>
                 </td>
-                <td className="px-2 py-1.5">
+                {/* A wrapped name turns one row into two and breaks the scan
+                    down the column, so it stays on one line and elides. */}
+                <td className="max-w-[14rem] px-2 py-1.5 whitespace-nowrap">
                   <button
                     type="button"
-                    className="font-medium hover:text-accent-700 hover:underline"
+                    title={component.name}
+                    className="block max-w-full truncate font-medium hover:text-accent-700 hover:underline"
                     onClick={() => onSelect(component.id)}
                   >
                     {component.name}
@@ -394,7 +397,16 @@ export function ComponentTable({
                     {component.architecture_prep.thermal_profile_status}
                   </span>
                 </td>
-                <td className="px-2 py-1.5 text-[11px] whitespace-nowrap text-ink-400">
+                {/* The project name is long and rarely the thing being read,
+                    so the column is capped and the full text is on hover. */}
+                <td
+                  className="max-w-[11rem] truncate px-2 py-1.5 text-[11px] text-ink-400"
+                  title={`${component.provenance.source_type}${
+                    component.provenance.source_project_name
+                      ? ` · ${component.provenance.source_project_name}`
+                      : ''
+                  }`}
+                >
                   {component.provenance.source_type}
                   {component.provenance.source_project_name
                     ? ` · ${component.provenance.source_project_name}`

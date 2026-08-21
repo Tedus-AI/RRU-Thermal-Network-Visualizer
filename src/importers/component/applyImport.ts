@@ -41,8 +41,6 @@ function specFromRow(row: StagingRow, materials: MaterialDefaults): ThermalSpec 
       ...emptyGeometry(),
       source_L_mm: row.source_L_mm,
       source_W_mm: row.source_W_mm,
-      spread_L_mm: row.spread_L_mm,
-      spread_W_mm: row.spread_W_mm,
       // The Volume Evaluation Tool overloads one Thick column: it is the board
       // on a via path and the coin on a coin path. Coin thickness is one
       // decision for the whole design, so it belongs to the project (01 §4)
@@ -80,6 +78,11 @@ function buildMetadata(
   if (heatPath === 'Coin' && row.thickness_mm != null) {
     extra._imported_coin_thickness_mm = row.thickness_mm;
   }
+  // The spread face is derived from the path now (GEOMETRY_RULES), so an
+  // imported one has nowhere to live. Kept rather than dropped, so a number
+  // someone measured is never lost without a trace.
+  if (row.spread_L_mm != null) extra._imported_spread_L_mm = row.spread_L_mm;
+  if (row.spread_W_mm != null) extra._imported_spread_W_mm = row.spread_W_mm;
   return Object.keys(extra).length > 0 ? extra : undefined;
 }
 
@@ -217,14 +220,6 @@ export function applyImport({ existing, rows, sessionPolicy, source, materials }
                 source_W_mm: mergeNonEmpty(
                   spec.geometry.source_W_mm,
                   target.thermal_spec.geometry.source_W_mm,
-                ),
-                spread_L_mm: mergeNonEmpty(
-                  spec.geometry.spread_L_mm,
-                  target.thermal_spec.geometry.spread_L_mm,
-                ),
-                spread_W_mm: mergeNonEmpty(
-                  spec.geometry.spread_W_mm,
-                  target.thermal_spec.geometry.spread_W_mm,
                 ),
                 board_thickness_mm: mergeNonEmpty(
                   spec.geometry.board_thickness_mm,

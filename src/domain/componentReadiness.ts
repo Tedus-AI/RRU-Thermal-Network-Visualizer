@@ -5,7 +5,13 @@
  * engineer must be able to see exactly which of the nine facts is missing.
  */
 
-import { isHeatSource, powerWOf, sourceAreaMm2, type Component } from './component';
+import {
+  GEOMETRY_RULES,
+  isHeatSource,
+  powerWOf,
+  sourceAreaMm2,
+  type Component,
+} from './component';
 import { valueOf } from './sourcedValue';
 
 export type ComponentStatus = 'READY' | 'WARNING' | 'ERROR' | 'DISABLED';
@@ -137,8 +143,6 @@ export function validateComponent(component: Component): ComponentIssue[] {
     ['package_H_mm', 'Package H', '封裝高'],
     ['source_L_mm', 'Source face L', '熱源面長'],
     ['source_W_mm', 'Source face W', '熱源面寬'],
-    ['spread_L_mm', 'Spread face L', '擴散面長'],
-    ['spread_W_mm', 'Spread face W', '擴散面寬'],
     ['board_thickness_mm', 'Board thickness', '板厚'],
   ];
   for (const [key, label, labelZh] of geometryFields) {
@@ -224,9 +228,12 @@ export function validateComponent(component: Component): ComponentIssue[] {
     issues.push({
       severity: 'warning',
       // Named to a real field so the issue can be a link to it, not just a
-      // sentence: plain `geometry` pointed at nothing the user could open. On a
-      // coin path the joint face IS the package, so that is the field to fix.
-      field: spec.heat_path.type === 'Coin' ? 'geometry.package_L_mm' : 'geometry.source_L_mm',
+      // sentence: plain `geometry` pointed at nothing the user could open. Two
+      // paths take the face from the package, so that is where they are fixed.
+      field:
+        GEOMETRY_RULES[spec.heat_path.type].source === 'package'
+          ? 'geometry.package_L_mm'
+          : 'geometry.source_L_mm',
       message: 'Source face size is missing.',
       message_zh: '缺少熱源面尺寸。',
     });
