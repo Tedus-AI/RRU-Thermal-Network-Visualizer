@@ -224,7 +224,9 @@ export function validateComponent(component: Component): ComponentIssue[] {
   if (isHeatSource(component) && sourceAreaMm2(spec.geometry) == null) {
     issues.push({
       severity: 'warning',
-      field: 'geometry',
+      // Named to a real field so the issue can be a link to it, not just a
+      // sentence: plain `geometry` pointed at nothing the user could open.
+      field: 'geometry.source_L_mm',
       message: 'Source face size is missing.',
       message_zh: '缺少熱源面尺寸。',
     });
@@ -242,7 +244,7 @@ export function validateComponent(component: Component): ComponentIssue[] {
   if (spec.geometry.needs_review) {
     issues.push({
       severity: 'warning',
-      field: 'geometry',
+      field: 'geometry.needs_review',
       message:
         'Imported legacy geometry needs review — Thickness / Pad may use Volume Tool semantics.',
       message_zh: '匯入的舊版幾何資料需人工確認（Thick / Pad 可能沿用舊工具定義）。',
