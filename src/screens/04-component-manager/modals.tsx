@@ -2,16 +2,13 @@
 
 import { defaultMaterials } from '@/domain/materials';
 import { useProjectStore } from '@/data/projectStore';
+import { presetZones } from '@/thermal/graph/sharedStructure';
 import { useState } from 'react';
 import { Button, Field, Modal, NumberInput, Select, TextInput } from '@/ui/primitives';
 import {
-  ARCHITECTURE_TEMPLATES,
-  ARCHITECTURE_TEMPLATE_LABELS,
-  BASE_ZONES,
   HEAT_PATH_TYPES,
   COMPONENT_CATEGORIES,
   LIMIT_TYPES,
-  type ArchitectureTemplate,
   type BaseZone,
   type HeatPathType,
   type Component,
@@ -153,7 +150,6 @@ export interface BulkEditValues {
   limit_type?: LimitType;
   heat_path?: HeatPathType;
   tim_id?: string;
-  template?: ArchitectureTemplate;
   base_zone?: BaseZone;
   enabled?: boolean;
 }
@@ -176,6 +172,9 @@ export function BulkEditModal({
   const [values, setValues] = useState<Record<string, string>>({});
   // The TIM choices are the project's own materials, not a fixed vocabulary.
   const materials = useProjectStore((s) => s.draft?.materials) ?? defaultMaterials();
+  // Likewise the zones: they come from the project's base structure (01 §2).
+  const baseStructure = useProjectStore((s) => s.draft?.project_context.base_structure);
+  const zones = presetZones(baseStructure ?? 'SINGLE_MAIN_BASE');
 
   const pick = (key: string) => values[key] ?? UNCHANGED;
   const setPick = (key: string, value: string) => setValues({ ...values, [key]: value });
@@ -186,7 +185,6 @@ export function BulkEditModal({
     if (pick('limit_type') !== UNCHANGED) out.limit_type = pick('limit_type') as LimitType;
     if (pick('heat_path') !== UNCHANGED) out.heat_path = pick('heat_path') as HeatPathType;
     if (pick('tim_id') !== UNCHANGED) out.tim_id = pick('tim_id') as string;
-    if (pick('template') !== UNCHANGED) out.template = pick('template') as ArchitectureTemplate;
     if (pick('base_zone') !== UNCHANGED) out.base_zone = pick('base_zone') as BaseZone;
     if (pick('enabled') !== UNCHANGED) out.enabled = pick('enabled') === 'true';
     return out;
@@ -244,14 +242,18 @@ export function BulkEditModal({
           materials.tim.map((material) => material.id),
           (value) => materials.tim.find((material) => material.id === value)?.name ?? value,
         )}
+        {/* No template row: the heat path decides it (`heatPathPatch`), and
+            offering it here would let the two disagree across a whole filter. */}
         {row(
-          'template',
-          'Architecture Template',
-          '架構模板',
-          ARCHITECTURE_TEMPLATES,
-          (value) => ARCHITECTURE_TEMPLATE_LABELS[value as ArchitectureTemplate],
+          'base_zone',
+          'Base Zone',
+          '基座區域',
+          zones.map((zone) => zone.key),
+          (value) => {
+            const zone = zones.find((entry) => entry.key === value);
+            return zone ? `${zone.name} / ${zone.zh}` : value;
+          },
         )}
-        {row('base_zone', 'Base Zone', '基座區域', BASE_ZONES)}
         {row('enabled', 'Enabled', '啟用', ['true', 'false'], (value) =>
           value === 'true' ? 'Enabled / 啟用' : 'Disabled / 停用',
         )}
@@ -284,10 +286,9 @@ export function bulkPatchFor(values: BulkEditValues) {
       };
     }
 
-    if (values.template || values.base_zone) {
+    if (values.base_zone) {
       patch.architecture_prep = {
         ...component.architecture_prep,
-        template_preference: values.template ?? component.architecture_prep.template_preference,
         preferred_base_zone: values.base_zone ?? component.architecture_prep.preferred_base_zone,
       };
     }
@@ -303,7 +304,7 @@ export function bulkFieldsFor(values: BulkEditValues): string[] {
   if (values.limit_type) fields.push('limit_type');
   if (values.heat_path) fields.push('heat_path.type');
   if (values.tim_id) fields.push('tim.tim_id');
-  if (values.template || values.base_zone) fields.push('architecture_prep');
+  if (values.base_zone) fields.push('architecture_prep');
   return fields;
 }
 

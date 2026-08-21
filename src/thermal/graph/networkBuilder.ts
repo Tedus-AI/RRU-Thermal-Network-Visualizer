@@ -7,13 +7,19 @@
  *   3. an input the component does not have leaves the edge UNRESOLVED, never 0.
  */
 
-import { coinAreaMm2, resolveTim, type MaterialDefaults } from '@/domain/materials';
+import {
+  coinAreaMm2,
+  isDirectContact,
+  resolveTim,
+  type MaterialDefaults,
+} from '@/domain/materials';
 import {
   powerWOf,
   sourceAreaMm2,
   spreadAreaMm2,
   spreadingAreaMm2,
   type Component,
+  UNASSIGNED_ZONE,
 } from '@/domain/component';
 import { valueOf } from '@/domain/sourcedValue';
 import { createRth } from '../rth';
@@ -27,6 +33,7 @@ import type { ThermalTemplate } from '../templates/types';
 import { edgeId, instanceKeys, instanceMultiplier, nodeId } from './idFactory';
 import type {
   ComponentTemplateBinding,
+  EdgeMethod,
   PortKind,
   ThermalEdge,
   ThermalNode,
@@ -75,6 +82,8 @@ export function readLinkedInput(
     // null — and a null length leaves the coin edge honestly unresolved.
     case 'materials.coin_thickness_mm':
       return materials.coin_thickness_mm?.value ?? null;
+    case 'materials.contact_conductance_W_m2K':
+      return materials.contact_conductance_W_m2K.value;
   }
 
   // --- Derived component values ------------------------------------------
@@ -142,6 +151,35 @@ function instanceLabel(component: Component, instance: string, model: QtyModel):
  * the whole component for AGGREGATE, one device for INDIVIDUAL, the group's
  * share for GROUPED. That is source aggregation and nothing more (05 §7).
  */
+/**
+ * What an interface edge actually is for this component.
+ *
+ * A template says "TIM here", but a component bolted straight to the casting
+ * has no TIM: the joint is metal on metal and resolves through a contact
+ * conductance, not a k and a thickness. That is a different formula, so the
+ * method itself changes — faking it as a very thin pseudo-TIM would put an
+ * invented thickness and conductivity into the report.
+ *
+ * Everything else passes through untouched.
+ */
+function effectiveEdgeSpec(
+  proto: { type: string; method: EdgeMethod; parameterLinks?: Record<string, string> },
+  component: Component,
+): { method: EdgeMethod; parameterLinks: Record<string, string> } {
+  const links = proto.parameterLinks ?? {};
+  if (proto.type !== 'tim' || !isDirectContact(component.thermal_spec.tim)) {
+    return { method: proto.method, parameterLinks: links };
+  }
+  return {
+    method: 'contact_hc',
+    parameterLinks: {
+      h_c_W_m2K: 'materials.contact_conductance_W_m2K',
+      // The joint spans the same face the TIM would have covered.
+      area_mm2: links.area_mm2 ?? 'thermal_spec.geometry.spread_area',
+    },
+  };
+}
+
 export function buildComponentSubgraph(
   component: Component,
   options: {
@@ -233,28 +271,30 @@ export function buildComponentSubgraph(
       const toId = roleToId.get(proto.toRole);
       if (!toId) continue;
 
+      const spec = effectiveEdgeSpec(proto, component);
+
       // Seed parameters from the component wherever the template links them,
       // then widen them to however many devices this instance stands for: the
       // source node already carries N devices' power, so the resistance beside
       // it has to be N joints wide or the junction rise is N times too high.
       const perDevice: EdgeParameters = {};
-      for (const [param, path] of Object.entries(proto.parameterLinks ?? {})) {
+      for (const [param, path] of Object.entries(spec.parameterLinks)) {
         const value = readLinkedInput(component, path, options.materials);
         if (value != null) perDevice[param] = value;
       }
-      const parameters = scaleParametersForDevices(proto.method, perDevice, multiplier);
+      const parameters = scaleParametersForDevices(spec.method, perDevice, multiplier);
 
-      const computed = computeRth(proto.method, parameters);
+      const computed = computeRth(spec.method, parameters);
 
       edges.push({
         id: edgeId(component.id, proto.fromRole, proto.toRole, instance),
         from: fromId,
         to: toId,
         type: proto.type,
-        method: proto.method,
+        method: spec.method,
         rth: createRth(computed.value, 'Analytical', computed.value == null ? 'low' : 'medium'),
         parameters: parameters as ThermalEdge['parameters'],
-        parameter_links: proto.parameterLinks,
+        parameter_links: spec.parameterLinks,
         heat_flow_W: null,
         delta_T_C: null,
         resolution: computed.resolution,
@@ -370,9 +410,10 @@ export function previewGeneration(
 /** Maps 04's preferred base zone onto a shared-structure zone node id. */
 export function suggestedZoneFor(component: Component, zoneIds: string[]): string | null {
   const preferred = component.architecture_prep.preferred_base_zone;
-  if (preferred === 'Unassigned' || preferred === 'Custom') return null;
-  const key = preferred.toUpperCase().replace(/[^A-Z0-9]+/g, '_');
-  return zoneIds.find((id) => id.endsWith(key)) ?? null;
+  if (preferred === UNASSIGNED_ZONE) return null;
+  // The stored value IS the zone key now, so no name mangling: a renamed zone
+  // used to break this link without saying anything.
+  return zoneIds.find((id) => id.endsWith(preferred)) ?? null;
 }
 
 export const PORT_LABELS: Record<PortKind, { label: string; zh: string }> = {

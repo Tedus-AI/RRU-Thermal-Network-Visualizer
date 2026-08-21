@@ -228,7 +228,14 @@ export function ThermalPathBuilderView() {
   const [zoom, setZoom] = useState(1);
   const [showPorts, setShowPorts] = useState(true);
   const [showLabels, setShowLabels] = useState(true);
-  const [structurePreset, setStructurePreset] = useState<StructurePreset>('FUNCTIONAL_ZONES');
+  // Seeded from the project's own answer (01 §2), so Screen 04's zone list and
+  // the structure this screen builds start from the same decision. It stays
+  // local state because trying a different shape here should not silently
+  // rewrite the project until the engineer applies it.
+  const projectStructure = useProjectStore((s) => s.draft?.project_context.base_structure);
+  const [structurePreset, setStructurePreset] = useState<StructurePreset>(
+    projectStructure ?? 'SINGLE_MAIN_BASE',
+  );
   const [showGenerate, setShowGenerate] = useState(false);
   const [rebuildFor, setRebuildFor] = useState<string | null>(null);
   const [qtyWarning, setQtyWarning] = useState<{ componentId: string; next: BuilderPref } | null>(

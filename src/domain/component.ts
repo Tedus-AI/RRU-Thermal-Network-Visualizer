@@ -235,17 +235,40 @@ export function heatPathPatch(
 
 export const HEAT_PATH_PATCH_FIELDS = ['heat_path.type', 'architecture_prep'];
 
-/** 04 §20 — a placement hint, never an actual base node. */
-export const BASE_ZONES = [
-  'Unassigned',
-  'RF Left',
-  'RF Right',
-  'Digital',
-  'Power',
-  'Filter',
-  'Custom',
-] as const;
-export type BaseZone = (typeof BASE_ZONES)[number];
+/**
+ * 04 §20 — which shared structure this part attaches to. A placement hint,
+ * never an actual base node.
+ *
+ * A zone KEY, not a display name. Which keys are valid depends on the project's
+ * base structure (01 §2) — `presetZones` is the vocabulary — so this cannot be
+ * a fixed union. It used to be one, hardcoded to the FUNCTIONAL_ZONES names,
+ * which left four of the six structures with no zone the user could pick and
+ * matched by upper-casing the display name, so a rename broke the link
+ * silently.
+ */
+export const UNASSIGNED_ZONE = 'Unassigned';
+export type BaseZone = string;
+
+/** Display names stored by earlier builds, mapped to the keys that replaced them. */
+const LEGACY_ZONE_KEYS: Record<string, string> = {
+  'RF Left': 'RF_LEFT',
+  'RF Right': 'RF_RIGHT',
+  Digital: 'DIGITAL',
+  Power: 'POWER',
+  Filter: 'FILTER',
+  'Main Base': 'MAIN_BASE',
+  'Small Base': 'SMALL_BASE',
+  'Base Top': 'BASE_TOP',
+  'Base Mid': 'BASE_MID',
+  'Base Bottom': 'BASE_BOTTOM',
+  // Never a zone — it meant "not decided", which is what Unassigned says.
+  Custom: UNASSIGNED_ZONE,
+};
+
+export function normalizeZoneKey(value: unknown): BaseZone {
+  if (typeof value !== 'string' || value.trim() === '') return UNASSIGNED_ZONE;
+  return LEGACY_ZONE_KEYS[value] ?? value;
+}
 
 /** 04 §21 — Screen 05 decides whether Qty 4 becomes 1, 4 or grouped nodes. */
 export const QTY_MODELS = ['DECIDE_LATER', 'AGGREGATE', 'INDIVIDUAL', 'GROUPED'] as const;
@@ -440,7 +463,7 @@ export function emptyThermalSpec(
 export function emptyArchitecturePrep(): ArchitecturePrep {
   return {
     template_preference: 'UNASSIGNED',
-    preferred_base_zone: 'Unassigned',
+    preferred_base_zone: UNASSIGNED_ZONE,
     qty_model_preference: 'DECIDE_LATER',
     thermal_profile_status: 'Not Assigned',
   };

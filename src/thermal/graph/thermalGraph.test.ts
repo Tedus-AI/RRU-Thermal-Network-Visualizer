@@ -1,4 +1,4 @@
-import { BUILTIN_TIM_IDS } from '@/domain/materials';
+import { BUILTIN_TIM_IDS, DIRECT_CONTACT_TIM_ID } from '@/domain/materials';
 import { defaultMaterials } from '@/domain/materials';
 import { describe, expect, it } from 'vitest';
 
@@ -881,5 +881,87 @@ describe('a qty model changes the drawing, not the answer', () => {
   it('leaves a single device untouched', () => {
     const one = build('AGGREGATE', 1).edges.find((edge) => edge.type === 'package_rjc')!;
     expect(one.parameters?.R_C_per_W).toBeCloseTo(0.35, 9);
+  });
+});
+
+/**
+ * A bolted metal-to-metal joint is not a very thin TIM.
+ *
+ * Common on RRU designs where the heat-sink base is machined flat in one pass
+ * and the board carries a flatness spec, so the two are simply screwed
+ * together. It still has a resistance — two solids touch only across their
+ * asperities — but there is no material and no thickness to quote, so the edge
+ * changes METHOD rather than borrowing a k and a bond line it does not have.
+ */
+describe('direct metal contact', () => {
+  const bolted = (qty = 1) =>
+    buildComponentSubgraph(
+      component({
+        qty,
+        thermal_spec: {
+          ...component().thermal_spec,
+          heat_path: { type: 'Board', parameters: {} },
+          tim: { ...emptyTim(DIRECT_CONTACT_TIM_ID) },
+        },
+      }),
+      { materials: defaultMaterials(), templateId: 'BOTTOM_COOL_VIA', qtyModel: 'AGGREGATE' },
+    )!;
+
+  it('switches the interface edge from t/kA to 1/h·A', () => {
+    const edge = bolted().edges.find((entry) => entry.type === 'tim')!;
+    expect(edge.method).toBe('contact_hc');
+    expect(edge.parameters?.h_c_W_m2K).toBe(3000);
+    // No invented thickness, no invented conductivity.
+    expect(edge.parameters?.thickness_mm).toBeUndefined();
+    expect(edge.parameters?.k_W_mK).toBeUndefined();
+  });
+
+  it('resolves, rather than sitting unresolved as "no TIM" did', () => {
+    const edge = bolted().edges.find((entry) => entry.type === 'tim')!;
+    expect(edge.resolution).toBe('resolved');
+    const area = edge.parameters?.area_mm2 as number;
+    expect(activeRth(edge.rth)).toBeCloseTo(1 / (3000 * (area / 1e6)), 9);
+  });
+
+  it('follows the project constant rather than a per-component value', () => {
+    const materials = defaultMaterials();
+    materials.contact_conductance_W_m2K = sourced(8000, 'Measurement');
+    const graph = buildComponentSubgraph(
+      component({
+        qty: 1,
+        thermal_spec: {
+          ...component().thermal_spec,
+          heat_path: { type: 'Board', parameters: {} },
+          tim: { ...emptyTim(DIRECT_CONTACT_TIM_ID) },
+        },
+      }),
+      { materials, templateId: 'BOTTOM_COOL_VIA', qtyModel: 'AGGREGATE' },
+    )!;
+    expect(graph.edges.find((entry) => entry.type === 'tim')!.parameters?.h_c_W_m2K).toBe(8000);
+  });
+
+  // A bolted joint is N joints in parallel, exactly like a solder joint.
+  it('widens with the devices the chain stands for', () => {
+    const one = bolted(1).edges.find((entry) => entry.type === 'tim')!;
+    const four = bolted(4).edges.find((entry) => entry.type === 'tim')!;
+    expect(four.parameters?.area_mm2).toBeCloseTo((one.parameters?.area_mm2 as number) * 4, 6);
+    expect(activeRth(four.rth)).toBeCloseTo((activeRth(one.rth) as number) / 4, 9);
+  });
+
+  it('leaves a real TIM alone', () => {
+    const graph = buildComponentSubgraph(
+      component({
+        qty: 1,
+        thermal_spec: {
+          ...component().thermal_spec,
+          heat_path: { type: 'Board', parameters: {} },
+          tim: { ...emptyTim(BUILTIN_TIM_IDS.grease) },
+        },
+      }),
+      { materials: defaultMaterials(), templateId: 'BOTTOM_COOL_VIA', qtyModel: 'AGGREGATE' },
+    )!;
+    const edge = graph.edges.find((entry) => entry.type === 'tim')!;
+    expect(edge.method).toBe('tim_thickness_k');
+    expect(edge.parameters?.h_c_W_m2K).toBeUndefined();
   });
 });

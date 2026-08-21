@@ -21,7 +21,7 @@ import {
   type LimitType,
 } from '@/domain/component';
 import { withValue } from '@/domain/sourcedValue';
-import { defaultMaterials } from '@/domain/materials';
+import { DIRECT_CONTACT_TIM_ID, defaultMaterials } from '@/domain/materials';
 import { useProjectStore } from '@/data/projectStore';
 import { statusOf, type ComponentStatus } from '@/domain/componentReadiness';
 import { tip, ZH } from '@/i18n/componentManagerCopy';
@@ -378,7 +378,8 @@ export function ComponentTable({
                       )
                     }
                   >
-                    <option value="">None</option>
+                    <option value="">—</option>
+                    <option value={DIRECT_CONTACT_TIM_ID}>直接接觸</option>
                     {materials.tim.map((material) => (
                       <option key={material.id} value={material.id}>
                         {material.name}

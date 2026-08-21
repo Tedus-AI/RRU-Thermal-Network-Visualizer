@@ -70,6 +70,23 @@ export interface MaterialDefaults {
   via_effective_k_W_mK: SourcedValue<number>;
   via_efficiency: SourcedValue<number>;
 
+  /**
+   * A bolted metal-to-metal joint with no TIM in the gap — W/m²·K.
+   *
+   * Common on RRU designs where the heat-sink base is machined flat in one pass
+   * and the board carries a flatness spec, so the two are simply screwed
+   * together. Two solids still only touch across their asperities, so the joint
+   * has a real resistance; it is conductance-based because there is no material
+   * and no thickness to quote, only how well the faces are made to meet.
+   *
+   * The shipped 3000 assumes a machined base against a flat board with
+   * fasteners roughly every 70 mm. It is the least defensible number in any
+   * chain that uses it — a sparser pitch or a bowed board pushes it toward
+   * 1000, a tight pitch and a thin solder mask toward 10000 — so it ships
+   * `Assumed` and Screen 04 says so.
+   */
+  contact_conductance_W_m2K: SourcedValue<number>;
+
   /** Solder preform between a package and its coin. */
   solder_k_W_mK: SourcedValue<number>;
   solder_thickness_mm: SourcedValue<number>;
@@ -116,6 +133,7 @@ export function defaultMaterials(): MaterialDefaults {
     solder_k_W_mK: assumed(58),
     solder_thickness_mm: assumed(0.3),
     solder_voiding: assumed(0.75),
+    contact_conductance_W_m2K: assumed(3000),
     coin_L_mm: null,
     coin_W_mm: null,
     coin_thickness_mm: null,
@@ -231,6 +249,10 @@ export function normalizeMaterials(raw: unknown): MaterialDefaults {
     solder_k_W_mK: readSourced(raw.solder_k_W_mK, base.solder_k_W_mK),
     solder_thickness_mm: readSourced(raw.solder_thickness_mm, base.solder_thickness_mm),
     solder_voiding: readSourced(raw.solder_voiding, base.solder_voiding),
+    contact_conductance_W_m2K: readSourced(
+      raw.contact_conductance_W_m2K,
+      base.contact_conductance_W_m2K,
+    ),
     coin_L_mm: readOptional(raw.coin_L_mm),
     coin_W_mm: readOptional(raw.coin_W_mm),
     coin_thickness_mm: readOptional(raw.coin_thickness_mm),
@@ -262,6 +284,12 @@ export interface ResolvedTim {
    * engineer has to resolve, so the UI must be able to tell them apart.
    */
   missing: boolean;
+  /**
+   * Bolted metal to metal with nothing between. Resolves through the project's
+   * contact conductance rather than a k and a thickness, so a null k here is a
+   * decision rather than a gap.
+   */
+  directContact: boolean;
 }
 
 export function findTimMaterial(
@@ -285,12 +313,43 @@ export function findTimMaterial(
  * resolves to nothing rather than borrowing another material's numbers, and the
  * edge stays unresolved.
  */
+/**
+ * Not a material — a statement that there is NO material, and the two faces are
+ * simply bolted together. It resolves through `contact_conductance_W_m2K`
+ * instead of a k and a thickness, so it cannot live in the TIM list.
+ */
+export const DIRECT_CONTACT_TIM_ID = 'TIM_DIRECT_CONTACT';
+
+export function isDirectContact(tim: TimSpec): boolean {
+  return tim.tim_id === DIRECT_CONTACT_TIM_ID;
+}
+
 export function resolveTim(tim: TimSpec, materials: MaterialDefaults): ResolvedTim {
+  // A bolted joint has a resistance but no k and no bond line, so there is
+  // nothing here to resolve; the interface edge switches method instead.
+  if (isDirectContact(tim)) {
+    return {
+      k_W_mK: null,
+      thickness_mm: null,
+      material: null,
+      inherited: false,
+      missing: false,
+      directContact: true,
+    };
+  }
+
   const material = findTimMaterial(materials, tim.tim_id);
   const missing = tim.tim_id != null && material == null;
 
   if (!material) {
-    return { k_W_mK: null, thickness_mm: null, material: null, inherited: false, missing };
+    return {
+      k_W_mK: null,
+      thickness_mm: null,
+      material: null,
+      inherited: false,
+      missing,
+      directContact: false,
+    };
   }
 
   const ownBlt = tim.blt_mm?.value ?? null;
@@ -300,6 +359,7 @@ export function resolveTim(tim: TimSpec, materials: MaterialDefaults): ResolvedT
     material,
     inherited: ownBlt == null,
     missing: false,
+    directContact: false,
   };
 }
 
@@ -327,6 +387,7 @@ export const PROCESS_FIELDS = [
   ['solder_k_W_mK', 'Solder k', '焊料導熱係數', 'W/m·K'],
   ['solder_thickness_mm', 'Solder thickness', '焊料厚度', 'mm'],
   ['solder_voiding', 'Solder effective area', '焊料有效面積率', '—'],
+  ['contact_conductance_W_m2K', 'Bare contact h', '硬接觸熱導', 'W/m²·K'],
 ] as const;
 
 export type ProcessField = (typeof PROCESS_FIELDS)[number][0];

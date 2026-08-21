@@ -16,6 +16,7 @@ import {
   emptyGeometry,
   inferHeatPath,
   inferLimitType,
+  normalizeZoneKey,
   type Component,
   type ComponentCategory,
   type ComponentGeometry,
@@ -255,7 +256,13 @@ export function migrateComponent(raw: unknown, index: number): Component | null 
       tim: migrateTim(timRaw, specRaw),
     },
 
-    architecture_prep: { ...emptyArchitecturePrep(), ...architecture },
+    architecture_prep: {
+      ...emptyArchitecturePrep(),
+      ...architecture,
+      // Zones became keys when the vocabulary started coming from the project's
+      // base structure; anything stored as a display name is mapped across.
+      preferred_base_zone: normalizeZoneKey(architecture.preferred_base_zone),
+    },
     provenance: {
       source_type: 'Manual',
       source_project_id: null,

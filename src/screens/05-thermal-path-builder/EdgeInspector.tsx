@@ -42,7 +42,8 @@ const METHODS: Array<{ value: EdgeMethod; label: string }> = [
   { value: 'conduction_LkA', label: 'Solid conduction L/kA' },
   { value: 'tim_thickness_k', label: 'TIM t/kA' },
   { value: 'via_array', label: 'Thermal via equivalent' },
-  { value: 'contact_area', label: 'Contact' },
+  { value: 'contact_area', label: 'Contact (quoted Rth)' },
+  { value: 'contact_hc', label: 'Bare metal contact 1/h·A' },
   { value: 'solder_voiding', label: 'Solder' },
   { value: 'convection_hA', label: 'Boundary derived (convection)' },
   { value: 'radiation_hA', label: 'Boundary derived (radiation)' },
@@ -53,6 +54,10 @@ const METHODS: Array<{ value: EdgeMethod; label: string }> = [
 const METHOD_PARAMETERS: Record<EdgeMethod, Array<{ key: string; label: string; zh: string; unit: string }>> = {
   direct_rth: [{ key: 'R_C_per_W', label: 'Rth', zh: '熱阻', unit: '°C/W' }],
   contact_area: [{ key: 'R_C_per_W', label: 'Contact Rth', zh: '接觸熱阻', unit: '°C/W' }],
+  contact_hc: [
+    { key: 'h_c_W_m2K', label: 'Contact conductance', zh: '接觸熱導', unit: 'W/m²·K' },
+    { key: 'area_mm2', label: 'Contact area', zh: '接觸面積', unit: 'mm²' },
+  ],
   solder_voiding: [
     { key: 'thickness_mm', label: 'Solder thickness', zh: '焊料厚度', unit: 'mm' },
     { key: 'k_W_mK', label: 'Conductivity k', zh: '熱傳導率', unit: 'W/m·K' },

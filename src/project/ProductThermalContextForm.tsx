@@ -29,6 +29,12 @@ import type {
   ProductType,
 } from '@/domain/project';
 import { useProjectStore } from '@/data/projectStore';
+import {
+  PRESET_LABELS,
+  STRUCTURE_PRESETS,
+  presetZones,
+  type StructurePreset,
+} from '@/thermal/graph/sharedStructure';
 
 /** zh-TW labels for the option sets whose English is not self-explanatory. */
 const ENCLOSURE_ZH: Record<EnclosureType, string> = {
@@ -48,6 +54,7 @@ export function ProductThermalContextForm({ readOnly }: { readOnly: boolean }) {
   if (!draft) return null;
   const context = draft.project_context;
   const allowedDeployments = DEPLOYMENTS_BY_PRODUCT[context.product_type];
+  const zones = presetZones(context.base_structure);
 
   return (
     <SectionCard
@@ -132,6 +139,33 @@ export function ProductThermalContextForm({ readOnly }: { readOnly: boolean }) {
               patchContext({ enclosure_type: event.target.value as EnclosureType })
             }
           />
+        </Field>
+
+        <Field
+          label="Base Structure"
+          zh="基座結構"
+          htmlFor="base_structure"
+          tip="共用基座怎麼分區。它決定 Screen 04 的「基座區域」可以選哪些，以及 Screen 05 會建出什麼結構。整片壓鑄件當一塊就選「單一主基座」；想區分鰭片正下方與邊角的溫差再往下拆。"
+        >
+          <Select
+            id="base_structure"
+            items={STRUCTURE_PRESETS.map((entry) => ({
+              value: entry,
+              label: `${PRESET_LABELS[entry].label} / ${PRESET_LABELS[entry].zh}`,
+            }))}
+            value={context.base_structure}
+            disabled={readOnly}
+            onChange={(event) =>
+              patchContext({ base_structure: event.target.value as StructurePreset })
+            }
+          />
+          {/* Naming the zones here is what makes the choice concrete: this is
+              exactly the list Screen 04 will offer per component. */}
+          <p className="mt-1.5 text-[11px] leading-relaxed text-ink-400">
+            {zones.length === 0
+              ? 'Zones are drawn by hand in Screen 05. / 區域於 Screen 05 自行建立。'
+              : `Zones / 可選區域：${zones.map((zone) => zone.zh).join('、')}`}
+          </p>
         </Field>
 
         <div className="lg:col-span-3">

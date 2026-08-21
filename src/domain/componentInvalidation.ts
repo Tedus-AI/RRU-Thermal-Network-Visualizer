@@ -48,7 +48,16 @@ export function effectOfChange(field: string, isMapped: boolean): InvalidationEf
       );
     case 'tim':
     case 'tim.type':
+    // Not merely a different k: choosing "direct contact" swaps the interface
+    // edge from t/kA to 1/h·A, so the subgraph has to be rebuilt, not just
+    // re-solved. `tim.tim_id` used to fall through to the default, which flagged
+    // the solver but left the network believing its edges were still current.
+    case 'tim.tim_id':
       return effect(true, true, 'component_tim_changed');
+
+    // A bond line is a number in an existing edge; the shape does not move.
+    case 'tim.blt_mm':
+      return effect(false, true, 'component_rth_changed');
     case 'heat_path':
     case 'heat_path.type':
       return effect(true, true, 'component_architecture_changed');
