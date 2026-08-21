@@ -12,6 +12,8 @@ import { combineEffects, effectOfChange, isMappedToNetwork } from './componentIn
 import {
   componentTotalPowerW,
   sourceAreaMm2,
+  heatPathPatch,
+  sourceFaceMm,
   createComponent,
   emptyArchitecturePrep,
   emptyExternalMappings,
@@ -66,7 +68,9 @@ function readyPA(): Component {
       limit_C: sourced(180, 'Datasheet'),
       r_jc_C_per_W: sourced(0.35, 'Datasheet'),
       package_type: 'QFN',
-      geometry: { ...emptyThermalSpec().geometry, source_L_mm: 20, source_W_mm: 10 },
+      // A Coin path takes its joint face from the package, because that is the
+      // face the part is reflowed onto.
+      geometry: { ...emptyThermalSpec().geometry, package_L_mm: 20, package_W_mm: 10 },
       heat_path: { type: 'Coin', parameters: {} },
       heat_path_confirmed: true,
       tim: { ...emptyThermalSpec().tim, tim_id: BUILTIN_TIM_IDS.grease },
@@ -74,6 +78,10 @@ function readyPA(): Component {
     architecture_prep: {
       ...emptyArchitecturePrep(),
       template_preference: 'BOTTOM_COOL_COIN',
+      // Screen 04 no longer asks for a template — the heat path decides it —
+      // so the open architecture choice, and what READY now requires, is which
+      // shared structure the part attaches to.
+      preferred_base_zone: 'RF Left',
     },
   };
 }
@@ -179,14 +187,14 @@ describe('component readiness', () => {
     const geometry = emptyThermalSpec().geometry;
     expect(sourceAreaMm2(geometry)).toBeNull();
     expect(sourceAreaMm2({ ...geometry, source_L_mm: 4, source_W_mm: 5 })).toBe(20);
+    // A coin-soldered part is joined across its whole base, so on that path the
+    // joint face follows the package and the source pair is not read at all.
     expect(
-      sourceAreaMm2({
-        ...geometry,
-        source_L_mm: 4,
-        source_W_mm: 5,
-        custom_source_area_mm2: 99,
-      }),
-    ).toBe(99);
+      sourceAreaMm2(
+        { ...geometry, package_L_mm: 20, package_W_mm: 10, source_L_mm: 4, source_W_mm: 5 },
+        'Coin',
+      ),
+    ).toBe(200);
   });
 
   // The whole point of splitting the two faces: heat enters across one and
@@ -221,7 +229,9 @@ describe('component readiness', () => {
     it('prefers a stated spread face over any derivation', () => {
       const stated = { ...board, spread_L_mm: 20, spread_W_mm: 20 };
       expect(spreadAreaMm2(stated, 'Board')).toBe(400);
-      expect(spreadAreaMm2({ ...stated, custom_spread_area_mm2: 7 }, 'Board')).toBe(7);
+      // On a coin path the project's coin still wins: its size is one mechanical
+      // decision for the whole design, not a per-component one.
+      expect(spreadAreaMm2(stated, 'Coin', 1925)).toBe(1925);
     });
 
     it('cannot spread without the inputs, and never invents them', () => {
@@ -585,5 +595,78 @@ describe('SourcedValue', () => {
     const unknown = unknownValue<number>('Imported');
     expect(unknown.value).toBeNull();
     expect(unknown.confidence).toBe('low');
+  });
+});
+
+/**
+ * A coin-soldered part is reflowed onto the coin across its whole base, so on
+ * that path the joint face IS the package outline and the coin's own footprint
+ * is the project's. Neither is typed twice, and neither can drift.
+ */
+describe('coin geometry follows the package and the project', () => {
+  const coin = () => {
+    const component = readyPA();
+    component.thermal_spec.geometry = {
+      ...emptyThermalSpec().geometry,
+      package_L_mm: 18,
+      package_W_mm: 12,
+      // Deliberately different, to prove they are not what a coin path reads.
+      source_L_mm: 4,
+      source_W_mm: 4,
+      spread_L_mm: 7,
+      spread_W_mm: 7,
+    };
+    return component;
+  };
+
+  it('takes the joint face from the package, not the source pair', () => {
+    expect(sourceFaceMm(coin().thermal_spec.geometry, 'Coin')).toEqual({ L: 18, W: 12 });
+    expect(sourceAreaMm2(coin().thermal_spec.geometry, 'Coin')).toBe(216);
+  });
+
+  it('still reads the source pair on every other path', () => {
+    expect(sourceAreaMm2(coin().thermal_spec.geometry, 'Board')).toBe(16);
+    expect(sourceAreaMm2(coin().thermal_spec.geometry, 'TopSurface')).toBe(16);
+  });
+
+  it('takes the spread face from the project coin, overriding the component', () => {
+    expect(spreadAreaMm2(coin().thermal_spec.geometry, 'Coin', 1925)).toBe(1925);
+  });
+
+  // With no project coin size there is no coin area — never a guess from the
+  // component's own numbers, which would silently move every PA's margin.
+  it('has no spread face at all until the project states the coin', () => {
+    expect(spreadAreaMm2(coin().thermal_spec.geometry, 'Coin', null)).toBeNull();
+  });
+});
+
+/**
+ * The heat path chooses the resistance chain, and each chain has exactly one
+ * template — so the template is written from the path rather than asked for a
+ * second time where the two could disagree.
+ */
+describe('heatPathPatch', () => {
+  it('sets the template the path implies, and confirms the path', () => {
+    const patch = heatPathPatch(readyPA(), 'Board');
+    expect(patch.thermal_spec.heat_path.type).toBe('Board');
+    expect(patch.thermal_spec.heat_path_confirmed).toBe(true);
+    expect(patch.architecture_prep.template_preference).toBe('BOTTOM_COOL_VIA');
+  });
+
+  it('keeps the two in step for every path', () => {
+    for (const [path, template] of [
+      ['Coin', 'BOTTOM_COOL_COIN'],
+      ['Board', 'BOTTOM_COOL_VIA'],
+      ['TopSurface', 'TOP_COOL_LID'],
+      ['DirectMetal', 'DIRECT_METAL'],
+    ] as const) {
+      expect(heatPathPatch(readyPA(), path).architecture_prep.template_preference).toBe(template);
+    }
+  });
+
+  it('leaves the base zone alone — that is a separate decision', () => {
+    const component = readyPA();
+    component.architecture_prep.preferred_base_zone = 'RF Right';
+    expect(heatPathPatch(component, 'Board').architecture_prep.preferred_base_zone).toBe('RF Right');
   });
 });

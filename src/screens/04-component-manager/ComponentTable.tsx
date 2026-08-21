@@ -9,10 +9,12 @@ import { AlertTriangle, CircleCheck, CircleSlash, XCircle } from 'lucide-react';
 import { ColumnLabel } from '@/ui/FieldLabel';
 import {
   HEAT_PATH_LABELS,
+  HEAT_PATH_PATCH_FIELDS,
   HEAT_PATH_TYPES,
   COMPONENT_CATEGORIES,
   LIMIT_TYPES,
   componentTotalPowerW,
+  heatPathPatch,
   type HeatPathType,
   type Component,
   type ComponentCategory,
@@ -342,17 +344,12 @@ export function ComponentTable({
                     value={spec.heat_path.type}
                     disabled={readOnly}
                     onChange={(event) =>
-                      patchSpec(
-                        component,
-                        {
-                          heat_path: {
-                            ...spec.heat_path,
-                            type: event.target.value as HeatPathType,
-                          },
-                          // Picking it IS the confirmation.
-                          heat_path_confirmed: true,
-                        },
-                        ['heat_path.type'],
+                      // Also rewrites the architecture template the path implies,
+                      // so the two can never disagree.
+                      onPatch(
+                        component.id,
+                        heatPathPatch(component, event.target.value as HeatPathType),
+                        HEAT_PATH_PATCH_FIELDS,
                       )
                     }
                   >

@@ -1,6 +1,6 @@
 /** Category tabs, filters and actions — 04 §8, §9. */
 
-import { Copy, Layers, Plus, RotateCcw, Trash2 } from 'lucide-react';
+import { Copy, Layers, Library, Plus, RotateCcw, Trash2 } from 'lucide-react';
 import { Button } from '@/ui/primitives';
 import { COMPONENT_CATEGORIES, componentTotalPowerW, type Component, type ComponentCategory } from '@/domain/component';
 import { statusOf } from '@/domain/componentReadiness';
@@ -188,6 +188,7 @@ export function ComponentActions({
   visibleCount,
   readOnly,
   onAdd,
+  onAddFromLibrary,
   onDuplicate,
   onDelete,
   onBulkEdit,
@@ -196,6 +197,7 @@ export function ComponentActions({
   visibleCount: number;
   readOnly: boolean;
   onAdd: () => void;
+  onAddFromLibrary: () => void;
   onDuplicate: () => void;
   onDelete: () => void;
   onBulkEdit: () => void;
@@ -205,6 +207,9 @@ export function ComponentActions({
     <div className="flex flex-wrap items-center gap-2">
       <Button icon={<Plus size={14} />} disabled={readOnly} onClick={onAdd}>
         Add Component / 新增
+      </Button>
+      <Button icon={<Library size={13} />} disabled={readOnly} onClick={onAddFromLibrary}>
+        From Library / 從元件庫
       </Button>
       <Button
         icon={<Copy size={13} />}

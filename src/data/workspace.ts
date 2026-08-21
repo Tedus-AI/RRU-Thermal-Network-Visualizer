@@ -19,6 +19,7 @@ import { clearOwnedStorage } from './buildStamp';
 import { listProjectFiles, readTextFile, type DirectoryHandle } from './folderBinding';
 import { withSyncSuspended } from './syncSuspend';
 import { applyProjectFile, parseProjectFile } from './projectFile';
+import { LIBRARY_FILENAME } from './componentLibraryFile';
 
 export interface HydrateResult {
   /** Project ids now in the cache, in the order their files were read. */
@@ -46,6 +47,9 @@ export async function hydrateFromFolder(handle: DirectoryHandle): Promise<Hydrat
     if (typeof localStorage !== 'undefined') clearOwnedStorage(localStorage);
 
     for (const entry of entries) {
+      // The component library lives in the same folder but is not a project;
+      // reading it here would only add it to `skipped` as noise.
+      if (entry.filename === LIBRARY_FILENAME) continue;
       const text = await readTextFile(handle, entry.filename);
       if (text == null) {
         skipped.push({ filename: entry.filename, reason: 'unreadable' });

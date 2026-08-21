@@ -67,6 +67,10 @@ export function readLinkedInput(
       return materials.solder_thickness_mm.value;
     case 'materials.solder_voiding':
       return materials.solder_voiding.value;
+    // Ships empty by design, so this is the one project constant that can be
+    // null — and a null length leaves the coin edge honestly unresolved.
+    case 'materials.coin_thickness_mm':
+      return materials.coin_thickness_mm?.value ?? null;
   }
 
   // --- Derived component values ------------------------------------------
@@ -81,7 +85,7 @@ export function readLinkedInput(
   switch (path) {
     case 'thermal_spec.geometry.contact_area':
     case 'thermal_spec.geometry.source_area':
-      return sourceAreaMm2(geometry);
+      return sourceAreaMm2(geometry, heatPath);
     case 'thermal_spec.geometry.spread_area':
       return spreadAreaMm2(geometry, heatPath, coinArea);
     case 'thermal_spec.geometry.spreading_area':

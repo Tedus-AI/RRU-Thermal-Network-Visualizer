@@ -7,6 +7,12 @@
  * The screen owns the active tab rather than this component, because an issue
  * elsewhere on the page has to be able to open the tab that fixes it. Every
  * editable control carries the DOM id `issueTargets.ts` names for it.
+ *
+ * Two things are deliberately NOT asked for here:
+ *   - a data source beside every number. Provenance still matters and is still
+ *     stored, but it is edited in one place — the Source tab — instead of
+ *     doubling the width of every field. A value still on `Assumed` says so.
+ *   - an architecture template. The heat path already picks it (`heatPathPatch`).
  */
 
 import { useEffect } from 'react';
@@ -15,23 +21,22 @@ import { CircleCheck, CircleDashed, Info, Link2, Ruler, Share2, Thermometer } fr
 import { Badge, Button, NumberInput, Select, TextArea, TextInput } from '@/ui/primitives';
 import { BilingualTooltip, FieldLabel } from '@/ui/FieldLabel';
 import {
-  ARCHITECTURE_TEMPLATES,
-  ARCHITECTURE_TEMPLATE_LABELS,
   BASE_ZONES,
   COMPONENT_CATEGORIES,
   HEAT_PATH_LABELS,
   HEAT_PATH_TYPES,
+  HEAT_PATH_PATCH_FIELDS,
   LIMIT_TYPES,
   LIMIT_TYPE_LABELS,
   PACKAGE_TYPES,
   QTY_MODELS,
   QTY_MODEL_LABELS,
   SOURCE_FACE_LABELS,
-  TEMPLATE_FOR_HEAT_PATH,
   componentTotalPowerW,
+  heatPathPatch,
   sourceAreaMm2,
+  sourceFaceMm,
   spreadAreaMm2,
-  type ArchitectureTemplate,
   type BaseZone,
   type Component,
   type ComponentCategory,
@@ -85,7 +90,11 @@ export interface InspectorProps {
   onSaveToLibrary: (component: Component) => void;
 }
 
-/** A SourcedValue editor: number plus its source, so provenance stays visible. */
+/**
+ * A number that carries provenance. The source itself is edited on the Source
+ * tab; the only thing said here is when a value is still a shipped guess, which
+ * is the one state that changes how much you should trust the number.
+ */
 function SourcedNumberField({
   id,
   label,
@@ -112,46 +121,18 @@ function SourcedNumberField({
   return (
     <div className="flex flex-col gap-1.5">
       <FieldLabel label={label} zh={zh} unit={unit} tooltip={tooltip} htmlFor={id} />
-      <div className="flex gap-1.5">
-        <NumberInput
-          id={id}
-          className="flex-1"
-          step={step}
-          value={value?.value ?? ''}
-          placeholder={placeholder}
-          disabled={readOnly}
-          onChange={(event) =>
-            onChange(
-              withValue(value, event.target.value === '' ? null : Number(event.target.value)),
-            )
-          }
-        />
-        <select
-          aria-label={`${label} data source`}
-          className="h-9 w-28 rounded-md border border-line-strong bg-surface px-2 text-[12px] text-ink-500"
-          value={value?.source ?? 'Manual'}
-          disabled={readOnly}
-          onChange={(event) =>
-            onChange({
-              value: value?.value ?? null,
-              source: event.target.value as DataSource,
-              reference: value?.reference,
-              confidence: value?.confidence,
-              updated_at: new Date().toISOString(),
-            })
-          }
-        >
-          {DATA_SOURCES.map((source) => (
-            <option key={source} value={source}>
-              {source}
-            </option>
-          ))}
-        </select>
-      </div>
-      {value?.value == null && (
-        <p className="text-[11px] text-ink-400">
-          N/A — unknown is stored as null, never 0. / 未知值以 N/A 保存，不以 0 代替。
-        </p>
+      <NumberInput
+        id={id}
+        step={step}
+        value={value?.value ?? ''}
+        placeholder={placeholder}
+        disabled={readOnly}
+        onChange={(event) =>
+          onChange(withValue(value, event.target.value === '' ? null : Number(event.target.value)))
+        }
+      />
+      {value?.value != null && value.source === 'Assumed' && (
+        <p className="text-[11px] text-warn-600">Assumed / 推定值</p>
       )}
     </div>
   );
@@ -189,6 +170,29 @@ function GeometryField({
           } as Partial<ComponentGeometry>)
         }
       />
+    </div>
+  );
+}
+
+/** A dimension this component does not own: shown, never typed, and said why. */
+function DerivedField({
+  id,
+  label,
+  zh,
+  value,
+  from,
+}: {
+  id: string;
+  label: string;
+  zh: string;
+  value: number | null;
+  from: string;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <FieldLabel label={label} zh={zh} htmlFor={id} />
+      <NumberInput id={id} value={value ?? ''} placeholder="—" disabled readOnly />
+      <p className="text-[11px] text-ink-400">{from}</p>
     </div>
   );
 }
@@ -249,23 +253,28 @@ export function ComponentInspector({
   const patchGeometry = (patch: Partial<ComponentGeometry>) =>
     patchSpec({ geometry: { ...spec.geometry, ...patch } }, ['geometry']);
 
-  const heatPath = spec.heat_path.type;
-  const resolvedTim = resolveTim(spec.tim, materials);
-  const sourceArea = sourceAreaMm2(spec.geometry);
-  const spreadArea = spreadAreaMm2(spec.geometry, heatPath, coinAreaMm2(materials));
-  const spreadOrigin =
-    spec.geometry.custom_spread_area_mm2 != null || spec.geometry.spread_L_mm != null
-      ? 'Stated on this component / 由此元件指定'
-      : heatPath === 'Board'
-        ? 'Derived: (L + board thickness) × (W + board thickness) / 由 45° 擴散推導'
-        : heatPath === 'Coin'
-          ? coinAreaMm2(materials) == null
-            ? 'Needs the project coin size (Screen 01) / 需先設定專案銅塊尺寸'
-            : 'From the project coin size / 取自專案銅塊尺寸'
-          : 'No spreading on this path / 此路徑無擴散，等於熱源面';
-
   const patchPrep = (patch: Partial<Component['architecture_prep']>) =>
     onPatch(component.id, { architecture_prep: { ...prep, ...patch } }, ['architecture_prep']);
+
+  const heatPath = spec.heat_path.type;
+  const resolvedTim = resolveTim(spec.tim, materials);
+  const sourceFace = sourceFaceMm(spec.geometry, heatPath);
+  const sourceArea = sourceAreaMm2(spec.geometry, heatPath);
+  const spreadArea = spreadAreaMm2(spec.geometry, heatPath, coinAreaMm2(materials));
+  // Blank BLT means "use the material's"; a stored one means the build was
+  // measured. The radio below is just that distinction, made visible.
+  const bltCustom = spec.tim.blt_mm != null;
+
+  const spreadOrigin =
+    heatPath === 'Coin'
+      ? coinAreaMm2(materials) == null
+        ? 'Set the coin size in Screen 01 / 請於 Screen 01 設定銅塊尺寸'
+        : 'From the project coin size / 取自專案銅塊尺寸'
+      : spec.geometry.spread_L_mm != null
+        ? 'Stated on this component / 由此元件指定'
+        : heatPath === 'Board'
+          ? 'Derived: (L + board thickness) × (W + board thickness) / 由 45° 擴散推導'
+          : 'No spreading on this path / 此路徑無擴散，等於熱源面';
 
   return (
     <div className="flex flex-col gap-3">
@@ -300,15 +309,17 @@ export function ComponentInspector({
         <div className="flex flex-col gap-3.5 p-3.5">
           {tab === 'overview' && (
             <>
-              <FieldLabel label="Component Name" zh="元件名稱" htmlFor="ins-name" />
-              <TextInput
-                id="ins-name"
-                value={component.name}
-                disabled={readOnly}
-                onChange={(event) => onPatch(component.id, { name: event.target.value }, ['name'])}
-              />
+              <div className="flex flex-col gap-1.5">
+                <FieldLabel label="Component Name" zh="元件名稱" htmlFor="ins-name" />
+                <TextInput
+                  id="ins-name"
+                  value={component.name}
+                  disabled={readOnly}
+                  onChange={(event) => onPatch(component.id, { name: event.target.value }, ['name'])}
+                />
+              </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-3">
                 <div className="flex flex-col gap-1.5">
                   <FieldLabel label="Category" zh="分類" htmlFor="ins-category" />
                   <Select
@@ -334,21 +345,20 @@ export function ComponentInspector({
                     }
                   />
                 </div>
+                <SourcedNumberField
+                  id="ins-power"
+                  label="Power"
+                  zh="單顆功耗"
+                  unit="W"
+                  tooltip={tip('Power')}
+                  value={component.power_W}
+                  step="0.01"
+                  readOnly={readOnly}
+                  onChange={(next) =>
+                    onPatch(component.id, { power_W: next ?? component.power_W }, ['power_W'])
+                  }
+                />
               </div>
-
-              <SourcedNumberField
-                id="ins-power"
-                label="Power per Device"
-                zh="單顆功耗"
-                unit="W"
-                tooltip={tip('Power')}
-                value={component.power_W}
-                step="0.01"
-                readOnly={readOnly}
-                onChange={(next) =>
-                  onPatch(component.id, { power_W: next ?? component.power_W }, ['power_W'])
-                }
-              />
 
               <div className="rounded-md border border-line bg-surface-muted px-3 py-2">
                 <div className="flex items-baseline justify-between">
@@ -359,9 +369,6 @@ export function ComponentInspector({
                     {componentTotalPowerW(component).toFixed(2)} W
                   </span>
                 </div>
-                <p className="mt-1 text-[11px] leading-relaxed text-ink-400">
-                  Qty × Power. Not thermal edge heat flow (Q). / 非熱網路邊的熱流 Q。
-                </p>
               </div>
 
               <div className="flex flex-col gap-1.5">
@@ -381,163 +388,13 @@ export function ComponentInspector({
 
           {tab === 'thermal' && (
             <>
-              <div className="flex flex-col gap-1.5">
-                <FieldLabel
-                  label="Limit Type"
-                  zh="限制類型"
-                  htmlFor="ins-limit-type"
-                  tooltip={tip('Limit Type')}
-                />
-                <Select
-                  id="ins-limit-type"
-                  items={LIMIT_TYPES.map((type) => ({
-                    value: type,
-                    label: `${type} — ${LIMIT_TYPE_LABELS[type].en} / ${LIMIT_TYPE_LABELS[type].zh}`,
-                  }))}
-                  value={spec.limit_type}
-                  disabled={readOnly}
-                  onChange={(event) =>
-                    patchSpec(
-                      // Picking it IS the confirmation.
-                      { limit_type: event.target.value as LimitType, limit_type_confirmed: true },
-                      ['limit_type'],
-                    )
-                  }
-                />
-                {spec.limit_type_confirmed ? (
-                  <p className="text-[11px] text-ink-400">
-                    Nothing forces a case-limited part onto Tj.
-                    <span className="block">不會強制把殼溫限制的元件轉為 Tj。</span>
-                  </p>
-                ) : (
-                  <p className="text-[11px] text-warn-600">
-                    Assumed from category — confirm against the datasheet.
-                    <span className="block">依類別推定，請對照規格書確認。</span>
-                  </p>
-                )}
-              </div>
-
-              <SourcedNumberField
-                id="ins-limit"
-                label="Thermal Limit"
-                zh="溫度上限"
-                unit="°C"
-                tooltip={tip('Limit')}
-                value={spec.limit_C}
-                readOnly={readOnly}
-                onChange={(next) => patchSpec({ limit_C: next }, ['limit_C'])}
-              />
-
-              <SourcedNumberField
-                id="ins-rjc"
-                label="Rjc"
-                zh="接面-外殼熱阻"
-                unit="°C/W"
-                tooltip={tip('Rjc')}
-                value={spec.r_jc_C_per_W}
-                placeholder="N/A"
-                step="0.01"
-                readOnly={readOnly}
-                onChange={(next) => patchSpec({ r_jc_C_per_W: next }, ['r_jc_C_per_W'])}
-              />
-
-              <div className="flex flex-col gap-1.5">
-                <FieldLabel
-                  label="Package Type"
-                  zh="封裝型式"
-                  htmlFor="ins-package"
-                  tooltip={tip('Package')}
-                />
-                <Select
-                  id="ins-package"
-                  options={PACKAGE_TYPES}
-                  value={spec.package_type ?? 'Unknown'}
-                  disabled={readOnly}
-                  onChange={(event) =>
-                    patchSpec({ package_type: event.target.value as PackageType }, ['package_type'])
-                  }
-                />
-              </div>
-
-              {/* --- TIM: picked from the project library (04 §18) --- */}
-              <fieldset className="rounded-md border border-line p-3">
-                <legend className="px-1 text-[12px] font-semibold text-ink-700">
-                  TIM / 熱介面材料
-                </legend>
-                <div className="flex flex-col gap-3">
-                  <div className="flex flex-col gap-1.5">
-                    <FieldLabel label="Material" zh="材料" htmlFor="ins-tim" tooltip={tip('TIM')} />
-                    <Select
-                      id="ins-tim"
-                      items={[
-                        { value: '', label: 'None / 無' },
-                        ...materials.tim.map((material) => ({
-                          value: material.id,
-                          label: `${material.name} — k ${material.k_W_mK.value ?? '?'} W/m·K`,
-                        })),
-                      ]}
-                      value={spec.tim.tim_id ?? ''}
-                      disabled={readOnly}
-                      onChange={(event) =>
-                        patchSpec(
-                          { tim: { ...spec.tim, tim_id: event.target.value || null } },
-                          ['tim.tim_id'],
-                        )
-                      }
-                    />
-                    <p className="text-[11px] leading-relaxed text-ink-400">
-                      Materials are defined once for the project, in Screen 01. This picks one.
-                      <span className="block">材料在 Screen 01 統一建立，這裡只是選用。</span>
-                    </p>
-                  </div>
-
-                  {/* A dangling reference is not the same as "no TIM", so it says so. */}
-                  {resolvedTim.missing && (
-                    <p className="text-[11px] leading-relaxed text-danger-600">
-                      This component points at a material the project no longer has. Pick another.
-                      <span className="block">
-                        此元件指向的材料已不存在於專案清單中，請重新選擇。
-                      </span>
-                    </p>
-                  )}
-
-                  <SourcedNumberField
-                    id="ins-blt"
-                    label="Bond Line (BLT)"
-                    zh="壓合厚度"
-                    unit="mm"
-                    value={spec.tim.blt_mm}
-                    placeholder={
-                      resolvedTim.thickness_mm == null
-                        ? '—'
-                        : `${resolvedTim.thickness_mm} (from material)`
-                    }
-                    step="0.01"
-                    readOnly={readOnly || spec.tim.tim_id == null}
-                    onChange={(next) => patchSpec({ tim: { ...spec.tim, blt_mm: next } }, ['tim'])}
-                  />
-                  <p className="text-[11px] leading-relaxed text-ink-400">
-                    Bond line is a build outcome, not a material property — the same material ends
-                    up thinner under screws than under a clip. Leave it empty to use the material's
-                    default; k always comes from the material.
-                    <span className="block">
-                      壓合厚度取決於組裝方式而非材料本身，故可個別覆寫；留空則沿用材料預設。k
-                      一律取自材料。
-                    </span>
-                  </p>
-                  <p className="text-[11px] leading-relaxed text-ink-400">
-                    Specifying a TIM does not create a thermal edge — Screen 05 decides that.
-                    <span className="block">指定 TIM 不代表建立獨立 Edge，由 Screen 05 決定。</span>
-                  </p>
-                </div>
-              </fieldset>
-
-              {/* --- Heat path (04 §17) --- */}
+              {/* Heat path first: it selects the whole chain, so everything
+                  below is read in its light. */}
               <fieldset className="rounded-md border border-line p-3">
                 <legend className="px-1 text-[12px] font-semibold text-ink-700">
                   Heat Path / 主要散熱路徑
                 </legend>
-                <div className="flex flex-col gap-3">
+                <div className="flex flex-col gap-2">
                   <Select
                     id="ins-heat-path"
                     aria-label="Heat path type"
@@ -548,29 +405,14 @@ export function ComponentInspector({
                     value={heatPath}
                     disabled={readOnly}
                     onChange={(event) =>
-                      patchSpec(
-                        {
-                          heat_path: {
-                            ...spec.heat_path,
-                            type: event.target.value as HeatPathType,
-                          },
-                          // Picking a path IS the confirmation.
-                          heat_path_confirmed: true,
-                        },
-                        ['heat_path.type'],
+                      onPatch(
+                        component.id,
+                        heatPathPatch(component, event.target.value as HeatPathType),
+                        HEAT_PATH_PATCH_FIELDS,
                       )
                     }
                   />
-                  {spec.heat_path_confirmed ? (
-                    <p className="text-[11px] text-ink-400">
-                      Suggests the {ARCHITECTURE_TEMPLATE_LABELS[TEMPLATE_FOR_HEAT_PATH[heatPath]]}{' '}
-                      template. Picking a path does not build topology — Screen 05 does.
-                      <span className="block">
-                        建議套用「{ARCHITECTURE_TEMPLATE_LABELS[TEMPLATE_FOR_HEAT_PATH[heatPath]]}
-                        」模板。選擇路徑不會建立 Node/Edge，那是 Screen 05 的工作。
-                      </span>
-                    </p>
-                  ) : (
+                  {!spec.heat_path_confirmed && (
                     <p className="text-[11px] text-warn-600">
                       Assumed from category — it selects the whole resistance chain, so confirm it.
                       <span className="block">依類別推定，它決定整條熱阻鏈，請確認。</span>
@@ -620,19 +462,202 @@ export function ComponentInspector({
                 </div>
               </fieldset>
 
-              {/* Dimensions all live on the Geometry tab, so this one stays about
-                  the thermal chain: limit, Rjc, package, TIM, path. */}
-              <p className="rounded-md border border-line bg-surface-muted p-2.5 text-[11px] leading-relaxed text-ink-500">
-                Face sizes, thicknesses and the resulting areas are on the Geometry tab.
-                <span className="block">熱源面 / 擴散面尺寸、厚度與面積在「Geometry 幾何」分頁。</span>
-              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex flex-col gap-1.5">
+                  <FieldLabel
+                    label="Limit Type"
+                    zh="限制類型"
+                    htmlFor="ins-limit-type"
+                    tooltip={tip('Limit Type')}
+                  />
+                  <Select
+                    id="ins-limit-type"
+                    items={LIMIT_TYPES.map((type) => ({
+                      value: type,
+                      label: `${type} — ${LIMIT_TYPE_LABELS[type].en} / ${LIMIT_TYPE_LABELS[type].zh}`,
+                    }))}
+                    value={spec.limit_type}
+                    disabled={readOnly}
+                    onChange={(event) =>
+                      patchSpec(
+                        // Picking it IS the confirmation.
+                        { limit_type: event.target.value as LimitType, limit_type_confirmed: true },
+                        ['limit_type'],
+                      )
+                    }
+                  />
+                  {!spec.limit_type_confirmed && (
+                    <p className="text-[11px] text-warn-600">
+                      Assumed — confirm against the datasheet.
+                      <span className="block">依類別推定，請對照規格書確認。</span>
+                    </p>
+                  )}
+                </div>
+
+                <SourcedNumberField
+                  id="ins-limit"
+                  label="Thermal Limit"
+                  zh="溫度上限"
+                  unit="°C"
+                  tooltip={tip('Limit')}
+                  value={spec.limit_C}
+                  readOnly={readOnly}
+                  onChange={(next) => patchSpec({ limit_C: next }, ['limit_C'])}
+                />
+
+                <SourcedNumberField
+                  id="ins-rjc"
+                  label="Rjc"
+                  zh="接面-外殼熱阻"
+                  unit="°C/W"
+                  tooltip={tip('Rjc')}
+                  value={spec.r_jc_C_per_W}
+                  placeholder="N/A"
+                  step="0.01"
+                  readOnly={readOnly}
+                  onChange={(next) => patchSpec({ r_jc_C_per_W: next }, ['r_jc_C_per_W'])}
+                />
+
+                <div className="flex flex-col gap-1.5">
+                  <FieldLabel
+                    label="Package Type"
+                    zh="封裝型式"
+                    htmlFor="ins-package"
+                    tooltip={tip('Package')}
+                  />
+                  <Select
+                    id="ins-package"
+                    options={PACKAGE_TYPES}
+                    value={spec.package_type ?? 'Unknown'}
+                    disabled={readOnly}
+                    onChange={(event) =>
+                      patchSpec({ package_type: event.target.value as PackageType }, [
+                        'package_type',
+                      ])
+                    }
+                  />
+                </div>
+              </div>
+
+              {/* --- TIM: picked from the project library (04 §18) --- */}
+              <fieldset className="rounded-md border border-line p-3">
+                <legend className="px-1 text-[12px] font-semibold text-ink-700">
+                  TIM / 熱介面材料
+                </legend>
+                <div className="flex flex-col gap-2.5">
+                  <div className="flex flex-col gap-1.5">
+                    <FieldLabel label="Material" zh="材料" htmlFor="ins-tim" tooltip={tip('TIM')} />
+                    <Select
+                      id="ins-tim"
+                      items={[
+                        { value: '', label: 'None / 無' },
+                        ...materials.tim.map((material) => ({
+                          value: material.id,
+                          label: `${material.name} — k ${material.k_W_mK.value ?? '?'} W/m·K`,
+                        })),
+                      ]}
+                      value={spec.tim.tim_id ?? ''}
+                      disabled={readOnly}
+                      onChange={(event) =>
+                        patchSpec({ tim: { ...spec.tim, tim_id: event.target.value || null } }, [
+                          'tim.tim_id',
+                        ])
+                      }
+                    />
+                  </div>
+
+                  {/* A dangling reference is not the same as "no TIM", so it says so. */}
+                  {resolvedTim.missing && (
+                    <p className="text-[11px] leading-relaxed text-danger-600">
+                      This component points at a material the project no longer has. Pick another.
+                      <span className="block">
+                        此元件指向的材料已不存在於專案清單中，請重新選擇。
+                      </span>
+                    </p>
+                  )}
+
+                  <div className="flex flex-col gap-1.5">
+                    <FieldLabel label="Bond Line (BLT)" zh="壓合厚度" unit="mm" htmlFor="ins-blt" />
+                    <div
+                      role="radiogroup"
+                      aria-label="Bond line source"
+                      className="flex flex-wrap gap-3 text-[12px]"
+                    >
+                      <label className="flex items-center gap-1.5">
+                        <input
+                          type="radio"
+                          name={`blt-mode-${component.id}`}
+                          className="size-3.5 accent-[var(--color-accent-600)]"
+                          checked={!bltCustom}
+                          disabled={readOnly || spec.tim.tim_id == null}
+                          onChange={() => patchSpec({ tim: { ...spec.tim, blt_mm: null } }, ['tim'])}
+                        />
+                        Project default / 系統預設
+                      </label>
+                      <label className="flex items-center gap-1.5">
+                        <input
+                          type="radio"
+                          name={`blt-mode-${component.id}`}
+                          className="size-3.5 accent-[var(--color-accent-600)]"
+                          checked={bltCustom}
+                          disabled={readOnly || spec.tim.tim_id == null}
+                          onChange={() =>
+                            patchSpec(
+                              {
+                                tim: {
+                                  ...spec.tim,
+                                  // Seeded with the inherited value so switching
+                                  // never blanks a field the user was reading.
+                                  blt_mm: withValue(
+                                    { value: null, source: 'Manual' },
+                                    resolvedTim.thickness_mm,
+                                  ),
+                                },
+                              },
+                              ['tim'],
+                            )
+                          }
+                        />
+                        Custom / 自訂
+                      </label>
+                    </div>
+                    <NumberInput
+                      id="ins-blt"
+                      step="0.01"
+                      value={
+                        bltCustom ? (spec.tim.blt_mm?.value ?? '') : (resolvedTim.thickness_mm ?? '')
+                      }
+                      placeholder="—"
+                      disabled={readOnly || !bltCustom}
+                      readOnly={!bltCustom}
+                      onChange={(event) =>
+                        patchSpec(
+                          {
+                            tim: {
+                              ...spec.tim,
+                              blt_mm: withValue(
+                                spec.tim.blt_mm ?? { value: null, source: 'Manual' },
+                                event.target.value === '' ? null : Number(event.target.value),
+                              ),
+                            },
+                          },
+                          ['tim'],
+                        )
+                      }
+                    />
+                    <p className="text-[11px] leading-relaxed text-ink-400">
+                      {bltCustom
+                        ? 'A measured bond line for this build. k always comes from the material. / 此組裝的量測值；k 一律取自材料。'
+                        : `From ${resolvedTim.material?.name ?? 'the project material'} in Screen 01. / 取自 Screen 01 的材料設定。`}
+                    </p>
+                  </div>
+                </div>
+              </fieldset>
             </>
           )}
 
           {tab === 'geometry' && (
             <>
-              {/* Package envelope. It feeds no resistance on its own, but it is
-                  validated, so it needs somewhere to be corrected. */}
               <div className="grid grid-cols-3 gap-2.5">
                 <GeometryField
                   label="Package L"
@@ -660,24 +685,107 @@ export function ComponentInspector({
                 />
               </div>
 
-              {/* Source face — one measurement, named for the path it serves. */}
+              {/* Source face — one measurement, named for the path it serves.
+                  A coin-soldered part is joined across its whole package base,
+                  so on that path it follows the package rather than being typed
+                  a second time and left to drift. */}
               <div className="grid grid-cols-2 gap-2.5">
-                <GeometryField
-                  label={`${SOURCE_FACE_LABELS[heatPath].en} L`}
-                  zh={`${SOURCE_FACE_LABELS[heatPath].zh}長`}
-                  field="source_L_mm"
-                  geometry={spec.geometry}
-                  readOnly={readOnly}
-                  onChange={patchGeometry}
-                />
-                <GeometryField
-                  label={`${SOURCE_FACE_LABELS[heatPath].en} W`}
-                  zh={`${SOURCE_FACE_LABELS[heatPath].zh}寬`}
-                  field="source_W_mm"
-                  geometry={spec.geometry}
-                  readOnly={readOnly}
-                  onChange={patchGeometry}
-                />
+                {heatPath === 'Coin' ? (
+                  <>
+                    <DerivedField
+                      id="geo-source_L_mm"
+                      label="Coin joint face L"
+                      zh="銅塊接合面長"
+                      value={sourceFace.L}
+                      from="= Package L / 等於封裝長"
+                    />
+                    <DerivedField
+                      id="geo-source_W_mm"
+                      label="Coin joint face W"
+                      zh="銅塊接合面寬"
+                      value={sourceFace.W}
+                      from="= Package W / 等於封裝寬"
+                    />
+                  </>
+                ) : (
+                  <>
+                    <GeometryField
+                      label={`${SOURCE_FACE_LABELS[heatPath].en} L`}
+                      zh={`${SOURCE_FACE_LABELS[heatPath].zh}長`}
+                      field="source_L_mm"
+                      geometry={spec.geometry}
+                      readOnly={readOnly}
+                      onChange={patchGeometry}
+                    />
+                    <GeometryField
+                      label={`${SOURCE_FACE_LABELS[heatPath].en} W`}
+                      zh={`${SOURCE_FACE_LABELS[heatPath].zh}寬`}
+                      field="source_W_mm"
+                      geometry={spec.geometry}
+                      readOnly={readOnly}
+                      onChange={patchGeometry}
+                    />
+                  </>
+                )}
+              </div>
+
+              {/* Spread face — on a coin path it is the project's coin, which is
+                  one mechanical decision for the whole design. */}
+              <div className="grid grid-cols-2 gap-2.5">
+                {heatPath === 'Coin' ? (
+                  <>
+                    <DerivedField
+                      id="geo-spread_L_mm"
+                      label="Coin L"
+                      zh="銅塊長"
+                      value={materials.coin_L_mm?.value ?? null}
+                      from="Screen 01 / 專案設定"
+                    />
+                    <DerivedField
+                      id="geo-spread_W_mm"
+                      label="Coin W"
+                      zh="銅塊寬"
+                      value={materials.coin_W_mm?.value ?? null}
+                      from="Screen 01 / 專案設定"
+                    />
+                    <DerivedField
+                      id="geo-coin_thickness_mm"
+                      label="Coin Thickness"
+                      zh="銅塊厚度"
+                      value={materials.coin_thickness_mm?.value ?? null}
+                      from="Screen 01 / 專案設定"
+                    />
+                  </>
+                ) : (
+                  <>
+                    <GeometryField
+                      label="Spread L"
+                      zh="擴散面長"
+                      field="spread_L_mm"
+                      geometry={spec.geometry}
+                      readOnly={readOnly}
+                      onChange={patchGeometry}
+                    />
+                    <GeometryField
+                      label="Spread W"
+                      zh="擴散面寬"
+                      field="spread_W_mm"
+                      geometry={spec.geometry}
+                      readOnly={readOnly}
+                      onChange={patchGeometry}
+                    />
+                  </>
+                )}
+                {heatPath === 'Board' && (
+                  <GeometryField
+                    label="Board Thickness"
+                    zh="板厚"
+                    field="board_thickness_mm"
+                    geometry={spec.geometry}
+                    readOnly={readOnly}
+                    onChange={patchGeometry}
+                  />
+                )}
               </div>
 
               <div className="rounded-md border border-line bg-surface-muted px-3 py-2">
@@ -699,64 +807,6 @@ export function ComponentInspector({
                 </div>
                 <p className="mt-1 text-[11px] text-ink-400">{spreadOrigin}</p>
               </div>
-
-              {/* Spread face — blank means derived, so it is optional by design. */}
-              <div className="grid grid-cols-2 gap-2.5">
-                <GeometryField
-                  label="Spread L"
-                  zh="擴散面長"
-                  field="spread_L_mm"
-                  geometry={spec.geometry}
-                  readOnly={readOnly}
-                  onChange={patchGeometry}
-                />
-                <GeometryField
-                  label="Spread W"
-                  zh="擴散面寬"
-                  field="spread_W_mm"
-                  geometry={spec.geometry}
-                  readOnly={readOnly}
-                  onChange={patchGeometry}
-                />
-                <GeometryField
-                  label="Custom Source Area"
-                  zh="自訂熱源面積 (mm²)"
-                  field="custom_source_area_mm2"
-                  geometry={spec.geometry}
-                  readOnly={readOnly}
-                  onChange={patchGeometry}
-                />
-                <GeometryField
-                  label="Custom Spread Area"
-                  zh="自訂擴散面積 (mm²)"
-                  field="custom_spread_area_mm2"
-                  geometry={spec.geometry}
-                  readOnly={readOnly}
-                  onChange={patchGeometry}
-                />
-              </div>
-
-              {/* Only the thickness this path actually conducts through. */}
-              {heatPath === 'Coin' && (
-                <GeometryField
-                  label="Coin Thickness"
-                  zh="銅塊厚度"
-                  field="coin_thickness_mm"
-                  geometry={spec.geometry}
-                  readOnly={readOnly}
-                  onChange={patchGeometry}
-                />
-              )}
-              {heatPath === 'Board' && (
-                <GeometryField
-                  label="Board Thickness"
-                  zh="板厚"
-                  field="board_thickness_mm"
-                  geometry={spec.geometry}
-                  readOnly={readOnly}
-                  onChange={patchGeometry}
-                />
-              )}
 
               {spec.geometry.needs_review && (
                 <div className="rounded-md border border-warn-500/30 bg-warn-100/60 p-2.5">
@@ -784,30 +834,6 @@ export function ComponentInspector({
             <>
               <div className="flex flex-col gap-1.5">
                 <FieldLabel
-                  label="Architecture Template Preference"
-                  zh="架構模板偏好"
-                  htmlFor="ins-template"
-                  tooltip={tip('Architecture Template Preference')}
-                />
-                <select
-                  id="ins-template"
-                  className="h-9 w-full rounded-md border border-line-strong bg-surface px-3 text-[13px]"
-                  value={prep.template_preference}
-                  disabled={readOnly}
-                  onChange={(event) =>
-                    patchPrep({ template_preference: event.target.value as ArchitectureTemplate })
-                  }
-                >
-                  {ARCHITECTURE_TEMPLATES.map((template) => (
-                    <option key={template} value={template}>
-                      {ARCHITECTURE_TEMPLATE_LABELS[template]}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <FieldLabel
                   label="Preferred Base Zone"
                   zh="偏好基座區域"
                   htmlFor="ins-zone"
@@ -831,21 +857,18 @@ export function ComponentInspector({
                   htmlFor="ins-qtymodel"
                   tooltip={tip('Qty Modeling')}
                 />
-                <select
+                <Select
                   id="ins-qtymodel"
-                  className="h-9 w-full rounded-md border border-line-strong bg-surface px-3 text-[13px]"
+                  items={QTY_MODELS.map((model) => ({
+                    value: model,
+                    label: QTY_MODEL_LABELS[model],
+                  }))}
                   value={prep.qty_model_preference}
                   disabled={readOnly || component.qty <= 1}
                   onChange={(event) =>
                     patchPrep({ qty_model_preference: event.target.value as QtyModel })
                   }
-                >
-                  {QTY_MODELS.map((model) => (
-                    <option key={model} value={model}>
-                      {QTY_MODEL_LABELS[model]}
-                    </option>
-                  ))}
-                </select>
+                />
                 {component.qty <= 1 && (
                   <p className="text-[11px] text-ink-400">
                     Only applies when Qty &gt; 1. / 僅在數量大於 1 時適用。
@@ -853,15 +876,19 @@ export function ComponentInspector({
                 )}
               </div>
 
-              {/* 04 §19 / AC-04-12/13/14 — the whole point of this tab. */}
-              <p className="rounded-md border border-accent-600/25 bg-accent-50 p-2.5 text-[11px] leading-relaxed text-accent-700">
-                These are modelling preferences only. No thermal nodes, edges or base-zone nodes are
-                created by this screen — Screen 05 Thermal Path Builder does that.
-                <span className="mt-0.5 block">
-                  以上僅為建模偏好，本頁不會建立任何 Node、Edge 或基座節點；實際拓樸由 Screen 05
-                  建立。
-                </span>
-              </p>
+              {/* The template used to be a third question here. It is not one:
+                  the heat path already decides it, and asking twice let the two
+                  disagree. Screen 05 is where a template is genuinely chosen. */}
+              <div className="rounded-md border border-line bg-surface-muted px-3 py-2 text-[12px]">
+                <div className="flex items-baseline justify-between">
+                  <span className="text-ink-500">Template / 架構模板</span>
+                  <span className="font-semibold text-ink-900">{prep.template_preference}</span>
+                </div>
+                <p className="mt-1 text-[11px] text-ink-400">
+                  Follows the heat path. Screen 05 can override it.
+                  <span className="block">由散熱路徑決定，可於 Screen 05 覆寫。</span>
+                </p>
+              </div>
             </>
           )}
 
@@ -874,51 +901,65 @@ export function ComponentInspector({
                     [
                       'Original Project / 原始專案',
                       component.provenance.source_project_name ??
-                        component.provenance.source_project_id ??
-                        '—',
+                        component.provenance.source_project_id,
                     ],
-                    ['Source File / 來源檔案', component.provenance.source_file ?? '—'],
-                    [
-                      'Import Date / 匯入時間',
-                      component.provenance.imported_at?.slice(0, 19).replace('T', ' ') ?? '—',
-                    ],
+                    ['Source File / 來源檔案', component.provenance.source_file],
                     [
                       'Last Modified / 最後修改',
-                      component.provenance.last_modified_at?.slice(0, 19).replace('T', ' ') ?? '—',
+                      component.provenance.last_modified_at?.slice(0, 19).replace('T', ' '),
                     ],
-                    ['Lineage / 原始追溯', component.provenance.ref_origin_id ?? '—'],
                   ] as const
-                ).map(([label, value]) => (
-                  <div key={label} className="flex justify-between gap-3">
-                    <dt className="text-ink-500">{label}</dt>
-                    <dd className="text-right font-medium text-ink-900">{value}</dd>
-                  </div>
-                ))}
+                )
+                  // A row of dashes is not information. Only what is known shows.
+                  .filter(([, value]) => value != null && value !== '')
+                  .map(([label, value]) => (
+                    <div key={label} className="flex justify-between gap-3">
+                      <dt className="text-ink-500">{label}</dt>
+                      <dd className="text-right font-medium text-ink-900">{value}</dd>
+                    </div>
+                  ))}
               </dl>
 
+              {/* Provenance is edited here rather than beside every number, so
+                  one place answers "where did this come from" for all of them. */}
               <div className="border-t border-line pt-2.5">
                 <h4 className="mb-1.5 text-[11px] font-bold text-ink-700">
                   Per-field Data Source / 各欄位資料來源
                 </h4>
-                <dl className="flex flex-col gap-1 text-[12px]">
+                <div className="flex flex-col gap-2">
                   {(
                     [
-                      ['Power', component.power_W],
-                      ['Thermal Limit', spec.limit_C],
-                      ['Rjc', spec.r_jc_C_per_W],
+                      ['Power / 功耗', component.power_W, 'power_W'],
+                      ['Thermal Limit / 溫度上限', spec.limit_C, 'limit_C'],
+                      ['Rjc / 接面熱阻', spec.r_jc_C_per_W, 'r_jc_C_per_W'],
                     ] as const
-                  ).map(([label, sv]) => (
-                    <div key={label} className="flex justify-between gap-3">
-                      <dt className="text-ink-500">{label}</dt>
-                      <dd className="text-right">
-                        <span className="font-medium text-ink-900">{sv?.source ?? '—'}</span>
-                        {sv?.confidence && (
-                          <span className="ml-1.5 text-[11px] text-ink-400">{sv.confidence}</span>
-                        )}
-                      </dd>
+                  ).map(([label, sv, field]) => (
+                    <div key={field} className="flex items-center justify-between gap-3">
+                      <span className="text-[12px] text-ink-500">{label}</span>
+                      <Select
+                        aria-label={`${label} data source`}
+                        className="h-8 w-40 text-[12px]"
+                        options={DATA_SOURCES}
+                        value={sv?.source ?? 'Manual'}
+                        disabled={readOnly}
+                        onChange={(event) => {
+                          const next = {
+                            value: sv?.value ?? null,
+                            source: event.target.value as DataSource,
+                            reference: sv?.reference,
+                            confidence: sv?.confidence,
+                            updated_at: new Date().toISOString(),
+                          };
+                          if (field === 'power_W') {
+                            onPatch(component.id, { power_W: next }, ['power_W']);
+                          } else {
+                            patchSpec({ [field]: next }, [field]);
+                          }
+                        }}
+                      />
                     </div>
                   ))}
-                </dl>
+                </div>
               </div>
 
               {component.metadata && Object.keys(component.metadata).length > 0 && (
@@ -1003,11 +1044,9 @@ export function ComponentInspector({
               */}
               <p className="rounded-md border border-line bg-surface-muted p-2.5 text-[11px] leading-relaxed text-ink-500">
                 Screen 03 is deferred. Aliases are stored as free text only — nothing is parsed or
-                validated against a FloTHERM model yet. Parser integration will be added after the
-                core analytical workflow is complete.
+                validated against a FloTHERM model yet.
                 <span className="mt-1 block">
-                  Screen 03 目前延後。此處僅以純文字保存別名，不解析也不驗證 FloTHERM
-                  格式；待解析流程完成後再回補。
+                  Screen 03 目前延後。此處僅以純文字保存別名，不解析也不驗證 FloTHERM 格式。
                 </span>
               </p>
             </>
@@ -1025,7 +1064,7 @@ export function ComponentInspector({
             {score.done} / {score.total}
           </span>
         </header>
-        <ul className="p-3.5">
+        <ul className="grid grid-cols-2 gap-x-3 p-3.5">
           {COMPLETENESS_ITEMS.map((item) => (
             <li key={item} className="flex items-center gap-2 py-[3px] text-[12px]">
               {completeness[item] ? (
@@ -1055,9 +1094,7 @@ export function ComponentInspector({
                 <li key={`${issue.field}-${index}`} className="flex items-start gap-1.5">
                   <span
                     aria-hidden
-                    className={
-                      issue.severity === 'error' ? 'text-danger-600' : 'text-warn-600'
-                    }
+                    className={issue.severity === 'error' ? 'text-danger-600' : 'text-warn-600'}
                   >
                     {issue.severity === 'error' ? '✕' : '⚠'}
                   </span>

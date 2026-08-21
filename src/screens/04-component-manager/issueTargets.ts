@@ -47,6 +47,7 @@ const TARGETS: Record<string, IssueTarget> = {
   r_jc_C_per_W: { tab: 'thermal', fieldId: 'ins-rjc' },
   package_type: { tab: 'thermal', fieldId: 'ins-package' },
   'tim.tim_id': { tab: 'thermal', fieldId: 'ins-tim' },
+  'tim.blt_mm': { tab: 'thermal', fieldId: 'ins-blt' },
   'heat_path.type': { tab: 'thermal', fieldId: 'ins-heat-path', confirm: 'heat_path' },
 
   'geometry.package_L_mm': { tab: 'geometry', fieldId: 'geo-package_L_mm' },
@@ -57,16 +58,13 @@ const TARGETS: Record<string, IssueTarget> = {
   'geometry.spread_L_mm': { tab: 'geometry', fieldId: 'geo-spread_L_mm' },
   'geometry.spread_W_mm': { tab: 'geometry', fieldId: 'geo-spread_W_mm' },
   'geometry.board_thickness_mm': { tab: 'geometry', fieldId: 'geo-board_thickness_mm' },
-  'geometry.coin_thickness_mm': { tab: 'geometry', fieldId: 'geo-coin_thickness_mm' },
-  'geometry.custom_source_area_mm2': { tab: 'geometry', fieldId: 'geo-custom_source_area_mm2' },
-  'geometry.custom_spread_area_mm2': { tab: 'geometry', fieldId: 'geo-custom_spread_area_mm2' },
   'geometry.needs_review': {
     tab: 'geometry',
     fieldId: 'geo-source_L_mm',
     confirm: 'geometry_review',
   },
 
-  architecture_prep: { tab: 'architecture', fieldId: 'ins-template' },
+  architecture_prep: { tab: 'architecture', fieldId: 'ins-zone' },
 };
 
 export function issueTarget(field: string): IssueTarget | null {

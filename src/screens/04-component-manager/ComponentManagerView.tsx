@@ -26,6 +26,7 @@ import { useScenarioStore } from '@/data/scenarioStore';
 import { useSolverStore } from '@/data/solverStore';
 
 import { createComponent, isHeatSource, type Component } from '@/domain/component';
+import { fromLibraryEntry } from '@/data/componentLibraryStore';
 import {
   completenessOf,
   completenessScore,
@@ -37,6 +38,7 @@ import {
 import { ComponentReadinessCards } from './ComponentReadinessCards';
 import { ComponentTable } from './ComponentTable';
 import { ComponentInspector, type FocusRequest } from './ComponentInspector';
+import { AddFromLibraryModal } from './AddFromLibraryModal';
 import { IssueList } from './IssueList';
 import type { InspectorTab } from './issueTargets';
 import {
@@ -90,6 +92,7 @@ export function ComponentManagerView() {
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>('overview');
   const [focus, setFocus] = useState<FocusRequest | null>(null);
   const [showAdd, setShowAdd] = useState(false);
+  const [showLibrary, setShowLibrary] = useState(false);
   const [showBulk, setShowBulk] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
   const [warningConfirm, setWarningConfirm] = useState<number | null>(null);
@@ -105,7 +108,9 @@ export function ComponentManagerView() {
     }
     useComponentStore.getState().loadFor(projectId);
     useNetworkStore.getState().loadFor(projectId);
-    useComponentLibraryStore.getState().load();
+    // Merges what this browser has with the folder's library file: the build
+    // stamp clears localStorage on every deploy, so the file is the durable half.
+    void useComponentLibraryStore.getState().loadWithFolder();
   }, [projectId]);
 
   const handleSave = () => {
@@ -323,6 +328,7 @@ export function ComponentManagerView() {
               visibleCount={visible.length}
               readOnly={readOnly}
               onAdd={() => setShowAdd(true)}
+              onAddFromLibrary={() => setShowLibrary(true)}
               onDuplicate={() => {
                 if (!selected) return;
                 const copy = useComponentStore.getState().duplicateComponent(selected.id);
@@ -427,6 +433,48 @@ export function ComponentManagerView() {
             setSelectedId(component.id);
             setShowAdd(false);
             toast.success(`"${component.name}" added / 已新增`);
+          }}
+        />
+      )}
+
+      {showLibrary && (
+        <AddFromLibraryModal
+          entries={useComponentLibraryStore.getState().entries}
+          existingNames={components.map((component) => component.name)}
+          onClose={() => setShowLibrary(false)}
+          onAdd={(entry, qty) => {
+            // A fresh id per use: the same catalogue part can appear twice in
+            // one radio, and they are two components, not one shared record.
+            const rehydrated = fromLibraryEntry(entry, {
+              id: `CMP_${entry.name.trim().toUpperCase().replace(/[^A-Z0-9]+/g, '_')}_${Date.now()
+                .toString(36)
+                .toUpperCase()}`,
+              qty,
+            });
+            const created = useComponentStore.getState().addComponent({
+              id: rehydrated.id,
+              name: rehydrated.name,
+              category: rehydrated.category,
+              qty,
+              power_W: rehydrated.power_W.value,
+              provenance: rehydrated.provenance,
+            });
+            // `addComponent` only takes the identity fields, so the spec the
+            // library actually holds is written straight after.
+            useComponentStore
+              .getState()
+              .patchComponent(
+                created.id,
+                {
+                  power_W: rehydrated.power_W,
+                  thermal_spec: rehydrated.thermal_spec,
+                  architecture_prep: rehydrated.architecture_prep,
+                },
+                ['power_W', 'thermal_spec', 'architecture_prep'],
+              );
+            setSelectedId(created.id);
+            setShowLibrary(false);
+            toast.success(`"${created.name}" added from the library / 已從元件庫新增`);
           }}
         />
       )}

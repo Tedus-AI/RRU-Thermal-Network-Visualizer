@@ -43,10 +43,12 @@ function specFromRow(row: StagingRow, materials: MaterialDefaults): ThermalSpec 
       source_W_mm: row.source_W_mm,
       spread_L_mm: row.spread_L_mm,
       spread_W_mm: row.spread_W_mm,
-      // Thickness means the coin for a coin path and the board otherwise —
-      // the Volume Evaluation Tool overloads one column for both.
+      // The Volume Evaluation Tool overloads one Thick column: it is the board
+      // on a via path and the coin on a coin path. Coin thickness is one
+      // decision for the whole design, so it belongs to the project (01 §4)
+      // rather than to each component. The imported value is not thrown away —
+      // `buildMetadata` keeps it so it can be read off and entered there.
       board_thickness_mm: heatPath === 'Coin' ? null : row.thickness_mm,
-      coin_thickness_mm: heatPath === 'Coin' ? row.thickness_mm : null,
       // 04 §30 — legacy geometry semantics must be confirmed, not assumed.
       needs_review: row.thickness_mm != null || row.source_L_mm != null || undefined,
     },
@@ -70,6 +72,13 @@ function buildMetadata(
   const extra: Record<string, unknown> = { ...row.extra };
   if (row.tim_name && matchTimId(row.tim_name, materials) == null) {
     extra._unmatched_tim = row.tim_name;
+  }
+  // A coin row's Thick is the coin, which is a project constant now. Dropping it
+  // silently would lose a measured number, so it is preserved here and shown on
+  // the component's Source tab under "Preserved Source Fields".
+  const heatPath = row.heat_path ?? inferHeatPath(row.category ?? 'Other');
+  if (heatPath === 'Coin' && row.thickness_mm != null) {
+    extra._imported_coin_thickness_mm = row.thickness_mm;
   }
   return Object.keys(extra).length > 0 ? extra : undefined;
 }
@@ -220,10 +229,6 @@ export function applyImport({ existing, rows, sessionPolicy, source, materials }
                 board_thickness_mm: mergeNonEmpty(
                   spec.geometry.board_thickness_mm,
                   target.thermal_spec.geometry.board_thickness_mm,
-                ),
-                coin_thickness_mm: mergeNonEmpty(
-                  spec.geometry.coin_thickness_mm,
-                  target.thermal_spec.geometry.coin_thickness_mm,
                 ),
               },
               heat_path: row.heat_path == null ? target.thermal_spec.heat_path : spec.heat_path,

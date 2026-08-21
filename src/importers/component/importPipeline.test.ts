@@ -546,3 +546,38 @@ describe('legacy adapter', () => {
     expect(back.customField).toBe('keep me');
   });
 });
+
+/**
+ * Coin thickness moved to the project (01 §4), so a coin row's `Thick` has no
+ * per-component home any more. Losing an imported measurement without saying so
+ * would be worse than not importing it at all.
+ */
+describe('an imported coin thickness', () => {
+  const csv = (heatPath: string) =>
+    ['Component,Qty,Power(W),Category,Heat_Path,Thick(mm)', `Final PA,4,45,RF,${heatPath},2.5`].join(
+      '\n',
+    );
+
+  const importOne = (heatPath: string) =>
+    applyImport({
+      materials: defaultMaterials(),
+      existing: [],
+      rows: stage(csv(heatPath)),
+      sessionPolicy: 'SKIP',
+      source: SOURCE,
+    }).components[0];
+
+  it('is kept as a preserved source field rather than dropped', () => {
+    expect(importOne('Copper Coin').metadata?._imported_coin_thickness_mm).toBe(2.5);
+  });
+
+  it('does not land in board thickness, which is a different path', () => {
+    expect(importOne('Copper Coin').thermal_spec.geometry.board_thickness_mm).toBeNull();
+  });
+
+  it('still fills board thickness on a via path', () => {
+    const viaPath = importOne('Thermal Via');
+    expect(viaPath.thermal_spec.geometry.board_thickness_mm).toBe(2.5);
+    expect(viaPath.metadata?._imported_coin_thickness_mm).toBeUndefined();
+  });
+});

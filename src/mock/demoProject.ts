@@ -51,6 +51,7 @@ export function demoProject(): Project {
       ...defaultMaterials(),
       coin_L_mm: { value: 55, source: 'Manual', updated_at: DEMO_TIMESTAMP },
       coin_W_mm: { value: 35, source: 'Manual', updated_at: DEMO_TIMESTAMP },
+      coin_thickness_mm: { value: 2.0, source: 'Manual', updated_at: DEMO_TIMESTAMP },
     },
     project_context: {
       customer: 'Synthetic Demo Program',
@@ -176,8 +177,6 @@ function buildReadyComponents(seeds: Seed[]): Component[] {
           source_L_mm: seed.contact[0],
           source_W_mm: seed.contact[1],
           board_thickness_mm: 1.6,
-          // A coin path conducts through the coin, not the board.
-          coin_thickness_mm: seed.heat_path === 'Coin' ? 2.0 : null,
         },
         heat_path: { type: seed.heat_path, parameters: {} },
         // The demo states every heat path deliberately, so none is a guess.

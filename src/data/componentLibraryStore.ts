@@ -11,6 +11,13 @@
 
 import { create } from 'zustand';
 import {
+  LIBRARY_FILENAME,
+  mergeLibraries,
+  parseLibraryFile,
+  serializeLibrary,
+} from './componentLibraryFile';
+import { readTextFile, writeTextFile } from './folderBinding';
+import {
   emptyArchitecturePrep,
   emptyExternalMappings,
   type Component,
@@ -97,9 +104,48 @@ export function fromLibraryEntry(
   };
 }
 
+/**
+ * Writes the library to the bound folder, if there is one.
+ *
+ * Best effort by design: the folder is a mirror, and a browser with no folder
+ * bound — or a write that fails — must leave the app working exactly as before.
+ * The import is dynamic to keep this module out of the folder store's cycle.
+ */
+async function mirrorToFolder(entries: LibraryEntry[]): Promise<void> {
+  try {
+    const { useFolderStore } = await import('./folderStore');
+    const handle = useFolderStore.getState().handle;
+    if (!handle) return;
+    await writeTextFile(handle, LIBRARY_FILENAME, serializeLibrary(entries));
+  } catch {
+    // localStorage already has the entry; the mirror is a bonus, not the store.
+  }
+}
+
+/** Reads the folder's library file, if one is there. */
+export async function readLibraryFromFolder(): Promise<LibraryEntry[]> {
+  try {
+    const { useFolderStore } = await import('./folderStore');
+    const handle = useFolderStore.getState().handle;
+    if (!handle) return [];
+    const text = await readTextFile(handle, LIBRARY_FILENAME);
+    if (text == null) return [];
+    const parsed = parseLibraryFile(text);
+    return parsed.ok ? parsed.file.entries : [];
+  } catch {
+    return [];
+  }
+}
+
 interface LibraryState {
   entries: LibraryEntry[];
   load: () => void;
+  /**
+   * Reads localStorage AND the folder file, merging the two. The build stamp
+   * clears the `tnv.` namespace on every deploy, so without this the catalogue
+   * would silently start over each time a new version shipped.
+   */
+  loadWithFolder: () => Promise<void>;
   saveComponent: (component: Component) => LibraryEntry;
   remove: (id: string) => void;
 }
@@ -109,11 +155,25 @@ export const useComponentLibraryStore = create<LibraryState>((set, get) => ({
 
   load: () => set({ entries: read() }),
 
+  loadWithFolder: async () => {
+    const local = read();
+    const fromFolder = await readLibraryFromFolder();
+    const entries = mergeLibraries(local, fromFolder);
+    // Anything the folder knew and this browser did not is now cached locally,
+    // so the rest of the app reads one list whether or not a folder is bound.
+    if (entries.length !== local.length) write(entries);
+    set({ entries });
+  },
+
   saveComponent: (component) => {
     const entry = toLibraryEntry(component);
-    const entries = [...get().entries.filter((e) => e.id !== entry.id), entry];
+    const entries = mergeLibraries(
+      get().entries.filter((e) => e.id !== entry.id),
+      [entry],
+    );
     write(entries);
     set({ entries });
+    void mirrorToFolder(entries);
     return entry;
   },
 
@@ -121,5 +181,6 @@ export const useComponentLibraryStore = create<LibraryState>((set, get) => ({
     const entries = get().entries.filter((entry) => entry.id !== id);
     write(entries);
     set({ entries });
+    void mirrorToFolder(entries);
   },
 }));

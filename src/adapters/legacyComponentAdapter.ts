@@ -127,9 +127,10 @@ export function legacyComponentToCanonical(
         ...emptyGeometry(),
         source_L_mm: row.Pad_L ?? null,
         source_W_mm: row.Pad_W ?? null,
-        // `Thick(mm)` is the coin for a coin path and the PCB otherwise.
+        // `Thick(mm)` is the coin for a coin path and the PCB otherwise. Coin
+        // thickness is a project constant (01 §4), so only the board case is
+        // stored here; the coin value survives in `metadata` below.
         board_thickness_mm: heatPath === 'Coin' ? null : (row['Thick(mm)'] ?? null),
-        coin_thickness_mm: heatPath === 'Coin' ? (row['Thick(mm)'] ?? null) : null,
         needs_review: hasLegacyGeometry || undefined,
       },
       heat_path: { type: heatPath, parameters: {} },
@@ -178,7 +179,7 @@ export function canonicalComponentToLegacy(
     'Power(W)': component.power_W.value ?? 0,
     Pad_L: spec.geometry.source_L_mm,
     Pad_W: spec.geometry.source_W_mm,
-    'Thick(mm)': spec.geometry.coin_thickness_mm ?? spec.geometry.board_thickness_mm,
+    'Thick(mm)': spec.geometry.board_thickness_mm,
     Board_Type: LEGACY_BOARD_TYPE[spec.heat_path.type],
     'Limit(C)': spec.limit_C?.value ?? null,
     R_jc: spec.r_jc_C_per_W?.value ?? null,

@@ -36,10 +36,13 @@ function component(overrides: Partial<Component> = {}): Component {
       package_type: 'QFN',
       geometry: {
         ...emptyThermalSpec().geometry,
+        // A coin path reads its joint face from the package, so both pairs are
+        // stated here and every heat path in this file has what it needs.
+        package_L_mm: 20,
+        package_W_mm: 10,
         source_L_mm: 20,
         source_W_mm: 10,
         board_thickness_mm: 1.6,
-        coin_thickness_mm: 2.0,
       },
       tim: {
         ...emptyThermalSpec().tim,
@@ -365,6 +368,7 @@ describe('analytical edge resistance (05 §21)', () => {
     const materials = defaultMaterials();
     materials.coin_L_mm = sourced(55, 'Manual');
     materials.coin_W_mm = sourced(35, 'Manual');
+    materials.coin_thickness_mm = sourced(2.0, 'Manual');
     const coin = component({
       thermal_spec: {
         ...component().thermal_spec,
@@ -689,6 +693,7 @@ describe('end-to-end resolution per heat path', () => {
     const m = defaultMaterials();
     m.coin_L_mm = sourced(55, 'Manual');
     m.coin_W_mm = sourced(35, 'Manual');
+    m.coin_thickness_mm = sourced(2.0, 'Manual');
     return m;
   };
 
