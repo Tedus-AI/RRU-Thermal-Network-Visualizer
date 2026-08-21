@@ -6,7 +6,11 @@ import { valueOf } from '@/domain/sourcedValue';
 
 import { defaultMaterials, type MaterialDefaults } from '@/domain/materials';
 import { setRthFromSource } from '../rth';
-import { computeRth, type EdgeParameters } from '../resistance/calculators';
+import {
+  computeRth,
+  scaleParametersForDevices,
+  type EdgeParameters,
+} from '../resistance/calculators';
 import type { ThermalEdge, ThermalNetwork, ThermalNode } from '../types';
 import { readLinkedInput } from './networkBuilder';
 
@@ -49,12 +53,21 @@ function updateLinkedEdge(
 ): void {
   if (!edge.parameter_links || Object.keys(edge.parameter_links).length === 0) return;
 
-  const parameters: EdgeParameters = { ...(edge.parameters ?? {}) };
+  // The component states ONE device; this edge may stand for several, so the
+  // count it was built with has to be reapplied. Without it, re-reading the
+  // component here would silently narrow an aggregated edge back to one joint.
+  const devices = Number(edge.metadata?.devices_represented);
+  const perDevice: EdgeParameters = { ...(edge.parameters ?? {}) };
   for (const [parameter, componentPath] of Object.entries(edge.parameter_links)) {
     const value = readLinkedInput(component, componentPath, materials);
-    if (value == null) delete parameters[parameter];
-    else parameters[parameter] = value;
+    if (value == null) delete perDevice[parameter];
+    else perDevice[parameter] = value;
   }
+  const parameters = scaleParametersForDevices(
+    edge.method,
+    perDevice,
+    Number.isFinite(devices) ? devices : 1,
+  );
 
   const computed = computeRth(edge.method, parameters);
   edge.parameters = parameters as ThermalEdge['parameters'];
