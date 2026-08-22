@@ -143,7 +143,7 @@ function Legend() {
   const [open, setOpen] = useState(true);
 
   return (
-    <div className="absolute bottom-3 left-3 z-10 min-w-[11.5rem] rounded-md border border-line bg-surface/95 px-3 py-2.5 shadow-sm">
+    <div className="absolute bottom-3 left-3 z-10 w-[11rem] rounded-md border border-line bg-surface/95 px-3 py-2.5 shadow-sm">
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
@@ -156,7 +156,10 @@ function Legend() {
       {open && (
         <ul className="mt-2 grid grid-cols-1 gap-1">
           {LEGEND.map((entry) => (
-            <li key={entry.label} className="flex items-center gap-2 text-[11px] text-ink-500">
+            <li
+              key={entry.label}
+              className="flex items-center gap-2 whitespace-nowrap text-[11px] text-ink-500"
+            >
               {entry.kind === 'node' ? (
                 <span
                   aria-hidden

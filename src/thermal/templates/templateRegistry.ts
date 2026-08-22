@@ -186,20 +186,19 @@ const BOTTOM_COOL_VIA: ThermalTemplate = {
   ],
 };
 
-/** Junction → Lid/Case → TIM → Pedestal → HEAT_OUT. */
+/** Junction → Lid/Case → TIM → HEAT_OUT. */
 const TOP_COOL_LID: ThermalTemplate = {
   id: 'TOP_COOL_LID',
-  version: '1.0',
+  version: '1.1',
   name: 'Top Cool + Lid',
   nameZh: '頂部散熱 + 金屬蓋',
-  description: 'Heat leaves through the package lid into a pedestal on the base.',
-  descriptionZh: '熱由封裝上蓋經 TIM 與凸台導出至基座。',
+  description: 'Heat leaves through the package lid and TIM to the heat-out interface.',
+  descriptionZh: '熱由封裝上蓋經 TIM 導出至主要散熱出口。',
   typicalUse: ['FPGA', 'ASIC', 'Lidded BGA'],
   nodes: [
     { role: 'JUNCTION', label: 'Junction', labelZh: '接面', type: 'junction', heatSource: true },
     { role: 'LID', label: 'Lid', labelZh: '上蓋', type: 'lid' },
     { role: 'TIM', label: 'TIM', labelZh: '介面材料', type: 'tim_interface' },
-    { role: 'PEDESTAL', label: 'Pedestal', labelZh: '凸台', type: 'pedestal' },
   ],
   edges: [
     {
@@ -228,15 +227,6 @@ const TOP_COOL_LID: ThermalTemplate = {
     },
     {
       fromRole: 'TIM',
-      toRole: 'PEDESTAL',
-      type: 'conduction',
-      method: 'conduction_LkA',
-      label: 'Pedestal',
-      labelZh: '凸台導熱',
-      requiredParameters: ['length_mm', 'k_W_mK', 'area_mm2'],
-    },
-    {
-      fromRole: 'PEDESTAL',
       toRole: 'HEAT_OUT',
       type: 'contact',
       method: 'direct_rth',

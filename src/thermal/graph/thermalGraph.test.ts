@@ -742,7 +742,7 @@ describe('end-to-end resolution per heat path', () => {
     expect(graph.edges.every((edge) => edge.resolution === 'resolved')).toBe(true);
   });
 
-  it('resolves the package and TIM of a top-cooled chain', () => {
+  it('ends a top-cooled chain at the TIM heat-out port without an invented pedestal', () => {
     const graph = withPath('TopSurface', 'TOP_COOL_LID');
     const byType = Object.fromEntries(graph.edges.map((edge) => [edge.type, edge]));
 
@@ -750,8 +750,14 @@ describe('end-to-end resolution per heat path', () => {
     expect(byType.tim.resolution).toBe('resolved');
     // Nothing spreads on this path, so the TIM crosses the case face itself.
     expect(byType.tim.parameters?.area_mm2).toBe(200);
-    // The pedestal is a mechanical part; its geometry is not the component's.
-    expect(byType.conduction.resolution).toBe('unresolved');
+    expect(graph.edges.every((edge) => edge.resolution === 'resolved')).toBe(true);
+    expect(graph.nodes.some((node) => node.type === 'pedestal')).toBe(false);
+
+    const tim = graph.nodes.find((node) => node.type === 'tim_interface');
+    expect(tim?.ports).toEqual([
+      expect.objectContaining({ kind: 'HEAT_OUT', required: true, connected_to: null }),
+    ]);
+    expect(graph.binding.template_version).toBe('1.1');
   });
 
   it('reads the via array constants from the project, not from the component', () => {
