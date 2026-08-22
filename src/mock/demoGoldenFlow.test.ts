@@ -94,8 +94,14 @@ describe('FR1 RRU Golden Demo', () => {
     const powerModule = flow.components.find((component) => component.id === 'CMP_POWER_MODULE')!;
     expect(powerModule.thermal_spec).toMatchObject({
       limit_type: 'Ts',
-      limit_reference_note: 'Center of the module integrated-HSK contact surface',
+      limit_reference_note: 'Center',
       r_jc_C_per_W: null,
+      geometry: {
+        package_L_mm: 58,
+        package_W_mm: 26,
+        source_L_mm: null,
+        source_W_mm: null,
+      },
       heat_path: { type: 'ModuleSurface' },
       tim: { blt_mm: { value: 1 } },
     });
@@ -117,8 +123,8 @@ describe('FR1 RRU Golden Demo', () => {
     );
     expect(moduleEdges.some((edge) => edge.type === 'package_rjc')).toBe(false);
     const installedTim = moduleEdges.find((edge) => edge.type === 'tim')!;
-    expect(installedTim.parameters).toMatchObject({ thickness_mm: 1, area_mm2: 480 });
-    expect(activeRth(installedTim.rth)).toBeGreaterThan(0.5);
+    expect(installedTim.parameters).toMatchObject({ thickness_mm: 1, area_mm2: 1508 });
+    expect(activeRth(installedTim.rth)).toBeCloseTo(1e-3 / (3 * 1508e-6), 6);
 
     expect(flow.components.every((component) => statusOf(component) === 'READY')).toBe(true);
     expect(Object.values(flow.network.zones).map((zone) => zone.name).sort()).toEqual([

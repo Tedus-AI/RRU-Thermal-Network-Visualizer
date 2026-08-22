@@ -24,6 +24,7 @@ import {
   emptyTim,
   inferHeatPath,
   inferLimitType,
+  normalizeModuleReferenceLocation,
   type HeatPathType,
   type Component,
   type ComponentCategory,
@@ -131,7 +132,7 @@ export function legacyComponentToCanonical(
           ? null
           : sourced(Number(row['Limit(C)']), 'Imported', { confidence: 'medium' }),
       limit_reference_note:
-        typeof row._tnv_limit_reference_note === 'string' ? row._tnv_limit_reference_note : '',
+        normalizeModuleReferenceLocation(row._tnv_limit_reference_note) ?? '',
       r_jc_C_per_W:
         row.R_jc == null ? null : sourced(Number(row.R_jc), 'Imported', { confidence: 'medium' }),
       package_type: null,

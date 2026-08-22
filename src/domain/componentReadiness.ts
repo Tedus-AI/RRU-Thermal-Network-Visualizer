@@ -8,6 +8,7 @@
 import {
   GEOMETRY_RULES,
   isHeatSource,
+  normalizeModuleReferenceLocation,
   powerWOf,
   sourceAreaMm2,
   UNASSIGNED_ZONE,
@@ -61,7 +62,7 @@ export function completenessOf(component: Component): CompletenessMap {
     Limit:
       spec.limit_type_confirmed &&
       valueOf(spec.limit_C) != null &&
-      (!moduleSurface || Boolean(spec.limit_reference_note?.trim())),
+      (!moduleSurface || normalizeModuleReferenceLocation(spec.limit_reference_note) != null),
     Package: spec.package_type != null && spec.package_type !== 'Unknown',
     // Rjc is genuinely not applicable when the manufacturer specifies the
     // allowed temperature at the very surface where this model injects heat.
@@ -214,12 +215,12 @@ export function validateComponent(component: Component): ComponentIssue[] {
     });
   }
 
-  if (moduleSurface && !spec.limit_reference_note?.trim()) {
+  if (moduleSurface && normalizeModuleReferenceLocation(spec.limit_reference_note) == null) {
     issues.push({
       severity: 'warning',
       field: 'limit_reference_note',
-      message: 'Record the exact datasheet location for the manufacturer surface limit.',
-      message_zh: '請記錄原廠表面溫度上限在規格書中指定的確切量測位置。',
+      message: 'Choose Left, Center or Right for the manufacturer surface reference.',
+      message_zh: '請選擇原廠指定散熱面的左側、中央或右側量測位置。',
     });
   }
 

@@ -130,12 +130,14 @@ describe('architecture templates', () => {
       thermal_spec: {
         ...component().thermal_spec,
         limit_type: 'Ts',
-        limit_reference_note: 'Baseplate center',
+        limit_reference_note: 'Center',
         r_jc_C_per_W: null,
         geometry: {
           ...component().thermal_spec.geometry,
-          source_L_mm: 24,
-          source_W_mm: 20,
+          package_L_mm: 58,
+          package_W_mm: 26,
+          source_L_mm: null,
+          source_W_mm: null,
         },
         heat_path: { type: 'ModuleSurface', parameters: {} },
         tim: { ...emptyTim(BUILTIN_TIM_IDS.grease), blt_mm: sourced(1, 'Datasheet') },
@@ -794,12 +796,14 @@ describe('end-to-end resolution per heat path', () => {
         limit_type: 'Ts',
         limit_type_confirmed: true,
         limit_C: sourced(115, 'Datasheet'),
-        limit_reference_note: 'Center of integrated HSK contact surface',
+        limit_reference_note: 'Center',
         r_jc_C_per_W: null,
         geometry: {
           ...component().thermal_spec.geometry,
-          source_L_mm: 24,
-          source_W_mm: 20,
+          package_L_mm: 58,
+          package_W_mm: 26,
+          source_L_mm: null,
+          source_W_mm: null,
         },
         heat_path: { type: 'ModuleSurface', parameters: {} },
         heat_path_confirmed: true,
@@ -816,14 +820,12 @@ describe('end-to-end resolution per heat path', () => {
     expect(graph.nodes.some((node) => node.type === 'junction')).toBe(false);
     expect(graph.edges.map((edge) => edge.type)).toEqual(['tim']);
     expect(graph.edges.some((edge) => edge.type === 'package_rjc')).toBe(false);
-    expect(graph.edges[0].parameters).toMatchObject({ thickness_mm: 1, area_mm2: 480 });
+    expect(graph.edges[0].parameters).toMatchObject({ thickness_mm: 1, area_mm2: 1508 });
     expect(graph.edges[0].resolution).toBe('resolved');
 
     const surface = graph.nodes[0];
     expect(surface).toMatchObject({ power_W: 20, limit_C: 115, limit_type: 'Ts' });
-    expect(surface.metadata?.limit_reference_note).toBe(
-      'Center of integrated HSK contact surface',
-    );
+    expect(surface.metadata?.limit_reference_note).toBe('Center');
     expect(graph.nodes[1].ports).toEqual([
       expect.objectContaining({ kind: 'HEAT_OUT', required: true, connected_to: null }),
     ]);

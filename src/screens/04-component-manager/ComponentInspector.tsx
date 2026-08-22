@@ -27,6 +27,8 @@ import {
   HEAT_PATH_PATCH_FIELDS,
   LIMIT_TYPES,
   LIMIT_TYPE_LABELS,
+  MODULE_REFERENCE_LOCATIONS,
+  MODULE_REFERENCE_LOCATION_LABELS,
   PACKAGE_TYPES,
   QTY_MODELS,
   QTY_MODEL_LABELS,
@@ -34,6 +36,7 @@ import {
   SOURCE_FACE_LABELS,
   componentTotalPowerW,
   heatPathPatch,
+  normalizeModuleReferenceLocation,
   sourceAreaMm2,
   sourceFaceMm,
   spreadAreaMm2,
@@ -45,6 +48,7 @@ import {
   type ComponentGeometry,
   type HeatPathType,
   type LimitType,
+  type ModuleReferenceLocation,
   type PackageType,
   type QtyModel,
 } from '@/domain/component';
@@ -326,6 +330,8 @@ export function ComponentInspector({
   const SOURCE_ORIGIN = {
     Coin: '= Package outline (soldered across its base) / 等於封裝外形（整個底面焊接）',
     TopSurface: '= Package outline (the case top) / 等於封裝外形（Case 上表面）',
+    ModuleSurface:
+      '= Package outline (specified module surface) / 等於封裝外形（原廠指定散熱面）',
   } as const;
   const spreadOrigin =
     rule.spread === 'project_coin'
@@ -555,23 +561,33 @@ export function ComponentInspector({
                       htmlFor="ins-limit-reference"
                       tooltip={tip('Reference Location')}
                     />
-                    <TextInput
+                    <Select
                       id="ins-limit-reference"
-                      value={spec.limit_reference_note ?? ''}
-                      placeholder="e.g. center of integrated HSK contact surface / 例如：模組 HSK 接觸面中央"
+                      items={[
+                        { value: '', label: 'Select location / 請選擇位置' },
+                        ...MODULE_REFERENCE_LOCATIONS.map((location) => ({
+                          value: location,
+                          label: `${MODULE_REFERENCE_LOCATION_LABELS[location].en} / ${MODULE_REFERENCE_LOCATION_LABELS[location].zh}`,
+                        })),
+                      ]}
+                      value={normalizeModuleReferenceLocation(spec.limit_reference_note) ?? ''}
                       disabled={readOnly}
                       onChange={(event) =>
                         patchSpec(
-                          { limit_reference_note: event.target.value },
+                          {
+                            limit_reference_note: event.target.value as
+                              | ModuleReferenceLocation
+                              | '',
+                          },
                           ['limit_reference_note'],
                         )
                       }
                     />
                     <p className="text-[11px] leading-relaxed text-ink-400">
-                      Copy the datasheet's exact measurement point; the solved temperature at this
-                      node is compared with the stated surface limit.
+                      Choose the left, center or right reference point on the manufacturer's
+                      specified surface.
                       <span className="block">
-                        請記錄規格書的確切量測點；求解後會以此表面節點溫度比對上限。
+                        選擇原廠指定散熱面上的左側、中央或右側量測位置。
                       </span>
                     </p>
                   </div>
@@ -806,7 +822,7 @@ export function ComponentInspector({
                       label={`${SOURCE_FACE_LABELS[heatPath].en} L`}
                       zh={`${SOURCE_FACE_LABELS[heatPath].zh}長`}
                       value={sourceFace.L}
-                      from={SOURCE_ORIGIN[heatPath as 'Coin' | 'TopSurface']}
+                      from={SOURCE_ORIGIN[heatPath as keyof typeof SOURCE_ORIGIN]}
                     />
                     <DerivedField
                       id="geo-source_W_mm"

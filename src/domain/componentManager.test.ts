@@ -149,12 +149,14 @@ describe('component readiness', () => {
     module.thermal_spec = {
       ...module.thermal_spec,
       limit_type: 'Ts',
-      limit_reference_note: 'Center of integrated HSK contact surface',
+      limit_reference_note: 'Center',
       r_jc_C_per_W: null,
       geometry: {
         ...module.thermal_spec.geometry,
-        source_L_mm: 24,
-        source_W_mm: 20,
+        package_L_mm: 58,
+        package_W_mm: 26,
+        source_L_mm: null,
+        source_W_mm: null,
       },
       heat_path: { type: 'ModuleSurface', parameters: {} },
     };
@@ -174,8 +176,10 @@ describe('component readiness', () => {
       r_jc_C_per_W: null,
       geometry: {
         ...module.thermal_spec.geometry,
-        source_L_mm: 24,
-        source_W_mm: 20,
+        package_L_mm: 58,
+        package_W_mm: 26,
+        source_L_mm: null,
+        source_W_mm: null,
       },
       heat_path: { type: 'ModuleSurface', parameters: {} },
     };
@@ -648,7 +652,7 @@ describe('legacy compatibility (04 §30)', () => {
     module.thermal_spec = {
       ...module.thermal_spec,
       limit_type: 'Ts',
-      limit_reference_note: 'Integrated HSK contact surface center',
+      limit_reference_note: 'Center',
       r_jc_C_per_W: null,
       heat_path: { type: 'ModuleSurface', parameters: {} },
     };
@@ -667,7 +671,7 @@ describe('legacy compatibility (04 §30)', () => {
       heat_path: { type: 'ModuleSurface' },
       limit_type: 'Ts',
       limit_type_confirmed: true,
-      limit_reference_note: 'Integrated HSK contact surface center',
+      limit_reference_note: 'Center',
       r_jc_C_per_W: null,
     });
   });
@@ -787,10 +791,10 @@ describe('GEOMETRY_RULES', () => {
   it('asks for a source face only where the package cannot answer', () => {
     expect(GEOMETRY_RULES.Coin.source).toBe('package');
     expect(GEOMETRY_RULES.TopSurface.source).toBe('package');
+    expect(GEOMETRY_RULES.ModuleSurface.source).toBe('package');
     // An E-PAD and a bolt-down flange are both smaller than the outline, and
     // nothing but the datasheet or the drawing knows by how much.
     expect(GEOMETRY_RULES.Board.source).toBe('stated');
-    expect(GEOMETRY_RULES.ModuleSurface.source).toBe('stated');
     expect(GEOMETRY_RULES.DirectMetal.source).toBe('stated');
   });
 
@@ -809,7 +813,7 @@ describe('GEOMETRY_RULES', () => {
 
   it('leaves a non-spreading path on the face heat entered', () => {
     expect(spreadFaceMm(geometry, 'TopSurface')).toEqual({ L: 18, W: 12 });
-    expect(spreadFaceMm(geometry, 'ModuleSurface')).toEqual({ L: 6, W: 6 });
+    expect(spreadFaceMm(geometry, 'ModuleSurface')).toEqual({ L: 18, W: 12 });
     expect(spreadFaceMm(geometry, 'DirectMetal')).toEqual({ L: 6, W: 6 });
   });
 
@@ -828,7 +832,7 @@ describe('GEOMETRY_RULES', () => {
     expect(sourceAreaMm2(geometry, 'Board')).toBe(36);
     expect(spreadAreaMm2(geometry, 'Board')).toBeCloseTo(7.6 * 7.6, 6);
     expect(spreadAreaMm2(geometry, 'TopSurface')).toBe(216);
-    expect(spreadAreaMm2(geometry, 'ModuleSurface')).toBe(36);
+    expect(spreadAreaMm2(geometry, 'ModuleSurface')).toBe(216);
     expect(spreadAreaMm2(geometry, 'DirectMetal')).toBe(36);
   });
 });
