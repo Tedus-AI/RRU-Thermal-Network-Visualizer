@@ -337,6 +337,17 @@ export function ComponentInspector({
   const moduleSurface = heatPath === 'ModuleSurface';
   const metalBase = heatPath === 'DirectMetal';
   const metalBaseModel = metalBaseParameters(spec);
+  const envelopeLabels = metalBase
+    ? {
+        L: { en: 'Body / Base Outer L', zh: '本體／底面外框長' },
+        W: { en: 'Body / Base Outer W', zh: '本體／底面外框寬' },
+        H: { en: 'Body H', zh: '本體高度' },
+      }
+    : {
+        L: { en: 'Package L', zh: '封裝長' },
+        W: { en: 'Package W', zh: '封裝寬' },
+        H: { en: 'Package H', zh: '封裝高' },
+      };
   const surfaceReferenced =
     moduleSurface || (metalBase && metalBaseModel.source_model === 'SurfaceBodyBased');
   const rule = GEOMETRY_RULES[heatPath];
@@ -932,24 +943,24 @@ export function ComponentInspector({
                   two of the four take their heat-leaving face straight from it. */}
               <div className="grid grid-cols-3 gap-2.5">
                 <GeometryField
-                  label="Package L"
-                  zh="封裝長"
+                  label={envelopeLabels.L.en}
+                  zh={envelopeLabels.L.zh}
                   field="package_L_mm"
                   geometry={spec.geometry}
                   readOnly={readOnly}
                   onChange={patchGeometry}
                 />
                 <GeometryField
-                  label="Package W"
-                  zh="封裝寬"
+                  label={envelopeLabels.W.en}
+                  zh={envelopeLabels.W.zh}
                   field="package_W_mm"
                   geometry={spec.geometry}
                   readOnly={readOnly}
                   onChange={patchGeometry}
                 />
                 <GeometryField
-                  label="Package H"
-                  zh="封裝高"
+                  label={envelopeLabels.H.en}
+                  zh={envelopeLabels.H.zh}
                   field="package_H_mm"
                   geometry={spec.geometry}
                   readOnly={readOnly}
@@ -994,14 +1005,14 @@ export function ComponentInspector({
                             label="Base Contact L"
                             zh="底面接觸長"
                             value={spec.geometry.package_L_mm}
-                            from="= Package L / 等於封裝長"
+                            from={`= ${envelopeLabels.L.en} / 等於${envelopeLabels.L.zh}`}
                           />
                           <DerivedField
                             id="geo-metal-contact-W"
                             label="Base Contact W"
                             zh="底面接觸寬"
                             value={spec.geometry.package_W_mm}
-                            from="= Package W / 等於封裝寬"
+                            from={`= ${envelopeLabels.W.en} / 等於${envelopeLabels.W.zh}`}
                           />
                         </>
                       )}
