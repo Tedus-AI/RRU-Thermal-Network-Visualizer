@@ -30,7 +30,14 @@ import type { DataSource } from '@/thermal/types';
 
 type Raw = Record<string, unknown>;
 
-const HEAT_PATH_TYPES_SET = new Set<HeatPathType>(['Coin', 'Board', 'TopSurface', 'DirectMetal']);
+const HEAT_PATH_TYPES_SET = new Set<HeatPathType>([
+  'Coin',
+  'Board',
+  'TopSurface',
+  'ModuleSurface',
+  'DirectMetal',
+]);
+const LIMIT_TYPES_SET = new Set<LimitType>(['Tj', 'Tc', 'Tb', 'Ts']);
 
 const isObject = (value: unknown): value is Raw =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -149,20 +156,18 @@ function migrateHeatPath(
 }
 
 /**
- * Legacy limit types collapse onto Tj / Tc.
- *
- * `Ts` named the package exterior, which `Tc` already covers — but calling a
- * surface limit a case limit is a reinterpretation, so it lands unconfirmed.
- * `Custom` and `Unknown` never were limit types; they meant nobody had decided,
- * which is exactly what `limit_type_confirmed: false` records.
+ * Tj, Tc, Tb and Ts are distinct engineering references. `Custom` and
+ * `Unknown` never were limit types; they meant nobody had decided, which is
+ * exactly what `limit_type_confirmed: false` records.
  */
 function migrateLimitType(
   raw: unknown,
   category: ComponentCategory,
   name: string,
 ): { limit_type: LimitType; limit_type_confirmed: boolean } {
-  if (raw === 'Tj' || raw === 'Tc') return { limit_type: raw, limit_type_confirmed: true };
-  if (raw === 'Ts') return { limit_type: 'Tc', limit_type_confirmed: false };
+  if (LIMIT_TYPES_SET.has(raw as LimitType)) {
+    return { limit_type: raw as LimitType, limit_type_confirmed: true };
+  }
   return { limit_type: inferLimitType(category, name), limit_type_confirmed: false };
 }
 
@@ -226,13 +231,17 @@ export function migrateComponent(raw: unknown, index: number): Component | null 
 
   const architecture = isObject(raw.architecture_prep) ? raw.architecture_prep : {};
   const category = (raw.category as ComponentCategory) ?? 'Other';
+  const migratedLimit = migrateLimitType(specRaw.limit_type, category, name);
   const limit =
     typeof specRaw.limit_type_confirmed === 'boolean'
       ? {
-          limit_type: (specRaw.limit_type === 'Tc' ? 'Tc' : 'Tj') as LimitType,
-          limit_type_confirmed: specRaw.limit_type_confirmed,
+          limit_type: LIMIT_TYPES_SET.has(specRaw.limit_type as LimitType)
+            ? (specRaw.limit_type as LimitType)
+            : migratedLimit.limit_type,
+          limit_type_confirmed:
+            specRaw.limit_type_confirmed && LIMIT_TYPES_SET.has(specRaw.limit_type as LimitType),
         }
-      : migrateLimitType(specRaw.limit_type, category, name);
+      : migratedLimit;
   const heat = migrateHeatPath(specRaw, category);
 
   return {
@@ -247,6 +256,8 @@ export function migrateComponent(raw: unknown, index: number): Component | null 
     thermal_spec: {
       ...limit,
       limit_C: toSourced(specRaw.limit_C),
+      limit_reference_note:
+        typeof specRaw.limit_reference_note === 'string' ? specRaw.limit_reference_note : '',
       r_jc_C_per_W: toSourced(specRaw.r_jc_C_per_W),
       package_type: (specRaw.package_type as PackageType) ?? null,
       geometry: migrateGeometry(specRaw),

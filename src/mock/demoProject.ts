@@ -135,13 +135,17 @@ interface Seed {
   category: ComponentCategory;
   qty: number;
   power_W: number;
-  r_jc: number;
+  r_jc: number | null;
   limit_C: number;
   limit_type: LimitType;
   package_type: PackageType;
   heat_path: HeatPathType;
   tim: string;
   contact: [number, number];
+  /** Exact manufacturer temperature-reference location, when surface-rated. */
+  limit_reference_note?: string;
+  /** Installed bond line override; defaults to the demo's normal 0.15 mm. */
+  tim_blt_mm?: number;
   template: ArchitectureTemplate;
   zone: BaseZone;
 }
@@ -170,7 +174,11 @@ function buildReadyComponents(seeds: Seed[]): Component[] {
         // they refer to is known rather than inferred.
         limit_type_confirmed: true,
         limit_C: demoSourced(seed.limit_C, 'Datasheet', 'Synthetic component qualification limit'),
-        r_jc_C_per_W: demoSourced(seed.r_jc, 'Datasheet', 'Synthetic component thermal profile'),
+        limit_reference_note: seed.limit_reference_note ?? '',
+        r_jc_C_per_W:
+          seed.r_jc == null
+            ? null
+            : demoSourced(seed.r_jc, 'Datasheet', 'Synthetic component thermal profile'),
         package_type: seed.package_type,
         geometry: {
           ...spec.geometry,
@@ -188,7 +196,11 @@ function buildReadyComponents(seeds: Seed[]): Component[] {
           ...spec.tim,
           tim_id: seed.tim,
           // A measured bond line, which is the one thing a component may state.
-          blt_mm: demoSourced(0.15, 'Datasheet', 'Synthetic build measurement'),
+          blt_mm: demoSourced(
+            seed.tim_blt_mm ?? 0.15,
+            'Datasheet',
+            'Synthetic installed bond-line measurement',
+          ),
         },
       },
       architecture_prep: {
@@ -276,15 +288,18 @@ export function demoComponents(): Component[] {
       name: 'Power Module',
       category: 'Power',
       qty: 1,
+      // This is dissipated loss (Pdiss), not the module's rated electrical output.
       power_W: 20,
-      r_jc: 0.4,
+      r_jc: null,
       limit_C: 115,
-      limit_type: 'Tc',
+      limit_type: 'Ts',
+      limit_reference_note: 'Center of the module integrated-HSK contact surface',
       package_type: 'Module',
-      heat_path: 'DirectMetal',
+      heat_path: 'ModuleSurface',
       tim: BUILTIN_TIM_IDS.grease,
       contact: [24, 20],
-      template: 'DIRECT_METAL',
+      tim_blt_mm: 1,
+      template: 'MODULE_SURFACE_TIM',
       zone: 'POWER',
     },
   ]);

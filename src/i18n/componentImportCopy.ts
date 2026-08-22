@@ -21,7 +21,7 @@ export const IMPORT_TOOLTIPS_ZH: Record<string, string> = {
   TIM: '此元件使用哪一種熱介面材料。材料本身在 Screen 01 的 TIM 清單中定義，這裡只是選用。',
   Thickness: 'PCB、Copper Coin 或相對應導熱結構厚度，單位 mm。',
   'Heat Path':
-    '熱離開元件的主要方向，決定整條熱阻鏈：Coin 銅塊焊接（往下）、Board 板級導熱孔（往下）、TopSurface 元件表面（往上）、DirectMetal 直接鎖附金屬。未填則依類別推定。',
+    '熱離開元件的主要方向，決定整條熱阻鏈：Coin 銅塊焊接（往下）、Board 板級導熱孔（往下）、TopSurface 接面經上蓋散熱（往上）、ModuleSurface 原廠指定模組散熱面經 TIM、DirectMetal 直接鎖附金屬。未填則依類別推定。',
   Limit:
     '元件允許最高溫度。此處不記錄它屬於 Tj 或 Tc，匯入後由 Component Manager 依類別推定並請工程師確認。',
   Rjc: 'Junction-to-Case thermal resistance，單位 °C/W。',

@@ -62,6 +62,9 @@ function specFromRow(row: StagingRow, materials: MaterialDefaults): ThermalSpec 
     limit_type_confirmed: false,
     limit_C:
       row.limit_C == null ? null : sourced(row.limit_C, 'Imported', { confidence: 'medium' }),
+    // Existing import formats do not identify the exact vendor measurement
+    // location. Screen 04 asks for it only if Module Surface is selected.
+    limit_reference_note: '',
     r_jc_C_per_W:
       row.r_jc_C_per_W == null
         ? null

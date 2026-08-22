@@ -18,7 +18,7 @@ import { projectComponentLimits } from '../graph/componentProjection';
 export const RESULT_SOURCES = ['analytical', 'flotherm', 'measurement'] as const;
 export type ResultSource = (typeof RESULT_SOURCES)[number];
 
-export type LimitType = 'Tj' | 'Tc' | 'Ts' | 'Custom';
+export type LimitType = 'Tj' | 'Tc' | 'Tb' | 'Ts' | 'Custom';
 
 /** 09 §31 — the display classification, not a product pass/fail (09 §32). */
 export type LimitStatus = 'within_limit' | 'near_limit' | 'over_limit' | 'no_limit';

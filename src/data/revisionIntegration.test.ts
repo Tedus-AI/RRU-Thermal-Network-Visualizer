@@ -81,6 +81,36 @@ describe('Phase 1 revision propagation', () => {
     expect(useNetworkStore.getState().requiresReview).toBe(false);
   });
 
+  it('treats a manufacturer reference-location edit as limit provenance only', () => {
+    const initial = createComponentRevisionSet();
+    const module = component();
+    useComponentStore.setState({
+      components: [module],
+      revisions: initial,
+      loaded_project_id: 'P',
+      dirty: false,
+    });
+    useSolverStore.getState().setSolutionState('SOLVED', '2026-08-13T01:00:00.000Z');
+
+    useComponentStore.getState().patchComponent(
+      module.id,
+      {
+        thermal_spec: {
+          ...module.thermal_spec,
+          limit_reference_note: 'Baseplate center',
+        },
+      },
+      ['limit_reference_note'],
+    );
+
+    const next = useComponentStore.getState().revisions;
+    expect(next.component_revision).not.toBe(initial.component_revision);
+    expect(next.limit_revision).not.toBe(initial.limit_revision);
+    expect(next.solver_input_revision).toBe(initial.solver_input_revision);
+    expect(useSolverStore.getState().state).toBe('SOLVED');
+    expect(useSolverStore.getState().dirtyReasons).toEqual([]);
+  });
+
   it('advances the solver-input clock and marks the solve DIRTY for a power edit', () => {
     const initial = createComponentRevisionSet();
     const pa = component();

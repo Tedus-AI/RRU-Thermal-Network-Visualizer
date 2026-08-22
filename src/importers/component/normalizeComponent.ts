@@ -188,6 +188,14 @@ const HEAT_PATH_ALIASES: Record<string, HeatPathType> = {
   top: 'TopSurface',
   'top cool': 'TopSurface',
 
+  // Vendor-rated module surface/baseplate, followed by an installed TIM.
+  'module surface': 'ModuleSurface',
+  modulesurface: 'ModuleSurface',
+  baseplate: 'ModuleSurface',
+  'module baseplate': 'ModuleSurface',
+  'integrated hsk': 'ModuleSurface',
+  'surface limit': 'ModuleSurface',
+
   // Bolted to metal, no board path at all.
   'direct metal': 'DirectMetal',
   directmetal: 'DirectMetal',
