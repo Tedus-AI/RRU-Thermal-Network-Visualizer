@@ -140,30 +140,27 @@ function Collapsible({
 }
 
 function Legend() {
-  // Collapsed by default: on the canvas widths this shell leaves, an open legend
-  // and the validation card would fight for the same corner. The validation list
-  // is the actionable one, so the legend starts as a chip.
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(true);
 
   return (
-    <div className="absolute bottom-3 left-3 z-10 rounded-md border border-line bg-surface/95 px-2.5 py-2 shadow-sm">
+    <div className="absolute bottom-3 left-3 z-10 min-w-[11.5rem] rounded-md border border-line bg-surface/95 px-3 py-2.5 shadow-sm">
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
         aria-expanded={open}
-        className="flex items-center gap-1 text-[10px] font-bold text-ink-700"
+        className="flex w-full items-center gap-1.5 text-[12px] font-bold text-ink-700"
       >
         Legend / 圖例
-        <ChevronDown size={11} className={open ? '' : '-rotate-90'} />
+        <ChevronDown size={13} className={`ml-auto ${open ? '' : '-rotate-90'}`} />
       </button>
       {open && (
-        <ul className="mt-1 grid grid-cols-1 gap-0.5">
+        <ul className="mt-2 grid grid-cols-1 gap-1">
           {LEGEND.map((entry) => (
-            <li key={entry.label} className="flex items-center gap-1.5 text-[9px] text-ink-500">
+            <li key={entry.label} className="flex items-center gap-2 text-[11px] text-ink-500">
               {entry.kind === 'node' ? (
                 <span
                   aria-hidden
-                  className="size-2 shrink-0 rounded-sm border"
+                  className="size-2.5 shrink-0 rounded-sm border"
                   style={{
                     borderColor: entry.style,
                     background: `${entry.style}33`,
@@ -172,7 +169,7 @@ function Legend() {
               ) : (
                 <span
                   aria-hidden
-                  className="h-0 w-4 shrink-0 border-t-2"
+                  className="h-0 w-5 shrink-0 border-t-2"
                   style={{
                     borderTopStyle: entry.style as 'solid',
                     borderTopColor: '#64748b',
