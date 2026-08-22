@@ -137,6 +137,17 @@ export async function readLibraryFromFolder(): Promise<LibraryEntry[]> {
   }
 }
 
+export interface ImportLibraryResult {
+  ok: boolean;
+  /** Entries the file had that this library did not. */
+  added: number;
+  /** Entries that existed here and were replaced by a newer saved copy. */
+  updated: number;
+  /** Entries the file had that were older than the copy already held. */
+  kept: number;
+  error?: string;
+}
+
 interface LibraryState {
   entries: LibraryEntry[];
   load: () => void;
@@ -147,7 +158,18 @@ interface LibraryState {
    */
   loadWithFolder: () => Promise<void>;
   saveComponent: (component: Component) => LibraryEntry;
+  rename: (id: string, name: string) => void;
+  setNotes: (id: string, notes: string) => void;
   remove: (id: string) => void;
+  /** Merges another library file in, newest saved copy of each part winning. */
+  importFile: (text: string) => ImportLibraryResult;
+  /** The whole catalogue as the portable file, for handing to someone else. */
+  exportText: () => string;
+}
+
+/** Same identity rule `saveComponent` uses, so a rename cannot fork an entry. */
+function sameName(a: string, b: string): boolean {
+  return a.trim().toLowerCase() === b.trim().toLowerCase();
 }
 
 export const useComponentLibraryStore = create<LibraryState>((set, get) => ({
@@ -166,7 +188,14 @@ export const useComponentLibraryStore = create<LibraryState>((set, get) => ({
   },
 
   saveComponent: (component) => {
-    const entry = toLibraryEntry(component);
+    const derived = toLibraryEntry(component);
+    // A renamed entry keeps its id (see `rename`), so the derived id can miss an
+    // entry this part is already saved as. Matching on the name too stops a
+    // re-save from forking the catalogue into two copies of the same part.
+    const existing = get().entries.find(
+      (e) => e.id === derived.id || sameName(e.name, derived.name),
+    );
+    const entry = existing ? { ...derived, id: existing.id } : derived;
     const entries = mergeLibraries(
       get().entries.filter((e) => e.id !== entry.id),
       [entry],
@@ -177,10 +206,66 @@ export const useComponentLibraryStore = create<LibraryState>((set, get) => ({
     return entry;
   },
 
+  /**
+   * Renames the label, never the id.
+   *
+   * The id is what `mergeLibraries` matches on, so re-deriving it from the new
+   * name would make a rename look like a brand new part to every other copy of
+   * the library — and the old one, still sitting in a colleague's file, would
+   * come back the next time the two merged.
+   */
+  rename: (id, name) => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    const entries = get()
+      .entries.map((entry) =>
+        entry.id === id ? { ...entry, name: trimmed, saved_at: new Date().toISOString() } : entry,
+      )
+      .sort((a, b) => a.name.localeCompare(b.name));
+    write(entries);
+    set({ entries });
+    void mirrorToFolder(entries);
+  },
+
+  setNotes: (id, notes) => {
+    const entries = get().entries.map((entry) =>
+      entry.id === id
+        ? { ...entry, notes: notes.trim() || undefined, saved_at: new Date().toISOString() }
+        : entry,
+    );
+    write(entries);
+    set({ entries });
+    void mirrorToFolder(entries);
+  },
+
   remove: (id) => {
     const entries = get().entries.filter((entry) => entry.id !== id);
     write(entries);
     set({ entries });
     void mirrorToFolder(entries);
   },
+
+  importFile: (text) => {
+    const parsed = parseLibraryFile(text);
+    if (!parsed.ok) return { ok: false, added: 0, updated: 0, kept: 0, error: parsed.error };
+
+    const before = new Map(get().entries.map((entry) => [entry.id, entry]));
+    let added = 0;
+    let updated = 0;
+    let kept = 0;
+    for (const incoming of parsed.file.entries) {
+      const existing = before.get(incoming.id);
+      if (!existing) added++;
+      else if ((incoming.saved_at ?? '') > (existing.saved_at ?? '')) updated++;
+      else kept++;
+    }
+
+    const entries = mergeLibraries(get().entries, parsed.file.entries);
+    write(entries);
+    set({ entries });
+    void mirrorToFolder(entries);
+    return { ok: true, added, updated, kept };
+  },
+
+  exportText: () => serializeLibrary(get().entries),
 }));

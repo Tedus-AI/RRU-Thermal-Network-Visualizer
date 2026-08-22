@@ -39,6 +39,7 @@ import { ComponentReadinessCards } from './ComponentReadinessCards';
 import { ComponentTable } from './ComponentTable';
 import { ComponentInspector, type FocusRequest } from './ComponentInspector';
 import { AddFromLibraryModal } from './AddFromLibraryModal';
+import { ComponentLibraryManager } from './ComponentLibraryManager';
 import { IssueList } from './IssueList';
 import type { InspectorTab } from './issueTargets';
 import {
@@ -93,6 +94,10 @@ export function ComponentManagerView() {
   const [focus, setFocus] = useState<FocusRequest | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [showLibrary, setShowLibrary] = useState(false);
+  const [showLibraryManager, setShowLibraryManager] = useState(false);
+  // Subscribed, not read once: the manager can rename or delete entries, and the
+  // picker beside it must not go on offering a part that is no longer there.
+  const libraryEntries = useComponentLibraryStore((s) => s.entries);
   const [showBulk, setShowBulk] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
   const [warningConfirm, setWarningConfirm] = useState<number | null>(null);
@@ -329,6 +334,7 @@ export function ComponentManagerView() {
               readOnly={readOnly}
               onAdd={() => setShowAdd(true)}
               onAddFromLibrary={() => setShowLibrary(true)}
+              onManageLibrary={() => setShowLibraryManager(true)}
               onDuplicate={() => {
                 if (!selected) return;
                 const copy = useComponentStore.getState().duplicateComponent(selected.id);
@@ -439,7 +445,7 @@ export function ComponentManagerView() {
 
       {showLibrary && (
         <AddFromLibraryModal
-          entries={useComponentLibraryStore.getState().entries}
+          entries={libraryEntries}
           existingNames={components.map((component) => component.name)}
           onClose={() => setShowLibrary(false)}
           onAdd={(entry, qty) => {
@@ -476,6 +482,13 @@ export function ComponentManagerView() {
             setShowLibrary(false);
             toast.success(`"${created.name}" added from the library / 已從元件庫新增`);
           }}
+        />
+      )}
+
+      {showLibraryManager && (
+        <ComponentLibraryManager
+          existingNames={components.map((component) => component.name)}
+          onClose={() => setShowLibraryManager(false)}
         />
       )}
 

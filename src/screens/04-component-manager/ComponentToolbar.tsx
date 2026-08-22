@@ -1,6 +1,6 @@
 /** Category tabs, filters and actions — 04 §8, §9. */
 
-import { Copy, Layers, Library, Plus, RotateCcw, Trash2 } from 'lucide-react';
+import { Copy, Layers, Library, Plus, RotateCcw, Settings2, Trash2 } from 'lucide-react';
 import { Button } from '@/ui/primitives';
 import { COMPONENT_CATEGORIES, componentTotalPowerW, type Component, type ComponentCategory } from '@/domain/component';
 import { statusOf } from '@/domain/componentReadiness';
@@ -189,6 +189,7 @@ export function ComponentActions({
   readOnly,
   onAdd,
   onAddFromLibrary,
+  onManageLibrary,
   onDuplicate,
   onDelete,
   onBulkEdit,
@@ -198,6 +199,7 @@ export function ComponentActions({
   readOnly: boolean;
   onAdd: () => void;
   onAddFromLibrary: () => void;
+  onManageLibrary: () => void;
   onDuplicate: () => void;
   onDelete: () => void;
   onBulkEdit: () => void;
@@ -210,6 +212,10 @@ export function ComponentActions({
       </Button>
       <Button icon={<Library size={13} />} disabled={readOnly} onClick={onAddFromLibrary}>
         From Library / 從元件庫
+      </Button>
+      {/* Browsing the catalogue is reading, so it is not gated on write access. */}
+      <Button icon={<Settings2 size={13} />} onClick={onManageLibrary}>
+        Manage Library / 管理元件庫
       </Button>
       <Button
         icon={<Copy size={13} />}
