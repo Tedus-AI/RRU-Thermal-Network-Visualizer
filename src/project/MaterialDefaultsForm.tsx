@@ -31,6 +31,11 @@ import { sourced, withValue, type SourcedValue } from '@/domain/sourcedValue';
 import { useProjectStore } from '@/data/projectStore';
 import { useComponentStore } from '@/data/componentStore';
 
+const PROCESS_TOOLTIPS: Partial<Record<ProcessField, string>> = {
+  contact_conductance_W_m2K:
+    '硬接觸熱傳係數 h（W/m²·K）參考值：\n1000（一般螺絲鎖付、無平整度要求）\n3000（整面 CNC + PCB 平整度 + 70 mm 一顆螺絲）\n10000（研磨面 + 高壓）',
+};
+
 /**
  * A number whose provenance is visible: a value still carrying the shipped
  * constant reads as muted, a stated one as normal weight. An engineer reviewing
@@ -59,6 +64,7 @@ function MaterialNumber({
   label,
   zh,
   unit,
+  tooltip,
   value,
   readOnly,
   placeholder = '—',
@@ -69,6 +75,7 @@ function MaterialNumber({
   label: string;
   zh: string;
   unit?: string;
+  tooltip?: string;
   value: SourcedValue<number> | null;
   readOnly: boolean;
   placeholder?: string;
@@ -96,7 +103,7 @@ function MaterialNumber({
 
   return (
     <div className="flex flex-col gap-1.5">
-      <FieldLabel label={label} zh={zh} unit={unit} htmlFor={id} />
+      <FieldLabel label={label} zh={zh} unit={unit} tooltip={tooltip} htmlFor={id} />
       <NumberInput
         id={id}
         step="any"
@@ -315,6 +322,7 @@ export function MaterialDefaultsForm({
                 label={label}
                 zh={zh}
                 unit={unit === '—' ? undefined : unit}
+                tooltip={PROCESS_TOOLTIPS[field]}
                 value={materials[field]}
                 readOnly={readOnly}
                 onChange={setProcess(field)}
