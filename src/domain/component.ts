@@ -88,8 +88,9 @@ export const SOURCE_FACE_LABELS: Record<HeatPathType, { en: string; zh: string }
  *                package outline, and nothing spreads on the way.
  *   ModuleSurface
  *                A module vendor specifies the allowable temperature at a
- *                named surface/baseplate. That face is stated explicitly and
- *                couples to the product heatsink through a TIM; there is no
+ *                named surface/baseplate. In this product model that interface
+ *                is the complete module face, so it follows the package outline
+ *                and couples to the product heatsink through a TIM; there is no
  *                junction-to-case resistance in this model.
  *   DirectMetal  A bolted part meets metal across a mounting face that may be
  *                the whole base or only a pair of flanges — a mechanical choice
@@ -109,7 +110,9 @@ export const GEOMETRY_RULES: Record<HeatPathType, GeometryRule> = {
   Coin: { source: 'package', spread: 'project_coin', thickness: 'project_coin' },
   Board: { source: 'stated', spread: 'board_spread', thickness: 'board' },
   TopSurface: { source: 'package', spread: 'none', thickness: 'none' },
-  ModuleSurface: { source: 'stated', spread: 'none', thickness: 'none' },
+  // For this product model the complete module face is the specified thermal
+  // interface, so its size follows the package outline and cannot diverge.
+  ModuleSurface: { source: 'package', spread: 'none', thickness: 'none' },
   DirectMetal: { source: 'stated', spread: 'none', thickness: 'none' },
 };
 
@@ -152,6 +155,29 @@ export const LIMIT_TYPE_LABELS: Record<LimitType, { en: string; zh: string }> = 
   Tb: { en: 'Baseplate', zh: '底板溫度' },
   Ts: { en: 'Manufacturer Surface', zh: '原廠指定表面溫度' },
 };
+
+export const MODULE_REFERENCE_LOCATIONS = ['Left', 'Center', 'Right'] as const;
+export type ModuleReferenceLocation = (typeof MODULE_REFERENCE_LOCATIONS)[number];
+
+export const MODULE_REFERENCE_LOCATION_LABELS: Record<
+  ModuleReferenceLocation,
+  { en: string; zh: string }
+> = {
+  Left: { en: 'Left', zh: '左側' },
+  Center: { en: 'Center', zh: '中央' },
+  Right: { en: 'Right', zh: '右側' },
+};
+
+/** Normalizes older free-text locations into the current three choices. */
+export function normalizeModuleReferenceLocation(value: unknown): ModuleReferenceLocation | null {
+  if (typeof value !== 'string') return null;
+  const text = value.trim().toLowerCase();
+  if (!text) return null;
+  if (/\bleft\b/.test(text) || text.includes('左')) return 'Left';
+  if (/\b(center|centre|middle)\b/.test(text) || text.includes('中')) return 'Center';
+  if (/\bright\b/.test(text) || text.includes('右')) return 'Right';
+  return null;
+}
 
 /**
  * Best guess at which surface a datasheet limit refers to, used when a source
@@ -324,10 +350,9 @@ export interface ComponentGeometry {
    * The face heat LEAVES the component through. What it is called depends on
    * the heat path — see SOURCE_FACE_LABELS — but it is one measurement.
    *
-   * On a Coin path it is not stated at all: a coin-soldered part is joined to
-   * the coin across its whole package base, so the joint face IS the package
-   * outline and `sourceFaceMm` reads it from there. Storing it twice would let
-   * the two disagree.
+   * On paths whose source is the complete package face (Coin, TopSurface and
+   * ModuleSurface), it is not stated separately: `sourceFaceMm` reads the
+   * package outline so the two dimensions cannot disagree.
    */
   source_L_mm: number | null;
   source_W_mm: number | null;
@@ -378,8 +403,8 @@ export interface ThermalSpec {
    */
   limit_type_confirmed: boolean;
   limit_C: SourcedValue<number> | null;
-  /** Exact datasheet location where Tc/Tb/Ts is defined or measured. */
-  limit_reference_note: string;
+  /** Left/center/right point on the manufacturer reference surface. */
+  limit_reference_note: ModuleReferenceLocation | '';
   /** Unknown stays null. 04 §11 / AC-04-06 forbid 0 as "unknown". */
   r_jc_C_per_W: SourcedValue<number> | null;
   package_type: PackageType | null;
@@ -551,10 +576,9 @@ export function isHeatSource(component: Component): boolean {
 /**
  * The face heat leaves the component through, as L and W.
  *
- * Every path but Coin states it directly. A coin-soldered part does not: it is
- * reflowed onto the coin across its whole package base, so the joint face is
- * the package outline — which is why those fields are read-only in the UI and
- * follow the package rather than being typed a second time.
+ * Coin, TopSurface and ModuleSurface use the complete package face, so their
+ * source fields are read-only in the UI and follow the package rather than
+ * being typed a second time. Other paths state the source face directly.
  */
 export function sourceFaceMm(
   geometry: ComponentGeometry,
@@ -605,7 +629,7 @@ export function sourceAreaMm2(
  *               With none supplied this returns null rather than guessing — a
  *               fabricated coin size would silently change every PA's margin.
  *   TopSurface  nothing spreads; heat leaves the case face it entered.
- *   ModuleSurface same, using the explicitly stated vendor reference face.
+ *   ModuleSurface same, using the complete package face selected by this model.
  *   DirectMetal same — the mount is modelled as its own edge in Screen 05.
  */
 export function spreadAreaMm2(

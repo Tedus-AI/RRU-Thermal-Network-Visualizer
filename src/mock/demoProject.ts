@@ -18,6 +18,7 @@ import {
   type ComponentCategory,
   type ComponentProvenance,
   type LimitType,
+  type ModuleReferenceLocation,
   type PackageType,
   type HeatPathType,
 } from '@/domain/component';
@@ -142,8 +143,8 @@ interface Seed {
   heat_path: HeatPathType;
   tim: string;
   contact: [number, number];
-  /** Exact manufacturer temperature-reference location, when surface-rated. */
-  limit_reference_note?: string;
+  /** Left/center/right point on the manufacturer temperature-reference surface. */
+  limit_reference_note?: ModuleReferenceLocation;
   /** Installed bond line override; defaults to the demo's normal 0.15 mm. */
   tim_blt_mm?: number;
   template: ArchitectureTemplate;
@@ -182,11 +183,13 @@ function buildReadyComponents(seeds: Seed[]): Component[] {
         package_type: seed.package_type,
         geometry: {
           ...spec.geometry,
-          package_L_mm: seed.contact[0] + 2,
-          package_W_mm: seed.contact[1] + 2,
+          package_L_mm:
+            seed.heat_path === 'ModuleSurface' ? seed.contact[0] : seed.contact[0] + 2,
+          package_W_mm:
+            seed.heat_path === 'ModuleSurface' ? seed.contact[1] : seed.contact[1] + 2,
           package_H_mm: 2,
-          source_L_mm: seed.contact[0],
-          source_W_mm: seed.contact[1],
+          source_L_mm: seed.heat_path === 'ModuleSurface' ? null : seed.contact[0],
+          source_W_mm: seed.heat_path === 'ModuleSurface' ? null : seed.contact[1],
           board_thickness_mm: 1.6,
         },
         heat_path: { type: seed.heat_path, parameters: {} },
@@ -293,11 +296,11 @@ export function demoComponents(): Component[] {
       r_jc: null,
       limit_C: 115,
       limit_type: 'Ts',
-      limit_reference_note: 'Center of the module integrated-HSK contact surface',
+      limit_reference_note: 'Center',
       package_type: 'Module',
       heat_path: 'ModuleSurface',
       tim: BUILTIN_TIM_IDS.grease,
-      contact: [24, 20],
+      contact: [58, 26],
       tim_blt_mm: 1,
       template: 'MODULE_SURFACE_TIM',
       zone: 'POWER',

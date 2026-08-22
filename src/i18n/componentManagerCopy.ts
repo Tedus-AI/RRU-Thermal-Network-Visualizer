@@ -6,7 +6,7 @@
 export const MANAGER_TOOLTIPS_ZH: Record<string, string> = {
   Rjc: '接面到外殼熱阻；若使用「模組散熱面／底板」模型則不適用，也不會建立 Rjc 熱阻邊。',
   'Limit Type': '指定溫度上限的參考位置：Tj 接面、Tc 外殼、Tb 底板或 Ts 原廠指定表面。',
-  'Reference Location': '記錄規格書指定的確切溫度量測位置，例如模組底板中心或整合式 HSK 接觸面。',
+  'Reference Location': '選擇原廠指定散熱面上的量測位置：左側、中央或右側。',
   'Thermal Profile': '供 Screen 05 建立熱網路使用的準備資料；本頁不建立 Node/Edge。',
   'Preferred Base Zone':
     '此元件的熱要交給哪一塊共用散熱結構。Screen 05 據此建議把元件的散熱出口接到哪個基座節點——接到不同區域＝走不同的散熱器＝到環境的路徑不同，會影響溫度。此處只是建議，不會自行建立節點。',

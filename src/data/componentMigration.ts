@@ -16,6 +16,7 @@ import {
   emptyGeometry,
   inferHeatPath,
   inferLimitType,
+  normalizeModuleReferenceLocation,
   normalizeZoneKey,
   type Component,
   type ComponentCategory,
@@ -257,7 +258,7 @@ export function migrateComponent(raw: unknown, index: number): Component | null 
       ...limit,
       limit_C: toSourced(specRaw.limit_C),
       limit_reference_note:
-        typeof specRaw.limit_reference_note === 'string' ? specRaw.limit_reference_note : '',
+        normalizeModuleReferenceLocation(specRaw.limit_reference_note) ?? '',
       r_jc_C_per_W: toSourced(specRaw.r_jc_C_per_W),
       package_type: (specRaw.package_type as PackageType) ?? null,
       geometry: migrateGeometry(specRaw),

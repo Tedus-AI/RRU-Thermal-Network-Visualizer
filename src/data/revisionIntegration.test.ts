@@ -97,7 +97,7 @@ describe('Phase 1 revision propagation', () => {
       {
         thermal_spec: {
           ...module.thermal_spec,
-          limit_reference_note: 'Baseplate center',
+          limit_reference_note: 'Center',
         },
       },
       ['limit_reference_note'],

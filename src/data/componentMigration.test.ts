@@ -168,14 +168,14 @@ describe('limit type migration', () => {
     });
   });
 
-  it('preserves an exact manufacturer reference location when present', () => {
+  it('normalizes a legacy manufacturer reference location to a supported choice', () => {
     expect(
       migrate({
         limit_type: 'Ts',
         limit_type_confirmed: true,
         limit_reference_note: 'Baseplate center',
       }).thermal_spec.limit_reference_note,
-    ).toBe('Baseplate center');
+    ).toBe('Center');
   });
 
   it('treats Custom and Unknown as "nobody decided" and infers instead', () => {
