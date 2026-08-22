@@ -5,7 +5,7 @@
 
 import { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Download, HelpCircle, Lock, Settings, Upload } from 'lucide-react';
+import { Download, HelpCircle, Library, Lock, Settings, Upload } from 'lucide-react';
 import { GROUP_LABELS_EN, SCREENS, projectPath } from './navigation';
 import { useProjectStore } from '@/data/projectStore';
 import { useScenarioStore } from '@/data/scenarioStore';
@@ -30,6 +30,7 @@ import {
   useProjectFilePicker,
 } from './ShellDialogs';
 import type { SolverState } from '@/thermal/types';
+import { useShellActions } from './shellActions';
 
 /**
  * Solver state as the engineer reads it.
@@ -136,6 +137,7 @@ export function TopHeader() {
 
   const solverState = useSolverStore((s) => s.state);
   const tone = SOLVER_TONE[solverState];
+  const componentLibraryHandler = useShellActions((s) => s.componentLibraryHandler);
 
   const currentScreen =
     SCREENS.find((screen) => location.pathname.endsWith(`/${screen.path}`)) ?? SCREENS[0];
@@ -304,6 +306,14 @@ export function TopHeader() {
             '將目前專案存成專案檔（.tnv.json），包含元件、網路、邊界、求解結果與報告設定。',
           )}
         />
+        {componentLibraryHandler && (
+          <HeaderAction
+            icon={Library}
+            label="Library"
+            onClick={componentLibraryHandler}
+            title={biTitle('Manage the component library', '管理元件庫')}
+          />
+        )}
         <HeaderAction
           icon={Settings}
           label="Settings"
