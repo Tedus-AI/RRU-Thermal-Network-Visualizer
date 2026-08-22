@@ -30,7 +30,9 @@ import {
   useProjectFilePicker,
 } from './ShellDialogs';
 import type { SolverState } from '@/thermal/types';
-import { useShellActions } from './shellActions';
+import { loadComponents } from '@/data/persistence';
+import { useComponentLibraryStore } from '@/data/componentLibraryStore';
+import { ComponentLibraryManager } from '@/screens/04-component-manager/ComponentLibraryManager';
 
 /**
  * Solver state as the engineer reads it.
@@ -137,12 +139,11 @@ export function TopHeader() {
 
   const solverState = useSolverStore((s) => s.state);
   const tone = SOLVER_TONE[solverState];
-  const componentLibraryHandler = useShellActions((s) => s.componentLibraryHandler);
 
   const currentScreen =
     SCREENS.find((screen) => location.pathname.endsWith(`/${screen.path}`)) ?? SCREENS[0];
 
-  const [dialog, setDialog] = useState<'settings' | 'help' | null>(null);
+  const [dialog, setDialog] = useState<'library' | 'settings' | 'help' | null>(null);
   const [pending, setPending] = useState<{
     file: ProjectFile;
     summary: ProjectFileSummary;
@@ -306,14 +307,15 @@ export function TopHeader() {
             '將目前專案存成專案檔（.tnv.json），包含元件、網路、邊界、求解結果與報告設定。',
           )}
         />
-        {componentLibraryHandler && (
-          <HeaderAction
-            icon={Library}
-            label="Library"
-            onClick={componentLibraryHandler}
-            title={biTitle('Manage the component library', '管理元件庫')}
-          />
-        )}
+        <HeaderAction
+          icon={Library}
+          label="Library"
+          onClick={() => {
+            setDialog('library');
+            void useComponentLibraryStore.getState().loadWithFolder();
+          }}
+          title={biTitle('Manage the component library', '管理元件庫')}
+        />
         <HeaderAction
           icon={Settings}
           label="Settings"
@@ -362,6 +364,14 @@ export function TopHeader() {
             setDialog(null);
             openImport(text);
           }}
+        />
+      )}
+      {dialog === 'library' && (
+        <ComponentLibraryManager
+          existingNames={
+            draft ? loadComponents(draft.project_id).map((component) => component.name) : []
+          }
+          onClose={() => setDialog(null)}
         />
       )}
       {dialog === 'help' && <HelpDialog onClose={() => setDialog(null)} />}

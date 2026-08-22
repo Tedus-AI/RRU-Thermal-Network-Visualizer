@@ -7,14 +7,9 @@ import { create } from 'zustand';
 interface ShellActions {
   saveHandler: (() => void) | null;
   setSaveHandler: (handler: (() => void) | null) => void;
-  /** Screen 04 registers this while mounted so the shared header can open it. */
-  componentLibraryHandler: (() => void) | null;
-  setComponentLibraryHandler: (handler: (() => void) | null) => void;
 }
 
 export const useShellActions = create<ShellActions>((set) => ({
   saveHandler: null,
   setSaveHandler: (handler) => set({ saveHandler: handler }),
-  componentLibraryHandler: null,
-  setComponentLibraryHandler: (handler) => set({ componentLibraryHandler: handler }),
 }));
