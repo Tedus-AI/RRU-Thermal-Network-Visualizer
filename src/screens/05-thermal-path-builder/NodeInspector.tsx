@@ -41,6 +41,7 @@ function Row({ label, zh, children }: { label: string; zh?: string; children: Re
 }
 
 export function NodeInspector({
+  embedded = false,
   node,
   network,
   readOnly,
@@ -52,6 +53,8 @@ export function NodeInspector({
   onToggleNode,
   onDeleteNode,
 }: {
+  /** FloatingPanel already owns the title and scrolling when embedded. */
+  embedded?: boolean;
   node: ThermalNode;
   network: ThermalNetwork;
   readOnly: boolean;
@@ -71,13 +74,19 @@ export function NodeInspector({
   const component = node.component_ref;
 
   return (
-    <div className="flex min-h-0 flex-col">
-      <header className="border-b border-line px-3.5 py-2.5">
-        <p className="truncate text-[13px] font-bold text-ink-900">Node: {node.id}</p>
-        <p className="truncate text-[11px] text-ink-500">{node.name}</p>
-      </header>
+    <div
+      className={`flex min-h-0 flex-col ${embedded ? 'rounded-lg border border-line bg-surface' : ''}`}
+    >
+      {!embedded && (
+        <header className="border-b border-line px-3.5 py-2.5">
+          <p className="truncate text-[13px] font-bold text-ink-900">Node: {node.id}</p>
+          <p className="truncate text-[11px] text-ink-500">{node.name}</p>
+        </header>
+      )}
 
-      <nav className="flex gap-0.5 overflow-x-auto border-b border-line px-2 pt-1.5">
+      <nav
+        className={`flex gap-0.5 border-b border-line px-2 pt-1.5 ${embedded ? 'flex-wrap' : 'overflow-x-auto'}`}
+      >
         {TABS.map((entry) => (
           <button
             key={entry.id}
@@ -94,7 +103,7 @@ export function NodeInspector({
         ))}
       </nav>
 
-      <div className="min-h-0 flex-1 overflow-auto p-3.5">
+      <div className={`min-h-0 flex-1 p-3.5 ${embedded ? '' : 'overflow-auto'}`}>
         {tab === 'overview' && (
           <div>
             <FieldLabel label="Node Name" zh="節點名稱" htmlFor="node-name" />
@@ -204,7 +213,9 @@ export function NodeInspector({
               disabled={readOnly}
               options={LIMIT_TYPES}
               onChange={(event) =>
-                onPatch({ limit_type: event.target.value as ThermalNode['limit_type'] })
+                onPatch({
+                  limit_type: event.target.value as ThermalNode['limit_type'],
+                })
               }
             />
 
@@ -215,7 +226,9 @@ export function NodeInspector({
               value={node.limit_C ?? ''}
               disabled={readOnly}
               onChange={(event) =>
-                onPatch({ limit_C: event.target.value === '' ? null : Number(event.target.value) })
+                onPatch({
+                  limit_C: event.target.value === '' ? null : Number(event.target.value),
+                })
               }
             />
 

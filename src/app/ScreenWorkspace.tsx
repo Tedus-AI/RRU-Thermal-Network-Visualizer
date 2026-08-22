@@ -47,10 +47,14 @@ export function ScreenWorkspace({
           </h1>
           {badge}
         </div>
-        {description && (
+        {(description || descriptionZh) && (
           <p className="mt-1.5 text-[13px] leading-relaxed text-ink-500">
             {description}
-            {descriptionZh && <span className="block text-ink-400">{descriptionZh}</span>}
+            {descriptionZh && (
+              <span className={description ? 'block text-ink-400' : 'text-ink-400'}>
+                {descriptionZh}
+              </span>
+            )}
           </p>
         )}
         {metrics && <div className="mt-3.5">{metrics}</div>}

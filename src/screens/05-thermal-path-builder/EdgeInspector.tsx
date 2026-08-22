@@ -51,15 +51,28 @@ const METHODS: Array<{ value: EdgeMethod; label: string }> = [
 ];
 
 /** Which numeric inputs each method needs, in the order they should be shown. */
-const METHOD_PARAMETERS: Record<EdgeMethod, Array<{ key: string; label: string; zh: string; unit: string }>> = {
+const METHOD_PARAMETERS: Record<
+  EdgeMethod,
+  Array<{ key: string; label: string; zh: string; unit: string }>
+> = {
   direct_rth: [{ key: 'R_C_per_W', label: 'Rth', zh: '熱阻', unit: '°C/W' }],
   contact_area: [{ key: 'R_C_per_W', label: 'Contact Rth', zh: '接觸熱阻', unit: '°C/W' }],
   contact_hc: [
-    { key: 'h_c_W_m2K', label: 'Contact conductance', zh: '接觸熱導', unit: 'W/m²·K' },
+    {
+      key: 'h_c_W_m2K',
+      label: 'Contact conductance',
+      zh: '接觸熱導',
+      unit: 'W/m²·K',
+    },
     { key: 'area_mm2', label: 'Contact area', zh: '接觸面積', unit: 'mm²' },
   ],
   solder_voiding: [
-    { key: 'thickness_mm', label: 'Solder thickness', zh: '焊料厚度', unit: 'mm' },
+    {
+      key: 'thickness_mm',
+      label: 'Solder thickness',
+      zh: '焊料厚度',
+      unit: 'mm',
+    },
     { key: 'k_W_mK', label: 'Conductivity k', zh: '熱傳導率', unit: 'W/m·K' },
     { key: 'area_mm2', label: 'Joint area', zh: '焊接面積', unit: 'mm²' },
     { key: 'voiding', label: 'Effective area', zh: '有效面積率', unit: '—' },
@@ -76,8 +89,18 @@ const METHOD_PARAMETERS: Record<EdgeMethod, Array<{ key: string; label: string; 
   ],
   via_array: [
     { key: 'thickness_mm', label: 'Board thickness', zh: '板厚', unit: 'mm' },
-    { key: 'effective_k_W_mK', label: 'Effective k', zh: '等效熱傳導率', unit: 'W/m·K' },
-    { key: 'area_mm2', label: 'Via region area', zh: '導熱孔區面積', unit: 'mm²' },
+    {
+      key: 'effective_k_W_mK',
+      label: 'Effective k',
+      zh: '等效熱傳導率',
+      unit: 'W/m·K',
+    },
+    {
+      key: 'area_mm2',
+      label: 'Via region area',
+      zh: '導熱孔區面積',
+      unit: 'mm²',
+    },
     { key: 'via_efficiency', label: 'Efficiency', zh: '效率係數', unit: '—' },
   ],
   convection_hA: [],
@@ -97,7 +120,10 @@ function Row({ label, zh, children }: { label: string; zh?: string; children: Re
   );
 }
 
-function statusOf(edge: ThermalEdge): { tone: 'ok' | 'warn' | 'danger'; label: string } {
+function statusOf(edge: ThermalEdge): {
+  tone: 'ok' | 'warn' | 'danger';
+  label: string;
+} {
   if (!edge.enabled) return { tone: 'warn', label: 'Disabled' };
   if (edge.resolution === 'resolved') return { tone: 'ok', label: 'Resolved' };
   if (edge.method === 'convection_hA' || edge.method === 'radiation_hA') {
@@ -107,6 +133,7 @@ function statusOf(edge: ThermalEdge): { tone: 'ok' | 'warn' | 'danger'; label: s
 }
 
 export function EdgeInspector({
+  embedded = false,
   edge,
   network,
   readOnly,
@@ -115,6 +142,8 @@ export function EdgeInspector({
   onDelete,
   onReverse,
 }: {
+  /** FloatingPanel already owns the title and scrolling when embedded. */
+  embedded?: boolean;
   edge: ThermalEdge;
   network: ThermalNetwork;
   readOnly: boolean;
@@ -136,7 +165,12 @@ export function EdgeInspector({
     onPatch({
       method,
       parameters,
-      rth: setRthFromSource(edge.rth, 'Analytical', computed.value, computed.value == null ? 'low' : 'medium'),
+      rth: setRthFromSource(
+        edge.rth,
+        'Analytical',
+        computed.value,
+        computed.value == null ? 'low' : 'medium',
+      ),
       resolution:
         edge.rth.active_source === 'Manual' && edge.rth.manual != null
           ? 'resolved'
@@ -149,15 +183,21 @@ export function EdgeInspector({
   };
 
   return (
-    <div className="flex min-h-0 flex-col">
-      <header className="border-b border-line px-3.5 py-2.5">
-        <p className="truncate text-[13px] font-bold text-ink-900">Edge: {edge.id}</p>
-        <p className="truncate text-[11px] text-ink-500">
-          {from} → {to}
-        </p>
-      </header>
+    <div
+      className={`flex min-h-0 flex-col ${embedded ? 'rounded-lg border border-line bg-surface' : ''}`}
+    >
+      {!embedded && (
+        <header className="border-b border-line px-3.5 py-2.5">
+          <p className="truncate text-[13px] font-bold text-ink-900">Edge: {edge.id}</p>
+          <p className="truncate text-[11px] text-ink-500">
+            {from} → {to}
+          </p>
+        </header>
+      )}
 
-      <nav className="flex gap-0.5 overflow-x-auto border-b border-line px-2 pt-1.5">
+      <nav
+        className={`flex gap-0.5 border-b border-line px-2 pt-1.5 ${embedded ? 'flex-wrap' : 'overflow-x-auto'}`}
+      >
         {TABS.map((entry) => (
           <button
             key={entry.id}
@@ -174,143 +214,148 @@ export function EdgeInspector({
         ))}
       </nav>
 
-      <div className="min-h-0 flex-1 overflow-auto p-3.5">
+      <div className={`min-h-0 flex-1 p-3.5 ${embedded ? '' : 'overflow-auto'}`}>
         {tab === 'overview' && (
-          <div>
-            <Row label="From" zh="起點">{from}</Row>
-            <Row label="To" zh="終點">{to}</Row>
-            <Row label="Type" zh="類型">{edge.type}</Row>
-            <Row label="Method" zh="方法">
-              {METHODS.find((method) => method.value === edge.method)?.label ?? edge.method}
-            </Row>
-            <Row label="Active Rth Source" zh="使用中熱阻來源">
-              {R != null ? (
-                `${edge.rth.active_source} · ${R.toFixed(4)} °C/W`
-              ) : (
-                <BilingualTooltip zh={TOOLTIPS_ZH.unresolvedRth}>
-                  <span className="text-warn-600">Unresolved</span>
-                </BilingualTooltip>
+          <div className={embedded ? 'grid gap-3 md:grid-cols-2' : ''}>
+            <div>
+              <Row label="From" zh="起點">
+                {from}
+              </Row>
+              <Row label="To" zh="終點">
+                {to}
+              </Row>
+              <Row label="Type" zh="類型">
+                {edge.type}
+              </Row>
+              <Row label="Method" zh="方法">
+                {METHODS.find((method) => method.value === edge.method)?.label ?? edge.method}
+              </Row>
+              <Row label="Active Rth Source" zh="使用中熱阻來源">
+                {R != null ? (
+                  `${edge.rth.active_source} · ${R.toFixed(4)} °C/W`
+                ) : (
+                  <BilingualTooltip zh={TOOLTIPS_ZH.unresolvedRth}>
+                    <span className="text-warn-600">Unresolved</span>
+                  </BilingualTooltip>
+                )}
+              </Row>
+              <Row label="Status" zh="狀態">
+                <Badge tone={status.tone}>{status.label}</Badge>
+              </Row>
+              <Row label="Enabled" zh="啟用">
+                {edge.enabled ? 'Yes' : 'No'}
+              </Row>
+              <Row label="Direction" zh="標示方向">
+                Nominal ({from} → {to})
+              </Row>
+
+              {edge.resolution_note && (
+                <p className="mt-2 rounded border border-warn-500/40 bg-warn-100 p-2 text-[10px] leading-relaxed text-warn-600">
+                  {edge.resolution_note}
+                </p>
               )}
-            </Row>
-            <Row label="Status" zh="狀態">
-              <Badge tone={status.tone}>{status.label}</Badge>
-            </Row>
-            <Row label="Enabled" zh="啟用">
-              {edge.enabled ? 'Yes' : 'No'}
-            </Row>
-            <Row label="Direction" zh="標示方向">
-              Nominal ({from} → {to})
-            </Row>
 
-            {edge.resolution_note && (
-              <p className="mt-2 rounded border border-warn-500/40 bg-warn-100 p-2 text-[10px] leading-relaxed text-warn-600">
-                {edge.resolution_note}
+              <p className="mt-2 text-[10px] leading-relaxed text-ink-400">
+                Heat flow Q and ΔT are not shown here: Screen 05 has no boundary conditions, so no
+                solve has run (05 §22). / 05 尚未有邊界條件，因此不顯示 Q 與 ΔT。
               </p>
-            )}
 
-            <p className="mt-2 text-[10px] leading-relaxed text-ink-400">
-              Heat flow Q and ΔT are not shown here: Screen 05 has no boundary conditions, so no
-              solve has run (05 §22). / 05 尚未有邊界條件，因此不顯示 Q 與 ΔT。
-            </p>
-
-            {(edge.method === 'convection_hA' || edge.method === 'radiation_hA') && (
-              <section className="mt-3 rounded-md border border-line bg-surface-muted p-2.5">
-                <p className="flex items-center gap-1 text-[11px] font-bold text-ink-700">
-                  Boundary Parameters
-                  <span className="font-semibold text-ink-400">(Defined in Screen 06)</span>
-                </p>
-                <Row label="Convection h" zh="對流係數">
-                  <span className="text-ink-400">— W/m²·K</span>
-                </Row>
-                <Row label="Radiation ε" zh="輻射率">
-                  <span className="text-ink-400">—</span>
-                </Row>
-                <Row label="Ambient Temperature" zh="環境溫度">
-                  <span className="text-ink-400">— °C</span>
-                </Row>
-                <p className="mt-1.5 text-[10px] leading-relaxed text-ink-400">
-                  Parameters must be configured in Screen 06 (Boundary Conditions). /
-                  須於 Screen 06 邊界條件設定。
-                </p>
-              </section>
-            )}
-
-            <section className="mt-3 rounded-md border border-line p-2.5">
-              <p className="text-[11px] font-bold text-ink-700">
-                Source <span className="font-semibold text-ink-400">/ 來源 (Provenance)</span>
-              </p>
-              <Row label="Analytical (Rth / Model)">
-                {edge.rth.analytical != null ? (
-                  `${edge.rth.analytical.toFixed(4)} °C/W`
-                ) : (
-                  <span className="text-ink-400">Not Defined</span>
-                )}
-              </Row>
-              <Row label="Manual / Override">
-                {edge.rth.manual != null ? (
-                  `${edge.rth.manual.toFixed(4)} °C/W`
-                ) : (
-                  <span className="text-ink-400">None</span>
-                )}
-              </Row>
-              <Row label="Future / Measurement">
-                <span className="text-ink-400">Reserved</span>
-              </Row>
-              <Row label="FloTHERM (Deferred)">
-                <span className="text-ink-400">Not Imported (Screen 03)</span>
-              </Row>
-            </section>
-
-            <section className="mt-3 rounded-md border border-line p-2.5">
-              <p className="text-[11px] font-bold text-ink-700">
-                External Mapping <span className="font-semibold text-ink-400">/ 外部對照</span>
-              </p>
-              <Row label="FloTHERM">
-                {edge.external_mappings?.flotherm?.object_aliases?.length ? (
-                  edge.external_mappings.flotherm.object_aliases.join(', ')
-                ) : (
-                  <span className="text-ink-400">Not Mapped</span>
-                )}
-              </Row>
-            </section>
-
-            <section className="mt-3 rounded-md border border-line p-2.5">
-              <p className="text-[11px] font-bold text-ink-700">
-                Readiness <span className="font-semibold text-ink-400">/ 驗證狀態</span>
-              </p>
-              <div className="mt-1 flex flex-wrap items-center gap-3 text-[11px] font-semibold">
-                <span className="text-danger-600">{readiness.errors} Blocking Errors</span>
-                <span className="text-warn-600">{readiness.warnings} Warnings</span>
-                <span className="text-accent-600">{readiness.info} Info</span>
-              </div>
-            </section>
-
-            <div className="mt-3 flex flex-wrap gap-2">
-              <Button
-                className="h-8"
-                disabled={readOnly}
-                icon={<Power size={13} />}
-                onClick={() => onPatch({ enabled: !edge.enabled })}
-              >
-                {edge.enabled ? 'Disable' : 'Enable'}
-              </Button>
-              <Button className="h-8" disabled={readOnly} onClick={onReverse}>
-                Reverse direction
-              </Button>
-              <Button
-                variant="danger"
-                className="h-8"
-                disabled={readOnly}
-                icon={<Trash2 size={13} />}
-                onClick={onDelete}
-              >
-                Delete
-              </Button>
+              {(edge.method === 'convection_hA' || edge.method === 'radiation_hA') && (
+                <section className="mt-2 rounded-md border border-line bg-surface-muted p-2.5">
+                  <p className="flex items-center gap-1 text-[11px] font-bold text-ink-700">
+                    Boundary Parameters / 邊界參數
+                    <span className="font-semibold text-ink-400">(Screen 06)</span>
+                  </p>
+                  <Row label="Convection h" zh="對流係數">
+                    <span className="text-ink-400">— W/m²·K</span>
+                  </Row>
+                  <Row label="Radiation ε" zh="輻射率">
+                    <span className="text-ink-400">—</span>
+                  </Row>
+                  <Row label="Ambient Temperature" zh="環境溫度">
+                    <span className="text-ink-400">— °C</span>
+                  </Row>
+                </section>
+              )}
             </div>
-            <p className="mt-1.5 text-[10px] text-ink-400">
-              Reversing changes the nominal label only. Conduction is not one-way (05 §51). /
-              反轉僅改變顯示方向，導熱本身並非單向。
-            </p>
+            <div>
+              <section className="mt-3 rounded-md border border-line p-2.5">
+                <p className="text-[11px] font-bold text-ink-700">
+                  Source <span className="font-semibold text-ink-400">/ 來源 (Provenance)</span>
+                </p>
+                <Row label="Analytical (Rth / Model)">
+                  {edge.rth.analytical != null ? (
+                    `${edge.rth.analytical.toFixed(4)} °C/W`
+                  ) : (
+                    <span className="text-ink-400">Not Defined</span>
+                  )}
+                </Row>
+                <Row label="Manual / Override">
+                  {edge.rth.manual != null ? (
+                    `${edge.rth.manual.toFixed(4)} °C/W`
+                  ) : (
+                    <span className="text-ink-400">None</span>
+                  )}
+                </Row>
+                <Row label="Future / Measurement">
+                  <span className="text-ink-400">Reserved</span>
+                </Row>
+                <Row label="FloTHERM (Deferred)">
+                  <span className="text-ink-400">Not Imported (Screen 03)</span>
+                </Row>
+              </section>
+
+              <section className="mt-3 rounded-md border border-line p-2.5">
+                <p className="text-[11px] font-bold text-ink-700">
+                  External Mapping <span className="font-semibold text-ink-400">/ 外部對照</span>
+                </p>
+                <Row label="FloTHERM">
+                  {edge.external_mappings?.flotherm?.object_aliases?.length ? (
+                    edge.external_mappings.flotherm.object_aliases.join(', ')
+                  ) : (
+                    <span className="text-ink-400">Not Mapped</span>
+                  )}
+                </Row>
+              </section>
+
+              <section className="mt-3 rounded-md border border-line p-2.5">
+                <p className="text-[11px] font-bold text-ink-700">
+                  Readiness <span className="font-semibold text-ink-400">/ 驗證狀態</span>
+                </p>
+                <div className="mt-1 flex flex-wrap items-center gap-3 text-[11px] font-semibold">
+                  <span className="text-danger-600">{readiness.errors} Blocking Errors</span>
+                  <span className="text-warn-600">{readiness.warnings} Warnings</span>
+                  <span className="text-accent-600">{readiness.info} Info</span>
+                </div>
+              </section>
+
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button
+                  className="h-8"
+                  disabled={readOnly}
+                  icon={<Power size={13} />}
+                  onClick={() => onPatch({ enabled: !edge.enabled })}
+                >
+                  {edge.enabled ? 'Disable' : 'Enable'}
+                </Button>
+                <Button className="h-8" disabled={readOnly} onClick={onReverse}>
+                  Reverse direction
+                </Button>
+                <Button
+                  variant="danger"
+                  className="h-8"
+                  disabled={readOnly}
+                  icon={<Trash2 size={13} />}
+                  onClick={onDelete}
+                >
+                  Delete
+                </Button>
+              </div>
+              <p className="mt-1.5 text-[10px] text-ink-400">
+                Reversing changes the nominal label only. Conduction is not one-way (05 §51). /
+                反轉僅改變顯示方向，導熱本身並非單向。
+              </p>
+            </div>
           </div>
         )}
 
@@ -376,8 +421,8 @@ export function EdgeInspector({
           <div>
             {METHOD_PARAMETERS[edge.method].length === 0 ? (
               <p className="text-[11px] leading-relaxed text-ink-400">
-                This method takes no geometry parameters in Screen 05. /
-                此方法在 05 不需要幾何參數。
+                This method takes no geometry parameters in Screen 05. / 此方法在 05
+                不需要幾何參數。
               </p>
             ) : (
               METHOD_PARAMETERS[edge.method].map((parameter) => {
@@ -531,7 +576,12 @@ export function EdgeInspector({
                   { value: 'FloTHERM', label: 'FloTHERM (deferred)' },
                 ]}
                 onChange={(event) =>
-                  onPatch({ rth: { ...edge.rth, active_source: event.target.value as DataSource } })
+                  onPatch({
+                    rth: {
+                      ...edge.rth,
+                      active_source: event.target.value as DataSource,
+                    },
+                  })
                 }
               />
 
@@ -590,8 +640,8 @@ export function EdgeInspector({
               }}
             />
             <p className="mt-1.5 text-[10px] leading-relaxed text-ink-400">
-              Stored as text only. No FloTHERM file is parsed and no CSV header is assumed
-              (05 §1). / 僅儲存文字，未解析任何 FloTHERM 檔案或欄位。
+              Stored as text only. No FloTHERM file is parsed and no CSV header is assumed (05 §1).
+              / 僅儲存文字，未解析任何 FloTHERM 檔案或欄位。
             </p>
           </div>
         )}

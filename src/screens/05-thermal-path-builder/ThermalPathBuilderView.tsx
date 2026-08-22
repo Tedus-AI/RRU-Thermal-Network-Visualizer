@@ -15,6 +15,8 @@ import {
   ArrowLeft,
   ArrowRight,
   Boxes,
+  ChevronLeft,
+  ChevronRight,
   ChevronDown,
   CircleCheck,
   CircleSlash,
@@ -31,6 +33,7 @@ import { projectPath } from '@/app/navigation';
 import { useShellActions } from '@/app/shellActions';
 import { Badge, Button, Modal, Select, Skeleton, TextInput } from '@/ui/primitives';
 import { FieldLabel } from '@/ui/FieldLabel';
+import { FloatingPanel } from '@/ui/FloatingPanel';
 import { toast } from '@/ui/toast';
 
 import { useProjectStore } from '@/data/projectStore';
@@ -60,7 +63,11 @@ import { NODE_TYPES, type NodeType, type ThermalEdge, type ThermalNode } from '@
 import { BuilderStepper, type BuilderStep } from './BuilderStepper';
 import { ComponentPalette, defaultPrefFor, type BuilderPref } from './ComponentPalette';
 import { TemplatePalette } from './TemplatePalette';
-import { SharedStructurePanel, type NewSpreadingDraft, type NewZoneDraft } from './SharedStructurePanel';
+import {
+  SharedStructurePanel,
+  type NewSpreadingDraft,
+  type NewZoneDraft,
+} from './SharedStructurePanel';
 import { GraphToolbar, type CanvasTool } from './GraphToolbar';
 import { ThermalGraphCanvas, type CanvasHandle, type GraphSelection } from './ThermalGraphCanvas';
 import { NodeInspector } from './NodeInspector';
@@ -87,13 +94,13 @@ function KpiCard({
   iconTone?: string;
 }) {
   return (
-    <div className="flex items-center gap-2.5 rounded-lg border border-line bg-surface px-3 py-2.5">
-      <span className={`shrink-0 ${iconTone}`}>{icon}</span>
-      <span className="min-w-0">
-        <span className="block truncate text-[11px] font-semibold text-ink-700">{label}</span>
-        <span className="block truncate text-[10px] text-ink-400">{zh}</span>
-        <span className={`block text-[19px] leading-tight font-bold tabular ${tone}`}>{value}</span>
+    <div className="min-w-0 rounded-lg border border-line bg-surface px-2 py-2">
+      <span className="flex min-w-0 items-center gap-1.5 text-[13px] font-semibold text-ink-900">
+        <span className={`shrink-0 ${iconTone}`}>{icon}</span>
+        <span className="truncate">{label}</span>
+        <span className={`ml-auto shrink-0 pl-2 font-bold tabular ${tone}`}>{value}</span>
       </span>
+      <span className="mt-0.5 block truncate text-[11px] text-ink-400">{zh}</span>
     </div>
   );
 }
@@ -157,13 +164,19 @@ function Legend() {
                 <span
                   aria-hidden
                   className="size-2 shrink-0 rounded-sm border"
-                  style={{ borderColor: entry.style, background: `${entry.style}33` }}
+                  style={{
+                    borderColor: entry.style,
+                    background: `${entry.style}33`,
+                  }}
                 />
               ) : (
                 <span
                   aria-hidden
                   className="h-0 w-4 shrink-0 border-t-2"
-                  style={{ borderTopStyle: entry.style as 'solid', borderTopColor: '#64748b' }}
+                  style={{
+                    borderTopStyle: entry.style as 'solid',
+                    borderTopColor: '#64748b',
+                  }}
                 />
               )}
               {entry.label}
@@ -180,7 +193,7 @@ function LoadingState() {
     <div className="flex flex-col gap-4 p-6">
       <div className="grid grid-cols-6 gap-3">
         {Array.from({ length: 6 }).map((_, index) => (
-          <Skeleton key={index} className="h-16" />
+          <Skeleton key={index} className="h-12" />
         ))}
       </div>
       <div className="flex gap-4">
@@ -228,6 +241,8 @@ export function ThermalPathBuilderView() {
   const [zoom, setZoom] = useState(1);
   const [showPorts, setShowPorts] = useState(true);
   const [showLabels, setShowLabels] = useState(true);
+  const [paletteCollapsed, setPaletteCollapsed] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false);
   // Seeded from the project's own answer (01 §2), so Screen 04's zone list and
   // the structure this screen builds start from the same decision. It stays
   // local state because trying a different shape here should not silently
@@ -238,17 +253,30 @@ export function ThermalPathBuilderView() {
   );
   const [showGenerate, setShowGenerate] = useState(false);
   const [rebuildFor, setRebuildFor] = useState<string | null>(null);
-  const [qtyWarning, setQtyWarning] = useState<{ componentId: string; next: BuilderPref } | null>(
-    null,
-  );
+  const [qtyWarning, setQtyWarning] = useState<{
+    componentId: string;
+    next: BuilderPref;
+  } | null>(null);
   const [contextMenu, setContextMenu] = useState<{
     kind: 'node' | 'edge';
     id: string;
     x: number;
     y: number;
   } | null>(null);
-  const [addNodeDraft, setAddNodeDraft] = useState<{ name: string; type: NodeType } | null>(null);
+  const [addNodeDraft, setAddNodeDraft] = useState<{
+    name: string;
+    type: NodeType;
+  } | null>(null);
   const [warningConfirm, setWarningConfirm] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!fullscreen) return;
+    const leaveFullscreen = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setFullscreen(false);
+    };
+    window.addEventListener('keydown', leaveFullscreen);
+    return () => window.removeEventListener('keydown', leaveFullscreen);
+  }, [fullscreen]);
 
   useEffect(() => {
     if (!projectId) return;
@@ -347,13 +375,10 @@ export function ThermalPathBuilderView() {
   const selectedComponent: Component | null =
     components.find((component) => component.id === selectedComponentId) ?? null;
   const selectedPref = selectedComponent
-    ? prefs[selectedComponent.id] ?? defaultPrefFor(selectedComponent)
+    ? (prefs[selectedComponent.id] ?? defaultPrefFor(selectedComponent))
     : null;
 
-  const zoneIds = useMemo(
-    () => Object.keys(network?.zones ?? {}),
-    [network?.zones],
-  );
+  const zoneIds = useMemo(() => Object.keys(network?.zones ?? {}), [network?.zones]);
 
   // --- Actions -------------------------------------------------------------
 
@@ -434,13 +459,17 @@ export function ThermalPathBuilderView() {
 
     setShowGenerate(false);
     setStep('connections');
-    toast.success('Network generated. Connect the ports in Step 4. / 已產生網路，請於步驟 4 連接埠。');
+    toast.success(
+      'Network generated. Connect the ports in Step 4. / 已產生網路，請於步驟 4 連接埠。',
+    );
   };
 
   const handleApplyPreset = () => {
     const structure = buildSharedStructure(structurePreset);
     if (structure.nodes.length === 0) {
-      toast.warning('Custom preset creates nothing — add zones manually. / 自訂結構請手動新增區域。');
+      toast.warning(
+        'Custom preset creates nothing — add zones manually. / 自訂結構請手動新增區域。',
+      );
       return;
     }
     useNetworkStore.getState().addSubgraph({
@@ -454,7 +483,10 @@ export function ThermalPathBuilderView() {
   const handleAddZone = (zoneDraft: NewZoneDraft) => {
     const node = createZoneNode(zoneDraft.name, zoneDraft.name, zoneDraft.type);
     useNetworkStore.getState().mutate((net) => {
-      net.nodes[node.id] = { ...node, metadata: zoneDraft.notes ? { notes: zoneDraft.notes } : undefined };
+      net.nodes[node.id] = {
+        ...node,
+        metadata: zoneDraft.notes ? { notes: zoneDraft.notes } : undefined,
+      };
       net.zones[node.id] = {
         id: node.id,
         name: zoneDraft.name,
@@ -633,7 +665,6 @@ export function ThermalPathBuilderView() {
     <ScreenWorkspace
       title="Thermal Path Builder"
       titleZh="熱路徑設定"
-      description="Define how heat can travel: component subgraphs, shared structure and their connections. No boundary conditions and no solve happen here."
       descriptionZh="定義熱可以怎麼走：元件子圖、共用結構與彼此的連接。本畫面不設定邊界條件，也不進行求解。"
       badge={
         <div className="flex flex-wrap items-center gap-2">
@@ -642,23 +673,21 @@ export function ThermalPathBuilderView() {
             {network.status}
           </Badge>
           <Badge tone={solverState === 'DIRTY' ? 'warn' : 'neutral'}>Solver {solverState}</Badge>
-          {requiresReview && (
-            <Badge tone="warn">Linked parameters changed / 連動參數已變更</Badge>
-          )}
+          {requiresReview && <Badge tone="warn">Linked parameters changed / 連動參數已變更</Badge>}
         </div>
       }
       metrics={
-        <div className="grid grid-cols-2 gap-2.5 md:grid-cols-3 xl:grid-cols-6">
+        <div className="grid grid-cols-2 gap-1.5 md:grid-cols-3 xl:grid-cols-6">
           <KpiCard
-            icon={<Boxes size={18} />}
+            icon={<Boxes size={13} />}
             value={`${kpis.componentsModeled} / ${kpis.componentsTotal}`}
             label="Components Modeled"
             zh="建模元件"
           />
-          <KpiCard icon={<Share2 size={18} />} value={kpis.nodes} label="Nodes" zh="節點" />
-          <KpiCard icon={<Link2 size={18} />} value={kpis.edges} label="Edges" zh="連線" />
+          <KpiCard icon={<Share2 size={13} />} value={kpis.nodes} label="Nodes" zh="節點" />
+          <KpiCard icon={<Link2 size={13} />} value={kpis.edges} label="Edges" zh="連線" />
           <KpiCard
-            icon={<CircleSlash size={18} />}
+            icon={<CircleSlash size={13} />}
             iconTone={kpis.unconnectedPorts > 0 ? 'text-warn-600' : 'text-ink-400'}
             value={kpis.unconnectedPorts}
             label="Unconnected Ports"
@@ -666,7 +695,7 @@ export function ThermalPathBuilderView() {
             tone={kpis.unconnectedPorts > 0 ? 'text-warn-600' : 'text-ink-900'}
           />
           <KpiCard
-            icon={<TriangleAlert size={18} />}
+            icon={<TriangleAlert size={13} />}
             iconTone={kpis.unresolvedRth > 0 ? 'text-warn-600' : 'text-ink-400'}
             value={kpis.unresolvedRth}
             label="Unresolved Rth"
@@ -674,7 +703,7 @@ export function ThermalPathBuilderView() {
             tone={kpis.unresolvedRth > 0 ? 'text-warn-600' : 'text-ink-900'}
           />
           <KpiCard
-            icon={<Octagon size={18} />}
+            icon={<Octagon size={13} />}
             iconTone={blockingErrors > 0 ? 'text-danger-600' : 'text-ok-600'}
             value={blockingErrors}
             label="Blocking Errors"
@@ -684,86 +713,6 @@ export function ThermalPathBuilderView() {
         </div>
       }
       stepper={<BuilderStepper current={step} onSelect={setStep} completed={completedSteps} />}
-      rightPanel={
-        <div className="flex min-h-0 flex-col overflow-hidden rounded-lg border border-line bg-surface">
-          {selectedNode ? (
-            <NodeInspector
-              node={selectedNode}
-              network={network}
-              readOnly={readOnly}
-              onPatch={(patch) =>
-                useNetworkStore.getState().upsertNode({
-                  ...selectedNode,
-                  ...patch,
-                  origin: selectedNode.origin
-                    ? { ...selectedNode.origin, modified: true }
-                    : { kind: 'manual' },
-                })
-              }
-              onFocus={(nodeId) => canvasRef.current?.center(nodeId)}
-              onSelectEdge={(edgeId) => setSelection({ kind: 'edge', id: edgeId })}
-              onToggleEdge={(edgeId) => {
-                const edge = network.edges[edgeId];
-                if (edge) useNetworkStore.getState().upsertEdge({ ...edge, enabled: !edge.enabled });
-              }}
-              onDeleteEdge={(edgeId) => useNetworkStore.getState().removeEdge(edgeId)}
-              onToggleNode={() => {
-                const disabled = !selectedNode.disabled;
-                useNetworkStore.getState().mutate((net) => {
-                  net.nodes[selectedNode.id] = { ...selectedNode, disabled };
-                  for (const [id, edge] of Object.entries(net.edges)) {
-                    if (edge.from === selectedNode.id || edge.to === selectedNode.id) {
-                      net.edges[id] = { ...edge, enabled: !disabled };
-                    }
-                  }
-                });
-              }}
-              onDeleteNode={() => {
-                useNetworkStore.getState().removeNode(selectedNode.id);
-                setSelection(null);
-              }}
-            />
-          ) : selectedEdge ? (
-            <EdgeInspector
-              edge={selectedEdge}
-              network={network}
-              readOnly={readOnly}
-              readiness={{
-                errors: validation?.errors ?? 0,
-                warnings: validation?.warnings ?? 0,
-                info: validation?.info ?? 0,
-              }}
-              onPatch={(patch) =>
-                useNetworkStore.getState().upsertEdge({ ...selectedEdge, ...patch })
-              }
-              onDelete={() => {
-                useNetworkStore.getState().removeEdge(selectedEdge.id);
-                setSelection(null);
-              }}
-              onReverse={() =>
-                useNetworkStore.getState().mutate((net) => {
-                  const edge = net.edges[selectedEdge.id];
-                  if (!edge) return;
-                  net.edges[selectedEdge.id] = {
-                    ...edge,
-                    from: edge.to,
-                    to: edge.from,
-                    metadata: { ...edge.metadata, nominal_direction_reversed: true },
-                  };
-                })
-              }
-            />
-          ) : (
-            <div className="p-6 text-center">
-              <Share2 size={22} className="mx-auto mb-2 text-ink-400" />
-              <p className="text-[13px] font-semibold text-ink-700">Nothing selected</p>
-              <p className="mt-1 text-[12px] text-ink-400">
-                Select a node or an edge on the canvas. / 請於畫布選擇節點或連線。
-              </p>
-            </div>
-          )}
-        </div>
-      }
       actionBar={
         <div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-line bg-surface px-6 py-3">
           <Button
@@ -816,94 +765,126 @@ export function ThermalPathBuilderView() {
         </div>
       }
     >
-      {/* A graph editor needs a deterministic viewport: the body claims the space
-          the shell leaves and each pane scrolls inside itself, so the page as a
-          whole does not scroll. */}
-      <div className="flex h-[calc(100vh-27rem)] min-h-[22rem] flex-col gap-3 lg:flex-row">
+      {/* The editor fills every pixel left by the shell. Fullscreen promotes this
+          workspace above the shell while keeping the same editing controls. */}
+      <div
+        className={`flex min-h-[22rem] flex-1 flex-col gap-3 lg:flex-row ${fullscreen ? 'fixed inset-0 z-30 min-h-0 bg-canvas p-3' : ''}`}
+        data-testid="thermal-path-workspace"
+      >
         {/* The palettes scroll inside their own column so the canvas keeps a
             stable viewport — a graph editor cannot live in a page that scrolls. */}
-        <div className="flex w-full shrink-0 flex-col gap-3 overflow-y-auto pr-1 lg:h-full lg:w-[19rem]">
-          <Collapsible
-            title="Components"
-            zh="元件"
-            open={openPanel.components}
-            onToggle={() => setOpenPanel({ ...openPanel, components: !openPanel.components })}
+        {!fullscreen && paletteCollapsed && (
+          <button
+            type="button"
+            onClick={() => setPaletteCollapsed(false)}
+            aria-label="Expand component tools / 展開元件工具"
+            title="Expand component tools / 展開元件工具"
+            className="flex h-9 w-full shrink-0 items-center justify-center gap-1 rounded-lg border border-line bg-surface text-[11px] font-semibold text-ink-500 hover:border-ink-400 hover:text-ink-900 lg:h-full lg:w-10 lg:flex-col"
           >
-            <ComponentPalette
-              components={components}
-              prefs={prefs}
-              modeledIds={modeledIds}
-              selectedId={selectedComponentId}
-              onSelect={(componentId) => {
-                setSelectedComponentId(componentId);
-                setOpenPanel((panels) => ({ ...panels, templates: true }));
-              }}
-            />
-          </Collapsible>
-
-          <Collapsible
-            title="Templates"
-            zh="架構模板"
-            open={openPanel.templates}
-            onToggle={() => setOpenPanel({ ...openPanel, templates: !openPanel.templates })}
-          >
-            <TemplatePalette
-              component={selectedComponent}
-              pref={selectedPref}
-              hasSubgraph={Boolean(selectedComponent && modeledIds.has(selectedComponent.id))}
-              readOnly={readOnly}
-              onPrefChange={(next) => {
-                if (!selectedComponent) return;
-                handlePrefChange(selectedComponent.id, next);
-              }}
-              onApply={handleApplyTemplate}
-            />
-          </Collapsible>
-
-          <Collapsible
-            title="Shared Structure"
-            zh="共用結構"
-            open={openPanel.structure}
-            onToggle={() => setOpenPanel({ ...openPanel, structure: !openPanel.structure })}
-          >
-            <SharedStructurePanel
-              network={network}
-              preset={structurePreset}
-              readOnly={readOnly}
-              onPresetChange={setStructurePreset}
-              onApplyPreset={handleApplyPreset}
-              onAddZone={handleAddZone}
-              onAddSpreading={handleAddSpreading}
-              onFocusNode={(nodeId) => {
-                setSelection({ kind: 'node', id: nodeId });
-                canvasRef.current?.center(nodeId);
-              }}
-            />
-          </Collapsible>
-
-          <div className="flex shrink-0 gap-2">
-            <Button
-              variant="primary"
-              className="h-8 flex-1"
-              disabled={readOnly || enabledComponents.length === 0}
-              onClick={() => setShowGenerate(true)}
+            <ChevronRight size={15} />
+            <span className="hidden [writing-mode:vertical-rl] lg:block">Tools / 工具</span>
+          </button>
+        )}
+        {!fullscreen && !paletteCollapsed && (
+          <div className="relative flex w-full shrink-0 flex-col gap-3 overflow-y-auto pr-1 lg:h-full lg:w-[19rem]">
+            <button
+              type="button"
+              onClick={() => setPaletteCollapsed(true)}
+              aria-label="Collapse component tools / 收合元件工具"
+              title="Collapse component tools / 收合元件工具"
+              className="absolute top-2 right-9 z-10 flex size-6 items-center justify-center rounded-full border border-line-strong bg-surface text-ink-500 shadow-sm hover:border-ink-400 hover:text-ink-900"
             >
-              Generate from Preferences
-            </Button>
-            <Button
-              className="h-8 flex-1"
-              disabled={readOnly}
-              onClick={() => {
-                handleApplyPreset();
-                setStep('structure');
-              }}
+              <ChevronLeft size={14} />
+            </button>
+            <Collapsible
+              title="Components"
+              zh="元件"
+              open={openPanel.components}
+              onToggle={() =>
+                setOpenPanel({
+                  ...openPanel,
+                  components: !openPanel.components,
+                })
+              }
             >
-              Start Blank
-            </Button>
+              <ComponentPalette
+                components={components}
+                prefs={prefs}
+                modeledIds={modeledIds}
+                selectedId={selectedComponentId}
+                onSelect={(componentId) => {
+                  setSelectedComponentId(componentId);
+                  setOpenPanel((panels) => ({ ...panels, templates: true }));
+                }}
+              />
+            </Collapsible>
+
+            <Collapsible
+              title="Templates"
+              zh="架構模板"
+              open={openPanel.templates}
+              onToggle={() => setOpenPanel({ ...openPanel, templates: !openPanel.templates })}
+            >
+              <TemplatePalette
+                component={selectedComponent}
+                pref={selectedPref}
+                hasSubgraph={Boolean(selectedComponent && modeledIds.has(selectedComponent.id))}
+                readOnly={readOnly}
+                onPrefChange={(next) => {
+                  if (!selectedComponent) return;
+                  handlePrefChange(selectedComponent.id, next);
+                }}
+                onApply={handleApplyTemplate}
+              />
+            </Collapsible>
+
+            <Collapsible
+              title="Shared Structure"
+              zh="共用結構"
+              open={openPanel.structure}
+              onToggle={() => setOpenPanel({ ...openPanel, structure: !openPanel.structure })}
+            >
+              <SharedStructurePanel
+                network={network}
+                preset={structurePreset}
+                readOnly={readOnly}
+                onPresetChange={setStructurePreset}
+                onApplyPreset={handleApplyPreset}
+                onAddZone={handleAddZone}
+                onAddSpreading={handleAddSpreading}
+                onFocusNode={(nodeId) => {
+                  setSelection({ kind: 'node', id: nodeId });
+                  canvasRef.current?.center(nodeId);
+                }}
+              />
+            </Collapsible>
+
+            <div className="flex shrink-0 gap-2">
+              <Button
+                variant="primary"
+                className="h-8 flex-1"
+                disabled={readOnly || enabledComponents.length === 0}
+                onClick={() => setShowGenerate(true)}
+              >
+                Generate from Preferences
+              </Button>
+              <Button
+                className="h-8 flex-1"
+                disabled={readOnly}
+                onClick={() => {
+                  handleApplyPreset();
+                  setStep('structure');
+                }}
+              >
+                Start Blank
+              </Button>
+            </div>
           </div>
-        </div>
+        )}
 
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-line bg-surface">
+        <div
+          className={`flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden border border-line bg-surface ${fullscreen ? 'rounded-none' : 'rounded-lg'}`}
+        >
           <GraphToolbar
             tool={tool}
             layoutMode={layoutMode}
@@ -933,6 +914,8 @@ export function ThermalPathBuilderView() {
             }}
             onTogglePorts={() => setShowPorts((value) => !value)}
             onToggleLabels={() => setShowLabels((value) => !value)}
+            fullscreen={fullscreen}
+            onToggleFullscreen={() => setFullscreen((value) => !value)}
           />
 
           <div className="relative min-h-0 flex-1">
@@ -945,9 +928,7 @@ export function ThermalPathBuilderView() {
                   handleApplyPreset();
                   setStep('structure');
                 }}
-                onGoToComponents={() =>
-                  navigate(projectPath(projectId, 'components'))
-                }
+                onGoToComponents={() => navigate(projectPath(projectId, 'components'))}
               />
             ) : (
               <>
@@ -964,14 +945,15 @@ export function ThermalPathBuilderView() {
                     useNetworkStore.getState().setNodePosition(nodeId, position)
                   }
                   onConnect={handleConnect}
-                  onContextMenu={(target, at) =>
-                    setContextMenu({ ...target, x: at.x, y: at.y })
-                  }
+                  onContextMenu={(target, at) => setContextMenu({ ...target, x: at.x, y: at.y })}
                   onZoomChange={setZoom}
                   onLayout={(positions) =>
                     useNetworkStore.getState().mutate(
                       (net) => {
-                        net.layout.positions = { ...net.layout.positions, ...positions };
+                        net.layout.positions = {
+                          ...net.layout.positions,
+                          ...positions,
+                        };
                       },
                       { skipHistory: true, skipInvalidate: true },
                     )
@@ -1012,7 +994,10 @@ export function ThermalPathBuilderView() {
                         { id: 'inspect', label: 'Inspect / 檢視' },
                         { id: 'duplicate', label: 'Duplicate / 複製' },
                         { id: 'disable', label: 'Disable / 停用' },
-                        { id: 'reverse', label: 'Reverse direction / 反轉方向' },
+                        {
+                          id: 'reverse',
+                          label: 'Reverse direction / 反轉方向',
+                        },
                         { id: 'delete', label: 'Delete / 刪除' },
                       ]
                   ).map((item) => (
@@ -1043,10 +1028,18 @@ export function ThermalPathBuilderView() {
                           if (item.id === 'disable') {
                             if (kind === 'edge') {
                               const edge = network.edges[id];
-                              if (edge) store.upsertEdge({ ...edge, enabled: !edge.enabled });
+                              if (edge)
+                                store.upsertEdge({
+                                  ...edge,
+                                  enabled: !edge.enabled,
+                                });
                             } else {
                               const node = network.nodes[id];
-                              if (node) store.upsertNode({ ...node, disabled: !node.disabled });
+                              if (node)
+                                store.upsertNode({
+                                  ...node,
+                                  disabled: !node.disabled,
+                                });
                             }
                             return;
                           }
@@ -1063,7 +1056,10 @@ export function ThermalPathBuilderView() {
                                   ...port,
                                   connected_to: null,
                                 })),
-                                origin: { kind: 'manual', component_id: node.component_ref },
+                                origin: {
+                                  kind: 'manual',
+                                  component_id: node.component_ref,
+                                },
                               };
                               store.upsertNode(copy);
                               setSelection({ kind: 'node', id: newId });
@@ -1074,7 +1070,10 @@ export function ThermalPathBuilderView() {
                               store.upsertEdge({
                                 ...edge,
                                 id: newId,
-                                origin: { kind: 'manual', component_id: edge.origin?.component_id },
+                                origin: {
+                                  kind: 'manual',
+                                  component_id: edge.origin?.component_id,
+                                },
                               });
                               setSelection({ kind: 'edge', id: newId });
                             }
@@ -1087,7 +1086,10 @@ export function ThermalPathBuilderView() {
                               ...edge,
                               from: edge.to,
                               to: edge.from,
-                              metadata: { ...edge.metadata, nominal_direction_reversed: true },
+                              metadata: {
+                                ...edge.metadata,
+                                nominal_direction_reversed: true,
+                              },
                             });
                           }
                         }}
@@ -1103,6 +1105,133 @@ export function ThermalPathBuilderView() {
         </div>
       </div>
 
+      {/* Like Screen 04, inspection is non-modal: the graph keeps its full
+          width and remains clickable behind the movable, resizable window. */}
+      {(selectedNode || selectedEdge) && (
+        <FloatingPanel
+          storageKey="tnv.05.inspector"
+          defaultWidth={720}
+          defaultHeight={960}
+          title={selectedNode ? `Node: ${selectedNode.id}` : `Edge: ${selectedEdge!.id}`}
+          subtitle={
+            selectedNode
+              ? selectedNode.name
+              : `${network.nodes[selectedEdge!.from]?.name ?? selectedEdge!.from} → ${network.nodes[selectedEdge!.to]?.name ?? selectedEdge!.to}`
+          }
+          badge={
+            selectedNode ? (
+              <Badge
+                tone={
+                  selectedNode.disabled
+                    ? 'neutral'
+                    : selectedNode.boundary_role === 'placeholder'
+                      ? 'warn'
+                      : 'ok'
+                }
+              >
+                {selectedNode.disabled
+                  ? 'DISABLED'
+                  : selectedNode.boundary_role === 'placeholder'
+                    ? 'BOUNDARY'
+                    : 'ACTIVE'}
+              </Badge>
+            ) : (
+              <Badge
+                tone={
+                  !selectedEdge!.enabled
+                    ? 'neutral'
+                    : selectedEdge!.resolution === 'resolved'
+                      ? 'ok'
+                      : 'warn'
+                }
+              >
+                {!selectedEdge!.enabled
+                  ? 'DISABLED'
+                  : selectedEdge!.resolution === 'resolved'
+                    ? 'RESOLVED'
+                    : 'UNRESOLVED'}
+              </Badge>
+            )
+          }
+          onClose={() => setSelection(null)}
+        >
+          {selectedNode ? (
+            <NodeInspector
+              embedded
+              node={selectedNode}
+              network={network}
+              readOnly={readOnly}
+              onPatch={(patch) =>
+                useNetworkStore.getState().upsertNode({
+                  ...selectedNode,
+                  ...patch,
+                  origin: selectedNode.origin
+                    ? { ...selectedNode.origin, modified: true }
+                    : { kind: 'manual' },
+                })
+              }
+              onFocus={(nodeId) => canvasRef.current?.center(nodeId)}
+              onSelectEdge={(edgeId) => setSelection({ kind: 'edge', id: edgeId })}
+              onToggleEdge={(edgeId) => {
+                const edge = network.edges[edgeId];
+                if (edge)
+                  useNetworkStore.getState().upsertEdge({ ...edge, enabled: !edge.enabled });
+              }}
+              onDeleteEdge={(edgeId) => useNetworkStore.getState().removeEdge(edgeId)}
+              onToggleNode={() => {
+                const disabled = !selectedNode.disabled;
+                useNetworkStore.getState().mutate((net) => {
+                  net.nodes[selectedNode.id] = { ...selectedNode, disabled };
+                  for (const [id, edge] of Object.entries(net.edges)) {
+                    if (edge.from === selectedNode.id || edge.to === selectedNode.id) {
+                      net.edges[id] = { ...edge, enabled: !disabled };
+                    }
+                  }
+                });
+              }}
+              onDeleteNode={() => {
+                useNetworkStore.getState().removeNode(selectedNode.id);
+                setSelection(null);
+              }}
+            />
+          ) : (
+            <EdgeInspector
+              embedded
+              edge={selectedEdge!}
+              network={network}
+              readOnly={readOnly}
+              readiness={{
+                errors: validation?.errors ?? 0,
+                warnings: validation?.warnings ?? 0,
+                info: validation?.info ?? 0,
+              }}
+              onPatch={(patch) =>
+                useNetworkStore.getState().upsertEdge({ ...selectedEdge!, ...patch })
+              }
+              onDelete={() => {
+                useNetworkStore.getState().removeEdge(selectedEdge!.id);
+                setSelection(null);
+              }}
+              onReverse={() =>
+                useNetworkStore.getState().mutate((net) => {
+                  const edge = net.edges[selectedEdge!.id];
+                  if (!edge) return;
+                  net.edges[selectedEdge!.id] = {
+                    ...edge,
+                    from: edge.to,
+                    to: edge.from,
+                    metadata: {
+                      ...edge.metadata,
+                      nominal_direction_reversed: true,
+                    },
+                  };
+                })
+              }
+            />
+          )}
+        </FloatingPanel>
+      )}
+
       {/* --- Modals --- */}
 
       {showGenerate && (
@@ -1113,9 +1242,11 @@ export function ThermalPathBuilderView() {
               architecture_prep: {
                 ...component.architecture_prep,
                 template_preference: (prefs[component.id]?.templateId ??
-                  component.architecture_prep.template_preference) as Component['architecture_prep']['template_preference'],
+                  component.architecture_prep
+                    .template_preference) as Component['architecture_prep']['template_preference'],
                 qty_model_preference: (prefs[component.id]?.qtyModel ??
-                  component.architecture_prep.qty_model_preference) as Component['architecture_prep']['qty_model_preference'],
+                  component.architecture_prep
+                    .qty_model_preference) as Component['architecture_prep']['qty_model_preference'],
               },
             })),
             materials,
@@ -1167,7 +1298,10 @@ export function ThermalPathBuilderView() {
               <Button
                 variant="primary"
                 onClick={() => {
-                  setPrefs({ ...prefs, [qtyWarning.componentId]: qtyWarning.next });
+                  setPrefs({
+                    ...prefs,
+                    [qtyWarning.componentId]: qtyWarning.next,
+                  });
                   setQtyWarning(null);
                   toast.warning(
                     'Representation changed. Re-apply the template to rebuild. / 已變更，請重新套用模板。',
@@ -1239,7 +1373,10 @@ export function ThermalPathBuilderView() {
             value={addNodeDraft.type}
             options={NODE_TYPES}
             onChange={(event) =>
-              setAddNodeDraft({ ...addNodeDraft, type: event.target.value as NodeType })
+              setAddNodeDraft({
+                ...addNodeDraft,
+                type: event.target.value as NodeType,
+              })
             }
           />
         </Modal>
@@ -1272,8 +1409,5 @@ export function ThermalPathBuilderView() {
 
 /** Kept for the palette: total dissipation summary, never an edge heat flow. */
 export function totalDissipation(components: Component[]): number {
-  return components.reduce(
-    (sum, component) => sum + powerWOf(component) * (component.qty || 1),
-    0,
-  );
+  return components.reduce((sum, component) => sum + powerWOf(component) * (component.qty || 1), 0);
 }
