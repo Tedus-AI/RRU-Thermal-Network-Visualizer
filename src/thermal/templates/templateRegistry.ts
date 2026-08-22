@@ -451,24 +451,25 @@ const SMALL_BASE_HEAT_PIPE: ThermalTemplate = {
   ],
 };
 
-/** Junction/Case → Contact → Metal Mount → HEAT_OUT. */
+/** Junction/body → metal base → interface → HEAT_OUT. Materialized per component. */
 const DIRECT_METAL: ThermalTemplate = {
   id: 'DIRECT_METAL',
-  version: '1.0',
-  name: 'Direct Metal Mount',
-  nameZh: '直接金屬鎖附',
-  description: 'Component is mounted straight onto metal with no board path.',
-  descriptionZh: '元件直接鎖附於金屬結構，不經板級路徑。',
-  typicalUse: ['Filters', 'Duplexers', 'Mechanical mounts'],
+  version: '2.0',
+  name: 'Metal Base + Interface',
+  nameZh: '金屬底面＋介面層',
+  description:
+    'A junction or distributed body source leaves through a metal base and a selected interface material.',
+  descriptionZh: '接面或本體分布熱源經金屬底面與所選介面材料導出。',
+  typicalUse: ['Flanged RF devices', 'Circulators', 'Filters', 'Duplexers', 'Metal housings'],
   nodes: [
     { role: 'JUNCTION', label: 'Junction', labelZh: '接面', type: 'junction', heatSource: true },
-    { role: 'CONTACT', label: 'Contact', labelZh: '接觸面', type: 'case' },
-    { role: 'MOUNT', label: 'Metal Mount', labelZh: '金屬座', type: 'pedestal' },
+    { role: 'METAL_BASE', label: 'Metal Base', labelZh: '金屬底面', type: 'housing' },
+    { role: 'TIM', label: 'TIM', labelZh: '介面材料', type: 'tim_interface' },
   ],
   edges: [
     {
       fromRole: 'JUNCTION',
-      toRole: 'CONTACT',
+      toRole: 'METAL_BASE',
       type: 'package_rjc',
       method: 'direct_rth',
       label: 'Rjc',
@@ -477,27 +478,35 @@ const DIRECT_METAL: ThermalTemplate = {
       requiredParameters: ['R_C_per_W'],
     },
     {
-      fromRole: 'CONTACT',
-      toRole: 'MOUNT',
-      type: 'contact',
-      method: 'contact_area',
-      label: 'Contact',
-      labelZh: '接觸熱阻',
-      requiredParameters: ['R_C_per_W'],
+      fromRole: 'METAL_BASE',
+      toRole: 'TIM',
+      type: 'tim',
+      method: 'tim_thickness_k',
+      label: 'Interface',
+      labelZh: '介面層',
+      parameterLinks: {
+        thickness_mm: 'thermal_spec.tim.thickness_mm',
+        k_W_mK: 'thermal_spec.tim.k_W_mK',
+        area_mm2: 'thermal_spec.geometry.source_area',
+      },
+      requiredParameters: ['thickness_mm', 'k_W_mK', 'area_mm2'],
     },
     {
-      fromRole: 'MOUNT',
+      fromRole: 'TIM',
       toRole: 'HEAT_OUT',
-      type: 'conduction',
-      method: 'conduction_LkA',
-      label: 'Mount conduction',
-      labelZh: '金屬座導熱',
-      requiredParameters: ['length_mm', 'k_W_mK', 'area_mm2'],
+      type: 'contact',
+      method: 'direct_rth',
+      label: 'Heat out',
+      labelZh: '散熱出口',
+      requiredParameters: ['R_C_per_W'],
     },
   ],
   ports: [HEAT_OUT_PORT],
   requiredComponentFields: [
     { path: 'thermal_spec.r_jc_C_per_W', label: 'Rjc', labelZh: '接面熱阻' },
+    { path: 'thermal_spec.tim.k_W_mK', label: 'Interface k', labelZh: '介面導熱係數' },
+    { path: 'thermal_spec.tim.thickness_mm', label: 'Interface BLT', labelZh: '介面壓合厚度' },
+    { path: 'thermal_spec.geometry.source_area', label: 'Contact area', labelZh: '有效接觸面積' },
   ],
 };
 

@@ -48,8 +48,45 @@ export const HEAT_PATH_LABELS: Record<HeatPathType, { en: string; zh: string }> 
   Board: { en: 'Board Vias (down)', zh: '板級導熱孔（往下）' },
   TopSurface: { en: 'Top Surface (up)', zh: '元件表面（往上）' },
   ModuleSurface: { en: 'Module Surface / Baseplate', zh: '模組散熱面／底板' },
-  DirectMetal: { en: 'Direct Metal Mount', zh: '直接鎖附金屬' },
+  DirectMetal: { en: 'Metal Base + Interface', zh: '金屬底面＋介面層' },
 };
+
+/** How a Metal Base + Interface component introduces heat into the network. */
+export const METAL_BASE_SOURCE_MODELS = ['JunctionBased', 'SurfaceBodyBased'] as const;
+export type MetalBaseSourceModel = (typeof METAL_BASE_SOURCE_MODELS)[number];
+
+export const METAL_BASE_SOURCE_MODEL_LABELS: Record<
+  MetalBaseSourceModel,
+  { en: string; zh: string; description: string; descriptionZh: string }
+> = {
+  JunctionBased: {
+    en: 'Junction-based',
+    zh: '接面型',
+    description: 'Junction → Rjc → metal base → interface',
+    descriptionZh: '接面 → Rjc → 金屬底面 → 介面層',
+  },
+  SurfaceBodyBased: {
+    en: 'Surface / body-based',
+    zh: '表面／本體型',
+    description: 'Distributed body loss → metal base → interface; no Rjc',
+    descriptionZh: '本體分布損耗 → 金屬底面 → 介面層；不使用 Rjc',
+  },
+};
+
+export const METAL_BASE_CONTACT_GEOMETRIES = ['FullBase', 'PerimeterFrame', 'CustomArea'] as const;
+export type MetalBaseContactGeometry = (typeof METAL_BASE_CONTACT_GEOMETRIES)[number];
+
+export const METAL_BASE_CONTACT_GEOMETRY_LABELS: Record<
+  MetalBaseContactGeometry,
+  { en: string; zh: string }
+> = {
+  FullBase: { en: 'Full Base', zh: '完整底面' },
+  PerimeterFrame: { en: 'Perimeter Frame', zh: '外圍框接觸' },
+  CustomArea: { en: 'Custom Effective Area', zh: '自訂有效接觸面積' },
+};
+
+export const METAL_BASE_EXPOSED_AREA_MODES = ['DerivedPackage', 'Custom'] as const;
+export type MetalBaseExposedAreaMode = (typeof METAL_BASE_EXPOSED_AREA_MODES)[number];
 
 /**
  * What the source face L/W MEANS for each path.
@@ -66,7 +103,7 @@ export const SOURCE_FACE_LABELS: Record<HeatPathType, { en: string; zh: string }
   Board: { en: 'E-PAD', zh: 'E-PAD 散熱墊' },
   TopSurface: { en: 'Case face', zh: 'Case 上表面' },
   ModuleSurface: { en: 'Specified surface', zh: '原廠指定散熱面' },
-  DirectMetal: { en: 'Contact face', zh: '鎖附接觸面' },
+  DirectMetal: { en: 'Metal-base contact', zh: '金屬底面接觸區' },
 };
 
 /**
@@ -92,10 +129,9 @@ export const SOURCE_FACE_LABELS: Record<HeatPathType, { en: string; zh: string }
  *                is the complete module face, so it follows the package outline
  *                and couples to the product heatsink through a TIM; there is no
  *                junction-to-case resistance in this model.
- *   DirectMetal  A bolted part meets metal across a mounting face that may be
- *                the whole base or only a pair of flanges — a mechanical choice
- *                the package cannot answer — so it is stated. Nothing spreads;
- *                the mount itself is an edge Screen 05 owns.
+ *   DirectMetal  A metal base, flange or housing land meets the product
+ *                structure through a thin interface. The effective contact
+ *                can be the full base, a perimeter frame, or a custom area.
  */
 export interface GeometryRule {
   /** `package` means read-only, following the package outline. */
@@ -230,7 +266,7 @@ export const ARCHITECTURE_TEMPLATE_LABELS: Record<ArchitectureTemplate, string> 
   MODULE_SURFACE_TIM: 'Module Surface + TIM',
   BARE_DIE: 'Bare Die',
   SMALL_BASE_HEAT_PIPE: 'Small Base + Heat Pipe',
-  DIRECT_METAL: 'Direct Metal Mount',
+  DIRECT_METAL: 'Metal Base + Interface',
   CUSTOM: 'Custom',
 };
 
@@ -267,7 +303,36 @@ export function heatPathPatch(
   return {
     thermal_spec: {
       ...component.thermal_spec,
-      heat_path: { ...component.thermal_spec.heat_path, type },
+      heat_path: {
+        ...component.thermal_spec.heat_path,
+        type,
+        parameters:
+          type === 'DirectMetal'
+            ? {
+                ...(component.thermal_spec.heat_path.type === 'DirectMetal'
+                  ? component.thermal_spec.heat_path.parameters
+                  : {}),
+                source_model:
+                  component.thermal_spec.heat_path.type === 'DirectMetal'
+                    ? metalBaseSourceModel(component.thermal_spec)
+                    : component.category === 'Filter'
+                      ? 'SurfaceBodyBased'
+                      : 'JunctionBased',
+                contact_geometry:
+                  component.thermal_spec.heat_path.type === 'DirectMetal'
+                    ? metalBaseContactGeometry(component.thermal_spec)
+                    : 'FullBase',
+                exposed_surface_enabled:
+                  component.thermal_spec.heat_path.type === 'DirectMetal'
+                    ? metalBaseExposedSurfaceEnabled(component.thermal_spec)
+                    : false,
+                exposed_area_mode:
+                  component.thermal_spec.heat_path.type === 'DirectMetal'
+                    ? metalBaseExposedAreaMode(component.thermal_spec)
+                    : 'DerivedPackage',
+              }
+            : component.thermal_spec.heat_path.parameters,
+      },
       // Picking a path IS the confirmation.
       heat_path_confirmed: true,
     },
@@ -392,7 +457,19 @@ export interface TimSpec {
   tim_id: string | null;
   /** Overrides the material's default bond line for this component only. */
   blt_mm: SourcedValue<number> | null;
+  /** Directly measured whole-interface resistance, used instead of k / BLT. */
+  measured_rth_C_per_W: SourcedValue<number> | null;
   contact_area_mode: 'derived' | 'custom';
+}
+
+export interface MetalBaseParameters {
+  source_model: MetalBaseSourceModel;
+  contact_geometry: MetalBaseContactGeometry;
+  perimeter_land_width_mm: number | null;
+  custom_contact_area_mm2: number | null;
+  exposed_surface_enabled: boolean;
+  exposed_area_mode: MetalBaseExposedAreaMode;
+  custom_exposed_area_mm2: number | null;
 }
 
 export interface ThermalSpec {
@@ -486,7 +563,12 @@ export function emptyHeatPath(type: HeatPathType = 'Board'): HeatPathSpec {
 }
 
 export function emptyTim(timId: string | null = null): TimSpec {
-  return { tim_id: timId, blt_mm: null, contact_area_mode: 'derived' };
+  return {
+    tim_id: timId,
+    blt_mm: null,
+    measured_rth_C_per_W: null,
+    contact_area_mode: 'derived',
+  };
 }
 
 export function emptyThermalSpec(
@@ -552,6 +634,101 @@ export function powerWOf(component: Component): number {
   return valueOf(component.power_W) ?? 0;
 }
 
+function finiteParameter(
+  parameters: HeatPathSpec['parameters'],
+  key: string,
+): number | null {
+  const value = parameters[key];
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+/** Normalized Metal Base settings, including safe defaults for older projects. */
+export function metalBaseParameters(spec: ThermalSpec): MetalBaseParameters {
+  const parameters = spec.heat_path.parameters;
+  const storedSource = parameters.source_model;
+  const storedGeometry = parameters.contact_geometry;
+  const storedAreaMode = parameters.exposed_area_mode;
+  const legacyArea =
+    spec.geometry.source_L_mm != null && spec.geometry.source_W_mm != null
+      ? spec.geometry.source_L_mm * spec.geometry.source_W_mm
+      : null;
+
+  return {
+    // DIRECT_METAL v1 always created a Junction/Rjc edge. Keeping that fallback
+    // means an old saved project does not silently change physics on migration.
+    source_model: METAL_BASE_SOURCE_MODELS.includes(storedSource as MetalBaseSourceModel)
+      ? (storedSource as MetalBaseSourceModel)
+      : 'JunctionBased',
+    contact_geometry: METAL_BASE_CONTACT_GEOMETRIES.includes(
+      storedGeometry as MetalBaseContactGeometry,
+    )
+      ? (storedGeometry as MetalBaseContactGeometry)
+      : legacyArea != null
+        ? 'CustomArea'
+        : 'FullBase',
+    perimeter_land_width_mm: finiteParameter(parameters, 'perimeter_land_width_mm'),
+    custom_contact_area_mm2:
+      finiteParameter(parameters, 'custom_contact_area_mm2') ?? legacyArea,
+    exposed_surface_enabled: parameters.exposed_surface_enabled === true,
+    exposed_area_mode: METAL_BASE_EXPOSED_AREA_MODES.includes(
+      storedAreaMode as MetalBaseExposedAreaMode,
+    )
+      ? (storedAreaMode as MetalBaseExposedAreaMode)
+      : 'DerivedPackage',
+    custom_exposed_area_mm2: finiteParameter(parameters, 'custom_exposed_area_mm2'),
+  };
+}
+
+export function metalBaseSourceModel(spec: ThermalSpec): MetalBaseSourceModel {
+  return metalBaseParameters(spec).source_model;
+}
+
+export function metalBaseContactGeometry(spec: ThermalSpec): MetalBaseContactGeometry {
+  return metalBaseParameters(spec).contact_geometry;
+}
+
+export function metalBaseExposedSurfaceEnabled(spec: ThermalSpec): boolean {
+  return metalBaseParameters(spec).exposed_surface_enabled;
+}
+
+export function metalBaseExposedAreaMode(spec: ThermalSpec): MetalBaseExposedAreaMode {
+  return metalBaseParameters(spec).exposed_area_mode;
+}
+
+/** Effective base contact area, including a perimeter-frame mounting land. */
+export function metalBaseContactAreaMm2(spec: ThermalSpec): number | null {
+  const model = metalBaseParameters(spec);
+  const { package_L_mm: L, package_W_mm: W } = spec.geometry;
+  switch (model.contact_geometry) {
+    case 'FullBase':
+      return L != null && W != null && L > 0 && W > 0 ? L * W : null;
+    case 'PerimeterFrame': {
+      const width = model.perimeter_land_width_mm;
+      if (L == null || W == null || width == null || L <= 0 || W <= 0 || width <= 0) return null;
+      if (width * 2 >= Math.min(L, W)) return null;
+      // Outer rectangle minus the open centre.
+      return L * W - (L - 2 * width) * (W - 2 * width);
+    }
+    case 'CustomArea': {
+      const area = model.custom_contact_area_mm2;
+      return area != null && area > 0 ? area : null;
+    }
+  }
+}
+
+/** Top plus four sides; the base itself belongs to the contact path. */
+export function metalBaseExposedAreaMm2(spec: ThermalSpec): number | null {
+  const model = metalBaseParameters(spec);
+  if (!model.exposed_surface_enabled) return null;
+  if (model.exposed_area_mode === 'Custom') {
+    const area = model.custom_exposed_area_mm2;
+    return area != null && area > 0 ? area : null;
+  }
+  const { package_L_mm: L, package_W_mm: W, package_H_mm: H } = spec.geometry;
+  if (L == null || W == null || H == null || L <= 0 || W <= 0 || H <= 0) return null;
+  return L * W + 2 * H * (L + W);
+}
+
 /**
  * Component dissipation summary, W.
  *
@@ -611,7 +788,16 @@ export function spreadFaceMm(
 export function sourceAreaMm2(
   geometry: ComponentGeometry,
   heatPath: HeatPathType = 'Board',
+  heatPathParameters: HeatPathSpec['parameters'] = {},
 ): number | null {
+  if (heatPath === 'DirectMetal') {
+    const spec = {
+      ...emptyThermalSpec('Tj', 'DirectMetal'),
+      geometry,
+      heat_path: { type: heatPath, parameters: heatPathParameters },
+    };
+    return metalBaseContactAreaMm2(spec);
+  }
   const { L, W } = sourceFaceMm(geometry, heatPath);
   return L != null && W != null ? L * W : null;
 }
@@ -630,18 +816,20 @@ export function sourceAreaMm2(
  *               fabricated coin size would silently change every PA's margin.
  *   TopSurface  nothing spreads; heat leaves the case face it entered.
  *   ModuleSurface same, using the complete package face selected by this model.
- *   DirectMetal same — the mount is modelled as its own edge in Screen 05.
+ *   DirectMetal uses the effective base-contact area selected by its contact
+ *               geometry model; there is no separate spreading body here.
  */
 export function spreadAreaMm2(
   geometry: ComponentGeometry,
   heatPath: HeatPathType,
   projectCoinAreaMm2: number | null = null,
+  heatPathParameters: HeatPathSpec['parameters'] = {},
 ): number | null {
   const rule = GEOMETRY_RULES[heatPath];
   // The coin is the project's, and it is the whole answer: nothing on the
   // component may override a decision shared by every coin in the design.
   if (rule.spread === 'project_coin') return projectCoinAreaMm2;
-  if (rule.spread === 'none') return sourceAreaMm2(geometry, heatPath);
+  if (rule.spread === 'none') return sourceAreaMm2(geometry, heatPath, heatPathParameters);
 
   const { L, W } = spreadFaceMm(geometry, heatPath);
   return L != null && W != null ? L * W : null;
@@ -668,9 +856,15 @@ export function spreadingAreaMm2(
   geometry: ComponentGeometry,
   heatPath: HeatPathType,
   projectCoinAreaMm2: number | null = null,
+  heatPathParameters: HeatPathSpec['parameters'] = {},
 ): number | null {
-  const source = sourceAreaMm2(geometry, heatPath);
-  const spread = spreadAreaMm2(geometry, heatPath, projectCoinAreaMm2);
+  const source = sourceAreaMm2(geometry, heatPath, heatPathParameters);
+  const spread = spreadAreaMm2(
+    geometry,
+    heatPath,
+    projectCoinAreaMm2,
+    heatPathParameters,
+  );
   if (source == null || source <= 0) return null;
   if (spread == null || spread <= 0) return null;
   return Math.sqrt(source * spread);

@@ -20,6 +20,8 @@ export interface NodePrototype {
   type: NodeType;
   /** True for the node that receives the component's dissipation. */
   heatSource?: boolean;
+  /** Scenario-independent opening which Screen 06 can attach conditions to. */
+  boundaryRole?: 'placeholder' | 'configured';
 }
 
 export interface EdgePrototype {

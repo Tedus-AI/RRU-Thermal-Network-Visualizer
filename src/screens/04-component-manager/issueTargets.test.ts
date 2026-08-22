@@ -109,6 +109,19 @@ describe('confirmAction', () => {
     expect(action.patch.thermal_spec?.heat_path.type).toBe('Coin');
   });
 
+  it('seeds the passive source model when a Filter confirms Metal Base + Interface', () => {
+    const subject = component({ category: 'Filter' });
+    subject.thermal_spec.heat_path = { type: 'DirectMetal', parameters: {} };
+
+    const action = confirmAction(subject, 'heat_path');
+
+    expect(action.patch.thermal_spec?.heat_path.type).toBe('DirectMetal');
+    expect(action.patch.thermal_spec?.heat_path.parameters.source_model).toBe(
+      'SurfaceBodyBased',
+    );
+    expect(action.patch.architecture_prep?.template_preference).toBe('DIRECT_METAL');
+  });
+
   it('clears the legacy geometry review flag and nothing else', () => {
     const subject = component();
     subject.thermal_spec.geometry = {

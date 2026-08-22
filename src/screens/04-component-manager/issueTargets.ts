@@ -11,7 +11,11 @@
  * `issueTargets.test.ts` asserts the map stays complete.
  */
 
-import type { Component } from '@/domain/component';
+import {
+  HEAT_PATH_PATCH_FIELDS,
+  heatPathPatch,
+  type Component,
+} from '@/domain/component';
 import type { ComponentIssue } from '@/domain/componentReadiness';
 
 export type InspectorTab =
@@ -49,6 +53,7 @@ const TARGETS: Record<string, IssueTarget> = {
   package_type: { tab: 'thermal', fieldId: 'ins-package' },
   'tim.tim_id': { tab: 'thermal', fieldId: 'ins-tim' },
   'tim.blt_mm': { tab: 'thermal', fieldId: 'ins-blt' },
+  'tim.measured_rth_C_per_W': { tab: 'thermal', fieldId: 'ins-interface-rth' },
   'heat_path.type': { tab: 'thermal', fieldId: 'ins-heat-path', confirm: 'heat_path' },
 
   'geometry.package_L_mm': { tab: 'geometry', fieldId: 'geo-package_L_mm' },
@@ -61,6 +66,18 @@ const TARGETS: Record<string, IssueTarget> = {
     tab: 'geometry',
     fieldId: 'geo-source_L_mm',
     confirm: 'geometry_review',
+  },
+  'heat_path.parameters.perimeter_land_width_mm': {
+    tab: 'geometry',
+    fieldId: 'geo-perimeter-land-width',
+  },
+  'heat_path.parameters.custom_contact_area_mm2': {
+    tab: 'geometry',
+    fieldId: 'geo-custom-contact-area',
+  },
+  'heat_path.parameters.custom_exposed_area_mm2': {
+    tab: 'geometry',
+    fieldId: 'geo-custom-exposed-area',
   },
 
   architecture_prep: { tab: 'architecture', fieldId: 'ins-zone' },
@@ -83,9 +100,11 @@ export interface ConfirmAction {
 /**
  * Builds the patch that clears a "this is only a guess" warning.
  *
- * Confirmation records a human decision, so it only ever sets the flag — the
- * value itself is left exactly as it stands. There is deliberately no bulk
- * version of this: confirming means someone looked.
+ * Confirmation records a human decision and leaves the visible choice exactly
+ * as it stands. Heat-path confirmation also applies the same category-aware
+ * defaults as selecting that choice from the inspector, so an inferred Filter
+ * cannot retain an empty legacy architecture shape. There is deliberately no
+ * bulk version of this: confirming means someone looked.
  */
 export function confirmAction(component: Component, kind: ConfirmKind): ConfirmAction {
   const spec = component.thermal_spec;
@@ -97,13 +116,30 @@ export function confirmAction(component: Component, kind: ConfirmKind): ConfirmA
         patch: { thermal_spec: { ...spec, limit_type_confirmed: true } },
         fields: ['limit_type'],
       };
-    case 'heat_path':
+    case 'heat_path': {
+      const patch = heatPathPatch(component, spec.heat_path.type);
+      if (
+        spec.heat_path.type === 'DirectMetal' &&
+        component.category === 'Filter' &&
+        !('source_model' in spec.heat_path.parameters)
+      ) {
+        // This is an inferred, not-yet-shaped Filter choice. A saved v1
+        // DIRECT_METAL record is already confirmed and keeps the legacy
+        // Junction/Rjc fallback; only this explicit human confirmation seeds
+        // the new passive body-source model.
+        patch.thermal_spec.heat_path.parameters.source_model = 'SurfaceBodyBased';
+      }
       return {
         label: `Confirm ${spec.heat_path.type}`,
         labelZh: `確認為 ${spec.heat_path.type}`,
-        patch: { thermal_spec: { ...spec, heat_path_confirmed: true } },
-        fields: ['heat_path.type'],
+        // Confirmation is equivalent to selecting the visible option. Besides
+        // clearing the inferred-value warning, this seeds the architecture's
+        // category-aware defaults (for example a Filter starts as a passive
+        // surface/body heat source) instead of leaving an empty legacy shape.
+        patch,
+        fields: [...HEAT_PATH_PATCH_FIELDS],
       };
+    }
     case 'geometry_review':
       return {
         label: 'Mark reviewed',

@@ -199,6 +199,10 @@ const HEAT_PATH_ALIASES: Record<string, HeatPathType> = {
   // Bolted to metal, no board path at all.
   'direct metal': 'DirectMetal',
   directmetal: 'DirectMetal',
+  'metal base + interface': 'DirectMetal',
+  'metal base interface': 'DirectMetal',
+  '金屬底面＋介面層': 'DirectMetal',
+  '金屬底面+介面層': 'DirectMetal',
   'metal mount': 'DirectMetal',
   'main base': 'DirectMetal',
   'small base': 'DirectMetal',

@@ -184,6 +184,7 @@ describe('enum normalization', () => {
     expect(normalizeHeatPath('Cu Coin')).toBe('Coin');
     expect(normalizeHeatPath('Thermal Vias')).toBe('Board');
     expect(normalizeHeatPath('Direct Metal')).toBe('DirectMetal');
+    expect(normalizeHeatPath('Metal Base + Interface')).toBe('DirectMetal');
     expect(normalizeHeatPath('Module Baseplate')).toBe('ModuleSurface');
     expect(normalizeHeatPath('Integrated HSK')).toBe('ModuleSurface');
     // `None` is top-surface cooling in the Volume Tool, not an absent path.

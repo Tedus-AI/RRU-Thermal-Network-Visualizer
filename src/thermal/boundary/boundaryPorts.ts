@@ -19,6 +19,8 @@ function surfaceGroupFor(node: ThermalNode): string {
 }
 
 function orientationFor(node: ThermalNode): string {
+  const stated = node.metadata?.boundary_orientation;
+  if (typeof stated === 'string' && stated.trim()) return stated;
   switch (node.type) {
     case 'fin_surface':
       return 'vertical_fins';
@@ -33,6 +35,17 @@ function orientationFor(node: ThermalNode): string {
     default:
       return 'unspecified';
   }
+}
+
+function areaFor(node: ThermalNode): number | null {
+  const areaMm2 = node.metadata?.boundary_area_mm2;
+  if (typeof areaMm2 !== 'number' || !Number.isFinite(areaMm2) || areaMm2 <= 0) return null;
+  return areaMm2 / 1e6;
+}
+
+function boundaryNameFor(node: ThermalNode): string {
+  const stated = node.metadata?.boundary_surface_name;
+  return typeof stated === 'string' && stated.trim() ? stated.trim() : `${node.name} Boundary`;
 }
 
 /**
@@ -97,11 +110,11 @@ export function deriveBoundaryPorts(network: ThermalNetwork | null): BoundaryPor
 
     ports.push({
       id: `BP_${surface.id.replace(/^NODE_/, '')}`,
-      name: `${surface.name} Boundary`,
+      name: boundaryNameFor(surface),
       connected_node_id: surface.id,
       boundary_edge_id: edge.id,
       surface_group_id: surfaceGroupFor(surface),
-      area_m2: null,
+      area_m2: areaFor(surface),
       orientation: orientationFor(surface),
       allowed_boundary_types: allowedTypesFor(surface),
       dissipating: true,

@@ -1,4 +1,8 @@
-import { BUILTIN_TIM_IDS, DIRECT_CONTACT_TIM_ID } from '@/domain/materials';
+import {
+  BUILTIN_TIM_IDS,
+  DIRECT_CONTACT_TIM_ID,
+  MEASURED_INTERFACE_TIM_ID,
+} from '@/domain/materials';
 import { defaultMaterials } from '@/domain/materials';
 import { describe, expect, it } from 'vitest';
 
@@ -19,6 +23,7 @@ import {
 } from '@/domain/component';
 import { sourced } from '@/domain/sourcedValue';
 import { emptyTim } from '@/domain/component';
+import { deriveBoundaryPorts } from '../boundary/boundaryPorts';
 
 function component(overrides: Partial<Component> = {}): Component {
   return {
@@ -146,6 +151,125 @@ describe('architecture templates', () => {
     const template = getTemplate('MODULE_SURFACE_TIM')!;
     expect(missingRequirements(module, template, defaultMaterials())).toEqual([]);
     expect(template.requiredComponentFields.some((field) => field.label === 'Rjc')).toBe(false);
+  });
+});
+
+describe('Metal Base + Interface template', () => {
+  function metalBaseComponent(
+    parameters: Record<string, number | string | boolean | null>,
+    tim = emptyTim(BUILTIN_TIM_IDS.grease),
+  ): Component {
+    const base = component();
+    return component({
+      id: 'CMP_CAVITY_FILTER',
+      name: 'Cavity Filter',
+      category: 'Filter',
+      qty: 1,
+      power_W: sourced(13.35, 'Analytical'),
+      thermal_spec: {
+        ...base.thermal_spec,
+        limit_type: 'Tc',
+        limit_reference_note: 'Center',
+        geometry: {
+          ...base.thermal_spec.geometry,
+          package_L_mm: 100,
+          package_W_mm: 80,
+          package_H_mm: 20,
+        },
+        heat_path: { type: 'DirectMetal', parameters },
+        tim: { ...tim, blt_mm: tim.tim_id === BUILTIN_TIM_IDS.grease ? sourced(0.05, 'Vendor') : null },
+      },
+      architecture_prep: {
+        ...base.architecture_prep,
+        template_preference: 'DIRECT_METAL',
+        qty_model_preference: 'AGGREGATE',
+      },
+    });
+  }
+
+  it('generates the passive body path, TIM HEAT_OUT and an optional exposed-surface boundary', () => {
+    const subject = metalBaseComponent({
+      source_model: 'SurfaceBodyBased',
+      contact_geometry: 'PerimeterFrame',
+      perimeter_land_width_mm: 2,
+      exposed_surface_enabled: true,
+      exposed_area_mode: 'DerivedPackage',
+    });
+    const graph = buildComponentSubgraph(subject, {
+      materials: defaultMaterials(),
+      templateId: 'DIRECT_METAL',
+      qtyModel: 'AGGREGATE',
+    })!;
+
+    expect(graph.nodes.some((node) => node.name.includes('Junction'))).toBe(false);
+    expect(graph.nodes.filter((node) => node.power_W > 0)).toHaveLength(1);
+    expect(graph.edges.some((edge) => edge.type === 'package_rjc')).toBe(false);
+
+    const terminal = graph.nodes.find((node) => node.type === 'tim_interface')!;
+    expect(terminal.name).toContain('TIM');
+    expect(terminal.ports).toEqual([
+      expect.objectContaining({ kind: 'HEAT_OUT', required: true, connected_to: null }),
+    ]);
+
+    const interfaceEdge = graph.edges.find((edge) => edge.type === 'tim')!;
+    expect(interfaceEdge.method).toBe('tim_thickness_k');
+    // Perimeter frame: 100×80 − 96×76 = 704 mm².
+    expect(interfaceEdge.parameters?.area_mm2).toBe(704);
+    expect(activeRth(interfaceEdge.rth)).toBeCloseTo(0.023674, 6);
+
+    const boundaryEdge = graph.edges.find((edge) => edge.method === 'convection_hA')!;
+    expect(boundaryEdge.resolution).toBe('unresolved');
+    const ports = deriveBoundaryPorts(toNetwork(graph.nodes, graph.edges));
+    const exposed = ports.find((port) => port.name.includes('Exposed Surface'))!;
+    // Top + four sides = 8000 + 2×20×(100+80) = 15,200 mm².
+    expect(exposed.area_m2).toBeCloseTo(0.0152, 8);
+    expect(exposed.orientation).toBe('mixed');
+  });
+
+  it('keeps Junction and Rjc for a junction-based metal-base source', () => {
+    const subject = metalBaseComponent(
+      {
+        source_model: 'JunctionBased',
+        contact_geometry: 'FullBase',
+        exposed_surface_enabled: false,
+      },
+      emptyTim(DIRECT_CONTACT_TIM_ID),
+    );
+    const graph = buildComponentSubgraph(subject, {
+      materials: defaultMaterials(),
+      templateId: 'DIRECT_METAL',
+      qtyModel: 'AGGREGATE',
+    })!;
+
+    expect(graph.nodes.some((node) => node.name.includes('Junction'))).toBe(true);
+    expect(graph.edges.some((edge) => edge.type === 'package_rjc')).toBe(true);
+    const contact = graph.edges.find((edge) => edge.type === 'tim')!;
+    expect(contact.method).toBe('contact_hc');
+    expect(contact.parameters).toMatchObject({ h_c_W_m2K: 3000, area_mm2: 8000 });
+    expect(activeRth(contact.rth)).toBeCloseTo(1 / (3000 * 0.008), 8);
+  });
+
+  it('uses a characterized whole-interface Rth without inventing k or BLT', () => {
+    const measured = emptyTim(MEASURED_INTERFACE_TIM_ID);
+    measured.measured_rth_C_per_W = sourced(0.12, 'Measurement');
+    const subject = metalBaseComponent(
+      {
+        source_model: 'SurfaceBodyBased',
+        contact_geometry: 'CustomArea',
+        custom_contact_area_mm2: 1200,
+        exposed_surface_enabled: false,
+      },
+      measured,
+    );
+    const graph = buildComponentSubgraph(subject, {
+      materials: defaultMaterials(),
+      templateId: 'DIRECT_METAL',
+      qtyModel: 'AGGREGATE',
+    })!;
+    const edge = graph.edges.find((candidate) => candidate.type === 'tim')!;
+    expect(edge.method).toBe('direct_rth');
+    expect(edge.parameters).toEqual({ R_C_per_W: 0.12 });
+    expect(activeRth(edge.rth)).toBe(0.12);
   });
 });
 

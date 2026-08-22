@@ -252,7 +252,11 @@ export function BoundaryInspector({
               {port.orientation}
             </Row>
             <Row label="Area" zh="面積">
-              {formatNumber(port.area_m2, 3, 'm²')}
+              {port.area_m2 == null
+                ? 'N/A'
+                : port.area_m2 < 0.01
+                  ? `${port.area_m2.toFixed(6)} m² (${(port.area_m2 * 1_000_000).toFixed(1)} mm²)`
+                  : formatNumber(port.area_m2, 3, 'm²')}
             </Row>
 
             <p className="mt-3 mb-1 text-[11px] font-bold text-ink-700">

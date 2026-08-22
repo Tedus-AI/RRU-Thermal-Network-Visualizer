@@ -267,10 +267,10 @@ export function demoNetwork(
       const resistance =
         edge.type === 'package_rjc' && componentRjc != null
           ? componentRjc
-          : component.thermal_spec.heat_path.type === 'ModuleSurface' && templateRth != null
-            // This demo exists to exercise the 1.00 mm installed TIM model,
-            // so keep the template's t/(kA) result instead of replacing it
-            // with the generic synthetic local resistance used by older rows.
+          : ['ModuleSurface', 'DirectMetal'].includes(component.thermal_spec.heat_path.type) &&
+              templateRth != null
+            // Keep the template's interface calculation for both the module
+            // surface and the Metal Base + Interface Golden Demo rows.
             ? templateRth
           : localResistance(edge);
       edges.push({

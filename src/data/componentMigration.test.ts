@@ -230,4 +230,17 @@ describe('heat path migration', () => {
     const spec = migrate({ board_path: { type: 'Thermal Via', parameters: { via_count: 24 } } });
     expect(spec.heat_path.parameters).toEqual({ via_count: 24 });
   });
+
+  it('keeps Metal Base source, contact and exposed-surface parameters', () => {
+    const parameters = {
+      source_model: 'SurfaceBodyBased',
+      contact_geometry: 'PerimeterFrame',
+      perimeter_land_width_mm: 2,
+      exposed_surface_enabled: true,
+      exposed_area_mode: 'Custom',
+      custom_exposed_area_mm2: 15_200,
+    };
+    const spec = migrate({ heat_path: { type: 'DirectMetal', parameters } }, 'Filter');
+    expect(spec.heat_path.parameters).toEqual(parameters);
+  });
 });
