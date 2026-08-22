@@ -54,12 +54,18 @@ export type CompletenessMap = Record<CompletenessItem, boolean>;
 
 export function completenessOf(component: Component): CompletenessMap {
   const spec = component.thermal_spec;
+  const moduleSurface = spec.heat_path.type === 'ModuleSurface';
   return {
     Identity: Boolean(component.name.trim()) && component.qty > 0,
     Power: component.power_W.value != null,
-    Limit: spec.limit_type_confirmed && valueOf(spec.limit_C) != null,
+    Limit:
+      spec.limit_type_confirmed &&
+      valueOf(spec.limit_C) != null &&
+      (!moduleSurface || Boolean(spec.limit_reference_note?.trim())),
     Package: spec.package_type != null && spec.package_type !== 'Unknown',
-    Rjc: valueOf(spec.r_jc_C_per_W) != null,
+    // Rjc is genuinely not applicable when the manufacturer specifies the
+    // allowed temperature at the very surface where this model injects heat.
+    Rjc: moduleSurface || valueOf(spec.r_jc_C_per_W) != null,
     'Contact Geometry': sourceAreaMm2(spec.geometry, spec.heat_path.type) != null,
     'Heat Path': spec.heat_path_confirmed,
     // Direct metal contact is an answer, not an absence — the interface still
@@ -83,6 +89,7 @@ export function completenessScore(map: CompletenessMap): { done: number; total: 
 export function validateComponent(component: Component): ComponentIssue[] {
   const issues: ComponentIssue[] = [];
   const spec = component.thermal_spec;
+  const moduleSurface = spec.heat_path.type === 'ModuleSurface';
 
   if (!component.name.trim()) {
     issues.push({
@@ -189,12 +196,30 @@ export function validateComponent(component: Component): ComponentIssue[] {
     });
   }
 
-  if (isHeatSource(component) && rjc == null) {
+  if (isHeatSource(component) && !moduleSurface && rjc == null) {
     issues.push({
       severity: 'warning',
       field: 'r_jc_C_per_W',
       message: 'Rjc is missing for a heat source.',
       message_zh: '此為熱源但缺少 Rjc。',
+    });
+  }
+
+  if (moduleSurface && spec.limit_type === 'Tj') {
+    issues.push({
+      severity: 'error',
+      field: 'limit_type',
+      message: 'A module-surface model must use a surface reference (Tc, Tb or Ts), not Tj.',
+      message_zh: '模組散熱面模型必須使用表面參考溫度（Tc、Tb 或 Ts），不可使用 Tj。',
+    });
+  }
+
+  if (moduleSurface && !spec.limit_reference_note?.trim()) {
+    issues.push({
+      severity: 'warning',
+      field: 'limit_reference_note',
+      message: 'Record the exact datasheet location for the manufacturer surface limit.',
+      message_zh: '請記錄原廠表面溫度上限在規格書中指定的確切量測位置。',
     });
   }
 

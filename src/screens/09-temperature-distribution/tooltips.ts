@@ -37,7 +37,7 @@ export const T09 = {
   nodesAboveWarning: '溫度高於 Warning Threshold 的節點數；此為視覺標示，非產品判定。',
   median: '第 50 百分位溫度；相較平均值較不受極端值影響。',
   distanceFromAverage: '所選節點溫度與目前資料集平均值的差；正值代表高於平均。',
-  limitType: '元件限制值的種類：Tj 接面、Tc 外殼、Ts 表面或自訂。',
+  limitType: '元件限制值的種類：Tj 接面、Tc 外殼、Tb 底板、Ts 原廠指定表面或自訂。',
   margin: 'Thermal Margin = Limit − Temperature。正值為餘裕，負值代表超出限制。',
   status: '依 margin 分類的顯示狀態：Within Limit、Near Limit、Over Limit 或 No Limit。',
   networkTemperature: '沿用 07 的已求解拓樸，節點依溫度著色；連線不依 Bottleneck Score 著色。',

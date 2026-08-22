@@ -157,13 +157,25 @@ describe('limit type migration', () => {
     });
   });
 
-  // Ts named the package exterior, which Tc already covers — but renaming a
-  // surface limit to a case limit is a reinterpretation, so it needs a human.
-  it('folds Ts onto Tc but leaves it unconfirmed', () => {
+  it('keeps manufacturer surface and baseplate references distinct', () => {
     expect(migrate({ limit_type: 'Ts' }).thermal_spec).toMatchObject({
-      limit_type: 'Tc',
-      limit_type_confirmed: false,
+      limit_type: 'Ts',
+      limit_type_confirmed: true,
     });
+    expect(migrate({ limit_type: 'Tb' }).thermal_spec).toMatchObject({
+      limit_type: 'Tb',
+      limit_type_confirmed: true,
+    });
+  });
+
+  it('preserves an exact manufacturer reference location when present', () => {
+    expect(
+      migrate({
+        limit_type: 'Ts',
+        limit_type_confirmed: true,
+        limit_reference_note: 'Baseplate center',
+      }).thermal_spec.limit_reference_note,
+    ).toBe('Baseplate center');
   });
 
   it('treats Custom and Unknown as "nobody decided" and infers instead', () => {
@@ -200,6 +212,12 @@ describe('heat path migration', () => {
   // package top. Reading it as an absence would delete a real thermal route.
   it('reads None as top-surface cooling, not as an absent path', () => {
     expect(migrate({ board_path: { type: 'None' } }).heat_path.type).toBe('TopSurface');
+  });
+
+  it('keeps the canonical manufacturer-surface path', () => {
+    expect(migrate({ heat_path: { type: 'ModuleSurface' } }).heat_path.type).toBe(
+      'ModuleSurface',
+    );
   });
 
   it('treats Custom as undecided and infers from the category', () => {

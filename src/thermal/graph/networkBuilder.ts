@@ -242,6 +242,9 @@ export function buildComponentSubgraph(
           devices_represented: multiplier,
           component_power_linked: proto.heatSource,
           component_limit_linked: proto.heatSource,
+          ...(proto.heatSource && component.thermal_spec.limit_reference_note?.trim()
+            ? { limit_reference_note: component.thermal_spec.limit_reference_note.trim() }
+            : {}),
         },
       });
     }

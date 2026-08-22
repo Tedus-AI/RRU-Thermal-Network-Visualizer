@@ -19,7 +19,7 @@ import {
   type ThermalNetwork,
   type ThermalNode,
 } from '@/thermal/types';
-import { createRth } from '@/thermal/rth';
+import { activeRth, createRth } from '@/thermal/rth';
 import { buildComponentSubgraph } from '@/thermal/graph/networkBuilder';
 import { buildSharedStructure } from '@/thermal/graph/sharedStructure';
 import { validateGraph, type GraphValidationResult } from '@/thermal/graph/graphValidation';
@@ -263,9 +263,15 @@ export function demoNetwork(
 
     for (const edge of subgraph.edges) {
       const componentRjc = valueOf(component.thermal_spec.r_jc_C_per_W);
+      const templateRth = activeRth(edge.rth);
       const resistance =
         edge.type === 'package_rjc' && componentRjc != null
           ? componentRjc
+          : component.thermal_spec.heat_path.type === 'ModuleSurface' && templateRth != null
+            // This demo exists to exercise the 1.00 mm installed TIM model,
+            // so keep the template's t/(kA) result instead of replacing it
+            // with the generic synthetic local resistance used by older rows.
+            ? templateRth
           : localResistance(edge);
       edges.push({
         ...edge,

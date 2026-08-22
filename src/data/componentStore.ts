@@ -101,6 +101,13 @@ function touch(component: Component): Component {
   };
 }
 
+function changesLimitDefinition(fields: string[]): boolean {
+  return fields.some(
+    (field) =>
+      field === 'limit_C' || field === 'limit_type' || field === 'limit_reference_note',
+  );
+}
+
 export const useComponentStore = create<ComponentStoreState>((set, get) => ({
   components: [],
   dirty: false,
@@ -142,7 +149,7 @@ export const useComponentStore = create<ComponentStoreState>((set, get) => ({
     const effect = applyEffects(components, [id], fields);
     const revisions = advanceRevisions(get().revisions, {
       solverInput: effect.solverDirty,
-      limits: fields.some((field) => field === 'limit_C' || field === 'limit_type'),
+      limits: changesLimitDefinition(fields),
     });
     set({
       components: components.map((component) =>
@@ -228,7 +235,7 @@ export const useComponentStore = create<ComponentStoreState>((set, get) => ({
       ),
       revisions: advanceRevisions(get().revisions, {
         solverInput: effect.solverDirty,
-        limits: fields.some((field) => field === 'limit_C' || field === 'limit_type'),
+        limits: changesLimitDefinition(fields),
       }),
       dirty: true,
     });

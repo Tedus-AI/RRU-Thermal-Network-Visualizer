@@ -85,6 +85,7 @@ describe('architecture templates', () => {
         'BOTTOM_COOL_COIN',
         'BOTTOM_COOL_VIA',
         'TOP_COOL_LID',
+        'MODULE_SURFACE_TIM',
         'BARE_DIE',
         'SMALL_BASE_HEAT_PIPE',
         'DIRECT_METAL',
@@ -121,6 +122,28 @@ describe('architecture templates', () => {
     expect(missing.map((field) => field.label)).toEqual(
       expect.arrayContaining(['Rjc', 'Source area', 'Coin area', 'Coin thickness']),
     );
+  });
+
+  it('does not require Rjc for the manufacturer-surface template', () => {
+    const module = component({
+      qty: 1,
+      thermal_spec: {
+        ...component().thermal_spec,
+        limit_type: 'Ts',
+        limit_reference_note: 'Baseplate center',
+        r_jc_C_per_W: null,
+        geometry: {
+          ...component().thermal_spec.geometry,
+          source_L_mm: 24,
+          source_W_mm: 20,
+        },
+        heat_path: { type: 'ModuleSurface', parameters: {} },
+        tim: { ...emptyTim(BUILTIN_TIM_IDS.grease), blt_mm: sourced(1, 'Datasheet') },
+      },
+    });
+    const template = getTemplate('MODULE_SURFACE_TIM')!;
+    expect(missingRequirements(module, template, defaultMaterials())).toEqual([]);
+    expect(template.requiredComponentFields.some((field) => field.label === 'Rjc')).toBe(false);
   });
 });
 
@@ -758,6 +781,52 @@ describe('end-to-end resolution per heat path', () => {
       expect.objectContaining({ kind: 'HEAT_OUT', required: true, connected_to: null }),
     ]);
     expect(graph.binding.template_version).toBe('1.1');
+  });
+
+  it('builds a surface-rated module as Module Surface to TIM with no junction or Rjc', () => {
+    const subject = component({
+      id: 'CMP_POWER_MODULE',
+      name: 'Power Module',
+      qty: 1,
+      power_W: sourced(20, 'Datasheet'),
+      thermal_spec: {
+        ...component().thermal_spec,
+        limit_type: 'Ts',
+        limit_type_confirmed: true,
+        limit_C: sourced(115, 'Datasheet'),
+        limit_reference_note: 'Center of integrated HSK contact surface',
+        r_jc_C_per_W: null,
+        geometry: {
+          ...component().thermal_spec.geometry,
+          source_L_mm: 24,
+          source_W_mm: 20,
+        },
+        heat_path: { type: 'ModuleSurface', parameters: {} },
+        heat_path_confirmed: true,
+        tim: { ...emptyTim(BUILTIN_TIM_IDS.grease), blt_mm: sourced(1, 'Datasheet') },
+      },
+    });
+    const graph = buildComponentSubgraph(subject, {
+      materials: materials(),
+      templateId: 'MODULE_SURFACE_TIM',
+      qtyModel: 'AGGREGATE',
+    })!;
+
+    expect(graph.nodes.map((node) => node.type)).toEqual(['case', 'tim_interface']);
+    expect(graph.nodes.some((node) => node.type === 'junction')).toBe(false);
+    expect(graph.edges.map((edge) => edge.type)).toEqual(['tim']);
+    expect(graph.edges.some((edge) => edge.type === 'package_rjc')).toBe(false);
+    expect(graph.edges[0].parameters).toMatchObject({ thickness_mm: 1, area_mm2: 480 });
+    expect(graph.edges[0].resolution).toBe('resolved');
+
+    const surface = graph.nodes[0];
+    expect(surface).toMatchObject({ power_W: 20, limit_C: 115, limit_type: 'Ts' });
+    expect(surface.metadata?.limit_reference_note).toBe(
+      'Center of integrated HSK contact surface',
+    );
+    expect(graph.nodes[1].ports).toEqual([
+      expect.objectContaining({ kind: 'HEAT_OUT', required: true, connected_to: null }),
+    ]);
   });
 
   it('reads the via array constants from the project, not from the component', () => {

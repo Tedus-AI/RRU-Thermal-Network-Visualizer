@@ -32,6 +32,7 @@ import { useOverviewStore } from '@/data/overviewStore';
 import { useSolverStore } from '@/data/solverStore';
 import { currentSourceRevision } from '@/data/sourceRevision';
 import { sourced } from '@/domain/sourcedValue';
+import { activeRth } from '@/thermal/rth';
 import { evaluateAllArtifacts } from '@/export/exportValidator';
 
 import {
@@ -89,6 +90,36 @@ describe('FR1 RRU Golden Demo', () => {
       ['FPGA', 1],
       ['Power Module', 1],
     ]);
+
+    const powerModule = flow.components.find((component) => component.id === 'CMP_POWER_MODULE')!;
+    expect(powerModule.thermal_spec).toMatchObject({
+      limit_type: 'Ts',
+      limit_reference_note: 'Center of the module integrated-HSK contact surface',
+      r_jc_C_per_W: null,
+      heat_path: { type: 'ModuleSurface' },
+      tim: { blt_mm: { value: 1 } },
+    });
+    expect(powerModule.architecture_prep.template_preference).toBe('MODULE_SURFACE_TIM');
+
+    const moduleNodes = Object.values(flow.network.nodes).filter(
+      (node) => node.component_ref === powerModule.id,
+    );
+    expect(moduleNodes.map((node) => node.type)).toEqual(['case', 'tim_interface']);
+    expect(moduleNodes.some((node) => node.type === 'junction')).toBe(false);
+    const moduleSurface = moduleNodes.find((node) => node.power_W > 0)!;
+    expect(moduleSurface).toMatchObject({ power_W: 20, limit_C: 115, limit_type: 'Ts' });
+    expect(flow.solution.node_temperatures_C[moduleSurface.id]).toBeLessThan(
+      moduleSurface.limit_C!,
+    );
+
+    const moduleEdges = Object.values(flow.network.edges).filter(
+      (edge) => edge.origin?.component_id === powerModule.id,
+    );
+    expect(moduleEdges.some((edge) => edge.type === 'package_rjc')).toBe(false);
+    const installedTim = moduleEdges.find((edge) => edge.type === 'tim')!;
+    expect(installedTim.parameters).toMatchObject({ thickness_mm: 1, area_mm2: 480 });
+    expect(activeRth(installedTim.rth)).toBeGreaterThan(0.5);
+
     expect(flow.components.every((component) => statusOf(component) === 'READY')).toBe(true);
     expect(Object.values(flow.network.zones).map((zone) => zone.name).sort()).toEqual([
       'Digital',

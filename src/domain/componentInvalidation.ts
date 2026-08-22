@@ -82,6 +82,7 @@ export function effectOfChange(field: string, isMapped: boolean): InvalidationEf
     // the engineer to re-solve an unchanged physical network.
     case 'limit_C':
     case 'limit_type':
+    case 'limit_reference_note':
       return NONE;
 
     // Bookkeeping only.

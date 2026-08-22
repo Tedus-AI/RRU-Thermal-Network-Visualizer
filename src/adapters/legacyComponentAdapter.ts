@@ -28,6 +28,7 @@ import {
   type Component,
   type ComponentCategory,
   type ComponentProvenance,
+  type LimitType,
 } from '@/domain/component';
 import { sourced, unknownValue } from '@/domain/sourcedValue';
 import { findTimMaterial, type MaterialDefaults } from '@/domain/materials';
@@ -76,6 +77,9 @@ const OWNED_LEGACY_KEYS = new Set([
   'R_jc',
   'TIM_Type',
   'category',
+  '_tnv_heat_path',
+  '_tnv_limit_type',
+  '_tnv_limit_reference_note',
 ]);
 
 export function legacyComponentToCanonical(
@@ -97,8 +101,14 @@ export function legacyComponentToCanonical(
 
   const name = String(row.Component ?? '').trim();
   const category = legacyCategoryToCanonical(row.category) ?? 'Other';
-  const statedHeatPath = options.normalizeHeatPath(row.Board_Type);
+  // TNV-only extension columns preserve semantics the old Volume Tool does
+  // not understand while `Board_Type` remains readable by that tool.
+  const statedHeatPath =
+    options.normalizeHeatPath(row._tnv_heat_path) ?? options.normalizeHeatPath(row.Board_Type);
   const heatPath = statedHeatPath ?? inferHeatPath(category);
+  const statedLimitType = ['Tj', 'Tc', 'Tb', 'Ts'].includes(String(row._tnv_limit_type))
+    ? (row._tnv_limit_type as LimitType)
+    : null;
 
   return {
     id: options.id,
@@ -114,12 +124,14 @@ export function legacyComponentToCanonical(
     thermal_spec: {
       // The legacy schema records a limit but never says which surface it is,
       // so the surface is inferred and left for Screen 04 to confirm.
-      limit_type: inferLimitType(category, name),
-      limit_type_confirmed: false,
+      limit_type: statedLimitType ?? inferLimitType(category, name),
+      limit_type_confirmed: statedLimitType != null,
       limit_C:
         row['Limit(C)'] == null
           ? null
           : sourced(Number(row['Limit(C)']), 'Imported', { confidence: 'medium' }),
+      limit_reference_note:
+        typeof row._tnv_limit_reference_note === 'string' ? row._tnv_limit_reference_note : '',
       r_jc_C_per_W:
         row.R_jc == null ? null : sourced(Number(row.R_jc), 'Imported', { confidence: 'medium' }),
       package_type: null,
@@ -150,6 +162,9 @@ const LEGACY_BOARD_TYPE: Record<HeatPathType, string> = {
   Coin: 'Copper Coin',
   Board: 'Thermal Via',
   TopSurface: 'None',
+  // The legacy format cannot express a manufacturer-defined surface limit.
+  // `None` at least preserves the upward physical route on export.
+  ModuleSurface: 'None',
   DirectMetal: 'None',
 };
 
@@ -185,5 +200,12 @@ export function canonicalComponentToLegacy(
     R_jc: spec.r_jc_C_per_W?.value ?? null,
     TIM_Type: tim?.name ?? 'None',
     category: CANONICAL_TO_LEGACY_CATEGORY[component.category],
+    ...(spec.heat_path.type === 'ModuleSurface'
+      ? {
+          _tnv_heat_path: spec.heat_path.type,
+          _tnv_limit_type: spec.limit_type,
+          _tnv_limit_reference_note: spec.limit_reference_note,
+        }
+      : {}),
   };
 }

@@ -31,16 +31,23 @@ export type ComponentCategory = (typeof COMPONENT_CATEGORIES)[number];
  *   - `Custom` was not a path at all; it meant nobody had decided. That now
  *     lives in `heat_path_confirmed`.
  *
- * The four that remain are the four the physics actually distinguishes, and
+ * The paths that remain are the ones the physics actually distinguishes, and
  * each selects a different resistance chain (see TEMPLATE_FOR_HEAT_PATH).
  */
-export const HEAT_PATH_TYPES = ['Coin', 'Board', 'TopSurface', 'DirectMetal'] as const;
+export const HEAT_PATH_TYPES = [
+  'Coin',
+  'Board',
+  'TopSurface',
+  'ModuleSurface',
+  'DirectMetal',
+] as const;
 export type HeatPathType = (typeof HEAT_PATH_TYPES)[number];
 
 export const HEAT_PATH_LABELS: Record<HeatPathType, { en: string; zh: string }> = {
   Coin: { en: 'Copper Coin (down)', zh: '銅塊焊接（往下）' },
   Board: { en: 'Board Vias (down)', zh: '板級導熱孔（往下）' },
   TopSurface: { en: 'Top Surface (up)', zh: '元件表面（往上）' },
+  ModuleSurface: { en: 'Module Surface / Baseplate', zh: '模組散熱面／底板' },
   DirectMetal: { en: 'Direct Metal Mount', zh: '直接鎖附金屬' },
 };
 
@@ -58,6 +65,7 @@ export const SOURCE_FACE_LABELS: Record<HeatPathType, { en: string; zh: string }
   Coin: { en: 'Coin joint face', zh: '銅塊接合面' },
   Board: { en: 'E-PAD', zh: 'E-PAD 散熱墊' },
   TopSurface: { en: 'Case face', zh: 'Case 上表面' },
+  ModuleSurface: { en: 'Specified surface', zh: '原廠指定散熱面' },
   DirectMetal: { en: 'Contact face', zh: '鎖附接觸面' },
 };
 
@@ -78,6 +86,11 @@ export const SOURCE_FACE_LABELS: Record<HeatPathType, { en: string; zh: string }
  *                `(L + t) x (W + t)`, the tool's own approximation.
  *   TopSurface   Heat leaves the case top into the TIM. The case top IS the
  *                package outline, and nothing spreads on the way.
+ *   ModuleSurface
+ *                A module vendor specifies the allowable temperature at a
+ *                named surface/baseplate. That face is stated explicitly and
+ *                couples to the product heatsink through a TIM; there is no
+ *                junction-to-case resistance in this model.
  *   DirectMetal  A bolted part meets metal across a mounting face that may be
  *                the whole base or only a pair of flanges — a mechanical choice
  *                the package cannot answer — so it is stated. Nothing spreads;
@@ -96,6 +109,7 @@ export const GEOMETRY_RULES: Record<HeatPathType, GeometryRule> = {
   Coin: { source: 'package', spread: 'project_coin', thickness: 'project_coin' },
   Board: { source: 'stated', spread: 'board_spread', thickness: 'board' },
   TopSurface: { source: 'package', spread: 'none', thickness: 'none' },
+  ModuleSurface: { source: 'stated', spread: 'none', thickness: 'none' },
   DirectMetal: { source: 'stated', spread: 'none', thickness: 'none' },
 };
 
@@ -124,17 +138,19 @@ export function inferHeatPath(category: ComponentCategory): HeatPathType {
  * limit, and the margin has to be measured against the surface the datasheet
  * actually specifies.
  *
- * Only two survive. `Ts` was a third name for the package exterior, which `Tc`
- * already covers, and `Custom` / `Unknown` were not limit types at all — they
- * were a way of saying "nobody has decided yet". That state now lives in
- * `limit_type_confirmed`, so the type itself is always answerable.
+ * Surface-referenced modules need more precision than the original Tj/Tc pair:
+ * `Tb` is a vendor-defined baseplate temperature and `Ts` is another explicitly
+ * named manufacturer surface. The free-text reference-location field below
+ * records exactly where the datasheet expects that temperature to be measured.
  */
-export const LIMIT_TYPES = ['Tj', 'Tc'] as const;
+export const LIMIT_TYPES = ['Tj', 'Tc', 'Tb', 'Ts'] as const;
 export type LimitType = (typeof LIMIT_TYPES)[number];
 
 export const LIMIT_TYPE_LABELS: Record<LimitType, { en: string; zh: string }> = {
   Tj: { en: 'Junction', zh: '接面溫度' },
   Tc: { en: 'Case', zh: '殼溫' },
+  Tb: { en: 'Baseplate', zh: '底板溫度' },
+  Ts: { en: 'Manufacturer Surface', zh: '原廠指定表面溫度' },
 };
 
 /**
@@ -172,6 +188,7 @@ export const ARCHITECTURE_TEMPLATES = [
   'BOTTOM_COOL_COIN',
   'BOTTOM_COOL_VIA',
   'TOP_COOL_LID',
+  'MODULE_SURFACE_TIM',
   'BARE_DIE',
   'SMALL_BASE_HEAT_PIPE',
   'DIRECT_METAL',
@@ -184,6 +201,7 @@ export const ARCHITECTURE_TEMPLATE_LABELS: Record<ArchitectureTemplate, string> 
   BOTTOM_COOL_COIN: 'Bottom Cool + Copper Coin',
   BOTTOM_COOL_VIA: 'Bottom Cool + Thermal Via',
   TOP_COOL_LID: 'Top Cool + Lid',
+  MODULE_SURFACE_TIM: 'Module Surface + TIM',
   BARE_DIE: 'Bare Die',
   SMALL_BASE_HEAT_PIPE: 'Small Base + Heat Pipe',
   DIRECT_METAL: 'Direct Metal Mount',
@@ -202,6 +220,7 @@ export const TEMPLATE_FOR_HEAT_PATH: Record<HeatPathType, ArchitectureTemplate> 
   Coin: 'BOTTOM_COOL_COIN',
   Board: 'BOTTOM_COOL_VIA',
   TopSurface: 'TOP_COOL_LID',
+  ModuleSurface: 'MODULE_SURFACE_TIM',
   DirectMetal: 'DIRECT_METAL',
 };
 
@@ -359,6 +378,8 @@ export interface ThermalSpec {
    */
   limit_type_confirmed: boolean;
   limit_C: SourcedValue<number> | null;
+  /** Exact datasheet location where Tc/Tb/Ts is defined or measured. */
+  limit_reference_note: string;
   /** Unknown stays null. 04 §11 / AC-04-06 forbid 0 as "unknown". */
   r_jc_C_per_W: SourcedValue<number> | null;
   package_type: PackageType | null;
@@ -451,6 +472,7 @@ export function emptyThermalSpec(
     limit_type: limitType,
     limit_type_confirmed: false,
     limit_C: null,
+    limit_reference_note: '',
     r_jc_C_per_W: null,
     package_type: null,
     geometry: emptyGeometry(),
@@ -583,6 +605,7 @@ export function sourceAreaMm2(
  *               With none supplied this returns null rather than guessing — a
  *               fabricated coin size would silently change every PA's margin.
  *   TopSurface  nothing spreads; heat leaves the case face it entered.
+ *   ModuleSurface same, using the explicitly stated vendor reference face.
  *   DirectMetal same — the mount is modelled as its own edge in Screen 05.
  */
 export function spreadAreaMm2(

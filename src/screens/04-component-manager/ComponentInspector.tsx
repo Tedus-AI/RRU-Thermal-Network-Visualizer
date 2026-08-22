@@ -308,6 +308,7 @@ export function ComponentInspector({
   }
 
   const heatPath = spec.heat_path.type;
+  const moduleSurface = heatPath === 'ModuleSurface';
   const rule = GEOMETRY_RULES[heatPath];
   const resolvedTim = resolveTim(spec.tim, materials);
   const projectCoin = {
@@ -546,18 +547,64 @@ export function ComponentInspector({
                   onChange={(next) => patchSpec({ limit_C: next }, ['limit_C'])}
                 />
 
-                <SourcedNumberField
-                  id="ins-rjc"
-                  label="Rjc"
-                  zh="接面-外殼熱阻"
-                  unit="°C/W"
-                  tooltip={tip('Rjc')}
-                  value={spec.r_jc_C_per_W}
-                  placeholder="N/A"
-                  step="0.01"
-                  readOnly={readOnly}
-                  onChange={(next) => patchSpec({ r_jc_C_per_W: next }, ['r_jc_C_per_W'])}
-                />
+                {moduleSurface && (
+                  <div className="col-span-2 flex flex-col gap-1.5">
+                    <FieldLabel
+                      label="Reference Location"
+                      zh="原廠量測位置"
+                      htmlFor="ins-limit-reference"
+                      tooltip={tip('Reference Location')}
+                    />
+                    <TextInput
+                      id="ins-limit-reference"
+                      value={spec.limit_reference_note ?? ''}
+                      placeholder="e.g. center of integrated HSK contact surface / 例如：模組 HSK 接觸面中央"
+                      disabled={readOnly}
+                      onChange={(event) =>
+                        patchSpec(
+                          { limit_reference_note: event.target.value },
+                          ['limit_reference_note'],
+                        )
+                      }
+                    />
+                    <p className="text-[11px] leading-relaxed text-ink-400">
+                      Copy the datasheet's exact measurement point; the solved temperature at this
+                      node is compared with the stated surface limit.
+                      <span className="block">
+                        請記錄規格書的確切量測點；求解後會以此表面節點溫度比對上限。
+                      </span>
+                    </p>
+                  </div>
+                )}
+
+                {moduleSurface ? (
+                  <div className="flex flex-col gap-1.5">
+                    <FieldLabel
+                      label="Rjc"
+                      zh="接面-外殼熱阻"
+                      unit="°C/W"
+                      htmlFor="ins-rjc"
+                      tooltip={tip('Rjc')}
+                    />
+                    <TextInput id="ins-rjc" value="N/A — surface-reference model" disabled />
+                    <p className="text-[11px] leading-relaxed text-ink-400">
+                      No junction node or Rjc edge is created. / 不建立接面節點或 Rjc 熱阻邊。
+                    </p>
+                  </div>
+                ) : (
+                  <SourcedNumberField
+                    id="ins-rjc"
+                    label="Rjc"
+                    zh="接面-外殼熱阻"
+                    unit="°C/W"
+                    tooltip={tip('Rjc')}
+                    value={spec.r_jc_C_per_W}
+                    placeholder="N/A"
+                    step="0.01"
+                    readOnly={readOnly}
+                    onChange={(next) => patchSpec({ r_jc_C_per_W: next }, ['r_jc_C_per_W'])}
+                  />
+                )}
 
                 <div className="flex flex-col gap-1.5">
                   <FieldLabel
@@ -981,7 +1028,9 @@ export function ComponentInspector({
                       ['Thermal Limit / 溫度上限', spec.limit_C, 'limit_C'],
                       ['Rjc / 接面熱阻', spec.r_jc_C_per_W, 'r_jc_C_per_W'],
                     ] as const
-                  ).map(([label, sv, field]) => (
+                  )
+                    .filter(([, , field]) => !(moduleSurface && field === 'r_jc_C_per_W'))
+                    .map(([label, sv, field]) => (
                     <div key={field} className="flex items-center justify-between gap-3">
                       <span className="text-[12px] text-ink-500">{label}</span>
                       <Select
@@ -1009,7 +1058,7 @@ export function ComponentInspector({
                         }}
                       />
                     </div>
-                  ))}
+                    ))}
                 </div>
               </div>
 
@@ -1142,7 +1191,7 @@ export function ComponentInspector({
                 <CircleDashed size={14} className="shrink-0 text-ink-400" aria-hidden />
               )}
               <span className={completeness[item] ? 'text-ink-700' : 'text-ink-400'}>
-                {item}
+                {item === 'Rjc' && moduleSurface ? 'Rjc (N/A)' : item}
                 <span className="ml-1 text-ink-400">/ {COMPLETENESS_ITEMS_ZH[item]}</span>
               </span>
             </li>

@@ -104,7 +104,12 @@ function EntryRow({
             {entry.default_power_W == null ? '— W' : `${entry.default_power_W} W`} ·{' '}
             {spec.heat_path.type} ·{' '}
             {spec.limit_C?.value == null ? '— °C' : `${spec.limit_C.value} °C`} ·{' '}
-            {spec.r_jc_C_per_W?.value == null ? 'Rjc —' : `Rjc ${spec.r_jc_C_per_W.value}`} ·{' '}
+            {spec.heat_path.type === 'ModuleSurface'
+              ? 'Rjc N/A'
+              : spec.r_jc_C_per_W?.value == null
+                ? 'Rjc —'
+                : `Rjc ${spec.r_jc_C_per_W.value}`}{' '}
+            ·{' '}
             {savedAgo(entry.saved_at)}
           </p>
           {entry.notes && (

@@ -44,6 +44,7 @@ const TARGETS: Record<string, IssueTarget> = {
 
   limit_type: { tab: 'thermal', fieldId: 'ins-limit-type', confirm: 'limit_type' },
   limit_C: { tab: 'thermal', fieldId: 'ins-limit' },
+  limit_reference_note: { tab: 'thermal', fieldId: 'ins-limit-reference' },
   r_jc_C_per_W: { tab: 'thermal', fieldId: 'ins-rjc' },
   package_type: { tab: 'thermal', fieldId: 'ins-package' },
   'tim.tim_id': { tab: 'thermal', fieldId: 'ins-tim' },

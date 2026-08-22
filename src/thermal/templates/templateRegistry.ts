@@ -242,6 +242,63 @@ const TOP_COOL_LID: ThermalTemplate = {
   ],
 };
 
+/** Manufacturer reference surface/baseplate → TIM → HEAT_OUT. No Rjc applies. */
+const MODULE_SURFACE_TIM: ThermalTemplate = {
+  id: 'MODULE_SURFACE_TIM',
+  version: '1.0',
+  name: 'Module Surface + TIM',
+  nameZh: '模組散熱面 + TIM',
+  description:
+    'Dissipation is injected at the manufacturer-defined surface or baseplate, then crosses the installed TIM.',
+  descriptionZh: '功耗由原廠指定的散熱面或底板節點注入，再經實際安裝的 TIM 導出。',
+  typicalUse: ['Power modules', 'Integrated heatsink modules', 'Baseplate-rated modules'],
+  nodes: [
+    {
+      role: 'MODULE_SURFACE',
+      label: 'Surface / Baseplate',
+      labelZh: '散熱面／底板',
+      type: 'case',
+      heatSource: true,
+    },
+    { role: 'TIM', label: 'TIM', labelZh: '介面材料', type: 'tim_interface' },
+  ],
+  edges: [
+    {
+      fromRole: 'MODULE_SURFACE',
+      toRole: 'TIM',
+      type: 'tim',
+      method: 'tim_thickness_k',
+      label: 'TIM',
+      labelZh: '熱介面材料',
+      parameterLinks: {
+        thickness_mm: 'thermal_spec.tim.thickness_mm',
+        k_W_mK: 'thermal_spec.tim.k_W_mK',
+        area_mm2: 'thermal_spec.geometry.spread_area',
+      },
+      requiredParameters: ['thickness_mm', 'k_W_mK', 'area_mm2'],
+    },
+    {
+      fromRole: 'TIM',
+      toRole: 'HEAT_OUT',
+      type: 'contact',
+      method: 'direct_rth',
+      label: 'Heat out',
+      labelZh: '散熱出口',
+      requiredParameters: ['R_C_per_W'],
+    },
+  ],
+  ports: [HEAT_OUT_PORT],
+  requiredComponentFields: [
+    { path: 'thermal_spec.tim.k_W_mK', label: 'TIM k', labelZh: 'TIM 導熱係數' },
+    { path: 'thermal_spec.tim.thickness_mm', label: 'TIM thickness', labelZh: 'TIM 厚度' },
+    {
+      path: 'thermal_spec.geometry.source_area',
+      label: 'Surface contact area',
+      labelZh: '散熱面接觸面積',
+    },
+  ],
+};
+
 /** Die/Junction → TIM → Pedestal/Base Contact → HEAT_OUT. */
 const BARE_DIE: ThermalTemplate = {
   id: 'BARE_DIE',
@@ -475,6 +532,7 @@ export const TEMPLATES: Record<string, ThermalTemplate> = {
   BOTTOM_COOL_COIN,
   BOTTOM_COOL_VIA,
   TOP_COOL_LID,
+  MODULE_SURFACE_TIM,
   BARE_DIE,
   SMALL_BASE_HEAT_PIPE,
   DIRECT_METAL,

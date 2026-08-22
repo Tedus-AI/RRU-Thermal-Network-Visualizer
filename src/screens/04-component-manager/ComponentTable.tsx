@@ -138,6 +138,7 @@ export function ComponentTable({
             const meta = STATUS_META[status];
             const Icon = meta.icon;
             const spec = component.thermal_spec;
+            const moduleSurface = spec.heat_path.type === 'ModuleSurface';
             const selected = component.id === selectedId;
 
             return (
@@ -313,9 +314,14 @@ export function ComponentTable({
                     aria-label={`Rjc for ${component.name}`}
                     onClick={(event) => event.stopPropagation()}
                     className={`${CELL} w-16 text-right`}
-                    value={spec.r_jc_C_per_W?.value ?? ''}
+                    value={moduleSurface ? '' : (spec.r_jc_C_per_W?.value ?? '')}
                     placeholder="N/A"
-                    disabled={readOnly}
+                    disabled={readOnly || moduleSurface}
+                    title={
+                      moduleSurface
+                        ? 'Rjc does not apply to the Module Surface / Baseplate model.'
+                        : undefined
+                    }
                     onChange={(event) =>
                       patchSpec(
                         component,

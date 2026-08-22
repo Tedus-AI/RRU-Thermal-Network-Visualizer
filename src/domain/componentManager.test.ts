@@ -142,6 +142,54 @@ describe('component readiness', () => {
     expect(completenessOf(component).Rjc).toBe(false);
   });
 
+  it('treats Rjc as N/A for a manufacturer-surface module', () => {
+    const module = readyPA();
+    module.name = 'Power Module';
+    module.category = 'Power';
+    module.thermal_spec = {
+      ...module.thermal_spec,
+      limit_type: 'Ts',
+      limit_reference_note: 'Center of integrated HSK contact surface',
+      r_jc_C_per_W: null,
+      geometry: {
+        ...module.thermal_spec.geometry,
+        source_L_mm: 24,
+        source_W_mm: 20,
+      },
+      heat_path: { type: 'ModuleSurface', parameters: {} },
+    };
+    module.architecture_prep.template_preference = 'MODULE_SURFACE_TIM';
+
+    expect(completenessOf(module).Rjc).toBe(true);
+    expect(validateComponent(module).some((issue) => issue.field === 'r_jc_C_per_W')).toBe(false);
+    expect(statusOf(module)).toBe('READY');
+  });
+
+  it('requires a surface reference and its exact datasheet location for that model', () => {
+    const module = readyPA();
+    module.thermal_spec = {
+      ...module.thermal_spec,
+      limit_type: 'Tj',
+      limit_reference_note: '',
+      r_jc_C_per_W: null,
+      geometry: {
+        ...module.thermal_spec.geometry,
+        source_L_mm: 24,
+        source_W_mm: 20,
+      },
+      heat_path: { type: 'ModuleSurface', parameters: {} },
+    };
+
+    const issues = validateComponent(module);
+    expect(issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ field: 'limit_type', severity: 'error' }),
+        expect.objectContaining({ field: 'limit_reference_note', severity: 'warning' }),
+      ]),
+    );
+    expect(completenessOf(module).Limit).toBe(false);
+  });
+
   it('treats a negative Rjc as an error (04 §38 case C)', () => {
     const component = { ...readyPA() };
     component.thermal_spec = { ...component.thermal_spec, r_jc_C_per_W: sourced(-1, 'Manual') };
@@ -328,7 +376,7 @@ describe('downstream invalidation (04 §32)', () => {
   });
 
   it('does not invalidate the physical solve for limit changes', () => {
-    for (const field of ['limit_C', 'limit_type']) {
+    for (const field of ['limit_C', 'limit_type', 'limit_reference_note']) {
       expect(effectOfChange(field, false)).toEqual({
         networkReview: false,
         solverDirty: false,
@@ -592,6 +640,37 @@ describe('legacy compatibility (04 §30)', () => {
     expect(back['Power(W)']).toBeCloseTo(52.13);
     expect(back.category).toBe('rf');
   });
+
+  it('round-trips the TNV-only module-surface semantics through a legacy row', () => {
+    const module = readyPA();
+    module.name = 'Power Module';
+    module.category = 'Power';
+    module.thermal_spec = {
+      ...module.thermal_spec,
+      limit_type: 'Ts',
+      limit_reference_note: 'Integrated HSK contact surface center',
+      r_jc_C_per_W: null,
+      heat_path: { type: 'ModuleSurface', parameters: {} },
+    };
+
+    const row = canonicalComponentToLegacy(module);
+    expect(row.Board_Type).toBe('None');
+    expect(row._tnv_heat_path).toBe('ModuleSurface');
+
+    const restored = legacyComponentToCanonical(row, {
+      id: 'CMP_POWER_MODULE',
+      provenance: module.provenance,
+      normalizeHeatPath,
+      resolveTimId: () => BUILTIN_TIM_IDS.grease,
+    });
+    expect(restored.thermal_spec).toMatchObject({
+      heat_path: { type: 'ModuleSurface' },
+      limit_type: 'Ts',
+      limit_type_confirmed: true,
+      limit_reference_note: 'Integrated HSK contact surface center',
+      r_jc_C_per_W: null,
+    });
+  });
 });
 
 // --- SourcedValue ----------------------------------------------------------
@@ -676,6 +755,7 @@ describe('heatPathPatch', () => {
       ['Coin', 'BOTTOM_COOL_COIN'],
       ['Board', 'BOTTOM_COOL_VIA'],
       ['TopSurface', 'TOP_COOL_LID'],
+      ['ModuleSurface', 'MODULE_SURFACE_TIM'],
       ['DirectMetal', 'DIRECT_METAL'],
     ] as const) {
       expect(heatPathPatch(readyPA(), path).architecture_prep.template_preference).toBe(template);
@@ -710,6 +790,7 @@ describe('GEOMETRY_RULES', () => {
     // An E-PAD and a bolt-down flange are both smaller than the outline, and
     // nothing but the datasheet or the drawing knows by how much.
     expect(GEOMETRY_RULES.Board.source).toBe('stated');
+    expect(GEOMETRY_RULES.ModuleSurface.source).toBe('stated');
     expect(GEOMETRY_RULES.DirectMetal.source).toBe('stated');
   });
 
@@ -718,6 +799,7 @@ describe('GEOMETRY_RULES', () => {
     expect(GEOMETRY_RULES.Board.thickness).toBe('board');
     // Nothing conducts through a spreader on these two, so no thickness applies.
     expect(GEOMETRY_RULES.TopSurface.thickness).toBe('none');
+    expect(GEOMETRY_RULES.ModuleSurface.thickness).toBe('none');
     expect(GEOMETRY_RULES.DirectMetal.thickness).toBe('none');
   });
 
@@ -727,6 +809,7 @@ describe('GEOMETRY_RULES', () => {
 
   it('leaves a non-spreading path on the face heat entered', () => {
     expect(spreadFaceMm(geometry, 'TopSurface')).toEqual({ L: 18, W: 12 });
+    expect(spreadFaceMm(geometry, 'ModuleSurface')).toEqual({ L: 6, W: 6 });
     expect(spreadFaceMm(geometry, 'DirectMetal')).toEqual({ L: 6, W: 6 });
   });
 
@@ -745,6 +828,7 @@ describe('GEOMETRY_RULES', () => {
     expect(sourceAreaMm2(geometry, 'Board')).toBe(36);
     expect(spreadAreaMm2(geometry, 'Board')).toBeCloseTo(7.6 * 7.6, 6);
     expect(spreadAreaMm2(geometry, 'TopSurface')).toBe(216);
+    expect(spreadAreaMm2(geometry, 'ModuleSurface')).toBe(36);
     expect(spreadAreaMm2(geometry, 'DirectMetal')).toBe(36);
   });
 });
