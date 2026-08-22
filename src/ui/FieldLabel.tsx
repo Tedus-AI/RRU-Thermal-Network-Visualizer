@@ -6,8 +6,93 @@
  * `title` attribute is deliberately not relied upon (02 §3.4, §32).
  */
 
-import { useId, useState, type ReactNode } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+  type RefObject,
+} from 'react';
+import { createPortal } from 'react-dom';
 import { Info } from 'lucide-react';
+import { positionTooltip, type TooltipAlign, type TooltipPosition } from './tooltipPosition';
+
+function ViewportTooltip({
+  anchor,
+  id,
+  open,
+  align,
+  children,
+}: {
+  anchor: RefObject<HTMLElement>;
+  id: string;
+  open: boolean;
+  align: TooltipAlign;
+  children: ReactNode;
+}) {
+  const tooltip = useRef<HTMLSpanElement>(null);
+  const [position, setPosition] = useState<TooltipPosition | null>(null);
+
+  const updatePosition = useCallback(() => {
+    const anchorElement = anchor.current;
+    const tooltipElement = tooltip.current;
+    if (!anchorElement || !tooltipElement) return;
+
+    const anchorRect = anchorElement.getBoundingClientRect();
+    const tooltipRect = tooltipElement.getBoundingClientRect();
+    setPosition(
+      positionTooltip(
+        {
+          left: anchorRect.left,
+          right: anchorRect.right,
+          top: anchorRect.top,
+          bottom: anchorRect.bottom,
+          width: anchorRect.width,
+        },
+        { width: tooltipRect.width, height: tooltipRect.height },
+        { width: window.innerWidth, height: window.innerHeight },
+        align,
+      ),
+    );
+  }, [align, anchor]);
+
+  useLayoutEffect(() => {
+    if (open) updatePosition();
+  }, [open, updatePosition]);
+
+  useEffect(() => {
+    if (!open) return;
+    window.addEventListener('resize', updatePosition);
+    window.addEventListener('scroll', updatePosition, true);
+    return () => {
+      window.removeEventListener('resize', updatePosition);
+      window.removeEventListener('scroll', updatePosition, true);
+    };
+  }, [open, updatePosition]);
+
+  if (!open || typeof document === 'undefined') return null;
+
+  return createPortal(
+    <span
+      ref={tooltip}
+      role="tooltip"
+      id={id}
+      data-placement={position?.placement}
+      className="pointer-events-none fixed z-[100] w-60 max-w-[calc(100vw-1rem)] whitespace-pre-line rounded-md bg-shell-800 px-2.5 py-2 text-[12px] leading-relaxed font-normal text-white shadow-lg"
+      style={{
+        left: position?.left ?? 0,
+        top: position?.top ?? 0,
+        visibility: position ? 'visible' : 'hidden',
+      }}
+    >
+      {children}
+    </span>,
+    document.body,
+  );
+}
 
 /**
  * Any piece of UI text, bilingual.
@@ -78,9 +163,10 @@ export function EngineeringInfo({
 }) {
   const [open, setOpen] = useState(false);
   const tooltipId = useId();
+  const anchor = useRef<HTMLSpanElement>(null);
 
   return (
-    <span className="relative inline-flex items-center">
+    <span ref={anchor} className="relative inline-flex items-center">
       <button
         type="button"
         aria-describedby={open ? tooltipId : undefined}
@@ -94,17 +180,9 @@ export function EngineeringInfo({
       >
         <Info size={12} aria-hidden />
       </button>
-      {open && (
-        <span
-          role="tooltip"
-          id={tooltipId}
-          className={`absolute bottom-full z-50 mb-1.5 w-64 rounded-md bg-shell-800 px-2.5 py-2 text-[12px] leading-relaxed font-normal text-white shadow-lg ${
-            align === 'left' ? 'left-0' : 'left-1/2 -translate-x-1/2'
-          }`}
-        >
-          {zh}
-        </span>
-      )}
+      <ViewportTooltip anchor={anchor} id={tooltipId} open={open} align={align}>
+        {zh}
+      </ViewportTooltip>
     </span>
   );
 }
@@ -120,9 +198,10 @@ export function BilingualTooltip({
 }) {
   const [open, setOpen] = useState(false);
   const tooltipId = useId();
+  const anchor = useRef<HTMLSpanElement>(null);
 
   return (
-    <span className="relative inline-flex items-center">
+    <span ref={anchor} className="relative inline-flex items-center">
       <span
         tabIndex={0}
         aria-describedby={open ? tooltipId : undefined}
@@ -134,17 +213,9 @@ export function BilingualTooltip({
       >
         {children}
       </span>
-      {open && (
-        <span
-          role="tooltip"
-          id={tooltipId}
-          className={`absolute bottom-full z-40 mb-1.5 w-60 rounded-md bg-shell-800 px-2.5 py-2 text-[12px] leading-relaxed font-normal text-white shadow-lg ${
-            align === 'left' ? 'left-0' : 'left-1/2 -translate-x-1/2'
-          }`}
-        >
-          {zh}
-        </span>
-      )}
+      <ViewportTooltip anchor={anchor} id={tooltipId} open={open} align={align}>
+        {zh}
+      </ViewportTooltip>
     </span>
   );
 }
@@ -189,8 +260,14 @@ export function FieldLabel({
 
   return (
     <label htmlFor={htmlFor} className="flex items-center gap-1 text-[12px] font-semibold text-ink-700">
-      {zhTooltip ? <BilingualTooltip zh={zhTooltip}>{text}</BilingualTooltip> : text}
-      {zhTooltip && <Info size={12} className="text-ink-400" aria-hidden />}
+      {zhTooltip ? (
+        <BilingualTooltip zh={zhTooltip}>
+          {text}
+          <Info size={12} className="text-ink-400" aria-hidden />
+        </BilingualTooltip>
+      ) : (
+        text
+      )}
     </label>
   );
 }
