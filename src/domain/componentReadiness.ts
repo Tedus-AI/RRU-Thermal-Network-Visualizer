@@ -8,12 +8,15 @@
 import {
   GEOMETRY_RULES,
   isHeatSource,
+  metalBaseExposedAreaMm2,
+  metalBaseParameters,
   normalizeModuleReferenceLocation,
   powerWOf,
   sourceAreaMm2,
   UNASSIGNED_ZONE,
   type Component,
 } from './component';
+import { isMeasuredInterface } from './materials';
 import { valueOf } from './sourcedValue';
 
 export type ComponentStatus = 'READY' | 'WARNING' | 'ERROR' | 'DISABLED';
@@ -56,22 +59,30 @@ export type CompletenessMap = Record<CompletenessItem, boolean>;
 export function completenessOf(component: Component): CompletenessMap {
   const spec = component.thermal_spec;
   const moduleSurface = spec.heat_path.type === 'ModuleSurface';
+  const metalBase = spec.heat_path.type === 'DirectMetal';
+  const metalBaseModel = metalBaseParameters(spec);
+  const surfaceReferenced =
+    moduleSurface || (metalBase && metalBaseModel.source_model === 'SurfaceBodyBased');
   return {
     Identity: Boolean(component.name.trim()) && component.qty > 0,
     Power: component.power_W.value != null,
     Limit:
       spec.limit_type_confirmed &&
       valueOf(spec.limit_C) != null &&
-      (!moduleSurface || normalizeModuleReferenceLocation(spec.limit_reference_note) != null),
+      (!surfaceReferenced || normalizeModuleReferenceLocation(spec.limit_reference_note) != null),
     Package: spec.package_type != null && spec.package_type !== 'Unknown',
     // Rjc is genuinely not applicable when the manufacturer specifies the
     // allowed temperature at the very surface where this model injects heat.
-    Rjc: moduleSurface || valueOf(spec.r_jc_C_per_W) != null,
-    'Contact Geometry': sourceAreaMm2(spec.geometry, spec.heat_path.type) != null,
+    Rjc: surfaceReferenced || valueOf(spec.r_jc_C_per_W) != null,
+    'Contact Geometry':
+      sourceAreaMm2(spec.geometry, spec.heat_path.type, spec.heat_path.parameters) != null,
     'Heat Path': spec.heat_path_confirmed,
     // Direct metal contact is an answer, not an absence — the interface still
     // resolves, through the project's contact conductance.
-    TIM: spec.tim.tim_id != null,
+    TIM:
+      spec.tim.tim_id != null &&
+      (!isMeasuredInterface(spec.tim) ||
+        (valueOf(spec.tim.measured_rth_C_per_W) ?? 0) > 0),
     // The template is no longer asked for — the heat path decides it. What is
     // still an open choice is which shared structure the part sits on.
     'Base Zone': component.architecture_prep.preferred_base_zone !== UNASSIGNED_ZONE,
@@ -91,6 +102,10 @@ export function validateComponent(component: Component): ComponentIssue[] {
   const issues: ComponentIssue[] = [];
   const spec = component.thermal_spec;
   const moduleSurface = spec.heat_path.type === 'ModuleSurface';
+  const metalBase = spec.heat_path.type === 'DirectMetal';
+  const metalBaseModel = metalBaseParameters(spec);
+  const surfaceReferenced =
+    moduleSurface || (metalBase && metalBaseModel.source_model === 'SurfaceBodyBased');
 
   if (!component.name.trim()) {
     issues.push({
@@ -197,7 +212,7 @@ export function validateComponent(component: Component): ComponentIssue[] {
     });
   }
 
-  if (isHeatSource(component) && !moduleSurface && rjc == null) {
+  if (isHeatSource(component) && !surfaceReferenced && rjc == null) {
     issues.push({
       severity: 'warning',
       field: 'r_jc_C_per_W',
@@ -206,21 +221,21 @@ export function validateComponent(component: Component): ComponentIssue[] {
     });
   }
 
-  if (moduleSurface && spec.limit_type === 'Tj') {
+  if (surfaceReferenced && spec.limit_type === 'Tj') {
     issues.push({
       severity: 'error',
       field: 'limit_type',
-      message: 'A module-surface model must use a surface reference (Tc, Tb or Ts), not Tj.',
-      message_zh: '模組散熱面模型必須使用表面參考溫度（Tc、Tb 或 Ts），不可使用 Tj。',
+      message: 'A surface/body-source model must use a surface reference (Tc, Tb or Ts), not Tj.',
+      message_zh: '表面／本體熱源模型必須使用表面參考溫度（Tc、Tb 或 Ts），不可使用 Tj。',
     });
   }
 
-  if (moduleSurface && normalizeModuleReferenceLocation(spec.limit_reference_note) == null) {
+  if (surfaceReferenced && normalizeModuleReferenceLocation(spec.limit_reference_note) == null) {
     issues.push({
       severity: 'warning',
       field: 'limit_reference_note',
-      message: 'Choose Left, Center or Right for the manufacturer surface reference.',
-      message_zh: '請選擇原廠指定散熱面的左側、中央或右側量測位置。',
+      message: 'Choose Left, Center or Right for the surface/body temperature reference.',
+      message_zh: '請選擇表面／本體溫度基準的左側、中央或右側量測位置。',
     });
   }
 
@@ -253,14 +268,21 @@ export function validateComponent(component: Component): ComponentIssue[] {
     });
   }
 
-  if (isHeatSource(component) && sourceAreaMm2(spec.geometry, spec.heat_path.type) == null) {
+  if (
+    isHeatSource(component) &&
+    sourceAreaMm2(spec.geometry, spec.heat_path.type, spec.heat_path.parameters) == null
+  ) {
     issues.push({
       severity: 'warning',
       // Named to a real field so the issue can be a link to it, not just a
       // sentence: plain `geometry` pointed at nothing the user could open. Two
       // paths take the face from the package, so that is where they are fixed.
       field:
-        GEOMETRY_RULES[spec.heat_path.type].source === 'package'
+        metalBase && metalBaseModel.contact_geometry === 'PerimeterFrame'
+          ? 'heat_path.parameters.perimeter_land_width_mm'
+          : metalBase && metalBaseModel.contact_geometry === 'CustomArea'
+            ? 'heat_path.parameters.custom_contact_area_mm2'
+            : GEOMETRY_RULES[spec.heat_path.type].source === 'package' || metalBase
           ? 'geometry.package_L_mm'
           : 'geometry.source_L_mm',
       message: 'Source face size is missing.',
@@ -268,9 +290,54 @@ export function validateComponent(component: Component): ComponentIssue[] {
     });
   }
 
+  if (metalBase && metalBaseModel.contact_geometry === 'PerimeterFrame') {
+    const width = metalBaseModel.perimeter_land_width_mm;
+    const limit = Math.min(
+      spec.geometry.package_L_mm ?? 0,
+      spec.geometry.package_W_mm ?? 0,
+    ) / 2;
+    if (width == null || width <= 0 || (limit > 0 && width >= limit)) {
+      issues.push({
+        severity: 'warning',
+        field: 'heat_path.parameters.perimeter_land_width_mm',
+        message: 'Perimeter land width is missing or does not fit inside the package base.',
+        message_zh: '外圍接觸邊寬缺少，或尺寸已超出元件底面。',
+      });
+    }
+  }
+
+  if (metalBase && metalBaseModel.exposed_surface_enabled && metalBaseExposedAreaMm2(spec) == null) {
+    issues.push({
+      severity: 'warning',
+      field:
+        metalBaseModel.exposed_area_mode === 'Custom'
+          ? 'heat_path.parameters.custom_exposed_area_mm2'
+          : 'geometry.package_L_mm',
+      message: 'Exposed-surface boundary is enabled but its area cannot be derived.',
+      message_zh: '已啟用暴露表面邊界，但目前無法取得有效表面積。',
+    });
+  }
+
+  if (
+    isMeasuredInterface(spec.tim) &&
+    (valueOf(spec.tim.measured_rth_C_per_W) ?? 0) <= 0
+  ) {
+    issues.push({
+      severity: 'warning',
+      field: 'tim.measured_rth_C_per_W',
+      message: 'Measured interface mode requires a positive Rth.',
+      message_zh: '實測介面熱阻模式必須輸入大於 0 的 Rth。',
+    });
+  }
+
   // Choosing "custom" bond line and then leaving it empty is not the same as
   // inheriting: the user asked to override and has not said with what.
-  if (spec.tim.tim_id != null && spec.tim.blt_mm != null && spec.tim.blt_mm.value == null) {
+  if (
+    spec.tim.tim_id != null &&
+    !isMeasuredInterface(spec.tim) &&
+    spec.tim.blt_mm != null &&
+    spec.tim.blt_mm.value == null
+  ) {
     issues.push({
       severity: 'warning',
       field: 'tim.blt_mm',

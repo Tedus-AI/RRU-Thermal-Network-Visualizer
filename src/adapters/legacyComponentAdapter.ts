@@ -79,6 +79,9 @@ const OWNED_LEGACY_KEYS = new Set([
   'TIM_Type',
   'category',
   '_tnv_heat_path',
+  '_tnv_heat_path_parameters',
+  '_tnv_tim_id',
+  '_tnv_measured_interface_rth_C_per_W',
   '_tnv_limit_type',
   '_tnv_limit_reference_note',
 ]);
@@ -110,6 +113,27 @@ export function legacyComponentToCanonical(
   const statedLimitType = ['Tj', 'Tc', 'Tb', 'Ts'].includes(String(row._tnv_limit_type))
     ? (row._tnv_limit_type as LimitType)
     : null;
+  const heatPathParameters =
+    typeof row._tnv_heat_path_parameters === 'object' &&
+    row._tnv_heat_path_parameters !== null &&
+    !Array.isArray(row._tnv_heat_path_parameters)
+      ? (row._tnv_heat_path_parameters as Component['thermal_spec']['heat_path']['parameters'])
+      : {};
+  const tim = emptyTim(
+    typeof row._tnv_tim_id === 'string'
+      ? row._tnv_tim_id
+      : options.resolveTimId(row.TIM_Type),
+  );
+  if (
+    typeof row._tnv_measured_interface_rth_C_per_W === 'number' &&
+    Number.isFinite(row._tnv_measured_interface_rth_C_per_W)
+  ) {
+    tim.measured_rth_C_per_W = sourced(
+      row._tnv_measured_interface_rth_C_per_W,
+      'Imported',
+      { confidence: 'medium' },
+    );
+  }
 
   return {
     id: options.id,
@@ -146,9 +170,9 @@ export function legacyComponentToCanonical(
         board_thickness_mm: heatPath === 'Coin' ? null : (row['Thick(mm)'] ?? null),
         needs_review: hasLegacyGeometry || undefined,
       },
-      heat_path: { type: heatPath, parameters: {} },
+      heat_path: { type: heatPath, parameters: heatPathParameters },
       heat_path_confirmed: statedHeatPath != null,
-      tim: emptyTim(options.resolveTimId(row.TIM_Type)),
+      tim,
     },
 
     architecture_prep: emptyArchitecturePrep(),
@@ -201,11 +225,19 @@ export function canonicalComponentToLegacy(
     R_jc: spec.r_jc_C_per_W?.value ?? null,
     TIM_Type: tim?.name ?? 'None',
     category: CANONICAL_TO_LEGACY_CATEGORY[component.category],
-    ...(spec.heat_path.type === 'ModuleSurface'
+    ...(['ModuleSurface', 'DirectMetal'].includes(spec.heat_path.type)
       ? {
           _tnv_heat_path: spec.heat_path.type,
           _tnv_limit_type: spec.limit_type,
           _tnv_limit_reference_note: spec.limit_reference_note,
+          ...(spec.heat_path.type === 'DirectMetal'
+            ? {
+                _tnv_heat_path_parameters: spec.heat_path.parameters,
+                _tnv_tim_id: spec.tim.tim_id,
+                _tnv_measured_interface_rth_C_per_W:
+                  spec.tim.measured_rth_C_per_W?.value ?? null,
+              }
+            : {}),
         }
       : {}),
   };

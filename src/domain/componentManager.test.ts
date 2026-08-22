@@ -1,4 +1,4 @@
-import { BUILTIN_TIM_IDS } from '@/domain/materials';
+import { BUILTIN_TIM_IDS, MEASURED_INTERFACE_TIM_ID } from '@/domain/materials';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -22,6 +22,8 @@ import {
   emptyThermalSpec,
   inferHeatPath,
   inferLimitType,
+  metalBaseContactAreaMm2,
+  metalBaseExposedAreaMm2,
   spreadAreaMm2,
   spreadFaceMm,
   spreadingAreaMm2,
@@ -194,6 +196,36 @@ describe('component readiness', () => {
     expect(completenessOf(module).Limit).toBe(false);
   });
 
+  it('requires a positive characterized Rth for a measured Metal Base interface', () => {
+    const component = readyPA();
+    component.thermal_spec = {
+      ...component.thermal_spec,
+      limit_type: 'Tc',
+      limit_reference_note: 'Center',
+      r_jc_C_per_W: null,
+      heat_path: {
+        type: 'DirectMetal',
+        parameters: {
+          source_model: 'SurfaceBodyBased',
+          contact_geometry: 'FullBase',
+        },
+      },
+      tim: {
+        ...component.thermal_spec.tim,
+        tim_id: MEASURED_INTERFACE_TIM_ID,
+        measured_rth_C_per_W: sourced(0, 'Measurement'),
+      },
+    };
+
+    expect(completenessOf(component).TIM).toBe(false);
+    expect(validateComponent(component).some((issue) => issue.field === 'tim.measured_rth_C_per_W')).toBe(
+      true,
+    );
+
+    component.thermal_spec.tim.measured_rth_C_per_W = sourced(0.12, 'Measurement');
+    expect(completenessOf(component).TIM).toBe(true);
+  });
+
   it('treats a negative Rjc as an error (04 §38 case C)', () => {
     const component = { ...readyPA() };
     component.thermal_spec = { ...component.thermal_spec, r_jc_C_per_W: sourced(-1, 'Manual') };
@@ -360,7 +392,15 @@ describe('component readiness', () => {
 
 describe('downstream invalidation (04 §32)', () => {
   it('marks both network review and solver dirty for topology-shaping fields', () => {
-    for (const field of ['category', 'qty', 'tim.type', 'heat_path.type', 'geometry']) {
+    for (const field of [
+      'category',
+      'qty',
+      'tim.type',
+      'heat_path.type',
+      'heat_path.parameters.source_model',
+      'heat_path.parameters.exposed_surface_enabled',
+      'geometry',
+    ]) {
       expect(effectOfChange(field, false)).toMatchObject({
         networkReview: true,
         solverDirty: true,
@@ -770,6 +810,38 @@ describe('heatPathPatch', () => {
     const component = readyPA();
     component.architecture_prep.preferred_base_zone = 'RF Right';
     expect(heatPathPatch(component, 'Board').architecture_prep.preferred_base_zone).toBe('RF Right');
+  });
+
+  it('defaults filters to a surface/body source and active parts to a junction source', () => {
+    const filter = readyPA();
+    filter.category = 'Filter';
+    const passive = heatPathPatch(filter, 'DirectMetal');
+    expect(passive.thermal_spec.heat_path.parameters.source_model).toBe('SurfaceBodyBased');
+
+    const active = heatPathPatch(readyPA(), 'DirectMetal');
+    expect(active.thermal_spec.heat_path.parameters.source_model).toBe('JunctionBased');
+  });
+
+  it('derives full-base, perimeter-frame and exposed-surface areas', () => {
+    const spec = emptyThermalSpec('Tc', 'DirectMetal');
+    spec.geometry = {
+      ...spec.geometry,
+      package_L_mm: 100,
+      package_W_mm: 80,
+      package_H_mm: 20,
+    };
+    spec.heat_path.parameters = {
+      source_model: 'SurfaceBodyBased',
+      contact_geometry: 'PerimeterFrame',
+      perimeter_land_width_mm: 2,
+      exposed_surface_enabled: true,
+      exposed_area_mode: 'DerivedPackage',
+    };
+    expect(metalBaseContactAreaMm2(spec)).toBe(704);
+    expect(metalBaseExposedAreaMm2(spec)).toBe(15_200);
+
+    spec.heat_path.parameters.contact_geometry = 'FullBase';
+    expect(metalBaseContactAreaMm2(spec)).toBe(8_000);
   });
 });
 

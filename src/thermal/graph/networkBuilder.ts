@@ -10,10 +10,14 @@
 import {
   coinAreaMm2,
   isDirectContact,
+  isMeasuredInterface,
   resolveTim,
   type MaterialDefaults,
 } from '@/domain/materials';
 import {
+  metalBaseExposedAreaMm2,
+  metalBaseExposedSurfaceEnabled,
+  metalBaseSourceModel,
   powerWOf,
   sourceAreaMm2,
   spreadAreaMm2,
@@ -98,11 +102,23 @@ export function readLinkedInput(
   switch (path) {
     case 'thermal_spec.geometry.contact_area':
     case 'thermal_spec.geometry.source_area':
-      return sourceAreaMm2(geometry, heatPath);
+      return sourceAreaMm2(geometry, heatPath, component.thermal_spec.heat_path.parameters);
     case 'thermal_spec.geometry.spread_area':
-      return spreadAreaMm2(geometry, heatPath, coinArea);
+      return spreadAreaMm2(
+        geometry,
+        heatPath,
+        coinArea,
+        component.thermal_spec.heat_path.parameters,
+      );
     case 'thermal_spec.geometry.spreading_area':
-      return spreadingAreaMm2(geometry, heatPath, coinArea);
+      return spreadingAreaMm2(
+        geometry,
+        heatPath,
+        coinArea,
+        component.thermal_spec.heat_path.parameters,
+      );
+    case 'thermal_spec.heat_path.parameters.exposed_surface_area':
+      return metalBaseExposedAreaMm2(component.thermal_spec);
     // TIM properties go through inheritance, so a component that never states
     // k or BLT still resolves against the project's material table. Reading the
     // stored field directly would have left every inherited TIM unresolved.
@@ -167,7 +183,18 @@ function effectiveEdgeSpec(
   component: Component,
 ): { method: EdgeMethod; parameterLinks: Record<string, string> } {
   const links = proto.parameterLinks ?? {};
-  if (proto.type !== 'tim' || !isDirectContact(component.thermal_spec.tim)) {
+  if (proto.type !== 'tim') {
+    return { method: proto.method, parameterLinks: links };
+  }
+  if (isMeasuredInterface(component.thermal_spec.tim)) {
+    return {
+      method: 'direct_rth',
+      parameterLinks: {
+        R_C_per_W: 'thermal_spec.tim.measured_rth_C_per_W',
+      },
+    };
+  }
+  if (!isDirectContact(component.thermal_spec.tim)) {
     return { method: proto.method, parameterLinks: links };
   }
   return {
@@ -178,6 +205,113 @@ function effectiveEdgeSpec(
       area_mm2: links.area_mm2 ?? 'thermal_spec.geometry.spread_area',
     },
   };
+}
+
+/**
+ * DIRECT_METAL is one user-facing template with two mutually-exclusive source
+ * models. Materializing it here keeps the registry data-driven while ensuring
+ * Screen 05 previews and generated graphs use the component's actual choice.
+ */
+export function templateForComponent(
+  component: Component,
+  templateId: string,
+): ThermalTemplate | null {
+  const base = getTemplate(templateId);
+  if (!base || base.id !== 'DIRECT_METAL') return base;
+
+  const template = structuredClone(base);
+  const sourceModel = metalBaseSourceModel(component.thermal_spec);
+  const exposed = metalBaseExposedSurfaceEnabled(component.thermal_spec);
+
+  if (sourceModel === 'SurfaceBodyBased') {
+    template.nodes = template.nodes
+      .filter((node) => node.role !== 'JUNCTION')
+      .map((node) =>
+        node.role === 'METAL_BASE'
+          ? {
+              ...node,
+              label: 'Body / Metal Base',
+              labelZh: '本體／金屬底面',
+              heatSource: true,
+            }
+          : node,
+      );
+    template.edges = template.edges.filter((edge) => edge.fromRole !== 'JUNCTION');
+  }
+
+  if (isDirectContact(component.thermal_spec.tim)) {
+    template.nodes = template.nodes.map((node) =>
+      node.role === 'TIM' ? { ...node, label: 'Contact', labelZh: '金屬接觸' } : node,
+    );
+  } else if (isMeasuredInterface(component.thermal_spec.tim)) {
+    template.nodes = template.nodes.map((node) =>
+      node.role === 'TIM' ? { ...node, label: 'Interface', labelZh: '實測介面' } : node,
+    );
+  }
+
+  if (exposed) {
+    template.nodes.push({
+      role: 'EXTERNAL_AMBIENT',
+      label: 'Ambient',
+      labelZh: '周圍環境',
+      type: 'ambient',
+      boundaryRole: 'placeholder',
+    });
+    template.edges.push({
+      fromRole: 'METAL_BASE',
+      toRole: 'EXTERNAL_AMBIENT',
+      type: 'convection',
+      method: 'convection_hA',
+      label: 'Exposed surface',
+      labelZh: '暴露表面邊界',
+      requiredParameters: ['boundary_conditions'],
+    });
+  }
+
+  const requirements: ThermalTemplate['requiredComponentFields'] = [];
+  if (sourceModel === 'JunctionBased') {
+    requirements.push({
+      path: 'thermal_spec.r_jc_C_per_W',
+      label: 'Rjc',
+      labelZh: '接面熱阻',
+    });
+  }
+  if (isDirectContact(component.thermal_spec.tim)) {
+    requirements.push({
+      path: 'materials.contact_conductance_W_m2K',
+      label: 'Contact h',
+      labelZh: '接觸導熱係數',
+    });
+  } else if (isMeasuredInterface(component.thermal_spec.tim)) {
+    requirements.push({
+      path: 'thermal_spec.tim.measured_rth_C_per_W',
+      label: 'Measured interface Rth',
+      labelZh: '實測介面熱阻',
+    });
+  } else {
+    requirements.push(
+      { path: 'thermal_spec.tim.k_W_mK', label: 'Interface k', labelZh: '介面導熱係數' },
+      {
+        path: 'thermal_spec.tim.thickness_mm',
+        label: 'Interface BLT',
+        labelZh: '介面壓合厚度',
+      },
+    );
+  }
+  requirements.push({
+    path: 'thermal_spec.geometry.source_area',
+    label: 'Contact area',
+    labelZh: '有效接觸面積',
+  });
+  if (exposed) {
+    requirements.push({
+      path: 'thermal_spec.heat_path.parameters.exposed_surface_area',
+      label: 'Exposed area',
+      labelZh: '暴露表面積',
+    });
+  }
+  template.requiredComponentFields = requirements;
+  return template;
 }
 
 export function buildComponentSubgraph(
@@ -194,7 +328,7 @@ export function buildComponentSubgraph(
     materials: MaterialDefaults;
   },
 ): Subgraph | null {
-  const template = getTemplate(options.templateId);
+  const template = templateForComponent(component, options.templateId);
   if (!template) return null;
 
   const nodes: ThermalNode[] = [];
@@ -228,6 +362,7 @@ export function buildComponentSubgraph(
         limit_C: proto.heatSource ? valueOf(component.thermal_spec.limit_C) : null,
         limit_type: proto.heatSource ? component.thermal_spec.limit_type : null,
         boundary_type: null,
+        boundary_role: proto.boundaryRole,
         zone_id: null,
         ports: [],
         origin: {
@@ -244,6 +379,15 @@ export function buildComponentSubgraph(
           component_limit_linked: proto.heatSource,
           ...(proto.heatSource && component.thermal_spec.limit_reference_note?.trim()
             ? { limit_reference_note: component.thermal_spec.limit_reference_note.trim() }
+            : {}),
+          ...(template.id === 'DIRECT_METAL' &&
+          proto.role === 'METAL_BASE' &&
+          metalBaseExposedSurfaceEnabled(component.thermal_spec)
+            ? {
+                boundary_surface_name: `${component.name} Exposed Surface`,
+                boundary_area_mm2: metalBaseExposedAreaMm2(component.thermal_spec),
+                boundary_orientation: 'mixed',
+              }
             : {}),
         },
       });
@@ -367,7 +511,10 @@ export function previewGeneration(
       continue;
     }
     const templateId = component.architecture_prep.template_preference;
-    const template = getTemplate(templateId === 'UNASSIGNED' ? 'CUSTOM' : templateId);
+    const template = templateForComponent(
+      component,
+      templateId === 'UNASSIGNED' ? 'CUSTOM' : templateId,
+    );
     if (!template) {
       skipped++;
       continue;

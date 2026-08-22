@@ -202,6 +202,7 @@ function migrateTim(timRaw: Raw | null, specRaw: Raw): Component['thermal_spec']
     return {
       tim_id: typeof timRaw.tim_id === 'string' ? timRaw.tim_id : null,
       blt_mm: toSourced(timRaw.blt_mm),
+      measured_rth_C_per_W: toSourced(timRaw.measured_rth_C_per_W),
       contact_area_mode: timRaw.contact_area_mode === 'custom' ? 'custom' : 'derived',
     };
   }
@@ -210,6 +211,7 @@ function migrateTim(timRaw: Raw | null, specRaw: Raw): Component['thermal_spec']
   return {
     tim_id: legacyType ? (LEGACY_TIM_ID[legacyType] ?? null) : null,
     blt_mm: toSourced(timRaw?.thickness_mm),
+    measured_rth_C_per_W: null,
     contact_area_mode: timRaw?.contact_area_mode === 'custom' ? 'custom' : 'derived',
   };
 }

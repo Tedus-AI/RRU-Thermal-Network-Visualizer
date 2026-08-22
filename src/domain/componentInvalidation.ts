@@ -33,6 +33,19 @@ function effect(
  * rows in the matrix are conditional on that.
  */
 export function effectOfChange(field: string, isMapped: boolean): InvalidationEffect {
+  if (
+    field === 'heat_path.parameters.source_model' ||
+    field === 'heat_path.parameters.exposed_surface_enabled'
+  ) {
+    return effect(true, true, 'component_architecture_changed');
+  }
+  if (field.startsWith('heat_path.parameters.')) {
+    // Contact/exposed-area parameters are embedded in generated edges and node
+    // boundary metadata. Re-apply is explicit so a hand-edited subgraph is never
+    // silently rewritten underneath the engineer.
+    return effect(true, true, 'component_geometry_changed');
+  }
+
   switch (field) {
     // Identity: only matters once the graph references it.
     case 'name':
@@ -57,6 +70,7 @@ export function effectOfChange(field: string, isMapped: boolean): InvalidationEf
 
     // A bond line is a number in an existing edge; the shape does not move.
     case 'tim.blt_mm':
+    case 'tim.measured_rth_C_per_W':
       return effect(false, true, 'component_rth_changed');
     case 'heat_path':
     case 'heat_path.type':

@@ -19,7 +19,7 @@ import { TOOLTIPS_ZH } from './tooltips';
 import type { Component } from '@/domain/component';
 import { TEMPLATE_LIST } from '@/thermal/templates/templateRegistry';
 import type { ThermalTemplate } from '@/thermal/templates/types';
-import { missingRequirements } from '@/thermal/graph/networkBuilder';
+import { missingRequirements, templateForComponent } from '@/thermal/graph/networkBuilder';
 import { useProjectStore } from '@/data/projectStore';
 import { defaultMaterials } from '@/domain/materials';
 import type { QtyModel } from '@/thermal/graph/networkBuilder';
@@ -27,44 +27,72 @@ import { QTY_MODELS, type BuilderPref } from './ComponentPalette';
 
 /** The prototype chain, drawn as a compact vertical path ending at its ports. */
 function MiniSubgraph({ template }: { template: ThermalTemplate }) {
+  const boundaryRoles = new Set(
+    template.nodes.filter((node) => node.boundaryRole).map((node) => node.role),
+  );
+  const mainNodes = template.nodes.filter((node) => !boundaryRoles.has(node.role));
+  const boundaryEdges = template.edges.filter((edge) => boundaryRoles.has(edge.toRole));
+
   return (
-    <div className="flex flex-wrap items-center gap-x-1 gap-y-1">
-      {template.nodes.map((proto) => {
-        const outgoing = template.edges.find((edge) => edge.fromRole === proto.role);
-        return (
-          <span key={proto.role} className="flex items-center gap-1">
-            <span
-              title={biTitle(proto.label, proto.labelZh)}
-              className={`inline-flex rounded border px-1.5 py-0.5 text-[10px] font-semibold whitespace-nowrap ${
-                proto.heatSource
-                  ? 'border-danger-500/60 bg-danger-100 text-danger-600'
-                  : 'border-warn-500/50 bg-warn-100 text-warn-600'
-              }`}
-            >
-              {proto.label}
+    <div className="flex flex-col gap-1.5">
+      <div className="flex flex-wrap items-center gap-x-1 gap-y-1">
+        {mainNodes.map((proto) => {
+          const outgoing = template.edges.find(
+            (edge) => edge.fromRole === proto.role && !boundaryRoles.has(edge.toRole),
+          );
+          return (
+            <span key={proto.role} className="flex items-center gap-1">
+              <span
+                title={biTitle(proto.label, proto.labelZh)}
+                className={`inline-flex rounded border px-1.5 py-0.5 text-[10px] font-semibold whitespace-nowrap ${
+                  proto.heatSource
+                    ? 'border-danger-500/60 bg-danger-100 text-danger-600'
+                    : 'border-warn-500/50 bg-warn-100 text-warn-600'
+                }`}
+              >
+                {proto.label}
+              </span>
+              {outgoing && (
+                <ArrowDown size={10} aria-hidden className="-rotate-90 text-ink-400" />
+              )}
             </span>
-            {outgoing && (
-              <ArrowDown
-                size={10}
-                aria-hidden
-                className="-rotate-90 text-ink-400"
-              />
-            )}
+          );
+        })}
+
+        {template.ports.map((port) => (
+          <span
+            key={port.kind}
+            title={biTitle('Thermal port', TOOLTIPS_ZH.thermalPort)}
+            className="inline-flex items-center gap-1 rounded border border-dashed border-accent-500 bg-accent-100 px-1.5 py-0.5 text-[10px] font-bold whitespace-nowrap text-accent-700"
+          >
+            <PlugZap size={10} />
+            {port.kind}
+            {port.required && <span className="text-danger-600">*</span>}
           </span>
+        ))}
+      </div>
+
+      {boundaryEdges.map((edge) => {
+        const target = template.nodes.find((node) => node.role === edge.toRole);
+        if (!target) return null;
+        return (
+          <div
+            key={`${edge.fromRole}-${edge.toRole}`}
+            className="flex flex-wrap items-center gap-1 pl-2 text-[10px] text-ink-400"
+          >
+            <span aria-hidden>↳</span>
+            <span>{edge.label}</span>
+            <ArrowDown size={10} aria-hidden className="-rotate-90" />
+            <span
+              title={biTitle(target.label, target.labelZh)}
+              className="rounded border border-accent-500/60 bg-accent-100 px-1.5 py-0.5 font-semibold text-accent-700"
+            >
+              {target.label}
+            </span>
+            <span className="text-ink-300">/ Screen 06</span>
+          </div>
         );
       })}
-
-      {template.ports.map((port) => (
-        <span
-          key={port.kind}
-          title={biTitle('Thermal port', TOOLTIPS_ZH.thermalPort)}
-          className="inline-flex items-center gap-1 rounded border border-dashed border-accent-500 bg-accent-100 px-1.5 py-0.5 text-[10px] font-bold whitespace-nowrap text-accent-700"
-        >
-          <PlugZap size={10} />
-          {port.kind}
-          {port.required && <span className="text-danger-600">*</span>}
-        </span>
-      ))}
     </div>
   );
 }
@@ -85,8 +113,11 @@ export function TemplatePalette({
   onPrefChange: (next: BuilderPref) => void;
   onApply: () => void;
 }) {
-  const template =
+  const selectedTemplate =
     TEMPLATE_LIST.find((entry) => entry.id === pref?.templateId) ?? TEMPLATE_LIST[0];
+  const template = component
+    ? (templateForComponent(component, selectedTemplate.id) ?? selectedTemplate)
+    : selectedTemplate;
   // Requirements are judged against the project's own constants, so a TIM that
   // inherits its k does not read as missing.
   const materials = useProjectStore((s) => s.draft?.materials) ?? defaultMaterials();

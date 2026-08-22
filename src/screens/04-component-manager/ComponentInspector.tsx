@@ -27,6 +27,10 @@ import {
   HEAT_PATH_PATCH_FIELDS,
   LIMIT_TYPES,
   LIMIT_TYPE_LABELS,
+  METAL_BASE_CONTACT_GEOMETRIES,
+  METAL_BASE_CONTACT_GEOMETRY_LABELS,
+  METAL_BASE_SOURCE_MODELS,
+  METAL_BASE_SOURCE_MODEL_LABELS,
   MODULE_REFERENCE_LOCATIONS,
   MODULE_REFERENCE_LOCATION_LABELS,
   PACKAGE_TYPES,
@@ -36,6 +40,8 @@ import {
   SOURCE_FACE_LABELS,
   componentTotalPowerW,
   heatPathPatch,
+  metalBaseExposedAreaMm2,
+  metalBaseParameters,
   normalizeModuleReferenceLocation,
   sourceAreaMm2,
   sourceFaceMm,
@@ -55,6 +61,8 @@ import {
 import { withValue, type SourcedValue } from '@/domain/sourcedValue';
 import {
   DIRECT_CONTACT_TIM_ID,
+  BUILTIN_TIM_IDS,
+  MEASURED_INTERFACE_TIM_ID,
   coinAreaMm2,
   defaultMaterials,
   resolveTim,
@@ -291,6 +299,20 @@ export function ComponentInspector({
   const patchGeometry = (patch: Partial<ComponentGeometry>) =>
     patchSpec({ geometry: { ...spec.geometry, ...patch } }, ['geometry']);
 
+  const patchHeatPathParameters = (
+    patch: Record<string, number | string | boolean | null>,
+    fields: string[],
+  ) =>
+    patchSpec(
+      {
+        heat_path: {
+          ...spec.heat_path,
+          parameters: { ...spec.heat_path.parameters, ...patch },
+        },
+      },
+      fields,
+    );
+
   const patchPrep = (patch: Partial<Component['architecture_prep']>) =>
     onPatch(component.id, { architecture_prep: { ...prep, ...patch } }, ['architecture_prep']);
 
@@ -313,6 +335,10 @@ export function ComponentInspector({
 
   const heatPath = spec.heat_path.type;
   const moduleSurface = heatPath === 'ModuleSurface';
+  const metalBase = heatPath === 'DirectMetal';
+  const metalBaseModel = metalBaseParameters(spec);
+  const surfaceReferenced =
+    moduleSurface || (metalBase && metalBaseModel.source_model === 'SurfaceBodyBased');
   const rule = GEOMETRY_RULES[heatPath];
   const resolvedTim = resolveTim(spec.tim, materials);
   const projectCoin = {
@@ -321,8 +347,14 @@ export function ComponentInspector({
   };
   const sourceFace = sourceFaceMm(spec.geometry, heatPath);
   const spreadFace = spreadFaceMm(spec.geometry, heatPath, projectCoin);
-  const sourceArea = sourceAreaMm2(spec.geometry, heatPath);
-  const spreadArea = spreadAreaMm2(spec.geometry, heatPath, coinAreaMm2(materials));
+  const sourceArea = sourceAreaMm2(spec.geometry, heatPath, spec.heat_path.parameters);
+  const spreadArea = spreadAreaMm2(
+    spec.geometry,
+    heatPath,
+    coinAreaMm2(materials),
+    spec.heat_path.parameters,
+  );
+  const exposedArea = metalBaseExposedAreaMm2(spec);
   // Blank BLT means "use the material's"; a stored one means the build was
   // measured. The radio below is just that distinction, made visible.
   const bltCustom = spec.tim.blt_mm != null;
@@ -470,19 +502,91 @@ export function ComponentInspector({
                     }))}
                     value={heatPath}
                     disabled={readOnly}
-                    onChange={(event) =>
-                      onPatch(
-                        component.id,
-                        heatPathPatch(component, event.target.value as HeatPathType),
-                        HEAT_PATH_PATCH_FIELDS,
-                      )
-                    }
+                    onChange={(event) => {
+                      const nextType = event.target.value as HeatPathType;
+                      const next = heatPathPatch(component, nextType);
+                      const fields = [...HEAT_PATH_PATCH_FIELDS];
+                      if (nextType === 'DirectMetal' && next.thermal_spec.tim.tim_id == null) {
+                        const defaultInterface =
+                          materials.tim.find((material) => material.id === BUILTIN_TIM_IDS.grease) ??
+                          materials.tim[0];
+                        if (defaultInterface) {
+                          next.thermal_spec.tim = {
+                            ...next.thermal_spec.tim,
+                            tim_id: defaultInterface.id,
+                          };
+                          fields.push('tim.tim_id');
+                        }
+                      }
+                      if (
+                        nextType !== 'DirectMetal' &&
+                        next.thermal_spec.tim.tim_id === MEASURED_INTERFACE_TIM_ID
+                      ) {
+                        // Whole-joint characterization belongs to the Metal Base
+                        // model. Do not carry an invisible direct-Rth mode into a
+                        // board, coin or package-surface template.
+                        next.thermal_spec.tim = {
+                          ...next.thermal_spec.tim,
+                          tim_id: null,
+                          measured_rth_C_per_W: null,
+                        };
+                        fields.push('tim.tim_id');
+                      }
+                      onPatch(component.id, next, fields);
+                    }}
                   />
                   {!spec.heat_path_confirmed && (
                     <p className="text-[11px] text-warn-600">
                       Assumed from category — it selects the whole resistance chain, so confirm it.
                       <span className="block">依類別推定，它決定整條熱阻鏈，請確認。</span>
                     </p>
+                  )}
+
+                  {metalBase && (
+                    <div className="rounded-md border border-line bg-surface-muted p-2.5">
+                      <FieldLabel
+                        label="Heat Source Reference"
+                        zh="熱源基準"
+                        tooltip="決定 Screen 05 是否建立 Junction 與 Rjc；這是物理模型，不由 Limit Type 推定。"
+                      />
+                      <div className="mt-1.5 grid grid-cols-2 gap-2" role="radiogroup">
+                        {METAL_BASE_SOURCE_MODELS.map((model) => {
+                          const label = METAL_BASE_SOURCE_MODEL_LABELS[model];
+                          const active = metalBaseModel.source_model === model;
+                          return (
+                            <label
+                              key={model}
+                              className={`cursor-pointer rounded-md border p-2 text-[11px] leading-relaxed ${
+                                active
+                                  ? 'border-accent-500 bg-accent-100 text-accent-700'
+                                  : 'border-line bg-surface text-ink-600'
+                              } ${readOnly ? 'cursor-default opacity-60' : ''}`}
+                            >
+                              <span className="flex items-center gap-1.5 font-bold">
+                                <input
+                                  type="radio"
+                                  name={`metal-base-source-${component.id}`}
+                                  value={model}
+                                  checked={active}
+                                  disabled={readOnly}
+                                  onChange={() =>
+                                    patchHeatPathParameters(
+                                      { source_model: model },
+                                      ['heat_path.parameters.source_model'],
+                                    )
+                                  }
+                                />
+                                {label.en} / {label.zh}
+                              </span>
+                              <span className="mt-1 block text-[10px] text-ink-400">
+                                {label.description}
+                                <span className="block">{label.descriptionZh}</span>
+                              </span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
                   )}
 
                   {/* The via array's k and process derate are the project's
@@ -553,7 +657,7 @@ export function ComponentInspector({
                   onChange={(next) => patchSpec({ limit_C: next }, ['limit_C'])}
                 />
 
-                {moduleSurface && (
+                {surfaceReferenced && (
                   <div className="col-span-2 flex flex-col gap-1.5">
                     <FieldLabel
                       label="Reference Location"
@@ -584,16 +688,16 @@ export function ComponentInspector({
                       }
                     />
                     <p className="text-[11px] leading-relaxed text-ink-400">
-                      Choose the left, center or right reference point on the manufacturer's
-                      specified surface.
+                      Choose the left, center or right reference point on the specified
+                      surface or body.
                       <span className="block">
-                        選擇原廠指定散熱面上的左側、中央或右側量測位置。
+                        選擇指定散熱面或本體上的左側、中央或右側量測位置。
                       </span>
                     </p>
                   </div>
                 )}
 
-                {moduleSurface ? (
+                {surfaceReferenced ? (
                   <div className="flex flex-col gap-1.5">
                     <FieldLabel
                       label="Rjc"
@@ -602,7 +706,7 @@ export function ComponentInspector({
                       htmlFor="ins-rjc"
                       tooltip={tip('Rjc')}
                     />
-                    <TextInput id="ins-rjc" value="N/A — surface-reference model" disabled />
+                    <TextInput id="ins-rjc" value="N/A — surface/body-reference model" disabled />
                     <p className="text-[11px] leading-relaxed text-ink-400">
                       No junction node or Rjc edge is created. / 不建立接面節點或 Rjc 熱阻邊。
                     </p>
@@ -643,10 +747,10 @@ export function ComponentInspector({
                 </div>
               </div>
 
-              {/* --- TIM: picked from the project library (04 §18) --- */}
+              {/* --- Interface: material, dry contact or measured whole-joint Rth. --- */}
               <fieldset className="rounded-md border border-line p-3">
                 <legend className="px-1 text-[12px] font-semibold text-ink-700">
-                  TIM / 熱介面材料
+                  {metalBase ? 'Interface / 接觸介面' : 'TIM / 熱介面材料'}
                 </legend>
                 <div className="flex flex-col gap-2.5">
                   <div className="flex flex-col gap-1.5">
@@ -660,10 +764,18 @@ export function ComponentInspector({
                         // conductance rather than a k and a thickness.
                         {
                           value: DIRECT_CONTACT_TIM_ID,
-                          label: `Direct metal contact / 金屬硬接觸 — h ${
+                          label: `Dry metal contact / 乾式金屬接觸 — h ${
                             materials.contact_conductance_W_m2K.value ?? '?'
                           } W/m²·K`,
                         },
+                        ...(metalBase
+                          ? [
+                              {
+                                value: MEASURED_INTERFACE_TIM_ID,
+                                label: 'Measured interface Rth / 實測整體介面熱阻',
+                              },
+                            ]
+                          : []),
                         ...materials.tim.map((material) => ({
                           value: material.id,
                           label: `${material.name} — k ${material.k_W_mK.value ?? '?'} W/m·K`,
@@ -691,15 +803,39 @@ export function ComponentInspector({
 
                   {resolvedTim.directContact && (
                     <p className="rounded-md border border-line bg-surface-muted p-2.5 text-[11px] leading-relaxed text-ink-500">
-                      Bolted metal to metal, no TIM. The joint resistance is{' '}
+                      Dry metal-to-metal joint, no TIM. The joint resistance is{' '}
                       1 / (h · A) with h from Screen 01 — there is no bond line to state.
                       <span className="block">
-                        金屬直接鎖附、無 TIM。介面熱阻為 1/(h·A)，h 取自 Screen 01，沒有壓合厚度。
+                        乾式金屬接觸、無 TIM。介面熱阻為 1/(h·A)，h 取自 Screen 01，沒有壓合厚度。
                       </span>
                     </p>
                   )}
 
-                  {!resolvedTim.directContact && (
+                  {resolvedTim.measuredInterface && (
+                    <div className="rounded-md border border-line bg-surface-muted p-2.5">
+                      <SourcedNumberField
+                        id="ins-interface-rth"
+                        label="Measured Interface Rth"
+                        zh="實測整體介面熱阻"
+                        unit="°C/W"
+                        step="0.001"
+                        value={spec.tim.measured_rth_C_per_W}
+                        readOnly={readOnly}
+                        onChange={(next) =>
+                          patchSpec(
+                            { tim: { ...spec.tim, measured_rth_C_per_W: next } },
+                            ['tim.measured_rth_C_per_W'],
+                          )
+                        }
+                      />
+                      <p className="mt-1.5 text-[11px] leading-relaxed text-ink-400">
+                        Characterized value for the complete installed joint; k and BLT are not used.
+                        <span className="block">代表完整安裝介面的量測值，不再使用 k 與 BLT 計算。</span>
+                      </p>
+                    </div>
+                  )}
+
+                  {!resolvedTim.directContact && !resolvedTim.measuredInterface && (
                   <div className="flex flex-col gap-1.5">
                     <FieldLabel label="Bond Line (BLT)" zh="壓合厚度" unit="mm" htmlFor="ins-blt" />
                     <div
@@ -776,6 +912,15 @@ export function ComponentInspector({
                     </p>
                   </div>
                   )}
+                  {metalBase && !resolvedTim.directContact && !resolvedTim.measuredInterface && (
+                    <p className="rounded-md border border-accent-500/20 bg-accent-100/40 p-2.5 text-[11px] leading-relaxed text-ink-500">
+                      Grease, PCM and thin pads are represented by the terminal TIM HEAT_OUT node in
+                      Screen 05. Use the installed compressed BLT, not the supplied sheet thickness.
+                      <span className="block">
+                        Grease、PCM 與薄型導熱片會在 Screen 05 以 TIM HEAT_OUT 端點表示；請填入實際壓合厚度。
+                      </span>
+                    </p>
+                  )}
                 </div>
               </fieldset>
             </>
@@ -812,9 +957,215 @@ export function ComponentInspector({
                 />
               </div>
 
+              {metalBase && (
+                <>
+                  <fieldset className="rounded-md border border-line p-3">
+                    <legend className="px-1 text-[12px] font-semibold text-ink-700">
+                      Contact Geometry / 接觸幾何
+                    </legend>
+                    <div className="grid grid-cols-2 gap-2.5">
+                      <div className="col-span-2 flex flex-col gap-1.5">
+                        <FieldLabel
+                          label="Contact Model"
+                          zh="接觸面模型"
+                          htmlFor="geo-metal-contact-model"
+                        />
+                        <Select
+                          id="geo-metal-contact-model"
+                          items={METAL_BASE_CONTACT_GEOMETRIES.map((geometry) => ({
+                            value: geometry,
+                            label: `${METAL_BASE_CONTACT_GEOMETRY_LABELS[geometry].en} / ${METAL_BASE_CONTACT_GEOMETRY_LABELS[geometry].zh}`,
+                          }))}
+                          value={metalBaseModel.contact_geometry}
+                          disabled={readOnly}
+                          onChange={(event) =>
+                            patchHeatPathParameters(
+                              { contact_geometry: event.target.value },
+                              ['heat_path.parameters.contact_geometry'],
+                            )
+                          }
+                        />
+                      </div>
+
+                      {metalBaseModel.contact_geometry === 'FullBase' && (
+                        <>
+                          <DerivedField
+                            id="geo-metal-contact-L"
+                            label="Base Contact L"
+                            zh="底面接觸長"
+                            value={spec.geometry.package_L_mm}
+                            from="= Package L / 等於封裝長"
+                          />
+                          <DerivedField
+                            id="geo-metal-contact-W"
+                            label="Base Contact W"
+                            zh="底面接觸寬"
+                            value={spec.geometry.package_W_mm}
+                            from="= Package W / 等於封裝寬"
+                          />
+                        </>
+                      )}
+
+                      {metalBaseModel.contact_geometry === 'PerimeterFrame' && (
+                        <div className="col-span-2 flex flex-col gap-1.5">
+                          <FieldLabel
+                            label="Perimeter Land Width"
+                            zh="外圍接觸邊寬"
+                            unit="mm"
+                            htmlFor="geo-perimeter-land-width"
+                          />
+                          <NumberInput
+                            id="geo-perimeter-land-width"
+                            step="0.1"
+                            value={metalBaseModel.perimeter_land_width_mm ?? ''}
+                            placeholder="—"
+                            disabled={readOnly}
+                            onChange={(event) =>
+                              patchHeatPathParameters(
+                                {
+                                  perimeter_land_width_mm:
+                                    event.target.value === '' ? null : Number(event.target.value),
+                                },
+                                ['heat_path.parameters.perimeter_land_width_mm'],
+                              )
+                            }
+                          />
+                          <p className="text-[11px] text-ink-400">
+                            Effective area = outer base − open centre. / 有效面積＝完整底面－中央開口。
+                          </p>
+                        </div>
+                      )}
+
+                      {metalBaseModel.contact_geometry === 'CustomArea' && (
+                        <div className="col-span-2 flex flex-col gap-1.5">
+                          <FieldLabel
+                            label="Custom Effective Area"
+                            zh="自訂有效接觸面積"
+                            unit="mm²"
+                            htmlFor="geo-custom-contact-area"
+                          />
+                          <NumberInput
+                            id="geo-custom-contact-area"
+                            step="1"
+                            value={metalBaseModel.custom_contact_area_mm2 ?? ''}
+                            placeholder="—"
+                            disabled={readOnly}
+                            onChange={(event) =>
+                              patchHeatPathParameters(
+                                {
+                                  custom_contact_area_mm2:
+                                    event.target.value === '' ? null : Number(event.target.value),
+                                },
+                                ['heat_path.parameters.custom_contact_area_mm2'],
+                              )
+                            }
+                          />
+                          <p className="text-[11px] text-ink-400">
+                            Use the actual clamped lands; exclude paint, gaps and uncompressed gasket.
+                            <span className="block">只計入實際壓緊區域，扣除噴漆、缺口與未壓縮墊片。</span>
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </fieldset>
+
+                  <fieldset className="rounded-md border border-line p-3">
+                    <legend className="px-1 text-[12px] font-semibold text-ink-700">
+                      Additional Exposed Surface / 額外暴露表面
+                    </legend>
+                    <label className="flex items-start gap-2 text-[12px] text-ink-700">
+                      <input
+                        id="geo-exposed-surface-enabled"
+                        type="checkbox"
+                        className="mt-0.5 size-3.5 accent-[var(--color-accent-600)]"
+                        checked={metalBaseModel.exposed_surface_enabled}
+                        disabled={readOnly}
+                        onChange={(event) =>
+                          patchHeatPathParameters(
+                            { exposed_surface_enabled: event.target.checked },
+                            ['heat_path.parameters.exposed_surface_enabled'],
+                          )
+                        }
+                      />
+                      <span>
+                        Generate a convection/radiation boundary opening
+                        <span className="block text-[11px] text-ink-400">
+                          在 Screen 05 產生可供 Screen 06 設定對流／輻射的表面出口
+                        </span>
+                      </span>
+                    </label>
+
+                    {metalBaseModel.exposed_surface_enabled && (
+                      <div className="mt-2.5 grid grid-cols-2 gap-2.5">
+                        <div className="col-span-2 flex flex-col gap-1.5">
+                          <FieldLabel
+                            label="Exposed Area Source"
+                            zh="暴露面積來源"
+                            htmlFor="geo-exposed-area-mode"
+                          />
+                          <Select
+                            id="geo-exposed-area-mode"
+                            items={[
+                              {
+                                value: 'DerivedPackage',
+                                label: 'Package top + four sides / 封裝頂面＋四個側面',
+                              },
+                              { value: 'Custom', label: 'Custom exposed area / 自訂暴露面積' },
+                            ]}
+                            value={metalBaseModel.exposed_area_mode}
+                            disabled={readOnly}
+                            onChange={(event) =>
+                              patchHeatPathParameters(
+                                { exposed_area_mode: event.target.value },
+                                ['heat_path.parameters.exposed_area_mode'],
+                              )
+                            }
+                          />
+                        </div>
+
+                        {metalBaseModel.exposed_area_mode === 'Custom' ? (
+                          <div className="col-span-2 flex flex-col gap-1.5">
+                            <FieldLabel
+                              label="Custom Exposed Area"
+                              zh="自訂暴露面積"
+                              unit="mm²"
+                              htmlFor="geo-custom-exposed-area"
+                            />
+                            <NumberInput
+                              id="geo-custom-exposed-area"
+                              step="1"
+                              value={metalBaseModel.custom_exposed_area_mm2 ?? ''}
+                              placeholder="—"
+                              disabled={readOnly}
+                              onChange={(event) =>
+                                patchHeatPathParameters(
+                                  {
+                                    custom_exposed_area_mm2:
+                                      event.target.value === '' ? null : Number(event.target.value),
+                                  },
+                                  ['heat_path.parameters.custom_exposed_area_mm2'],
+                                )
+                              }
+                            />
+                          </div>
+                        ) : (
+                          <DerivedField
+                            id="geo-derived-exposed-area"
+                            label="Derived Exposed Area"
+                            zh="推導暴露面積"
+                            value={exposedArea}
+                            from="Top + four sides; base excluded / 頂面加四側，底面不重複計入"
+                          />
+                        )}
+                      </div>
+                    )}
+                  </fieldset>
+                </>
+              )}
+
               {/* Source face — asked for only when the path does not already
                   determine it (GEOMETRY_RULES). */}
-              <div className="grid grid-cols-2 gap-2.5">
+              {!metalBase && <div className="grid grid-cols-2 gap-2.5">
                 {rule.source === 'package' ? (
                   <>
                     <DerivedField
@@ -852,7 +1203,7 @@ export function ComponentInspector({
                     />
                   </>
                 )}
-              </div>
+              </div>}
 
               {/* The one thickness this path conducts through, if any. */}
               {rule.thickness === 'board' && (
@@ -881,7 +1232,7 @@ export function ComponentInspector({
 
               {/* Spread face — never typed. Every path derives it, so showing
                   it read-only is the only way it and the solver can agree. */}
-              <div className="grid grid-cols-2 gap-2.5">
+              {!metalBase && <div className="grid grid-cols-2 gap-2.5">
                 <DerivedField
                   id="geo-spread_L_mm"
                   label={rule.spread === 'project_coin' ? 'Coin L' : 'Spread L'}
@@ -896,25 +1247,37 @@ export function ComponentInspector({
                   value={spreadFace.W}
                   from=""
                 />
-              </div>
+              </div>}
 
               <div className="rounded-md border border-line bg-surface-muted px-3 py-2">
                 <div className="flex items-baseline justify-between">
                   <BilingualTooltip zh={tip('Source Area') ?? ''} align="left">
-                    <span className="text-[12px] text-ink-500">Source Area / 熱源面積</span>
+                    <span className="text-[12px] text-ink-500">
+                      {metalBase ? 'Effective Contact Area / 有效接觸面積' : 'Source Area / 熱源面積'}
+                    </span>
                   </BilingualTooltip>
                   <span className="tabular text-[13px] font-bold">
                     {sourceArea == null ? '—' : `${sourceArea.toFixed(1)} mm²`}
                   </span>
                 </div>
-                <div className="mt-1.5 flex items-baseline justify-between">
+                {!metalBase && <div className="mt-1.5 flex items-baseline justify-between">
                   <BilingualTooltip zh={tip('Spread Area') ?? ''} align="left">
                     <span className="text-[12px] text-ink-500">Spread Area / 擴散面積</span>
                   </BilingualTooltip>
                   <span className="tabular text-[13px] font-bold">
                     {spreadArea == null ? '—' : `${spreadArea.toFixed(1)} mm²`}
                   </span>
-                </div>
+                </div>}
+                {metalBase && metalBaseModel.exposed_surface_enabled && (
+                  <div className="mt-1.5 flex items-baseline justify-between">
+                    <span className="text-[12px] text-ink-500">
+                      Exposed Surface Area / 暴露表面積
+                    </span>
+                    <span className="tabular text-[13px] font-bold">
+                      {exposedArea == null ? '—' : `${exposedArea.toFixed(1)} mm²`}
+                    </span>
+                  </div>
+                )}
               </div>
 
               {spec.geometry.needs_review && (

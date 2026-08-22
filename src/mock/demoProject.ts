@@ -141,6 +141,7 @@ interface Seed {
   limit_type: LimitType;
   package_type: PackageType;
   heat_path: HeatPathType;
+  heat_path_parameters?: Record<string, number | string | boolean | null>;
   tim: string;
   contact: [number, number];
   /** Left/center/right point on the manufacturer temperature-reference surface. */
@@ -192,7 +193,7 @@ function buildReadyComponents(seeds: Seed[]): Component[] {
           source_W_mm: seed.heat_path === 'ModuleSurface' ? null : seed.contact[1],
           board_thickness_mm: 1.6,
         },
-        heat_path: { type: seed.heat_path, parameters: {} },
+        heat_path: { type: seed.heat_path, parameters: seed.heat_path_parameters ?? {} },
         // The demo states every heat path deliberately, so none is a guess.
         heat_path_confirmed: true,
         tim: {
@@ -260,13 +261,22 @@ export function demoComponents(): Component[] {
       category: 'Filter',
       qty: 1,
       power_W: 6,
-      r_jc: 0.8,
+      r_jc: null,
       limit_C: 120,
       limit_type: 'Tc',
+      limit_reference_note: 'Center',
       package_type: 'Shielded Module',
       heat_path: 'DirectMetal',
-      tim: BUILTIN_TIM_IDS.pad,
+      tim: BUILTIN_TIM_IDS.grease,
       contact: [30, 18],
+      tim_blt_mm: 0.05,
+      heat_path_parameters: {
+        source_model: 'SurfaceBodyBased',
+        contact_geometry: 'PerimeterFrame',
+        perimeter_land_width_mm: 2,
+        exposed_surface_enabled: false,
+        exposed_area_mode: 'DerivedPackage',
+      },
       template: 'DIRECT_METAL',
       zone: 'RF_LEFT',
     },

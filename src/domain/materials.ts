@@ -290,6 +290,8 @@ export interface ResolvedTim {
    * decision rather than a gap.
    */
   directContact: boolean;
+  /** Whole-joint Rth supplied directly by test or vendor characterization. */
+  measuredInterface: boolean;
 }
 
 export function findTimMaterial(
@@ -319,9 +321,15 @@ export function findTimMaterial(
  * instead of a k and a thickness, so it cannot live in the TIM list.
  */
 export const DIRECT_CONTACT_TIM_ID = 'TIM_DIRECT_CONTACT';
+/** A characterized whole-joint Rth, rather than a k / BLT material model. */
+export const MEASURED_INTERFACE_TIM_ID = 'TIM_MEASURED_INTERFACE_RTH';
 
 export function isDirectContact(tim: TimSpec): boolean {
   return tim.tim_id === DIRECT_CONTACT_TIM_ID;
+}
+
+export function isMeasuredInterface(tim: TimSpec): boolean {
+  return tim.tim_id === MEASURED_INTERFACE_TIM_ID;
 }
 
 export function resolveTim(tim: TimSpec, materials: MaterialDefaults): ResolvedTim {
@@ -335,6 +343,19 @@ export function resolveTim(tim: TimSpec, materials: MaterialDefaults): ResolvedT
       inherited: false,
       missing: false,
       directContact: true,
+      measuredInterface: false,
+    };
+  }
+
+  if (isMeasuredInterface(tim)) {
+    return {
+      k_W_mK: null,
+      thickness_mm: null,
+      material: null,
+      inherited: false,
+      missing: false,
+      directContact: false,
+      measuredInterface: true,
     };
   }
 
@@ -349,6 +370,7 @@ export function resolveTim(tim: TimSpec, materials: MaterialDefaults): ResolvedT
       inherited: false,
       missing,
       directContact: false,
+      measuredInterface: false,
     };
   }
 
@@ -360,6 +382,7 @@ export function resolveTim(tim: TimSpec, materials: MaterialDefaults): ResolvedT
     inherited: ownBlt == null,
     missing: false,
     directContact: false,
+    measuredInterface: false,
   };
 }
 
