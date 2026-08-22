@@ -13,6 +13,8 @@ import {
   CircleCheck,
   Hand,
   Maximize,
+  Maximize2,
+  Minimize2,
   MousePointer2,
   Plus,
   Redo2,
@@ -95,6 +97,8 @@ export function GraphToolbar({
   onValidate,
   onTogglePorts,
   onToggleLabels,
+  fullscreen,
+  onToggleFullscreen,
 }: {
   tool: CanvasTool;
   layoutMode: string;
@@ -115,133 +119,146 @@ export function GraphToolbar({
   onValidate: () => void;
   onTogglePorts: () => void;
   onToggleLabels: () => void;
+  fullscreen: boolean;
+  onToggleFullscreen: () => void;
 }) {
   return (
-    <div className="flex items-center gap-0.5 overflow-x-auto border-b border-line bg-surface px-2 py-1.5">
-      <ToolButton
-        active={tool === 'select'}
-        label="Select"
-        zh="選取"
-        icon={<MousePointer2 size={14} />}
-        onClick={() => onTool('select')}
-      />
-      <ToolButton
-        active={tool === 'pan'}
-        label="Pan"
-        zh="平移"
-        icon={<Hand size={14} />}
-        onClick={() => onTool('pan')}
-      />
-      <ToolButton
-        active={tool === 'connect'}
-        disabled={readOnly}
-        label="Connect"
-        zh="連接埠"
-        icon={<Share2 size={14} />}
-        onClick={() => onTool('connect')}
-      />
-      <ToolButton
-        active={tool === 'add-node'}
-        disabled={readOnly}
-        label="Add Node"
-        zh="新增節點"
-        icon={<Plus size={14} />}
-        onClick={() => onTool('add-node')}
-      />
-      <ToolButton
-        active={tool === 'add-edge'}
-        disabled={readOnly}
-        label="Add Edge"
-        zh="新增連線"
-        icon={<Spline size={14} />}
-        onClick={() => onTool('add-edge')}
-      />
-      <ToolButton
-        disabled={readOnly}
-        label="Auto Connect"
-        zh="依建議連接"
-        icon={<Waypoints size={14} />}
-        onClick={onAutoConnect}
-      />
+    <div className="flex items-center border-b border-line bg-surface px-2 py-1.5">
+      <div className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto">
+        <ToolButton
+          active={tool === 'select'}
+          label="Select"
+          zh="選取"
+          icon={<MousePointer2 size={14} />}
+          onClick={() => onTool('select')}
+        />
+        <ToolButton
+          active={tool === 'pan'}
+          label="Pan"
+          zh="平移"
+          icon={<Hand size={14} />}
+          onClick={() => onTool('pan')}
+        />
+        <ToolButton
+          active={tool === 'connect'}
+          disabled={readOnly}
+          label="Connect"
+          zh="連接埠"
+          icon={<Share2 size={14} />}
+          onClick={() => onTool('connect')}
+        />
+        <ToolButton
+          active={tool === 'add-node'}
+          disabled={readOnly}
+          label="Add Node"
+          zh="新增節點"
+          icon={<Plus size={14} />}
+          onClick={() => onTool('add-node')}
+        />
+        <ToolButton
+          active={tool === 'add-edge'}
+          disabled={readOnly}
+          label="Add Edge"
+          zh="新增連線"
+          icon={<Spline size={14} />}
+          onClick={() => onTool('add-edge')}
+        />
+        <ToolButton
+          disabled={readOnly}
+          label="Auto Connect"
+          zh="依建議連接"
+          icon={<Waypoints size={14} />}
+          onClick={onAutoConnect}
+        />
 
-      <Divider />
+        <Divider />
 
-      <ToolButton
-        label="Undo"
-        zh="復原"
-        disabled={!canUndo || readOnly}
-        icon={<Undo2 size={14} />}
-        onClick={onUndo}
-      />
-      <ToolButton
-        label="Redo"
-        zh="重做"
-        disabled={!canRedo || readOnly}
-        icon={<Redo2 size={14} />}
-        onClick={onRedo}
-      />
+        <ToolButton
+          label="Undo"
+          zh="復原"
+          disabled={!canUndo || readOnly}
+          icon={<Undo2 size={14} />}
+          onClick={onUndo}
+        />
+        <ToolButton
+          label="Redo"
+          zh="重做"
+          disabled={!canRedo || readOnly}
+          icon={<Redo2 size={14} />}
+          onClick={onRedo}
+        />
 
-      <Divider />
+        <Divider />
 
-      <ToolButton
-        label="Auto Layout"
-        zh="自動排列"
-        icon={<Workflow size={14} />}
-        onClick={onAutoLayout}
-      />
-      <Select
-        aria-label="Layout mode / 版面模式"
-        className="h-8 w-[5.75rem] shrink-0 !text-[11px]"
-        value={layoutMode}
-        items={LAYOUT_MODES}
-        onChange={(event) => onLayoutMode(event.target.value)}
-      />
-      <ToolButton label="Fit" zh="全覽" icon={<Maximize size={14} />} onClick={onFit} />
+        <ToolButton
+          label="Auto Layout"
+          zh="自動排列"
+          icon={<Workflow size={14} />}
+          onClick={onAutoLayout}
+        />
+        <Select
+          aria-label="Layout mode / 版面模式"
+          className="h-8 w-[5.75rem] shrink-0 !text-[11px]"
+          value={layoutMode}
+          items={LAYOUT_MODES}
+          onChange={(event) => onLayoutMode(event.target.value)}
+        />
+        <ToolButton label="Fit" zh="全覽" icon={<Maximize size={14} />} onClick={onFit} />
 
-      <div className="ml-1 flex shrink-0 items-center gap-1">
-        <button
-          type="button"
-          aria-label="Zoom out / 縮小"
-          onClick={() => onZoom(-0.15)}
-          className="flex size-7 items-center justify-center rounded border border-line-strong text-ink-500 hover:bg-surface-muted"
-        >
-          <ZoomOut size={13} />
-        </button>
-        <span className="w-10 text-center text-[11px] font-semibold tabular text-ink-700">
-          {Math.round(zoom * 100)}%
-        </span>
-        <button
-          type="button"
-          aria-label="Zoom in / 放大"
-          onClick={() => onZoom(0.15)}
-          className="flex size-7 items-center justify-center rounded border border-line-strong text-ink-500 hover:bg-surface-muted"
-        >
-          <ZoomIn size={13} />
-        </button>
+        <div className="ml-1 flex shrink-0 items-center gap-1">
+          <button
+            type="button"
+            aria-label="Zoom out / 縮小"
+            onClick={() => onZoom(-0.15)}
+            className="flex size-7 items-center justify-center rounded border border-line-strong text-ink-500 hover:bg-surface-muted"
+          >
+            <ZoomOut size={13} />
+          </button>
+          <span className="w-10 text-center text-[11px] font-semibold tabular text-ink-700">
+            {Math.round(zoom * 100)}%
+          </span>
+          <button
+            type="button"
+            aria-label="Zoom in / 放大"
+            onClick={() => onZoom(0.15)}
+            className="flex size-7 items-center justify-center rounded border border-line-strong text-ink-500 hover:bg-surface-muted"
+          >
+            <ZoomIn size={13} />
+          </button>
+        </div>
+
+        <Divider />
+
+        <ToolButton
+          label="Validate"
+          zh="驗證"
+          icon={<CircleCheck size={14} />}
+          onClick={onValidate}
+        />
+        <ToolButton
+          active={showPorts}
+          label="Show Ports"
+          zh="顯示連接埠"
+          icon={<Share2 size={14} />}
+          onClick={onTogglePorts}
+        />
+        <ToolButton
+          active={showLabels}
+          label="Show Labels"
+          zh="顯示標籤"
+          icon={<Tags size={14} />}
+          onClick={onToggleLabels}
+        />
       </div>
-
-      <Divider />
-
-      <ToolButton
-        label="Validate"
-        zh="驗證"
-        icon={<CircleCheck size={14} />}
-        onClick={onValidate}
-      />
-      <ToolButton
-        active={showPorts}
-        label="Show Ports"
-        zh="顯示連接埠"
-        icon={<Share2 size={14} />}
-        onClick={onTogglePorts}
-      />
-      <ToolButton
-        active={showLabels}
-        label="Show Labels"
-        zh="顯示標籤"
-        icon={<Tags size={14} />}
-        onClick={onToggleLabels}
-      />
+      <div className="ml-1 shrink-0 border-l border-line pl-1">
+        <ToolButton
+          active={fullscreen}
+          label={fullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
+          zh={fullscreen ? '離開全螢幕' : '全螢幕編輯'}
+          icon={fullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+          onClick={onToggleFullscreen}
+        />
+      </div>
     </div>
   );
 }
