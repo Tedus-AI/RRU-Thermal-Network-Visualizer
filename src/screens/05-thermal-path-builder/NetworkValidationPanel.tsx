@@ -44,12 +44,12 @@ export function NetworkValidationPanel({
   );
 
   return (
-    <div className="absolute right-3 bottom-3 z-10 w-[22rem] max-w-[calc(100%-1.5rem)] rounded-md border border-line bg-surface/95 shadow-md">
+    <div className="absolute right-3 bottom-3 z-10 flex max-h-[calc(100%-1.5rem)] w-[22rem] max-w-[calc(100%-1.5rem)] flex-col overflow-hidden rounded-md border border-line bg-surface/95 shadow-md">
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
         aria-expanded={open}
-        className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left"
+        className="flex w-full shrink-0 items-center gap-2 px-2.5 py-1.5 text-left"
       >
         <span className="text-[11px] font-bold text-ink-700">Validation / 驗證提示</span>
         <span className="ml-auto flex items-center gap-2 text-[10px] font-bold">
@@ -67,7 +67,7 @@ export function NetworkValidationPanel({
       </button>
 
       {open && (
-        <div className="max-h-[8.5rem] overflow-auto border-t border-line px-2 py-1.5">
+        <div className="min-h-0 overflow-y-auto border-t border-line px-2 py-1.5">
           {issues.length === 0 ? (
             <p className="py-3 text-center text-[11px] text-ok-600">
               No issues found. Ready for Screen 06. / 未發現問題，可進入邊界條件設定。
