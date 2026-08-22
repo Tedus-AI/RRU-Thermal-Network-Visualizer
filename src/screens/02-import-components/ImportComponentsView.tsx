@@ -30,7 +30,7 @@ import { useComponentStore } from '@/data/componentStore';
 import { useNetworkStore } from '@/data/networkStore';
 import { useScenarioStore } from '@/data/scenarioStore';
 import { useSolverStore } from '@/data/solverStore';
-import { useComponentImportStore } from '@/data/componentImportStore';
+import { useComponentImportStore, type ImportStep } from '@/data/componentImportStore';
 
 import { WorkflowStepper } from './WorkflowStepper';
 import { ImportSourceCards } from './ImportSourceCards';
@@ -38,9 +38,33 @@ import { ColumnMappingPanel } from './ColumnMappingPanel';
 import { ComponentPreviewTable } from './ComponentPreviewTable';
 import { DuplicatePolicyPanel } from './DuplicatePolicyPanel';
 import { MaterialDefaultsForm } from '@/project/MaterialDefaultsForm';
-import { ImportSummaryPanel, ProjectImpactPanel, ValidationPanel } from './ImportSummaryPanel';
+import { ImportStatusBand, ProjectImpactPanel, ValidationPanel } from './ImportSummaryPanel';
+
+/**
+ * The five steps, in order. The stepper used to be decorative — every panel on
+ * the screen rendered at once whatever it said — so the source cards, the
+ * mapping grid, the preview table, the duplicate policy and the project
+ * materials all competed for the same column, beside a docked 24rem rail.
+ *
+ * Now the step decides what fills the workspace, and each one gets the whole
+ * width. The preview table in particular is the widest thing on this screen.
+ */
+const STEP_ORDER = ['source', 'mapping', 'validate', 'duplicates', 'apply'] as const;
+
+function stepNeighbours(current: ImportStep, reachable: readonly ImportStep[]) {
+  const index = STEP_ORDER.indexOf(current);
+  const at = (offset: number): ImportStep | null => {
+    const candidate = STEP_ORDER[index + offset];
+    return candidate && reachable.includes(candidate) ? candidate : null;
+  };
+  return { previous: at(-1), next: at(1) };
+}
 
 function ActionBar({
+  step,
+  previousStep,
+  nextStep,
+  onStep,
   onBack,
   onCancel,
   onRevalidate,
@@ -50,6 +74,10 @@ function ActionBar({
   readOnly,
   hasSession,
 }: {
+  step: ImportStep;
+  previousStep: ImportStep | null;
+  nextStep: ImportStep | null;
+  onStep: (step: ImportStep) => void;
   onBack: () => void;
   onCancel: () => void;
   onRevalidate: () => void;
@@ -61,9 +89,22 @@ function ActionBar({
 }) {
   return (
     <div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-line bg-surface px-6 py-3">
-      <Button icon={<ArrowLeft size={15} />} onClick={onBack}>
-        Back / 返回
-      </Button>
+      {/* Leaving the screen and stepping back within it are different actions,
+          so they do not share a button. */}
+      {previousStep ? (
+        <Button icon={<ArrowLeft size={15} />} onClick={() => onStep(previousStep)}>
+          Previous Step / 上一步
+        </Button>
+      ) : (
+        <Button icon={<ArrowLeft size={15} />} onClick={onBack}>
+          Back / 返回
+        </Button>
+      )}
+      {nextStep && step !== 'duplicates' && (
+        <Button trailingIcon={<ArrowRight size={15} />} onClick={() => onStep(nextStep)}>
+          Next Step / 下一步
+        </Button>
+      )}
       <Button variant="danger" disabled={!hasSession} onClick={onCancel}>
         Cancel Import / 取消匯入
       </Button>
@@ -153,7 +194,12 @@ export function ImportComponentsView() {
     }
   };
 
-  const reachable = table ? (['source', 'mapping', 'validate', 'duplicates'] as const) : (['source'] as const);
+  const reachable: ImportStep[] = table
+    ? applyResult
+      ? ['source', 'mapping', 'validate', 'duplicates', 'apply']
+      : ['source', 'mapping', 'validate', 'duplicates']
+    : ['source'];
+  const { previous, next } = stepNeighbours(step, reachable);
 
   const successPanel = applyResult && (
     <PanelCard title="Import Result / 匯入結果" icon={<CheckCircle2 size={15} />}>
@@ -216,34 +262,13 @@ export function ImportComponentsView() {
           <Badge tone="accent">{rows.length} rows staged / 已暫存</Badge>
         ) : undefined
       }
-      stepper={
-        <WorkflowStepper
-          current={step}
-          reachable={applyResult ? [...reachable, 'apply'] : [...reachable]}
-          onSelect={store.setStep}
-        />
-      }
-      rightPanel={
-        table ? (
-          <>
-            {successPanel}
-            <ImportSummaryPanel />
-            <ValidationPanel />
-            <ProjectImpactPanel />
-          </>
-        ) : (
-          successPanel || (
-            <PanelCard title="Import Summary / 匯入摘要">
-              <p className="text-[12px] leading-relaxed text-ink-400">
-                Choose an import source to begin.
-                <span className="block">請先選擇匯入來源。</span>
-              </p>
-            </PanelCard>
-          )
-        )
-      }
+      stepper={<WorkflowStepper current={step} reachable={reachable} onSelect={store.setStep} />}
       actionBar={
         <ActionBar
+          step={step}
+          previousStep={previous}
+          nextStep={next}
+          onStep={store.setStep}
           canApply={canApply}
           readOnly={readOnly}
           hasSession={Boolean(table)}
@@ -261,7 +286,7 @@ export function ImportComponentsView() {
         />
       }
     >
-      <ImportSourceCards />
+      {step === 'source' && <ImportSourceCards />}
 
       {phase === 'loading' && (
         <div className="flex items-center gap-2.5 rounded-lg border border-line bg-surface px-4 py-3 text-[13px] text-ink-500">
@@ -284,23 +309,41 @@ export function ImportComponentsView() {
         </div>
       )}
 
-      {table && (
+      {table && step === 'mapping' && (
         <>
           <ColumnMappingPanel />
+          {/*
+            The same project-level form Screen 01 owns. Mapping is where the
+            source's vocabulary is settled, and a TIM_Type column is matched
+            against this library by name on apply — so the library belongs on
+            the step where a name that matches nothing can still be fixed.
+          */}
+          <MaterialDefaultsForm readOnly={false} defaultOpen={false} />
+        </>
+      )}
+
+      {table && (step === 'validate' || step === 'duplicates') && (
+        <>
+          <ImportStatusBand />
+          {step === 'duplicates' && <DuplicatePolicyPanel />}
           <div id="staging-preview">
             <ComponentPreviewTable />
           </div>
-          <DuplicatePolicyPanel />
-          {/*
-            The same project-level form Screen 01 owns. Importing is the first
-            moment these numbers matter — an imported TIM inherits from them —
-            so they are editable here rather than one screen back.
-          */}
-          {/* Folded here: the import is what this screen is for, and these
-              numbers only need a glance unless the coin size is missing —
-              which the collapsed header says. */}
-          <MaterialDefaultsForm readOnly={false} defaultOpen={false} />
+          {/* Below the table rather than beside it: these are things to act on,
+              read after the row they refer to, the way Screen 04's issue list
+              sits under its component table. */}
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+            <ValidationPanel />
+            <ProjectImpactPanel />
+          </div>
         </>
+      )}
+
+      {step === 'apply' && (
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+          {successPanel}
+          <ProjectImpactPanel />
+        </div>
       )}
 
       {!table && phase !== 'loading' && phase !== 'error' && !applyThenContinue && (

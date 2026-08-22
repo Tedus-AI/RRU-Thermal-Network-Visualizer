@@ -50,6 +50,115 @@ function Row({
   return <div className="flex items-baseline justify-between gap-3 py-[5px]">{content}</div>;
 }
 
+/**
+ * The import counts as one horizontal row above the table, rather than a card
+ * docked down the right-hand side.
+ *
+ * Same reasoning as Screen 04's status band: the preview table is the widest
+ * thing on this screen and every column of it is data an engineer reads across,
+ * so a 24rem rail was taken out of the one place that needed the width. These
+ * are six numbers; they fit on a line.
+ */
+export function ImportStatusBand() {
+  const rows = useComponentImportStore((s) => s.rows);
+  const statusFilter = useComponentImportStore((s) => s.statusFilter);
+  const setStatusFilter = useComponentImportStore((s) => s.setStatusFilter);
+  const summary = useMemo(() => summarizeImport(rows), [rows]);
+
+  const counts: Array<{
+    status: StagingRow['status'] | null;
+    label: string;
+    zh: string;
+    value: number;
+    tone: string;
+  }> = [
+    { status: null, label: 'Detected', zh: '偵測', value: summary.detected_rows, tone: 'text-ink-900' },
+    { status: 'VALID', label: 'Valid', zh: '有效', value: summary.valid_rows, tone: 'text-ok-600' },
+    {
+      status: 'WARNING',
+      label: 'Warnings',
+      zh: '警告',
+      value: summary.warning_rows,
+      tone: summary.warning_rows > 0 ? 'text-warn-600' : 'text-ink-400',
+    },
+    {
+      status: 'ERROR',
+      label: 'Errors',
+      zh: '錯誤',
+      value: summary.error_rows,
+      tone: summary.error_rows > 0 ? 'text-danger-600' : 'text-ink-400',
+    },
+    {
+      status: 'DUPLICATE',
+      label: 'Duplicates',
+      zh: '重複',
+      value: summary.duplicate_rows,
+      tone: summary.duplicate_rows > 0 ? 'text-accent-700' : 'text-ink-400',
+    },
+  ];
+
+  return (
+    <div className="flex flex-wrap items-stretch gap-2">
+      {counts.map((entry) => {
+        const active = entry.status != null && statusFilter === entry.status;
+        const body = (
+          <>
+            <span className={`tabular text-[17px] leading-none font-bold ${entry.tone}`}>
+              {entry.value}
+            </span>
+            <span className="mt-1 block text-[11px] leading-tight text-ink-500">
+              {entry.label}
+              <span className="block text-[10px] text-ink-400">{entry.zh}</span>
+            </span>
+          </>
+        );
+
+        // "Detected" is a total, not a subset, so it filters nothing.
+        if (entry.status == null) {
+          return (
+            <div
+              key={entry.label}
+              className="min-w-[5.5rem] rounded-lg border border-line bg-surface px-3 py-2"
+            >
+              {body}
+            </div>
+          );
+        }
+        return (
+          <button
+            key={entry.label}
+            type="button"
+            aria-pressed={active}
+            onClick={() => setStatusFilter(active ? 'ALL' : entry.status!)}
+            className={`min-w-[5.5rem] rounded-lg border px-3 py-2 text-left transition-colors ${
+              active
+                ? 'border-accent-600 bg-accent-50/70'
+                : 'border-line bg-surface hover:border-line-strong'
+            }`}
+          >
+            {body}
+          </button>
+        );
+      })}
+
+      {/* 02 §19 / §34 — a component dissipation summary, never edge heat flow. */}
+      <div className="ml-auto flex items-center gap-3 rounded-lg border border-line bg-surface px-3.5 py-2">
+        <div>
+          <span className="tabular text-[17px] leading-none font-bold text-ink-900">
+            {summary.total_power_W.toFixed(1)} W
+          </span>
+          <span className="mt-1 block text-[11px] leading-tight text-ink-500">
+            <BilingualTooltip zh={tip('Total Power') ?? ''} align="left">
+              Total Power
+            </BilingualTooltip>
+            <span className="block text-[10px] text-ink-400">總功耗（非邊熱流 Q）</span>
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function ImportSummaryPanel() {
   const rows = useComponentImportStore((s) => s.rows);
   const summary = useMemo(() => summarizeImport(rows), [rows]);

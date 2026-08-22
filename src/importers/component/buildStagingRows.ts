@@ -4,12 +4,15 @@
  */
 
 import type { Component } from '@/domain/component';
+import { GEOMETRY_RULES, inferHeatPath, type HeatPathType } from '@/domain/component';
 import {
   normalizeCategory,
   normalizeHeatPath,
+  normalizePackageType,
   normalizeTimName,
   parseNumericCell,
   unrecognisedHeatPath,
+  unrecognisedPackage,
 } from './normalizeComponent';
 import {
   IGNORE_COLUMN,
@@ -76,15 +79,18 @@ export function buildStagingRows({
     const limit = parseNumericCell(cellFor(cells, mapping, 'Limit(C)'));
     const sourceL = parseNumericCell(cellFor(cells, mapping, 'Source_L'));
     const sourceW = parseNumericCell(cellFor(cells, mapping, 'Source_W'));
-    const spreadL = parseNumericCell(cellFor(cells, mapping, 'Spread_L'));
-    const spreadW = parseNumericCell(cellFor(cells, mapping, 'Spread_W'));
+    const packageL = parseNumericCell(cellFor(cells, mapping, 'Package_L'));
+    const packageW = parseNumericCell(cellFor(cells, mapping, 'Package_W'));
+    const packageH = parseNumericCell(cellFor(cells, mapping, 'Package_H'));
     const thickness = parseNumericCell(cellFor(cells, mapping, 'Thick(mm)'));
     const timBlt = parseNumericCell(cellFor(cells, mapping, 'TIM_BLT'));
 
     const rawHeatPath = cellFor(cells, mapping, 'Heat_Path');
     const rawTim = cellFor(cells, mapping, 'TIM_Type');
+    const rawPackage = cellFor(cells, mapping, 'Package');
     const heatPath = normalizeHeatPath(rawHeatPath);
     const tim = normalizeTimName(rawTim);
+    const packageType = normalizePackageType(rawPackage);
 
     const duplicate = existingByKey.get(duplicateKey(name, category));
 
@@ -100,10 +106,12 @@ export function buildStagingRows({
       heat_path: heatPath,
       tim_name: tim,
       tim_blt_mm: timBlt.value,
+      package_type: packageType,
+      package_L_mm: packageL.value,
+      package_W_mm: packageW.value,
+      package_H_mm: packageH.value,
       source_L_mm: sourceL.value,
       source_W_mm: sourceW.value,
-      spread_L_mm: spreadL.value,
-      spread_W_mm: spreadW.value,
       thickness_mm: thickness.value,
       raw,
       extra,
@@ -121,12 +129,14 @@ export function buildStagingRows({
         'Limit(C)': limit.invalid,
         Source_L: sourceL.invalid,
         Source_W: sourceW.invalid,
-        Spread_L: spreadL.invalid,
-        Spread_W: spreadW.invalid,
+        Package_L: packageL.invalid,
+        Package_W: packageW.invalid,
+        Package_H: packageH.invalid,
         TIM_BLT: timBlt.invalid,
         'Thick(mm)': thickness.invalid,
       },
       heatPathUnrecognised: unrecognisedHeatPath(rawHeatPath, heatPath),
+      packageUnrecognised: unrecognisedPackage(rawPackage, packageType),
       unmappedRequired: REQUIRED_FIELDS.filter((field) => !mapping.includes(field)),
     });
   });
@@ -135,7 +145,60 @@ export function buildStagingRows({
 export interface ValidateContext {
   invalidNumerics?: Partial<Record<CanonicalField, boolean>>;
   heatPathUnrecognised?: boolean;
+  packageUnrecognised?: boolean;
   unmappedRequired?: CanonicalField[];
+}
+
+/**
+ * The heat path a row will actually import with. An unstated one is inferred
+ * from the category at apply, so anything reasoning about the path before then
+ * has to infer it the same way or it will describe a different component from
+ * the one that gets created.
+ */
+export function effectiveHeatPath(row: StagingRow): HeatPathType {
+  return row.heat_path ?? inferHeatPath(row.category ?? 'Other');
+}
+
+/**
+ * Which pair of columns actually feeds the source face for a row, per
+ * GEOMETRY_RULES, and what is in them.
+ *
+ * A coin-path row's face IS its package outline, so a source that spells it
+ * `Pad_L/W` is describing that outline and it is read from there. There is one
+ * resolver rather than three because the preview, the row warning and the apply
+ * each used to answer this for themselves: the preview showed a coin row's face
+ * as missing while the apply imported it, which is the preview lying about what
+ * the button will do.
+ */
+export function effectiveSourceFace(row: StagingRow): {
+  from: 'package' | 'stated';
+  L: number | null;
+  W: number | null;
+  /** The canonical field to send the user to when it is missing. */
+  field: CanonicalField;
+  label: string;
+  labelZh: string;
+} {
+  if (GEOMETRY_RULES[effectiveHeatPath(row)].source === 'package') {
+    return {
+      from: 'package',
+      // An explicitly mapped Package_L wins: it says what it means. A stated
+      // pad stands in for it, since on these two paths they are the same face.
+      L: row.package_L_mm ?? row.source_L_mm,
+      W: row.package_W_mm ?? row.source_W_mm,
+      field: 'Package_L',
+      label: 'Package_L / Package_W',
+      labelZh: '封裝長寬',
+    };
+  }
+  return {
+    from: 'stated',
+    L: row.source_L_mm,
+    W: row.source_W_mm,
+    field: 'Source_L',
+    label: 'Source_L / Source_W',
+    labelZh: '熱源面長寬',
+  };
 }
 
 /**
@@ -291,12 +354,24 @@ export function validateStagingRow(row: StagingRow, context: ValidateContext = {
     });
   }
 
-  if (row.source_L_mm == null || row.source_W_mm == null) {
+  if (context.packageUnrecognised) {
     issues.push({
       severity: 'warning',
-      field: 'Source_L',
-      message: 'Source face size is missing — spreading and TIM resistance cannot be computed.',
-      message_zh: '缺少熱源面尺寸，將無法計算擴散與 TIM 熱阻。',
+      field: 'Package',
+      message: `Unrecognised package "${row.raw.Package ?? ''}" — it will import as unresolved.`,
+      message_zh: `無法辨識的封裝型式「${row.raw.Package ?? ''}」，將以未指定匯入。`,
+    });
+  }
+
+  // The heat path decides WHICH columns carry the source face, so the warning
+  // has to name the ones this row will actually be read from.
+  const face = effectiveSourceFace(row);
+  if (face.L == null || face.W == null) {
+    issues.push({
+      severity: 'warning',
+      field: face.field,
+      message: `Source face size is missing — fill ${face.label} so spreading and TIM resistance can be computed.`,
+      message_zh: `缺少熱源面尺寸，請補上${face.labelZh}，否則無法計算擴散與 TIM 熱阻。`,
     });
   }
 
