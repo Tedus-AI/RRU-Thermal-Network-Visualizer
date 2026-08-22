@@ -102,6 +102,14 @@ export function ComponentManagerView() {
   const [showDelete, setShowDelete] = useState(false);
   const [warningConfirm, setWarningConfirm] = useState<number | null>(null);
 
+  // Screen 04 owns the component-library UI; expose its opener in the shared
+  // header beside Import / Export only while this screen is mounted.
+  const setComponentLibraryHandler = useShellActions((s) => s.setComponentLibraryHandler);
+  useEffect(() => {
+    setComponentLibraryHandler(() => setShowLibraryManager(true));
+    return () => setComponentLibraryHandler(null);
+  }, [setComponentLibraryHandler]);
+
   useEffect(() => {
     if (!projectId) return;
     const projectStore = useProjectStore.getState();

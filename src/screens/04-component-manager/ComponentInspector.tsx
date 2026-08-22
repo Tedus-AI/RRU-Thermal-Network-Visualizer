@@ -15,7 +15,7 @@
  *   - an architecture template. The heat path already picks it (`heatPathPatch`).
  */
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { CircleCheck, CircleDashed, Info, Link2, Ruler, Share2, Thermometer } from 'lucide-react';
 
 import { Badge, Button, NumberInput, Select, TextArea, TextInput } from '@/ui/primitives';
@@ -252,7 +252,18 @@ export function ComponentInspector({
 }: InspectorProps) {
   const projectMaterials = useProjectStore((s) => s.draft?.materials);
   const projectContext = useProjectStore((s) => s.draft?.project_context);
+  const [librarySavedAt, setLibrarySavedAt] = useState(0);
   useFocusField(focus, tab);
+
+  // Keep the acknowledgement beside the action that caused it. The global
+  // toast remains useful, but can be missed while the floating panel is open.
+  useEffect(() => {
+    if (librarySavedAt === 0) return;
+    const timer = window.setTimeout(() => setLibrarySavedAt(0), 3000);
+    return () => window.clearTimeout(timer);
+  }, [librarySavedAt]);
+
+  useEffect(() => setLibrarySavedAt(0), [component?.id]);
 
   if (!component) {
     return (
@@ -1020,9 +1031,27 @@ export function ComponentInspector({
                 </div>
               )}
 
-              <Button disabled={readOnly} onClick={() => onSaveToLibrary(component)}>
-                Save to Library / 存入元件庫
-              </Button>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  disabled={readOnly}
+                  onClick={() => {
+                    onSaveToLibrary(component);
+                    setLibrarySavedAt(Date.now());
+                  }}
+                >
+                  Save to Library / 存入元件庫
+                </Button>
+                {librarySavedAt > 0 && (
+                  <span
+                    role="status"
+                    aria-live="polite"
+                    className="flex items-center gap-1 text-[12px] font-semibold text-ok-600"
+                  >
+                    <CircleCheck size={14} aria-hidden />
+                    Saved to library / 已存入元件庫
+                  </span>
+                )}
+              </div>
               <p className="text-[11px] leading-relaxed text-ink-400">
                 The library stores the thermal spec only — base zone, external mapping, graph ids
                 and solver results are project-specific and are excluded.
