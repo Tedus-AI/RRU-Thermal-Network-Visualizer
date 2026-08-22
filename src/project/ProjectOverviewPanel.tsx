@@ -51,6 +51,27 @@ export function ProjectOverviewPanel({ loading }: { loading?: boolean }) {
     <PanelCard title="Project Overview / 專案總覽" icon={<BarChart3 size={15} />}>
       <dl>
         <Row label="Components" zh="元件數" value={String(kpi.componentCount)} />
+        {/*
+          A count of components says how much was imported, not how much of it
+          is usable. This row is the difference, and it is the one that decides
+          whether a solve is worth running.
+        */}
+        <Row
+          label="Complete Data"
+          zh="資料齊全"
+          value={
+            kpi.componentTypeCount === 0
+              ? '—'
+              : `${kpi.componentsReady} / ${kpi.componentTypeCount}`
+          }
+          tone={
+            kpi.componentsWithErrors > 0
+              ? 'text-danger-600'
+              : kpi.componentTypeCount > 0 && kpi.componentsReady < kpi.componentTypeCount
+                ? 'text-warn-600'
+                : 'text-ink-900'
+          }
+        />
         <Row label="Heat Sources" zh="熱源數" value={String(kpi.heatSourceCount)} />
         <Row label="Total Power" zh="總功耗" value={`${kpi.totalPowerW.toFixed(1)} W`} />
         <Row label="Thermal Nodes" zh="熱節點" value={String(kpi.nodeCount)} />
