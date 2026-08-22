@@ -5,7 +5,11 @@
  * forbid persisting these KPIs as authoritative project data.
  */
 
+import { useMemo } from 'react';
+
 import { PROJECT_ID_PATTERN } from '@/domain/project';
+import type { Component } from '@/domain/component';
+import { completenessOf, completenessScore, statusOf } from '@/domain/componentReadiness';
 import { useProjectStore } from '@/data/projectStore';
 import { useComponentStore } from '@/data/componentStore';
 import { useNetworkStore } from '@/data/networkStore';
@@ -16,6 +20,15 @@ import { SCREENS } from '@/app/navigation';
 export interface ProjectHealth {
   projectIdentity: boolean;
   components: boolean;
+  /**
+   * Whether the imported components carry the thermal data a solve needs.
+   *
+   * Importing is not the same as being ready: a row arrives with a name, a qty
+   * and a power, and nothing else. Without this, forty components all missing
+   * Rjc read here as "Hardware components imported ✓" and the panel that exists
+   * to say what is left said nothing about the largest thing left.
+   */
+  componentData: 'ready' | 'incomplete' | 'errors' | 'none';
   thermalNetwork: boolean;
   baselineScenario: boolean;
   /** Optional — never blocking (01 §34, AC-12). */
@@ -31,16 +44,31 @@ export interface ProjectOverviewKpis {
   edgeCount: number;
   scenarioCount: number;
   flothermMappingCount: number;
+  /**
+   * Enabled component RECORDS, as against `componentCount`, which is units
+   * (sum of qty). Readiness is a property of the record — four identical PAs
+   * are one thing to fill in — so the ratio has to be counted against this or
+   * it reads "5 of 11" over five components.
+   */
+  componentTypeCount: number;
+  /** Enabled components whose nine facts are all answered (04 §23). */
+  componentsReady: number;
+  /** Enabled components with at least one blocking error (04 §22). */
+  componentsWithErrors: number;
 }
 
 export function useProjectOverview(): ProjectOverviewKpis {
   const componentCount = useComponentStore((s) => s.componentCount());
   const heatSourceCount = useComponentStore((s) => s.heatSourceCount());
   const totalPowerW = useComponentStore((s) => s.totalPowerW());
+  const componentTypeCount = useComponentStore((s) => s.typeCount());
+  const components = useComponentStore((s) => s.components);
   const nodeCount = useNetworkStore((s) => s.nodeCount());
   const edgeCount = useNetworkStore((s) => s.edgeCount());
   const scenarioCount = useScenarioStore((s) => s.scenarioCount());
   const flothermMappingCount = useNetworkStore((s) => s.flothermMappingCount());
+
+  const readiness = useMemo(() => summarizeComponentData(components), [components]);
 
   return {
     componentCount,
@@ -50,7 +78,37 @@ export function useProjectOverview(): ProjectOverviewKpis {
     edgeCount,
     scenarioCount,
     flothermMappingCount,
+    componentTypeCount,
+    ...readiness,
   };
+}
+
+/**
+ * Ready means the checklist is complete, not merely that nothing errored.
+ * A component missing Rjc raises a warning and is deliberately not blocked
+ * (04 §7), but it is also not finished, and Screen 01 is where that is owned up
+ * to before the workflow moves on.
+ */
+export function summarizeComponentData(components: Component[]): {
+  componentsReady: number;
+  componentsWithErrors: number;
+} {
+  let componentsReady = 0;
+  let componentsWithErrors = 0;
+  for (const component of components) {
+    if (!component.enabled) continue;
+    const status = statusOf(component);
+    if (status === 'ERROR') componentsWithErrors++;
+    const score = completenessScore(completenessOf(component));
+    if (status !== 'ERROR' && score.done === score.total) componentsReady++;
+  }
+  return { componentsReady, componentsWithErrors };
+}
+
+export function componentDataState(kpi: ProjectOverviewKpis): ProjectHealth['componentData'] {
+  if (kpi.componentTypeCount === 0) return 'none';
+  if (kpi.componentsWithErrors > 0) return 'errors';
+  return kpi.componentsReady >= kpi.componentTypeCount ? 'ready' : 'incomplete';
 }
 
 export function useProjectHealth(): ProjectHealth {
@@ -64,6 +122,7 @@ export function useProjectHealth(): ProjectHealth {
   return {
     projectIdentity: nameValid && idValid,
     components: overview.componentCount > 0,
+    componentData: componentDataState(overview),
     thermalNetwork: overview.nodeCount > 0 && overview.edgeCount > 0,
     baselineScenario: overview.scenarioCount > 0,
     flotherm: overview.flothermMappingCount > 0,
@@ -102,6 +161,28 @@ export function nextStepFor(health: ProjectHealth): NextStep {
       screenCode: '02',
       screenPath: screen('02').path,
       cta: 'Continue to Import Components',
+      blockedHere: false,
+    };
+  }
+  /**
+   * Screen 04 used to be skipped entirely: the recommendation went from
+   * "components imported" straight to Screen 05. But an imported row arrives
+   * with a name, a qty and a power and nothing else — no Rjc, no confirmed heat
+   * path, no base zone — so the step being recommended was building a network
+   * out of components that could not yet be solved.
+   */
+  if (health.componentData !== 'ready') {
+    const blocking = health.componentData === 'errors';
+    return {
+      label: 'Complete Component Thermal Data',
+      description: blocking
+        ? 'Some components have errors that block the network build. Fix them in Component Manager.'
+        : 'Imported components still need Rjc, thermal limits, heat paths and base zones before a solve means anything.',
+      screenCode: '04',
+      screenPath: screen('04').path,
+      cta: 'Continue to Component Manager',
+      // Not a gate: 04 §7 says a component missing Rjc is still worth carrying
+      // forward, and this screen must not become a second place that blocks.
       blockedHere: false,
     };
   }

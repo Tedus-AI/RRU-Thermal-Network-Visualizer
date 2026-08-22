@@ -8,7 +8,7 @@
 import { CircleCheck, CircleMinus, ShieldCheck, TriangleAlert } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { PanelCard, Skeleton } from '@/ui/primitives';
-import { useProjectHealth } from './projectHealth';
+import { useProjectHealth, useProjectOverview } from './projectHealth';
 import { projectPath } from '@/app/navigation';
 
 type RowState = 'done' | 'optional' | 'todo';
@@ -68,6 +68,7 @@ function HealthRow({
 
 export function ProjectHealthPanel({ loading }: { loading?: boolean }) {
   const health = useProjectHealth();
+  const kpi = useProjectOverview();
 
   if (loading) {
     return (
@@ -99,6 +100,32 @@ export function ProjectHealthPanel({ loading }: { loading?: boolean }) {
             : 'Components not imported / 尚未匯入元件'
         }
         targetPath="import-components"
+      />
+      {/*
+        Importing is not the same as being ready. Errors block the network
+        build, so they are a todo; a component that is merely incomplete is
+        grey — 04 §7 carries it forward rather than blocking on it — but it is
+        still said out loud, because a solve over guessed data is worth less
+        than no solve at all.
+      */}
+      <HealthRow
+        state={
+          health.componentData === 'ready'
+            ? 'done'
+            : health.componentData === 'errors'
+              ? 'todo'
+              : 'optional'
+        }
+        label={
+          health.componentData === 'none'
+            ? 'No component thermal data yet / 尚無元件熱資料'
+            : health.componentData === 'ready'
+              ? 'Component thermal data complete / 元件熱資料齊全'
+              : health.componentData === 'errors'
+                ? `${kpi.componentsWithErrors} component${kpi.componentsWithErrors === 1 ? '' : 's'} with errors / ${kpi.componentsWithErrors} 個元件有錯誤`
+                : `${kpi.componentTypeCount - kpi.componentsReady} of ${kpi.componentTypeCount} still need thermal data / ${kpi.componentTypeCount} 個中有 ${kpi.componentTypeCount - kpi.componentsReady} 個尚缺熱資料`
+        }
+        targetPath="components"
       />
       <HealthRow
         state={health.thermalNetwork ? 'done' : 'todo'}

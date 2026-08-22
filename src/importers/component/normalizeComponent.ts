@@ -9,8 +9,10 @@
 import {
   COMPONENT_CATEGORIES,
   HEAT_PATH_TYPES,
+  PACKAGE_TYPES,
   type ComponentCategory,
   type HeatPathType,
+  type PackageType,
 } from '@/domain/component';
 
 export interface NumericParse {
@@ -87,6 +89,66 @@ export function normalizeCategory(raw: unknown): ComponentCategory | null {
   if (exact) return exact;
 
   return CATEGORY_ALIASES[text.toLowerCase()] ?? null;
+}
+
+/**
+ * Package vocabulary.
+ *
+ * `Unknown` is deliberately NOT an alias target: a source that says nothing
+ * about the package must import as null so Screen 04 reports it as unresolved,
+ * rather than as a package type someone chose.
+ */
+const PACKAGE_ALIASES: Record<string, PackageType> = {
+  qfn: 'QFN',
+  'qfn package': 'QFN',
+  dfn: 'QFN',
+  bga: 'BGA',
+  fcbga: 'BGA',
+  'flip chip bga': 'BGA',
+  pbga: 'BGA',
+  lga: 'LGA',
+  'land grid array': 'LGA',
+  'lidded bga': 'Lidded BGA',
+  lidded: 'Lidded BGA',
+  'lid bga': 'Lidded BGA',
+  ihs: 'Lidded BGA',
+  'bare die': 'Bare Die',
+  baredie: 'Bare Die',
+  die: 'Bare Die',
+  'flip chip': 'Bare Die',
+  module: 'Module',
+  som: 'Module',
+  'shielded module': 'Shielded Module',
+  shielded: 'Shielded Module',
+  'can shield': 'Shielded Module',
+  sot: 'SOT',
+  'sot-223': 'SOT',
+  sot223: 'SOT',
+  to: 'SOT',
+  qfp: 'QFP',
+  lqfp: 'QFP',
+  tqfp: 'QFP',
+};
+
+export function normalizePackageType(raw: unknown): PackageType | null {
+  if (raw == null) return null;
+  const text = String(raw).trim();
+  if (!text) return null;
+
+  const exact = PACKAGE_TYPES.find((p) => p.toLowerCase() === text.toLowerCase());
+  // "Unknown" spelled out IS an answer of sorts, but it carries no more than a
+  // blank does, so it lands the same way.
+  if (exact) return exact === 'Unknown' ? null : exact;
+
+  return PACKAGE_ALIASES[text.toLowerCase()] ?? null;
+}
+
+/** True when package text was present but could not be recognised. */
+export function unrecognisedPackage(raw: unknown, normalized: PackageType | null): boolean {
+  if (normalized != null) return false;
+  const text = (raw == null ? '' : String(raw).trim()).toLowerCase();
+  if (!text) return false;
+  return text !== 'unknown';
 }
 
 /**

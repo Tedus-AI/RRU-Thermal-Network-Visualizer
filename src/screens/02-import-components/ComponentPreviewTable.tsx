@@ -12,6 +12,7 @@ import { Badge, Button, SectionCard } from '@/ui/primitives';
 import { ColumnLabel } from '@/ui/FieldLabel';
 import { COMPONENT_CATEGORIES, type ComponentCategory } from '@/domain/component';
 import { useComponentImportStore } from '@/data/componentImportStore';
+import { effectiveSourceFace } from '@/importers/component/buildStagingRows';
 import { rowTotalPowerW } from '@/importers/component/summarize';
 import {
   DUPLICATE_POLICIES,
@@ -244,7 +245,7 @@ export function ComponentPreviewTable() {
                 <ColumnLabel label="TIM" zh={ZH_NAMES.TIM} tooltip={tip('TIM')} />
               </th>
               <th scope="col" className="px-2 py-2 text-right">
-                <ColumnLabel label="Source L / W" unit="mm" zh="熱源面長 / 寬" />
+                <ColumnLabel label="Source Face L / W" unit="mm" zh="熱源面長 / 寬" />
               </th>
               <th scope="col" className="px-2 py-2">
                 <ColumnLabel
@@ -381,8 +382,26 @@ export function ComponentPreviewTable() {
                   </td>
                   <td className="tabular px-2 py-1.5 whitespace-nowrap">{row.heat_path ?? '—'}</td>
                   <td className="tabular px-2 py-1.5 whitespace-nowrap">{row.tim_name ?? '—'}</td>
+                  {/*
+                    Which pair this is depends on the heat path (GEOMETRY_RULES):
+                    a coin-soldered or top-cooled part takes its face from the
+                    package outline, the other two state it. `effectiveSourceFace`
+                    is the same resolver Apply uses, so what is shown here is what
+                    the component gets — the two answering separately is how the
+                    preview came to report a mapped pad as a missing face.
+                  */}
                   <td className="tabular px-2 py-1.5 text-right whitespace-nowrap">
-                    {numberCell(row.source_L_mm, 1)} / {numberCell(row.source_W_mm, 1)}
+                    {(() => {
+                      const face = effectiveSourceFace(row);
+                      return (
+                        <>
+                          {numberCell(face.L, 1)} / {numberCell(face.W, 1)}
+                          <span className="ml-1 text-[10px] text-ink-400">
+                            {face.from === 'package' ? '封裝' : '實填'}
+                          </span>
+                        </>
+                      );
+                    })()}
                   </td>
                   <td className="px-2 py-1.5">
                     {row.duplicate_of ? (

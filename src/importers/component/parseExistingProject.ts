@@ -45,20 +45,27 @@ export function summarizeSourceProject(
   };
 }
 
-const HEADERS = [
+/**
+ * One column per canonical field the component model can still answer, so a
+ * project exported here re-imports without losing anything. The spread face is
+ * absent because it is derived from the heat path now, not stored.
+ */
+export const EXISTING_PROJECT_HEADERS = [
   'Component',
   'Category',
   'Qty',
   'Power(W)',
   'R_jc',
   'Limit(C)',
+  'Package',
+  'Package_L',
+  'Package_W',
+  'Package_H',
   'Heat_Path',
   'TIM_Type',
   'TIM_BLT',
   'Source_L',
   'Source_W',
-  'Spread_L',
-  'Spread_W',
   'Thick(mm)',
   '_ref_origin_project',
   '_ref_origin_id',
@@ -93,6 +100,10 @@ export function parseExistingProject(
     text(component.power_W.value),
     text(component.thermal_spec.r_jc_C_per_W?.value),
     text(component.thermal_spec.limit_C?.value),
+    text(component.thermal_spec.package_type),
+    text(component.thermal_spec.geometry.package_L_mm),
+    text(component.thermal_spec.geometry.package_W_mm),
+    text(component.thermal_spec.geometry.package_H_mm),
     text(component.thermal_spec.heat_path.type),
     // The material's NAME, since that is what another project can match on —
     // an id is meaningless outside this project's library.
@@ -108,5 +119,5 @@ export function parseExistingProject(
     text(component.provenance.ref_origin_id ?? component.id),
   ]);
 
-  return { headers: HEADERS, rows, sourceName: projectId };
+  return { headers: EXISTING_PROJECT_HEADERS, rows, sourceName: projectId };
 }

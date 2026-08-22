@@ -6,19 +6,28 @@ import { autoMapColumns, matchCanonicalField } from './autoMapColumns';
 import {
   normalizeHeatPath,
   normalizeCategory,
+  normalizePackageType,
   normalizeTimName,
   parseNumericCell,
 } from './normalizeComponent';
 import { buildStagingRows, duplicateKey } from './buildStagingRows';
 import { applyImport } from './applyImport';
+import { EXISTING_PROJECT_HEADERS } from './parseExistingProject';
 import { projectImpact, summarizeImport } from './summarize';
-import { IGNORE_COLUMN, type ImportSourceDescriptor, type StagingRow } from './types';
+import {
+  CANONICAL_FIELDS,
+  IGNORE_COLUMN,
+  type ImportSourceDescriptor,
+  type StagingRow,
+} from './types';
 import {
   emptyArchitecturePrep,
   emptyExternalMappings,
   emptyThermalSpec,
+  sourceAreaMm2,
   type Component,
 } from '@/domain/component';
+import { completenessOf } from '@/domain/componentReadiness';
 import { sourced } from '@/domain/sourcedValue';
 import {
   canonicalComponentToLegacy,
@@ -579,5 +588,155 @@ describe('an imported coin thickness', () => {
     const viaPath = importOne('Thermal Via');
     expect(viaPath.thermal_spec.geometry.board_thickness_mm).toBe(2.5);
     expect(viaPath.metadata?._imported_coin_thickness_mm).toBeUndefined();
+  });
+
+  // A top-cooled part conducts through no thickness at all, so the value used to
+  // land in board thickness where nothing would ever read it.
+  it('preserves a thickness the path has no use for, rather than misfiling it', () => {
+    const top = importOne('Top Surface');
+    expect(top.thermal_spec.geometry.board_thickness_mm).toBeNull();
+    expect(top.metadata?._imported_thickness_mm).toBe(2.5);
+  });
+});
+
+/**
+ * Two of the four heat paths read the source face off the package outline
+ * (GEOMETRY_RULES). Until the canonical field list carried `Package_L/W`, a
+ * coin-path row's face landed in `source_L/W` — a field that path never reads —
+ * and the component arrived in Screen 04 reported as missing its geometry with
+ * the imported numbers sitting unused beside it.
+ */
+describe('the source face lands where its heat path reads it', () => {
+  const importRow = (csv: string) =>
+    applyImport({
+      materials: defaultMaterials(),
+      existing: [],
+      rows: stage(csv),
+      sessionPolicy: 'SKIP',
+      source: SOURCE,
+    }).components[0];
+
+  const withPad = (heatPath: string) =>
+    importRow(
+      ['Component,Qty,Power(W),Category,Heat_Path,Pad_L,Pad_W', `X,1,40,RF,${heatPath},15,15`].join(
+        '\n',
+      ),
+    );
+
+  it('promotes a stated pad to the package on a coin path', () => {
+    const geometry = withPad('Copper Coin').thermal_spec.geometry;
+    expect(geometry.package_L_mm).toBe(15);
+    expect(geometry.package_W_mm).toBe(15);
+    // Not stored twice: `sourceFaceMm` reads the package here, so a second copy
+    // could only ever drift out of agreement with it.
+    expect(geometry.source_L_mm).toBeNull();
+  });
+
+  it('promotes it on a top-surface path too, where the case top is the outline', () => {
+    expect(withPad('Top Surface').thermal_spec.geometry.package_L_mm).toBe(15);
+  });
+
+  it('leaves it stated on a board path, where nothing else knows the E-PAD', () => {
+    const geometry = withPad('Thermal Via').thermal_spec.geometry;
+    expect(geometry.source_L_mm).toBe(15);
+    expect(geometry.package_L_mm).toBeNull();
+  });
+
+  it('gives a coin-path component the geometry Screen 04 checks for', () => {
+    const coin = withPad('Copper Coin');
+    expect(sourceAreaMm2(coin.thermal_spec.geometry, 'Coin')).toBe(225);
+    expect(completenessOf(coin)['Contact Geometry']).toBe(true);
+  });
+
+  it('lets an explicit Package_L win over a pad on a package-sourced path', () => {
+    const geometry = importRow(
+      [
+        'Component,Qty,Power(W),Category,Heat_Path,Package_L,Package_W,Pad_L,Pad_W',
+        'X,1,40,RF,Copper Coin,20,20,15,15',
+      ].join('\n'),
+    ).thermal_spec.geometry;
+    expect(geometry.package_L_mm).toBe(20);
+  });
+
+  it('warns against the columns the row will actually be read from', () => {
+    const coin = stage('Component,Qty,Power(W),Category,Heat_Path\nX,1,40,RF,Copper Coin')[0];
+    expect(coin.issues.find((issue) => issue.message.includes('Source face'))?.field).toBe(
+      'Package_L',
+    );
+
+    const via = stage('Component,Qty,Power(W),Category,Heat_Path\nX,1,40,Digital,Thermal Via')[0];
+    expect(via.issues.find((issue) => issue.message.includes('Source face'))?.field).toBe(
+      'Source_L',
+    );
+  });
+});
+
+describe('package type', () => {
+  const stageOne = (packageText: string) =>
+    stage(`Component,Qty,Power(W),Package\nX,1,40,${packageText}`)[0];
+
+  it('reads the shipped vocabulary and its common spellings', () => {
+    expect(normalizePackageType('QFN')).toBe('QFN');
+    expect(normalizePackageType('fcBGA')).toBe('BGA');
+    expect(normalizePackageType('Lidded BGA')).toBe('Lidded BGA');
+    expect(normalizePackageType('flip chip')).toBe('Bare Die');
+  });
+
+  // "Unknown" carries no more than a blank does, and importing it as a chosen
+  // package would hide the gap Screen 04 exists to report.
+  it('treats an explicit Unknown as nothing said', () => {
+    expect(normalizePackageType('Unknown')).toBeNull();
+    expect(stageOne('Unknown').issues.some((issue) => issue.field === 'Package')).toBe(false);
+  });
+
+  it('warns rather than guessing at a package it does not recognise', () => {
+    const row = stageOne('CBGA-1234');
+    expect(row.package_type).toBeNull();
+    expect(row.issues.some((issue) => issue.field === 'Package')).toBe(true);
+  });
+
+  it('carries onto the component', () => {
+    const imported = applyImport({
+      materials: defaultMaterials(),
+      existing: [],
+      rows: [stageOne('LGA')],
+      sessionPolicy: 'SKIP',
+      source: SOURCE,
+    }).components[0];
+    expect(imported.thermal_spec.package_type).toBe('LGA');
+  });
+});
+
+/**
+ * The field list is the import side of the component model. When a field leaves
+ * the model, a column that still maps onto it becomes a column whose value goes
+ * nowhere — which is exactly what happened to the spread face.
+ */
+describe('the canonical field list tracks the component model', () => {
+  it('no longer offers a spread face, which the heat path derives', () => {
+    expect(CANONICAL_FIELDS).not.toContain('Spread_L' as never);
+    expect(CANONICAL_FIELDS).not.toContain('Spread_W' as never);
+  });
+
+  it('maps a spread column to nothing rather than to a field that is gone', () => {
+    expect(matchCanonicalField('Spread_L')).toBeNull();
+  });
+
+  /**
+   * Importing from another project of this tool goes through the same pipeline
+   * as a file, so anything the export cannot say is data that silently does not
+   * survive a project-to-project copy.
+   */
+  it('exports a column for every field an existing project can be re-imported through', () => {
+    for (const field of CANONICAL_FIELDS) {
+      expect(EXISTING_PROJECT_HEADERS, `no export column for ${field}`).toContain(field);
+    }
+  });
+
+  it('auto-maps its own export with nothing left over', () => {
+    const mapping = autoMapColumns(EXISTING_PROJECT_HEADERS);
+    for (const field of CANONICAL_FIELDS) {
+      expect(mapping, `${field} did not map back onto itself`).toContain(field);
+    }
   });
 });

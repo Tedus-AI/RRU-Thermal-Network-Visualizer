@@ -7,9 +7,29 @@
  * Nothing in this pipeline may touch componentStore before Apply (02 §8, §34).
  */
 
-import type { ComponentCategory, HeatPathType, ImportSourceType } from '@/domain/component';
+import type {
+  ComponentCategory,
+  HeatPathType,
+  ImportSourceType,
+  PackageType,
+} from '@/domain/component';
 
-/** Target fields a source column can be mapped onto — 02 §11. */
+/**
+ * Target fields a source column can be mapped onto — 02 §11.
+ *
+ * This list is the import side of `ComponentGeometry`, so it only offers what a
+ * component can still hold:
+ *
+ *   - `Spread_L` / `Spread_W` are gone. The spread face is derived from the heat
+ *     path now (GEOMETRY_RULES) — from the project's coin on a coin path, from
+ *     `(L + t) x (W + t)` on a board path, and not at all on the other two — so
+ *     an imported one had nowhere to land and would have contradicted the rule.
+ *   - `Package_*` are new. Two of the four heat paths read the source face off
+ *     the package outline, and until now nothing could import it: a coin-path
+ *     row arrived with its face in `Source_L/W`, which that path never reads,
+ *     and the component showed up in Screen 04 as missing its geometry with the
+ *     imported numbers sitting unused beside it.
+ */
 export const CANONICAL_FIELDS = [
   'Component',
   'Qty',
@@ -17,13 +37,15 @@ export const CANONICAL_FIELDS = [
   'Category',
   'Limit(C)',
   'R_jc',
+  'Package',
+  'Package_L',
+  'Package_W',
+  'Package_H',
   'Heat_Path',
   'TIM_Type',
   'TIM_BLT',
   'Source_L',
   'Source_W',
-  'Spread_L',
-  'Spread_W',
   'Thick(mm)',
 ] as const;
 export type CanonicalField = (typeof CANONICAL_FIELDS)[number];
@@ -40,13 +62,15 @@ export const RECOMMENDED_FIELDS: CanonicalField[] = [
   'Heat_Path',
   'Source_L',
   'Source_W',
+  'Package_L',
+  'Package_W',
 ];
 
 /**
  * Fields that override a project-level default rather than stating a fact the
  * source owns. Blank is the normal case, so they never raise a warning.
  */
-export const OVERRIDE_FIELDS: CanonicalField[] = ['Spread_L', 'Spread_W', 'TIM_BLT'];
+export const OVERRIDE_FIELDS: CanonicalField[] = ['TIM_BLT'];
 
 /** Raw tabular data straight out of a parser, before any mapping. */
 export interface ParsedTable {
@@ -97,10 +121,17 @@ export interface StagingRow {
    */
   tim_name: string | null;
   tim_blt_mm: number | null;
+  package_type: PackageType | null;
+  package_L_mm: number | null;
+  package_W_mm: number | null;
+  package_H_mm: number | null;
   source_L_mm: number | null;
   source_W_mm: number | null;
-  spread_L_mm: number | null;
-  spread_W_mm: number | null;
+  /**
+   * The Volume Evaluation Tool's single `Thick` column, which means the board
+   * on a via path and the coin on a coin path. `applyImport` reads it per heat
+   * path; nothing here reinterprets it.
+   */
   thickness_mm: number | null;
 
   /** Original cell text per canonical field, for error reporting. */

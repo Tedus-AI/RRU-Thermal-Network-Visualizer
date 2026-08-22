@@ -11,20 +11,50 @@ import {
   emptyExternalMappings,
   emptyGeometry,
   emptyTim,
-  inferHeatPath,
+  GEOMETRY_RULES,
   inferLimitType,
   type Component,
   type ComponentProvenance,
+  type HeatPathType,
   type ThermalSpec,
 } from '@/domain/component';
 import { sourced, unknownValue, type SourcedValue } from '@/domain/sourcedValue';
 import type { MaterialDefaults } from '@/domain/materials';
-import { duplicateKey, effectiveDuplicateAction } from './buildStagingRows';
+import {
+  duplicateKey,
+  effectiveDuplicateAction,
+  effectiveHeatPath,
+  effectiveSourceFace,
+} from './buildStagingRows';
 import type { ApplyResult, DuplicatePolicy, ImportSourceDescriptor, StagingRow } from './types';
+
+/**
+ * Where a row's source face belongs once the heat path is known — the same
+ * resolution the preview and the row warning show, so the three agree.
+ *
+ * On a package-sourced path a stated pad IS the package outline (the Volume
+ * Evaluation Tool's own comment says a coin-soldered part is joined across its
+ * whole package base), so it fills the package rather than landing in
+ * `source_L/W` where that path would never look at it.
+ */
+function geometryFaces(row: StagingRow, heatPath: HeatPathType) {
+  const face = effectiveSourceFace(row);
+  const readsPackage = GEOMETRY_RULES[heatPath].source === 'package';
+  return {
+    package_L_mm: readsPackage ? face.L : row.package_L_mm,
+    package_W_mm: readsPackage ? face.W : row.package_W_mm,
+    package_H_mm: row.package_H_mm,
+    // On a package-sourced path the face has been promoted above, so keeping a
+    // copy here would let the two disagree the moment one is edited.
+    source_L_mm: readsPackage ? null : face.L,
+    source_W_mm: readsPackage ? null : face.W,
+  };
+}
 
 function specFromRow(row: StagingRow, materials: MaterialDefaults): ThermalSpec {
   // No heat path stated means it is inferred, which must not read as a decision.
-  const heatPath = row.heat_path ?? inferHeatPath(row.category ?? 'Other');
+  const heatPath = effectiveHeatPath(row);
+  const faces = geometryFaces(row, heatPath);
   return {
     // No source this tool imports from records WHICH surface the limit belongs
     // to, so it is inferred and left unconfirmed for Screen 04 to settle.
@@ -36,18 +66,20 @@ function specFromRow(row: StagingRow, materials: MaterialDefaults): ThermalSpec 
       row.r_jc_C_per_W == null
         ? null
         : sourced(row.r_jc_C_per_W, 'Imported', { confidence: 'medium' }),
-    package_type: null,
+    package_type: row.package_type,
     geometry: {
       ...emptyGeometry(),
-      source_L_mm: row.source_L_mm,
-      source_W_mm: row.source_W_mm,
+      ...faces,
       // The Volume Evaluation Tool overloads one Thick column: it is the board
       // on a via path and the coin on a coin path. Coin thickness is one
       // decision for the whole design, so it belongs to the project (01 §4)
       // rather than to each component. The imported value is not thrown away —
       // `buildMetadata` keeps it so it can be read off and entered there.
-      board_thickness_mm: heatPath === 'Coin' ? null : row.thickness_mm,
-      // 04 §30 — legacy geometry semantics must be confirmed, not assumed.
+      board_thickness_mm:
+        GEOMETRY_RULES[heatPath].thickness === 'board' ? row.thickness_mm : null,
+      // 04 §30 — legacy geometry semantics must be confirmed, not assumed. An
+      // explicitly mapped Package_L is not legacy: it says what it is, so only
+      // the overloaded columns raise the flag.
       needs_review: row.thickness_mm != null || row.source_L_mm != null || undefined,
     },
     heat_path: { type: heatPath, parameters: {} },
@@ -71,18 +103,19 @@ function buildMetadata(
   if (row.tim_name && matchTimId(row.tim_name, materials) == null) {
     extra._unmatched_tim = row.tim_name;
   }
-  // A coin row's Thick is the coin, which is a project constant now. Dropping it
-  // silently would lose a measured number, so it is preserved here and shown on
-  // the component's Source tab under "Preserved Source Fields".
-  const heatPath = row.heat_path ?? inferHeatPath(row.category ?? 'Other');
-  if (heatPath === 'Coin' && row.thickness_mm != null) {
-    extra._imported_coin_thickness_mm = row.thickness_mm;
+  // Only a board path has somewhere to put a thickness. A coin row's Thick is
+  // the coin, which is a project constant now; a top-surface or bolted row
+  // conducts through no thickness at all. Dropping either silently would lose a
+  // measured number, so it is preserved here and shown on the component's
+  // Source tab under "Preserved Source Fields".
+  const heatPath = effectiveHeatPath(row);
+  if (row.thickness_mm != null && GEOMETRY_RULES[heatPath].thickness !== 'board') {
+    const key =
+      GEOMETRY_RULES[heatPath].thickness === 'project_coin'
+        ? '_imported_coin_thickness_mm'
+        : '_imported_thickness_mm';
+    extra[key] = row.thickness_mm;
   }
-  // The spread face is derived from the path now (GEOMETRY_RULES), so an
-  // imported one has nowhere to live. Kept rather than dropped, so a number
-  // someone measured is never lost without a trace.
-  if (row.spread_L_mm != null) extra._imported_spread_L_mm = row.spread_L_mm;
-  if (row.spread_W_mm != null) extra._imported_spread_W_mm = row.spread_W_mm;
   return Object.keys(extra).length > 0 ? extra : undefined;
 }
 
@@ -205,14 +238,29 @@ export function applyImport({ existing, rows, sessionPolicy, source, materials }
               // decision, so a settled path survives a Replace.
               heat_path: row.heat_path == null ? target.thermal_spec.heat_path : spec.heat_path,
               heat_path_confirmed: row.heat_path != null || target.thermal_spec.heat_path_confirmed,
-              package_type: target.thermal_spec.package_type,
+              // A stated package replaces; an unstated one must not erase what
+              // Screen 04 already resolved.
+              package_type: spec.package_type ?? target.thermal_spec.package_type,
             }
           : {
               ...target.thermal_spec,
               limit_C: mergeSourced(spec.limit_C, target.thermal_spec.limit_C),
               r_jc_C_per_W: mergeSourced(spec.r_jc_C_per_W, target.thermal_spec.r_jc_C_per_W),
+              package_type: spec.package_type ?? target.thermal_spec.package_type,
               geometry: {
                 ...target.thermal_spec.geometry,
+                package_L_mm: mergeNonEmpty(
+                  spec.geometry.package_L_mm,
+                  target.thermal_spec.geometry.package_L_mm,
+                ),
+                package_W_mm: mergeNonEmpty(
+                  spec.geometry.package_W_mm,
+                  target.thermal_spec.geometry.package_W_mm,
+                ),
+                package_H_mm: mergeNonEmpty(
+                  spec.geometry.package_H_mm,
+                  target.thermal_spec.geometry.package_H_mm,
+                ),
                 source_L_mm: mergeNonEmpty(
                   spec.geometry.source_L_mm,
                   target.thermal_spec.geometry.source_L_mm,
