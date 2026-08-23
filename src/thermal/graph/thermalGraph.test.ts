@@ -6,7 +6,12 @@ import {
 import { defaultMaterials } from '@/domain/materials';
 import { describe, expect, it } from 'vitest';
 
-import { buildComponentSubgraph, missingRequirements, previewGeneration } from './networkBuilder';
+import {
+  buildComponentSubgraph,
+  missingRequirements,
+  previewGeneration,
+  suggestedZoneFor,
+} from './networkBuilder';
 import { buildSharedStructure, createSpreadingEdge } from './sharedStructure';
 import { validateGraph, networkKpis } from './graphValidation';
 import { edgeId, instanceKeys, instanceMultiplier, nodeId } from './idFactory';
@@ -268,7 +273,9 @@ describe('Metal Base + Interface template', () => {
     })!;
     const edge = graph.edges.find((candidate) => candidate.type === 'tim')!;
     expect(edge.method).toBe('direct_rth');
-    expect(edge.parameters).toEqual({ R_C_per_W: 0.12 });
+    // The measured interface owns Rth directly, but its contact area must stay
+    // available to the following HSK-base conduction model.
+    expect(edge.parameters).toEqual({ R_C_per_W: 0.12, area_mm2: 1200 });
     expect(activeRth(edge.rth)).toBe(0.12);
   });
 });
@@ -604,6 +611,15 @@ describe('shared structure (05 §13, §14, §15)', () => {
     );
     expect(serialized).not.toMatch(/h_conv|wind|solar/i);
     expect(serialized).not.toContain('55');
+  });
+
+  it('maps the persisted MAIN_BASE preference onto the corrected HSK Base node', () => {
+    const subject = component();
+    subject.architecture_prep.preferred_base_zone = 'MAIN_BASE';
+    const structure = buildSharedStructure('SINGLE_MAIN_BASE');
+    expect(suggestedZoneFor(subject, structure.zones.map((zone) => zone.id))).toBe(
+      'NODE_HSK_BASE',
+    );
   });
 
   it('gives the heat pipe preset two parallel routes to the main base (05 §59 case C)', () => {

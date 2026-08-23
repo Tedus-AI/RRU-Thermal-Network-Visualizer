@@ -59,6 +59,31 @@ export const BUILTIN_TIM_IDS = {
   solder: 'TIM_SOLDER',
 } as const;
 
+/** Supported bulk materials for the shared heat-sink base. */
+export const HSK_BASE_MATERIALS = ['ADC12', 'A380', 'AL6063', 'HPDC_HIGH_K'] as const;
+export type HskBaseMaterial = (typeof HSK_BASE_MATERIALS)[number];
+
+export const HSK_BASE_MATERIAL_OPTIONS: ReadonlyArray<{
+  value: HskBaseMaterial;
+  label: string;
+  zh: string;
+  defaultK_W_mK: number;
+}> = [
+  { value: 'ADC12', label: 'ADC12', zh: 'ADC12 壓鑄鋁', defaultK_W_mK: 96 },
+  { value: 'A380', label: 'A380', zh: 'A380 壓鑄鋁', defaultK_W_mK: 96 },
+  { value: 'AL6063', label: 'AL6063', zh: 'AL6063 鋁合金', defaultK_W_mK: 200 },
+  {
+    value: 'HPDC_HIGH_K',
+    label: 'HPDC High-K Aluminum (k ≥ 150)',
+    zh: 'HPDC 高導熱壓鑄鋁（k ≥ 150）',
+    defaultK_W_mK: 150,
+  },
+];
+
+export function hskMaterialDefaultK(material: HskBaseMaterial): number {
+  return HSK_BASE_MATERIAL_OPTIONS.find((option) => option.value === material)?.defaultK_W_mK ?? 96;
+}
+
 export interface MaterialDefaults {
   /** The project's TIM library. Order is the order Screen 01 shows. */
   tim: TimMaterial[];
@@ -106,6 +131,15 @@ export interface MaterialDefaults {
    * that is right for an unknown build.
    */
   coin_thickness_mm: SourcedValue<number> | null;
+
+  /** One project-wide shared heat-sink casting, configured in Screen 01. */
+  hsk_base_material: HskBaseMaterial;
+  hsk_base_k_W_mK: SourcedValue<number>;
+  /** Component mounting face to fin-root plane. Empty until the drawing states it. */
+  hsk_base_thickness_mm: SourcedValue<number> | null;
+  /** Overall base envelope, retained for placement checks and later spreading models. */
+  hsk_base_L_mm: SourcedValue<number> | null;
+  hsk_base_W_mm: SourcedValue<number> | null;
 }
 
 const assumed = (value: number) => sourced(value, 'Assumed', { confidence: 'medium' });
@@ -137,6 +171,11 @@ export function defaultMaterials(): MaterialDefaults {
     coin_L_mm: null,
     coin_W_mm: null,
     coin_thickness_mm: null,
+    hsk_base_material: 'ADC12',
+    hsk_base_k_W_mK: assumed(96),
+    hsk_base_thickness_mm: null,
+    hsk_base_L_mm: null,
+    hsk_base_W_mm: null,
   };
 }
 
@@ -256,6 +295,13 @@ export function normalizeMaterials(raw: unknown): MaterialDefaults {
     coin_L_mm: readOptional(raw.coin_L_mm),
     coin_W_mm: readOptional(raw.coin_W_mm),
     coin_thickness_mm: readOptional(raw.coin_thickness_mm),
+    hsk_base_material: HSK_BASE_MATERIALS.includes(raw.hsk_base_material as HskBaseMaterial)
+      ? (raw.hsk_base_material as HskBaseMaterial)
+      : base.hsk_base_material,
+    hsk_base_k_W_mK: readSourced(raw.hsk_base_k_W_mK, base.hsk_base_k_W_mK),
+    hsk_base_thickness_mm: readOptional(raw.hsk_base_thickness_mm),
+    hsk_base_L_mm: readOptional(raw.hsk_base_L_mm),
+    hsk_base_W_mm: readOptional(raw.hsk_base_W_mm),
   };
 }
 
@@ -326,6 +372,14 @@ export const MEASURED_INTERFACE_TIM_ID = 'TIM_MEASURED_INTERFACE_RTH';
 
 export function isDirectContact(tim: TimSpec): boolean {
   return tim.tim_id === DIRECT_CONTACT_TIM_ID;
+}
+
+/** Overall shared HSK base footprint, when both drawing dimensions are known. */
+export function hskBaseAreaMm2(materials: MaterialDefaults): number | null {
+  const L = materials.hsk_base_L_mm?.value;
+  const W = materials.hsk_base_W_mm?.value;
+  if (L == null || W == null || L <= 0 || W <= 0) return null;
+  return L * W;
 }
 
 export function isMeasuredInterface(tim: TimSpec): boolean {
@@ -425,5 +479,6 @@ export function assumedCount(materials: MaterialDefaults): number {
   for (const [field] of PROCESS_FIELDS) {
     if (materials[field].source === 'Assumed') count++;
   }
+  if (materials.hsk_base_k_W_mK.source === 'Assumed') count++;
   return count;
 }

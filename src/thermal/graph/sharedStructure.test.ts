@@ -23,7 +23,8 @@ describe('presetZones matches what the structure actually builds', () => {
 
       expect(offered).toHaveLength(built.length);
       for (const zone of built) {
-        const match = offered.find((candidate) => zone.id.endsWith(candidate.key));
+        const key = zoneKeyOf(zone.id, preset);
+        const match = offered.find((candidate) => candidate.key === key);
         expect(match, `no key offered for built zone ${zone.id}`).toBeDefined();
         // The label the user picks is the label the graph node carries.
         expect(match!.name).toBe(zone.name);
@@ -31,8 +32,9 @@ describe('presetZones matches what the structure actually builds', () => {
     });
   }
 
-  it('offers a Main Base on a single machined casting — the common RRU case', () => {
+  it('keeps MAIN_BASE as the compatible key for one physical HSK Base', () => {
     expect(presetZones('SINGLE_MAIN_BASE').map((zone) => zone.key)).toEqual(['MAIN_BASE']);
+    expect(presetZones('SINGLE_MAIN_BASE')[0].name).toBe('HSK Base');
   });
 
   // The old hardcoded list was exactly this preset's, which is why the other
@@ -72,15 +74,18 @@ describe('zoneKeyOf', () => {
  */
 describe('the heat sink tail is shared, not chosen', () => {
   for (const preset of STRUCTURE_PRESETS.filter((entry) => entry !== 'CUSTOM')) {
-    it(`${preset} ends at HSK base, fin root, fin surface and ambient`, () => {
+    it(`${preset} ends at HSK base, fin surface and ambient`, () => {
       const ids = buildSharedStructure(preset).nodes.map((node) => node.id);
-      for (const tail of [
-        'NODE_HSK_BASE',
-        'NODE_FIN_ROOT',
-        'NODE_FIN_SURFACE',
-        'NODE_AMBIENT_PLACEHOLDER',
-      ]) {
+      for (const tail of ['NODE_HSK_BASE', 'NODE_FIN_SURFACE', 'NODE_AMBIENT_PLACEHOLDER']) {
         expect(ids).toContain(tail);
+      }
+      // For a single casting, the HSK Base node is already the fin-root plane;
+      // retaining both Main Base and Fin Root would double-count the material.
+      if (preset === 'SINGLE_MAIN_BASE') {
+        expect(ids).not.toContain('NODE_MAIN_BASE');
+        expect(ids).not.toContain('NODE_FIN_ROOT');
+      } else {
+        expect(ids).toContain('NODE_FIN_ROOT');
       }
       // And none of them is offered as somewhere to attach a component.
       const zoneKeys = presetZones(preset).map((zone) => zone.key);
