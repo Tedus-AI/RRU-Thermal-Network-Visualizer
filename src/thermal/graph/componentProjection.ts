@@ -47,6 +47,7 @@ function representedDevices(
 }
 
 function updateLinkedEdge(
+  network: ThermalNetwork,
   edge: ThermalEdge,
   component: Component,
   materials: MaterialDefaults,
@@ -59,7 +60,14 @@ function updateLinkedEdge(
   const devices = Number(edge.metadata?.devices_represented);
   const perDevice: EdgeParameters = { ...(edge.parameters ?? {}) };
   for (const [parameter, componentPath] of Object.entries(edge.parameter_links)) {
-    const value = readLinkedInput(component, componentPath, materials);
+    const edgeParameterLink = componentPath.match(/^(.+)\.parameters\.([^.]+)$/);
+    const linkedEdgeValue = edgeParameterLink
+      ? network.edges[edgeParameterLink[1]]?.parameters?.[edgeParameterLink[2] as keyof EdgeParameters]
+      : undefined;
+    const value =
+      typeof linkedEdgeValue === 'number'
+        ? linkedEdgeValue
+        : readLinkedInput(component, componentPath, materials);
     if (value == null) delete perDevice[parameter];
     else perDevice[parameter] = value;
   }
@@ -123,7 +131,7 @@ export function projectComponentMaster(
       const component = componentId ? byId.get(componentId) : undefined;
       if (!component) continue;
       if (!component.enabled) edge.enabled = false;
-      else updateLinkedEdge(edge, component, materials);
+      else updateLinkedEdge(clone, edge, component, materials);
     }
   }
 

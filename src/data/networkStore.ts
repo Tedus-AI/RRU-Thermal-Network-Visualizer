@@ -317,7 +317,6 @@ export const useNetworkStore = create<NetworkStoreState>((set, get) => ({
           .map((node) => node.id),
       );
       const nextNodeIds = new Set(nodes.map((node) => node.id));
-      const replacementHsk = zones.find((zone) => zone.type === 'heat_sink_base')?.id ?? null;
       const retainedConnections: Array<{
         nodeId: string;
         portKind: PortKind;
@@ -340,19 +339,16 @@ export const useNetworkStore = create<NetworkStoreState>((set, get) => ({
       for (const [id] of Object.entries(network.zones)) {
         if (removedNodeIds.has(id)) delete network.zones[id];
       }
-      // Replacing the structure deliberately disconnects component ports. The
-      // same physical target is retained when it survives the replacement. A
-      // legacy single Main Base maps to the corrected single HSK Base.
+      // Replacing the structure deliberately disconnects component ports. A
+      // connection is retained only when its exact physical target survives.
+      // Switching between one and two HSK bases therefore requires an explicit
+      // RF/Digital assignment instead of silently guessing which half to use.
       for (const node of Object.values(network.nodes)) {
         if (!node.ports?.length) continue;
         node.ports = node.ports.map((port) => {
           const oldTarget = port.connected_to;
           if (!oldTarget || !removedNodeIds.has(oldTarget)) return port;
-          const targetNodeId = nextNodeIds.has(oldTarget)
-            ? oldTarget
-            : oldTarget === 'NODE_MAIN_BASE'
-              ? replacementHsk
-              : null;
+          const targetNodeId = nextNodeIds.has(oldTarget) ? oldTarget : null;
           if (targetNodeId) {
             retainedConnections.push({ nodeId: node.id, portKind: port.kind, targetNodeId });
           }

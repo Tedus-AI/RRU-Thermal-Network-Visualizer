@@ -7,7 +7,6 @@
  * Screen 03 remains metadata-only and is not involved in this flow.
  */
 
-import { defaultMaterials } from '@/domain/materials';
 import type { Component } from '@/domain/component';
 import { valueOf } from '@/domain/sourcedValue';
 import type { ComponentRevisionSet } from '@/domain/revision';
@@ -23,7 +22,8 @@ import { activeRth, createRth } from '@/thermal/rth';
 import { buildComponentSubgraph } from '@/thermal/graph/networkBuilder';
 import { buildSharedStructure } from '@/thermal/graph/sharedStructure';
 import { validateGraph, type GraphValidationResult } from '@/thermal/graph/graphValidation';
-import { zoneNodeId } from '@/thermal/graph/idFactory';
+import { structureNodeId } from '@/thermal/graph/idFactory';
+import { hskBaseConnectionPatch } from '@/thermal/graph/hskBaseConnection';
 import { deriveBoundaryPorts } from '@/thermal/boundary/boundaryPorts';
 import {
   BOUNDARY_SET_SCHEMA_VERSION,
@@ -72,20 +72,10 @@ import {
   demoScenario,
 } from './demoProject';
 
-// Keyed by the zone KEY a component stores, which is also what `zoneNodeId`
-// builds its id from — one vocabulary, not a display-name lookup beside it.
-const DEMO_ZONE_IDS = {
-  RF_LEFT: zoneNodeId('RF_LEFT'),
-  RF_RIGHT: zoneNodeId('RF_RIGHT'),
-  DIGITAL: zoneNodeId('DIGITAL'),
-  POWER: zoneNodeId('POWER'),
-} as const;
+const DEMO_HSK_BASE_ID = structureNodeId('HSK_BASE');
 
 const ZONE_COLUMNS: Record<string, number> = {
-  [DEMO_ZONE_IDS.RF_LEFT]: 180,
-  [DEMO_ZONE_IDS.RF_RIGHT]: 520,
-  [DEMO_ZONE_IDS.DIGITAL]: 860,
-  [DEMO_ZONE_IDS.POWER]: 1180,
+  [DEMO_HSK_BASE_ID]: 440,
 };
 
 function demoRth(value: number, reference: string) {
@@ -158,14 +148,9 @@ function positionNetworkNodes(nodes: ThermalNode[]): Record<string, { x: number;
     }
 
     const sharedPosition: Record<string, { x: number; y: number }> = {
-      [DEMO_ZONE_IDS.RF_LEFT]: { x: 260, y: 620 },
-      [DEMO_ZONE_IDS.RF_RIGHT]: { x: 560, y: 620 },
-      [DEMO_ZONE_IDS.DIGITAL]: { x: 860, y: 620 },
-      [DEMO_ZONE_IDS.POWER]: { x: 1160, y: 620 },
       NODE_HSK_BASE: { x: 700, y: 760 },
-      NODE_FIN_ROOT: { x: 700, y: 870 },
-      NODE_FIN_SURFACE: { x: 700, y: 980 },
-      NODE_AMBIENT_PLACEHOLDER: { x: 700, y: 1090 },
+      NODE_FIN_SURFACE: { x: 700, y: 900 },
+      NODE_AMBIENT_PLACEHOLDER: { x: 700, y: 1040 },
     };
     const position = sharedPosition[node.id] ?? { x: 700, y: 720 };
     positions[node.id] = position;
@@ -180,13 +165,10 @@ export function demoNetwork(
   components = demoComponents(),
   materials = demoProject().materials,
 ): ThermalNetwork {
-  const structure = buildSharedStructure('FUNCTIONAL_ZONES');
-  const filterZoneId = zoneNodeId('FILTER');
-  const nodes = structure.nodes.filter((node) => node.id !== filterZoneId);
-  const edges = structure.edges.filter(
-    (edge) => edge.from !== filterZoneId && edge.to !== filterZoneId,
-  );
-  const zones = structure.zones.filter((zone) => zone.id !== filterZoneId);
+  const structure = buildSharedStructure('SINGLE_MAIN_BASE');
+  const nodes = [...structure.nodes];
+  const edges = [...structure.edges];
+  const zones = [...structure.zones];
   const templates: ThermalNetwork['templates'] = {};
 
   for (const edge of edges) {
@@ -210,8 +192,10 @@ export function demoNetwork(
   }
 
   for (const component of components) {
-    const zoneId = DEMO_ZONE_IDS[component.architecture_prep.preferred_base_zone as keyof typeof DEMO_ZONE_IDS];
-    if (!zoneId) throw new Error(`Golden Demo component ${component.id} has no supported zone.`);
+    const zoneId = DEMO_HSK_BASE_ID;
+    if (component.architecture_prep.preferred_base_zone !== 'HSK_BASE') {
+      throw new Error(`Golden Demo component ${component.id} has no supported HSK assignment.`);
+    }
 
     const subgraph = buildComponentSubgraph(component, {
       templateId: component.architecture_prep.template_preference,
@@ -306,6 +290,19 @@ export function demoNetwork(
       updated_at: DEMO_TIMESTAMP,
     },
   };
+
+  // Use the same analytical HSK-thickness edge model as Screen 05. The
+  // component TIM exit area supplies A, while Screen 01 owns L and k.
+  for (const node of Object.values(network.nodes)) {
+    for (const port of node.ports ?? []) {
+      if (!port.connected_to) continue;
+      const edgeId = `EDGE_PORT_${node.id.replace(/^NODE_/, '')}_${port.kind}`;
+      const patch = hskBaseConnectionPatch(network, node.id, port.connected_to, materials);
+      if (patch && network.edges[edgeId]) {
+        network.edges[edgeId] = { ...network.edges[edgeId], ...patch };
+      }
+    }
+  }
 
   const validation = validateGraph(network);
   if (validation.errors > 0) {
@@ -459,7 +456,7 @@ export async function buildDemoGoldenFlow(): Promise<DemoGoldenFlow> {
   const boundary = demoBoundarySet(network);
   const ports = deriveBoundaryPorts(network);
   const solve = solveScenario({
-    materials: defaultMaterials(),
+    materials: project.materials,
     network,
     components,
     boundarySet: boundary,

@@ -315,39 +315,6 @@ export function ThermalPathBuilderView() {
     materials.hsk_base_thickness_mm?.value,
   ]);
 
-  // One-time migration for the legacy single-base graph, which represented one
-  // casting twice as Main Base → HSK Base. Existing component connections are
-  // retained and redirected to the one corrected HSK Base node.
-  useEffect(() => {
-    if (
-      !draft ||
-      draft.project_id !== projectId ||
-      projectStructure !== 'SINGLE_MAIN_BASE'
-    ) {
-      return;
-    }
-    const store = useNetworkStore.getState();
-    const current = store.network;
-    if (
-      !current ||
-      current.project_id !== projectId ||
-      current.nodes.NODE_MAIN_BASE?.origin?.kind !== 'shared_structure' ||
-      current.nodes.NODE_HSK_BASE?.origin?.kind !== 'shared_structure'
-    ) {
-      return;
-    }
-    store.replaceSharedStructure(buildSharedStructure('SINGLE_MAIN_BASE'), materials);
-    toast.success(
-      'Legacy Main Base was merged into the shared HSK Base; existing connections were migrated. / 舊 Main Base 已合併至共用 HSK Base，既有連線已遷移。',
-    );
-  }, [
-    draft?.project_id,
-    projectId,
-    projectStructure,
-    materials.hsk_base_k_W_mK.value,
-    materials.hsk_base_thickness_mm?.value,
-  ]);
-
   // One section at a time, matching the step. Three open panels in a 300 px
   // column is what made this side of the screen feel cramped; the engineer can
   // still open any of them by hand afterwards.

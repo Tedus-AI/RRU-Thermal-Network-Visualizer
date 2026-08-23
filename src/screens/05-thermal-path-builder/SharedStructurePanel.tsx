@@ -122,7 +122,7 @@ export function SharedStructurePanel({
           />
           <Button
             className="h-8 shrink-0"
-            disabled={readOnly || preset === 'CUSTOM'}
+            disabled={readOnly}
             title={biTitle('Apply preset', '套用預設結構')}
             onClick={onApplyPreset}
             icon={<Waypoints size={13} />}

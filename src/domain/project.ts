@@ -92,11 +92,10 @@ export interface ProjectContext {
   cooling_architecture: CoolingArchitecture[];
   enclosure_type: EnclosureType;
   /**
-   * How the shared base is divided — 05 §13. It belongs here, beside the other
-   * two architecture answers, because it is one mechanical decision for the
-   * whole radio: it names the zones a component can attach to (Screen 04) and
-   * the structure Screen 05 builds. A single machined casting is the common
-   * case, so that is the default.
+   * Whether the product uses one shared HSK or independent RF and Digital HSKs.
+   * It belongs here because this mechanical decision defines Screen 04's
+   * attachment targets and the topology Screen 05 builds. A single machined
+   * casting is the default.
    */
   base_structure: StructurePreset;
   notes: string;

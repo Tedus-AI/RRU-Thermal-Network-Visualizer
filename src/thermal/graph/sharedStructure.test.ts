@@ -7,17 +7,19 @@ import {
   zoneKeyOf,
 } from './sharedStructure';
 
-/**
- * Screen 04 asks which shared structure a component attaches to; Screen 05
- * builds that structure. If the two disagree, a component points at a zone the
- * graph does not have and `suggestedZoneFor` quietly returns null — the
- * component simply never gets wired, with nothing said.
- *
- * These pin the picker's vocabulary to the graph's.
- */
-describe('presetZones matches what the structure actually builds', () => {
+describe('supported HSK structures', () => {
+  it('exposes only the two product structures', () => {
+    expect(STRUCTURE_PRESETS).toEqual(['SINGLE_MAIN_BASE', 'DUAL_HSK_BASE']);
+  });
+
+  it('rejects removed preset identifiers instead of keeping hidden compatibility', () => {
+    expect(() =>
+      buildSharedStructure('FUNCTIONAL_ZONES' as Parameters<typeof buildSharedStructure>[0]),
+    ).toThrow('Unsupported HSK structure preset');
+  });
+
   for (const preset of STRUCTURE_PRESETS) {
-    it(`offers exactly the zones ${preset} creates`, () => {
+    it(`keeps ${preset} picker targets identical to its graph zones`, () => {
       const built = buildSharedStructure(preset).zones;
       const offered = presetZones(preset);
 
@@ -26,71 +28,67 @@ describe('presetZones matches what the structure actually builds', () => {
         const key = zoneKeyOf(zone.id, preset);
         const match = offered.find((candidate) => candidate.key === key);
         expect(match, `no key offered for built zone ${zone.id}`).toBeDefined();
-        // The label the user picks is the label the graph node carries.
         expect(match!.name).toBe(zone.name);
       }
     });
   }
 
-  it('keeps MAIN_BASE as the compatible key for one physical HSK Base', () => {
-    expect(presetZones('SINGLE_MAIN_BASE').map((zone) => zone.key)).toEqual(['MAIN_BASE']);
-    expect(presetZones('SINGLE_MAIN_BASE')[0].name).toBe('HSK Base');
-  });
-
-  // The old hardcoded list was exactly this preset's, which is why the other
-  // five could not be expressed at all.
-  it('still offers the five functional zones', () => {
-    expect(presetZones('FUNCTIONAL_ZONES').map((zone) => zone.key)).toEqual([
-      'RF_LEFT',
-      'RF_RIGHT',
-      'DIGITAL',
-      'POWER',
-      'FILTER',
+  it('uses the physical HSK key directly for the single structure', () => {
+    expect(presetZones('SINGLE_MAIN_BASE').map((zone) => zone.key)).toEqual(['HSK_BASE']);
+    expect(buildSharedStructure('SINGLE_MAIN_BASE').zones.map((zone) => zone.id)).toEqual([
+      'NODE_HSK_BASE',
     ]);
   });
 
-  it('offers nothing for a custom structure, which is drawn by hand', () => {
-    expect(presetZones('CUSTOM')).toEqual([]);
-    expect(buildSharedStructure('CUSTOM').zones).toEqual([]);
+  it('provides exact RF and Digital attachment targets for the dual structure', () => {
+    const structure = buildSharedStructure('DUAL_HSK_BASE');
+    expect(presetZones('DUAL_HSK_BASE').map((zone) => zone.key)).toEqual([
+      'RF_HSK_BASE',
+      'DIGITAL_HSK_BASE',
+    ]);
+    expect(structure.zones.map((zone) => zone.id)).toEqual([
+      'NODE_RF_HSK_BASE',
+      'NODE_DIGITAL_HSK_BASE',
+    ]);
   });
 });
 
-describe('zoneKeyOf', () => {
-  it('reads the key back off a built zone id', () => {
-    const [zone] = buildSharedStructure('SINGLE_MAIN_BASE').zones;
-    expect(zoneKeyOf(zone.id, 'SINGLE_MAIN_BASE')).toBe('MAIN_BASE');
+describe('independent heat-sink tails', () => {
+  it('builds one combined base/fin-root plane for the shared HSK', () => {
+    const structure = buildSharedStructure('SINGLE_MAIN_BASE');
+    expect(structure.nodes.map((node) => node.id)).toEqual([
+      'NODE_HSK_BASE',
+      'NODE_FIN_SURFACE',
+      'NODE_AMBIENT_PLACEHOLDER',
+    ]);
+    expect(structure.nodes.filter((node) => node.boundary_role === 'placeholder')).toHaveLength(1);
   });
 
-  it('returns null for a node that names no zone of this preset', () => {
-    expect(zoneKeyOf('NODE_FIN_ROOT', 'SINGLE_MAIN_BASE')).toBeNull();
-    // A real zone, but not one this structure has.
-    expect(zoneKeyOf('NODE_ZONE_RF_LEFT', 'SINGLE_MAIN_BASE')).toBeNull();
-  });
-});
+  it('builds two isolated HSK → fin → ambient paths', () => {
+    const structure = buildSharedStructure('DUAL_HSK_BASE');
+    const ids = structure.nodes.map((node) => node.id);
+    expect(ids).toEqual([
+      'NODE_RF_HSK_BASE',
+      'NODE_RF_FIN_SURFACE',
+      'NODE_RF_AMBIENT_PLACEHOLDER',
+      'NODE_DIGITAL_HSK_BASE',
+      'NODE_DIGITAL_FIN_SURFACE',
+      'NODE_DIGITAL_AMBIENT_PLACEHOLDER',
+    ]);
+    expect(structure.nodes.filter((node) => node.boundary_role === 'placeholder')).toHaveLength(2);
+    expect(structure.edges).toHaveLength(4);
 
-/**
- * Every preset ends at the same heat-sink tail. BASE and FIN are shared by
- * every component, which is exactly why they are not zone choices.
- */
-describe('the heat sink tail is shared, not chosen', () => {
-  for (const preset of STRUCTURE_PRESETS.filter((entry) => entry !== 'CUSTOM')) {
-    it(`${preset} ends at HSK base, fin surface and ambient`, () => {
-      const ids = buildSharedStructure(preset).nodes.map((node) => node.id);
-      for (const tail of ['NODE_HSK_BASE', 'NODE_FIN_SURFACE', 'NODE_AMBIENT_PLACEHOLDER']) {
-        expect(ids).toContain(tail);
-      }
-      // For a single casting, the HSK Base node is already the fin-root plane;
-      // retaining both Main Base and Fin Root would double-count the material.
-      if (preset === 'SINGLE_MAIN_BASE') {
-        expect(ids).not.toContain('NODE_MAIN_BASE');
-        expect(ids).not.toContain('NODE_FIN_ROOT');
-      } else {
-        expect(ids).toContain('NODE_FIN_ROOT');
-      }
-      // And none of them is offered as somewhere to attach a component.
-      const zoneKeys = presetZones(preset).map((zone) => zone.key);
-      expect(zoneKeys).not.toContain('HSK_BASE');
-      expect(zoneKeys).not.toContain('FIN_ROOT');
-    });
-  }
+    const crossLinks = structure.edges.filter(
+      (edge) =>
+        (edge.from.includes('RF_') && edge.to.includes('DIGITAL_')) ||
+        (edge.from.includes('DIGITAL_') && edge.to.includes('RF_')),
+    );
+    expect(crossLinks).toEqual([]);
+  });
+
+  it('does not confuse RF_HSK_BASE with the shorter HSK_BASE key', () => {
+    expect(zoneKeyOf('NODE_RF_HSK_BASE', 'DUAL_HSK_BASE')).toBe('RF_HSK_BASE');
+    expect(zoneKeyOf('NODE_DIGITAL_HSK_BASE', 'DUAL_HSK_BASE')).toBe('DIGITAL_HSK_BASE');
+    expect(zoneKeyOf('NODE_RF_FIN_SURFACE', 'DUAL_HSK_BASE')).toBeNull();
+  });
 });

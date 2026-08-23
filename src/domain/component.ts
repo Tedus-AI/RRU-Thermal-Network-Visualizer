@@ -350,34 +350,15 @@ export const HEAT_PATH_PATCH_FIELDS = ['heat_path.type', 'architecture_prep'];
  * never an actual base node.
  *
  * A zone KEY, not a display name. Which keys are valid depends on the project's
- * base structure (01 §2) — `presetZones` is the vocabulary — so this cannot be
- * a fixed union. It used to be one, hardcoded to the FUNCTIONAL_ZONES names,
- * which left four of the six structures with no zone the user could pick and
- * matched by upper-casing the display name, so a rename broke the link
- * silently.
+ * base structure — `presetZones` is the vocabulary — so this cannot be a fixed
+ * union. The stored value is the exact stable zone key, never a display name.
  */
 export const UNASSIGNED_ZONE = 'Unassigned';
 export type BaseZone = string;
 
-/** Display names stored by earlier builds, mapped to the keys that replaced them. */
-const LEGACY_ZONE_KEYS: Record<string, string> = {
-  'RF Left': 'RF_LEFT',
-  'RF Right': 'RF_RIGHT',
-  Digital: 'DIGITAL',
-  Power: 'POWER',
-  Filter: 'FILTER',
-  'Main Base': 'MAIN_BASE',
-  'Small Base': 'SMALL_BASE',
-  'Base Top': 'BASE_TOP',
-  'Base Mid': 'BASE_MID',
-  'Base Bottom': 'BASE_BOTTOM',
-  // Never a zone — it meant "not decided", which is what Unassigned says.
-  Custom: UNASSIGNED_ZONE,
-};
-
 export function normalizeZoneKey(value: unknown): BaseZone {
   if (typeof value !== 'string' || value.trim() === '') return UNASSIGNED_ZONE;
-  return LEGACY_ZONE_KEYS[value] ?? value;
+  return value.trim();
 }
 
 /** 04 §21 — Screen 05 decides whether Qty 4 becomes 1, 4 or grouped nodes. */

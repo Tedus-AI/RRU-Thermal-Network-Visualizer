@@ -1,6 +1,7 @@
 /**
- * Resolves a component terminal into the one physical HSK base used by the
- * SINGLE_MAIN_BASE preset.
+ * Resolves a component terminal into its selected physical HSK base. The same
+ * calculation applies to the single shared HSK and either half of a dual-HSK
+ * structure.
  *
  * The terminal node is the downstream face of the TIM. The edge after it is
  * therefore the HSK base thickness, matching the graph's existing convention:
@@ -71,10 +72,7 @@ function baseConductionInputs(
   };
 }
 
-/**
- * Returns an analytical edge model only for the corrected single shared HSK
- * target. Other presets retain their explicit zone/spreading workflow.
- */
+/** Returns the analytical HSK-thickness edge for any declared HSK target. */
 export function hskBaseConnectionPatch(
   network: ThermalNetwork,
   sourceNodeId: string,
