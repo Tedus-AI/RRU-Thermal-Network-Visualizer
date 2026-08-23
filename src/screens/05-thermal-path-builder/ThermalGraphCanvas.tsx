@@ -62,7 +62,7 @@ function positionViewBuses(cy: Core) {
   cy.nodes('.hsk-bus').forEach((bus) => {
     const shared = cy.getElementById(bus.data('sharedId') as string);
     if (shared.length === 0) return;
-    const junctions = cy.nodes('.hsk-bus-junction').filter(
+    const junctions = cy.nodes('.hsk-bus-branch-junction').filter(
       (junction) => junction.data('busId') === bus.id(),
     );
     if (junctions.length === 0) return;
@@ -73,6 +73,8 @@ function positionViewBuses(cy: Core) {
       if (source.isNode()) sourceEntries.push({ junction, source });
     });
     if (sourceEntries.length === 0) return;
+    const outlet = cy.getElementById(bus.data('outletId') as string);
+    if (!outlet.isNode()) return;
 
     const sharedBox = shared.boundingBox();
     const averageSourceX =
@@ -83,21 +85,17 @@ function positionViewBuses(cy: Core) {
       ? Math.max(...sourceEntries.map((entry) => entry.source.boundingBox().x2))
       : Math.min(...sourceEntries.map((entry) => entry.source.boundingBox().x1));
     const targetFront = targetOnRight ? sharedBox.x1 : sharedBox.x2;
-    const busX = sourceFront + (targetFront - sourceFront) * 0.58;
-    const busY = shared.position('y');
+    const busX = sourceFront + (targetFront - sourceFront) * 0.72;
     const sourceYs = sourceEntries.map((entry) => entry.source.position('y'));
-    const maxDistanceY = Math.max(...sourceYs.map((value) => Math.abs(value - busY)));
+    const allYs = [...sourceYs, shared.position('y')];
+    const minY = Math.min(...allYs);
+    const maxY = Math.max(...allYs);
 
-    bus.data('h', Math.max(80, maxDistanceY * 2 + 16));
-    bus.position({ x: busX, y: busY });
+    bus.data('h', Math.max(2, maxY - minY));
+    bus.position({ x: busX, y: (minY + maxY) / 2 });
+    outlet.position({ x: busX, y: shared.position('y') });
     sourceEntries.forEach(({ junction, source }) => {
       junction.position({ x: busX, y: source.position('y') });
-      const sourceBox = source.boundingBox();
-      const sourceEdge = targetOnRight ? sourceBox.x2 : sourceBox.x1;
-      cy.getElementById(junction.data('edgeId') as string).data(
-        'labelOffset',
-        Math.max(42, Math.abs(busX - sourceEdge) / 2),
-      );
     });
   });
 }
