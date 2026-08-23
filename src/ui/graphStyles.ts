@@ -157,6 +157,32 @@ export function cytoscapeStylesheet(): StylesheetCSS[] {
       style: { 'border-color': '#1d4ed8', 'border-width': 3, 'border-style': 'double' },
     },
     {
+      selector: 'node.hsk-bus',
+      style: {
+        shape: 'rectangle',
+        width: 'data(w)',
+        height: 'data(h)',
+        label: '',
+        'background-color': '#0d9488',
+        'border-width': 0,
+        events: 'no',
+        'z-index': 1,
+      },
+    },
+    {
+      selector: 'node.hsk-bus-junction',
+      style: {
+        shape: 'ellipse',
+        width: 'data(w)',
+        height: 'data(h)',
+        label: '',
+        'background-color': '#0d9488',
+        'border-width': 0,
+        events: 'no',
+        'z-index': 8,
+      },
+    },
+    {
       selector: 'edge',
       style: {
         width: 2,
@@ -173,6 +199,60 @@ export function cytoscapeStylesheet(): StylesheetCSS[] {
         'text-background-opacity': 0.85,
         'text-background-padding': '2px',
         'text-rotation': 'autorotate',
+        'min-zoomed-font-size': 7,
+      },
+    },
+    {
+      selector: 'edge.routed-port-edge',
+      style: {
+        'curve-style': 'straight',
+        label: '',
+        'arrow-scale': 0.65,
+        'text-background-opacity': 1,
+        'text-background-shape': 'roundrectangle',
+        'text-background-padding': '3px',
+        'text-border-opacity': 1,
+        'text-border-width': 1,
+        'text-border-color': '#cbd5e1',
+        'z-index': 5,
+      },
+    },
+    {
+      selector: 'edge.routed-port-edge.label-at-source',
+      style: {
+        'source-label': 'data(label)',
+        'source-text-offset': 'data(labelOffset)',
+        'source-text-rotation': 'none',
+      },
+    },
+    {
+      selector: 'edge.routed-port-edge.label-at-target',
+      style: {
+        'target-label': 'data(label)',
+        'target-text-offset': 'data(labelOffset)',
+        'target-text-rotation': 'none',
+      },
+    },
+    {
+      selector: 'edge.hsk-bus-trunk',
+      style: {
+        width: 3,
+        'curve-style': 'straight',
+        'line-color': '#0d9488',
+        'target-arrow-shape': 'none',
+        label: '',
+        events: 'no',
+        'z-index': 2,
+      },
+    },
+    {
+      selector: 'edge.layout-only',
+      style: {
+        opacity: 0,
+        width: 0.1,
+        label: '',
+        'target-arrow-shape': 'none',
+        events: 'no',
       },
     },
     {
