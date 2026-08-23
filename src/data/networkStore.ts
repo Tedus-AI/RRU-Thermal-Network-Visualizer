@@ -26,9 +26,11 @@ import type {
   ThermalEdge,
   ThermalNetwork,
   ThermalNode,
+  PortKind,
 } from '@/thermal/types';
 import { validateGraph, type GraphValidationResult } from '@/thermal/graph/graphValidation';
 import { hskBaseConnectionPatch } from '@/thermal/graph/hskBaseConnection';
+import { reconcilePortConnections } from '@/thermal/graph/portConnectionReconciliation';
 import type { MaterialDefaults } from '@/domain/materials';
 
 export function emptyNetwork(projectId: string): ThermalNetwork {
@@ -100,11 +102,11 @@ interface NetworkStoreState {
 
   connectPort: (
     nodeId: string,
-    portKind: string,
+    portKind: PortKind,
     targetNodeId: string,
     materials?: MaterialDefaults,
   ) => void;
-  disconnectPort: (nodeId: string, portKind: string) => void;
+  disconnectPort: (nodeId: string, portKind: PortKind) => void;
 
   undo: () => void;
   redo: () => void;
@@ -136,14 +138,15 @@ function snapshot(network: ThermalNetwork): Snapshot {
 function portConnectionEdge(
   network: ThermalNetwork,
   nodeId: string,
+  portKind: PortKind,
   targetNodeId: string,
   materials?: MaterialDefaults,
 ): ThermalEdge {
-  const edgeKey = `EDGE_PORT_${nodeId.replace(/^NODE_/, '')}_${targetNodeId.replace(/^NODE_/, '')}`;
+  const edgeKey = `EDGE_PORT_${nodeId.replace(/^NODE_/, '')}_${portKind}_${targetNodeId.replace(/^NODE_/, '')}`;
   const linkedBaseModel = materials
     ? hskBaseConnectionPatch(network, nodeId, targetNodeId, materials)
     : null;
-  return {
+  const edge: ThermalEdge = {
     id: edgeKey,
     from: nodeId,
     to: targetNodeId,
@@ -166,6 +169,19 @@ function portConnectionEdge(
     origin: { kind: 'manual', component_id: network.nodes[nodeId]?.component_ref },
     ...(linkedBaseModel ?? {}),
   };
+  edge.metadata = {
+    ...edge.metadata,
+    port_kind: portKind,
+  };
+  return edge;
+}
+
+function statusFor(network: ThermalNetwork, validation: GraphValidationResult): NetworkStatus {
+  return Object.keys(network.nodes).length === 0
+    ? 'EMPTY'
+    : validation.errors > 0
+      ? 'NEEDS_REVIEW'
+      : 'DRAFT';
 }
 
 export const useNetworkStore = create<NetworkStoreState>((set, get) => ({
@@ -180,6 +196,14 @@ export const useNetworkStore = create<NetworkStoreState>((set, get) => ({
   loadFor: (projectId) => {
     const stored = loadNetwork(projectId);
     const network = stored ?? emptyNetwork(projectId);
+    const repaired = reconcilePortConnections(network);
+    const validation = validateGraph(network);
+    if (repaired.length > 0) {
+      network.status = statusFor(network, validation);
+      // This is a metadata repair of topology that already exists, so keep the
+      // engineering revision and solver freshness while persisting the fix.
+      saveNetwork(projectId, network);
+    }
     const review = loadNetworkReviewState(projectId);
     set({
       network,
@@ -188,7 +212,7 @@ export const useNetworkStore = create<NetworkStoreState>((set, get) => ({
       requiresReviewReasons: review.reasons,
       past: [],
       future: [],
-      validation: validateGraph(network),
+      validation,
     });
   },
 
@@ -225,17 +249,14 @@ export const useNetworkStore = create<NetworkStoreState>((set, get) => ({
     // Recipes may edit nested ports/provenance; isolate them from history and subscribers.
     const next: ThermalNetwork = structuredClone(current);
     recipe(next);
+    reconcilePortConnections(next);
 
     // Layout-only mutations deliberately keep the engineering graph revision.
     // Every mutation that invalidates a solve advances the provenance clock.
     if (!options.skipInvalidate) next.revision = createRevision('network');
 
     const validation = validateGraph(next);
-    next.status = Object.keys(next.nodes).length === 0
-      ? 'EMPTY'
-      : validation.errors > 0
-        ? 'NEEDS_REVIEW'
-        : 'DRAFT';
+    next.status = statusFor(next, validation);
 
     set({
       network: next,
@@ -297,7 +318,11 @@ export const useNetworkStore = create<NetworkStoreState>((set, get) => ({
       );
       const nextNodeIds = new Set(nodes.map((node) => node.id));
       const replacementHsk = zones.find((zone) => zone.type === 'heat_sink_base')?.id ?? null;
-      const retainedConnections: Array<{ nodeId: string; targetNodeId: string }> = [];
+      const retainedConnections: Array<{
+        nodeId: string;
+        portKind: PortKind;
+        targetNodeId: string;
+      }> = [];
 
       for (const id of removedNodeIds) {
         delete network.nodes[id];
@@ -328,7 +353,9 @@ export const useNetworkStore = create<NetworkStoreState>((set, get) => ({
             : oldTarget === 'NODE_MAIN_BASE'
               ? replacementHsk
               : null;
-          if (targetNodeId) retainedConnections.push({ nodeId: node.id, targetNodeId });
+          if (targetNodeId) {
+            retainedConnections.push({ nodeId: node.id, portKind: port.kind, targetNodeId });
+          }
           return { ...port, connected_to: targetNodeId };
         });
       }
@@ -340,6 +367,7 @@ export const useNetworkStore = create<NetworkStoreState>((set, get) => ({
         const edge = portConnectionEdge(
           network,
           connection.nodeId,
+          connection.portKind,
           connection.targetNodeId,
           materials,
         );
@@ -386,13 +414,22 @@ export const useNetworkStore = create<NetworkStoreState>((set, get) => ({
     get().mutate((network) => {
       const node = network.nodes[nodeId];
       if (!node?.ports) return;
+      const previousTarget = node.ports.find((port) => port.kind === portKind)?.connected_to;
+      if (previousTarget && previousTarget !== targetNodeId) {
+        for (const [edgeId, edge] of Object.entries(network.edges)) {
+          const connectsPrevious =
+            (edge.from === nodeId && edge.to === previousTarget) ||
+            (edge.to === nodeId && edge.from === previousTarget);
+          if (edge.id.startsWith('EDGE_PORT_') && connectsPrevious) delete network.edges[edgeId];
+        }
+      }
       node.ports = node.ports.map((port) =>
         port.kind === portKind ? { ...port, connected_to: targetNodeId } : port,
       );
 
       // The port becomes a real edge. Single-HSK connections are resolved from
       // Screen 01; other structures retain an explicit unresolved interface.
-      const edge = portConnectionEdge(network, nodeId, targetNodeId, materials);
+      const edge = portConnectionEdge(network, nodeId, portKind, targetNodeId, materials);
       network.edges[edge.id] = edge;
     }),
 
@@ -402,8 +439,15 @@ export const useNetworkStore = create<NetworkStoreState>((set, get) => ({
       if (!node?.ports) return;
       const port = node.ports.find((candidate) => candidate.kind === portKind);
       if (port?.connected_to) {
-        const edgeKey = `EDGE_PORT_${nodeId.replace(/^NODE_/, '')}_${port.connected_to.replace(/^NODE_/, '')}`;
-        delete network.edges[edgeKey];
+        for (const [edgeId, edge] of Object.entries(network.edges)) {
+          const connectsTarget =
+            (edge.from === nodeId && edge.to === port.connected_to) ||
+            (edge.to === nodeId && edge.from === port.connected_to);
+          const matchesKind = edge.metadata?.port_kind == null || edge.metadata.port_kind === portKind;
+          if (edge.id.startsWith('EDGE_PORT_') && connectsTarget && matchesKind) {
+            delete network.edges[edgeId];
+          }
+        }
       }
       node.ports = node.ports.map((candidate) =>
         candidate.kind === portKind ? { ...candidate, connected_to: null } : candidate,
@@ -419,6 +463,7 @@ export const useNetworkStore = create<NetworkStoreState>((set, get) => ({
       ...previous,
       revision: createRevision('network'),
     };
+    reconcilePortConnections(restored);
     set({
       network: restored,
       past: past.slice(0, -1),
@@ -438,6 +483,7 @@ export const useNetworkStore = create<NetworkStoreState>((set, get) => ({
       ...nextSnapshot,
       revision: createRevision('network'),
     };
+    reconcilePortConnections(restored);
     set({
       network: restored,
       future: future.slice(1),
@@ -452,10 +498,14 @@ export const useNetworkStore = create<NetworkStoreState>((set, get) => ({
   canRedo: () => get().future.length > 0,
 
   revalidate: () => {
-    const network = get().network;
-    if (!network) return null;
+    const current = get().network;
+    if (!current) return null;
+    const network = structuredClone(current);
+    const repaired = reconcilePortConnections(network);
     const validation = validateGraph(network);
-    set({ validation });
+    network.status = statusFor(network, validation);
+    if (repaired.length > 0) saveNetwork(network.project_id, network);
+    set({ network, validation, dirty: repaired.length > 0 ? false : get().dirty });
     return validation;
   },
 
@@ -481,10 +531,14 @@ export const useNetworkStore = create<NetworkStoreState>((set, get) => ({
   },
 
   save: (projectId) => {
-    const network = get().network;
-    if (!network) return;
+    const current = get().network;
+    if (!current) return;
+    const network = structuredClone(current);
+    reconcilePortConnections(network);
+    const validation = validateGraph(network);
+    network.status = statusFor(network, validation);
     saveNetwork(projectId, network);
-    set({ dirty: false });
+    set({ network, validation, dirty: false });
   },
 
   nodeCount: () => Object.keys(get().network?.nodes ?? {}).length,

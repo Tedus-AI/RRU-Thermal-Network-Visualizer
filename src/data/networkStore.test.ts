@@ -11,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useNetworkStore } from './networkStore';
 import { useSolverStore } from './solverStore';
+import { loadNetwork, saveNetwork } from './persistence';
 import { createComponent } from '@/domain/component';
 import { sourced } from '@/domain/sourcedValue';
 import { buildComponentSubgraph } from '@/thermal/graph/networkBuilder';
@@ -131,6 +132,66 @@ describe('component subgraph rebuild (05 §40, AC-05-11)', () => {
 });
 
 describe('port connection (05 §16)', () => {
+  it('automatically syncs a visible port edge before validation', () => {
+    const structure = buildSharedStructure('SINGLE_MAIN_BASE');
+    const subgraph = buildComponentSubgraph(pa(), {
+      materials: defaultMaterials(),
+      templateId: 'BOTTOM_COOL_COIN',
+      qtyModel: 'AGGREGATE',
+    })!;
+    useNetworkStore.getState().addSubgraph({
+      nodes: structure.nodes,
+      edges: structure.edges,
+      zones: structure.zones,
+    });
+    useNetworkStore.getState().addSubgraph(subgraph);
+    const portNode = subgraph.nodes.find((node) => node.ports?.length)!;
+    const targetId = structure.zones[0].id;
+
+    useNetworkStore
+      .getState()
+      .upsertEdge(manualEdge('EDGE_PORT_LEGACY_TIM_HSK_BASE', portNode.id, targetId));
+
+    const state = useNetworkStore.getState();
+    expect(state.network!.nodes[portNode.id].ports?.[0].connected_to).toBe(targetId);
+    expect(
+      state.validation!.issues.some(
+        (issue) => issue.code === 'UNCONNECTED_PORT' && issue.nodeId === portNode.id,
+      ),
+    ).toBe(false);
+  });
+
+  it('repairs and persists an inconsistent saved network as soon as it loads', () => {
+    const structure = buildSharedStructure('SINGLE_MAIN_BASE');
+    const subgraph = buildComponentSubgraph(pa(), {
+      materials: defaultMaterials(),
+      templateId: 'BOTTOM_COOL_COIN',
+      qtyModel: 'AGGREGATE',
+    })!;
+    const stored = structuredClone(useNetworkStore.getState().network!);
+    for (const entry of structure.nodes) stored.nodes[entry.id] = entry;
+    for (const entry of structure.edges) stored.edges[entry.id] = entry;
+    for (const entry of structure.zones) stored.zones[entry.id] = entry;
+    for (const entry of subgraph.nodes) stored.nodes[entry.id] = entry;
+    for (const entry of subgraph.edges) stored.edges[entry.id] = entry;
+    const portNode = subgraph.nodes.find((node) => node.ports?.length)!;
+    const targetId = structure.zones[0].id;
+    stored.edges.EDGE_PORT_SAVED_TIM_HSK_BASE = manualEdge(
+      'EDGE_PORT_SAVED_TIM_HSK_BASE',
+      portNode.id,
+      targetId,
+    );
+    saveNetwork('LEGACY', stored);
+
+    useNetworkStore.getState().loadFor('LEGACY');
+
+    expect(useNetworkStore.getState().network!.nodes[portNode.id].ports?.[0].connected_to).toBe(
+      targetId,
+    );
+    expect(loadNetwork('LEGACY')!.nodes[portNode.id].ports?.[0].connected_to).toBe(targetId);
+    expect(useNetworkStore.getState().dirty).toBe(false);
+  });
+
   it('wires a port to a shared node and creates an unresolved interface edge', () => {
     const structure = buildSharedStructure('FUNCTIONAL_ZONES');
     useNetworkStore.getState().addSubgraph({
