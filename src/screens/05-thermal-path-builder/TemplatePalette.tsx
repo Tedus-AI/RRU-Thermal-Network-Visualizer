@@ -17,13 +17,16 @@ import { Bi, BilingualTooltip, biTitle } from '@/ui/FieldLabel';
 import { TOOLTIPS_ZH } from './tooltips';
 
 import type { Component } from '@/domain/component';
-import { TEMPLATE_LIST } from '@/thermal/templates/templateRegistry';
 import type { ThermalTemplate } from '@/thermal/templates/types';
 import { missingRequirements, templateForComponent } from '@/thermal/graph/networkBuilder';
 import { useProjectStore } from '@/data/projectStore';
 import { defaultMaterials } from '@/domain/materials';
 import type { QtyModel } from '@/thermal/graph/networkBuilder';
 import { QTY_MODELS, type BuilderPref } from './ComponentPalette';
+import {
+  SELECTABLE_TEMPLATE_LIST,
+  templateForPaletteSelection,
+} from './templatePaletteOptions';
 
 /** The prototype chain, drawn as a compact vertical path ending at its ports. */
 function MiniSubgraph({ template }: { template: ThermalTemplate }) {
@@ -113,8 +116,7 @@ export function TemplatePalette({
   onPrefChange: (next: BuilderPref) => void;
   onApply: () => void;
 }) {
-  const selectedTemplate =
-    TEMPLATE_LIST.find((entry) => entry.id === pref?.templateId) ?? TEMPLATE_LIST[0];
+  const selectedTemplate = templateForPaletteSelection(pref?.templateId);
   const template = component
     ? (templateForComponent(component, selectedTemplate.id) ?? selectedTemplate)
     : selectedTemplate;
@@ -171,7 +173,7 @@ export function TemplatePalette({
           Architecture <span className="font-normal text-ink-400">/ 架構模板</span>
         </p>
         <ul className="grid grid-cols-2 gap-1">
-          {TEMPLATE_LIST.map((entry) => {
+          {SELECTABLE_TEMPLATE_LIST.map((entry) => {
             const active = entry.id === template.id;
             return (
               <li key={entry.id}>
