@@ -34,7 +34,7 @@ import {
 } from '../resistance/calculators';
 import { getTemplate } from '../templates/templateRegistry';
 import type { ThermalTemplate } from '../templates/types';
-import { edgeId, instanceKeys, instanceMultiplier, nodeId } from './idFactory';
+import { edgeId, instanceKeys, instanceMultiplier, nodeId, structureNodeId } from './idFactory';
 import type {
   ComponentTemplateBinding,
   EdgeMethod,
@@ -88,6 +88,10 @@ export function readLinkedInput(
       return materials.coin_thickness_mm?.value ?? null;
     case 'materials.contact_conductance_W_m2K':
       return materials.contact_conductance_W_m2K.value;
+    case 'materials.hsk_base_thickness_mm':
+      return materials.hsk_base_thickness_mm?.value ?? null;
+    case 'materials.hsk_base_k_W_mK':
+      return materials.hsk_base_k_W_mK.value;
   }
 
   // --- Derived component values ------------------------------------------
@@ -565,15 +569,7 @@ export function previewGeneration(
 export function suggestedZoneFor(component: Component, zoneIds: string[]): string | null {
   const preferred = component.architecture_prep.preferred_base_zone;
   if (preferred === UNASSIGNED_ZONE) return null;
-  // SINGLE_MAIN_BASE keeps MAIN_BASE as its persisted compatibility key, while
-  // the corrected Screen 05 structure exposes the one physical NODE_HSK_BASE.
-  if (preferred === 'MAIN_BASE') {
-    const sharedHsk = zoneIds.find((id) => id.endsWith('HSK_BASE'));
-    if (sharedHsk) return sharedHsk;
-  }
-  // The stored value IS the zone key now, so no name mangling: a renamed zone
-  // used to break this link without saying anything.
-  return zoneIds.find((id) => id.endsWith(preferred)) ?? null;
+  return zoneIds.find((id) => id === structureNodeId(preferred)) ?? null;
 }
 
 export const PORT_LABELS: Record<PortKind, { label: string; zh: string }> = {

@@ -54,6 +54,16 @@ function networkWithBoundary(): ThermalNetwork {
   };
 }
 
+function dualNetworkWithBoundary(): ThermalNetwork {
+  const structure = buildSharedStructure('DUAL_HSK_BASE');
+  return {
+    ...networkWithBoundary(),
+    nodes: Object.fromEntries(structure.nodes.map((node) => [node.id, node])),
+    edges: Object.fromEntries(structure.edges.map((edge) => [edge.id, edge])),
+    zones: Object.fromEntries(structure.zones.map((zone) => [zone.id, zone])),
+  };
+}
+
 function port(overrides: Partial<BoundaryPort> = {}): BoundaryPort {
   return {
     id: 'BP_TEST',
@@ -301,6 +311,19 @@ describe('boundary ports derived from Screen 05 (06 §5)', () => {
     const ports = deriveBoundaryPorts(networkWithBoundary());
     const ambient = ports.find((entry) => entry.connected_node_id.includes('AMBIENT'));
     expect(ambient?.dissipating).toBe(false);
+  });
+
+  it('derives separate RF and Digital boundary ports for dual HSK bases', () => {
+    const dissipating = deriveBoundaryPorts(dualNetworkWithBoundary()).filter(
+      (entry) => entry.dissipating,
+    );
+
+    expect(dissipating.map((entry) => entry.connected_node_id).sort()).toEqual([
+      'NODE_DIGITAL_FIN_SURFACE',
+      'NODE_RF_FIN_SURFACE',
+    ]);
+    expect(new Set(dissipating.map((entry) => entry.boundary_edge_id)).size).toBe(2);
+    expect(new Set(dissipating.map((entry) => entry.surface_group_id)).size).toBe(2);
   });
 
   it('does not mutate the topology it reads', () => {

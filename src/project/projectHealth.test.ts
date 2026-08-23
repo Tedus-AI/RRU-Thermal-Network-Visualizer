@@ -40,7 +40,7 @@ function ready(name = 'Final PA'): Component {
     tim: { ...subject.thermal_spec.tim, tim_id: 'TIM_GREASE' },
     geometry: { ...emptyGeometry(), source_L_mm: 15, source_W_mm: 15 },
   };
-  subject.architecture_prep.preferred_base_zone = 'MAIN_BASE';
+  subject.architecture_prep.preferred_base_zone = 'HSK_BASE';
   return subject;
 }
 

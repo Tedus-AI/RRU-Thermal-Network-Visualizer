@@ -1,97 +1,45 @@
 /**
- * Shared base / heat sink structure — 05 §13, §14, §15.
+ * Shared HSK structures owned by Screen 05.
  *
- * The boundary rule this module protects (05 §15, §61): Screen 05 may create the
- * structural endpoint `FIN_SURFACE → AMBIENT_PLACEHOLDER`, but that edge is
- * always UNRESOLVED. Ambient temperature, h_conv, h_rad, wind and solar are
- * Screen 06's job and must not be assumed here.
+ * Screen 05 creates topology through the ambient placeholder. It never assumes
+ * ambient temperature, convection, radiation, wind, or solar inputs; Screen 06
+ * resolves those boundary conditions independently for every fin surface.
  */
 
 import { createRth } from '../rth';
 import { structureEdgeId, structureNodeId, zoneNodeId } from './idFactory';
 import type { BaseZone, NodeType, ThermalEdge, ThermalNode } from '../types';
 
-export const STRUCTURE_PRESETS = [
-  'SINGLE_MAIN_BASE',
-  'THREE_ZONE',
-  'FUNCTIONAL_ZONES',
-  'SMALL_BASE_MAIN_BASE',
-  'HEAT_PIPE_MAIN_BASE',
-  'CUSTOM',
-] as const;
+export const STRUCTURE_PRESETS = ['SINGLE_MAIN_BASE', 'DUAL_HSK_BASE'] as const;
 export type StructurePreset = (typeof STRUCTURE_PRESETS)[number];
 
 export const PRESET_LABELS: Record<StructurePreset, { label: string; zh: string }> = {
   SINGLE_MAIN_BASE: { label: 'Single Shared HSK Base', zh: '單一共用散熱器底座' },
-  THREE_ZONE: { label: '3-Zone Base', zh: '三區基座' },
-  FUNCTIONAL_ZONES: { label: 'Functional Zones', zh: '功能分區' },
-  SMALL_BASE_MAIN_BASE: { label: 'Small Base + Main Base', zh: '小基座 + 主基座' },
-  HEAT_PIPE_MAIN_BASE: { label: 'Heat Pipe + Main Base', zh: '熱管 + 主基座' },
-  CUSTOM: { label: 'Custom', zh: '自訂' },
+  DUAL_HSK_BASE: { label: 'Dual Independent HSK Bases', zh: '雙獨立散熱器底座' },
 };
 
-export const FUNCTIONAL_ZONE_PRESETS = [
-  { key: 'RF_LEFT', name: 'RF Left', zh: 'RF 左' },
-  { key: 'RF_RIGHT', name: 'RF Right', zh: 'RF 右' },
-  { key: 'DIGITAL', name: 'Digital', zh: '數位' },
-  { key: 'POWER', name: 'Power', zh: '電源' },
-  { key: 'FILTER', name: 'Filter', zh: '濾波器' },
-] as const;
-
-/**
- * The zones each preset offers, as keys rather than display names.
- *
- * Screen 04 asks which shared structure a component attaches to, and until this
- * existed it offered a hardcoded list of the FUNCTIONAL_ZONES names — so a
- * project built on a single machined casting had no `Main Base` to pick, and
- * four of the six presets could not be expressed at all. The match was also by
- * name, upper-cased and punctuation-stripped, which silently failed the moment
- * a zone was renamed.
- *
- * `sharedStructure.test.ts` asserts these keys are exactly the zones
- * `buildSharedStructure` produces, so the picker and the graph cannot drift.
- */
+/** A component attachment target exposed by the selected shared structure. */
 export interface PresetZone {
-  /** Matches the tail of the zone node's id — see `zoneNodeId` / `structureNodeId`. */
   key: string;
   name: string;
   zh: string;
 }
 
 const PRESET_ZONES: Record<StructurePreset, readonly PresetZone[]> = {
-  // Keep MAIN_BASE as the stored compatibility key. The physical node is now
-  // NODE_HSK_BASE; `zoneKeyOf` and `suggestedZoneFor` bridge that old key.
-  SINGLE_MAIN_BASE: [{ key: 'MAIN_BASE', name: 'HSK Base', zh: '散熱器底座' }],
-  THREE_ZONE: [
-    { key: 'BASE_TOP', name: 'Base Top', zh: '基座上段' },
-    { key: 'BASE_MID', name: 'Base Mid', zh: '基座中段' },
-    { key: 'BASE_BOTTOM', name: 'Base Bottom', zh: '基座下段' },
+  SINGLE_MAIN_BASE: [{ key: 'HSK_BASE', name: 'HSK Base', zh: '散熱器底座' }],
+  DUAL_HSK_BASE: [
+    { key: 'RF_HSK_BASE', name: 'RF HSK Base', zh: 'RF 散熱器底座' },
+    { key: 'DIGITAL_HSK_BASE', name: 'Digital HSK Base', zh: '數位散熱器底座' },
   ],
-  FUNCTIONAL_ZONES: FUNCTIONAL_ZONE_PRESETS.map((zone) => ({
-    key: zone.key,
-    name: zone.name,
-    zh: zone.zh,
-  })),
-  SMALL_BASE_MAIN_BASE: [
-    { key: 'SMALL_BASE', name: 'Small Base', zh: '小基座' },
-    { key: 'MAIN_BASE', name: 'Main Base', zh: '主基座' },
-  ],
-  HEAT_PIPE_MAIN_BASE: [
-    { key: 'SMALL_BASE', name: 'Small Base', zh: '小基座' },
-    { key: 'MAIN_BASE', name: 'Main Base', zh: '主基座' },
-  ],
-  // Built by hand in Screen 05, so there is nothing to offer up front.
-  CUSTOM: [],
 };
 
 export function presetZones(preset: StructurePreset): readonly PresetZone[] {
-  return PRESET_ZONES[preset] ?? [];
+  return PRESET_ZONES[preset];
 }
 
-/** The zone key a structure node id ends with, or null when it names no zone. */
+/** Returns the exact zone key represented by a shared-structure node id. */
 export function zoneKeyOf(nodeId: string, preset: StructurePreset): string | null {
-  if (preset === 'SINGLE_MAIN_BASE' && nodeId.endsWith('HSK_BASE')) return 'MAIN_BASE';
-  return presetZones(preset).find((zone) => nodeId.endsWith(zone.key))?.key ?? null;
+  return presetZones(preset).find((zone) => structureNodeId(zone.key) === nodeId)?.key ?? null;
 }
 
 export interface StructureResult {
@@ -114,7 +62,6 @@ function structuralNode(
     temperature_C: null,
     temperature_source: null,
     boundary_type: null,
-    // A placeholder is structural only until Screen 06 configures it.
     boundary_role: options.boundary ? 'placeholder' : undefined,
     zone_id: options.zoneId ?? null,
     ports: [],
@@ -139,7 +86,6 @@ function structuralEdge(
     to: to.id,
     type: options.type,
     method: options.method,
-    // Unknown resistance stays null; it is never seeded with 0 (AC-05-35).
     rth: createRth(null, 'Analytical', 'low'),
     parameters: {},
     heat_flow_W: null,
@@ -155,150 +101,54 @@ function structuralEdge(
   };
 }
 
-/** Builds the heat-sink tail, ending at the boundary placeholder. */
-function heatSinkTail(combineBaseAndFinRoot = false): StructureResult {
-  const hsk = structuralNode(
-    'HSK_BASE',
-    combineBaseAndFinRoot ? 'HSK Base / Fin Root' : 'HSK Base',
-    'heat_sink_base',
+/** Builds one independent HSK → fin surface → ambient-placeholder path. */
+function heatSinkTail(prefix: '' | 'RF_' | 'DIGITAL_', displayPrefix = ''): StructureResult {
+  const hsk = structuralNode(`${prefix}HSK_BASE`, `${displayPrefix}HSK Base / Fin Root`, 'heat_sink_base');
+  const finSurface = structuralNode(`${prefix}FIN_SURFACE`, `${displayPrefix}Fin Surface`, 'fin_surface');
+  const ambient = structuralNode(
+    `${prefix}AMBIENT_PLACEHOLDER`,
+    `${displayPrefix}Ambient`,
+    'ambient',
+    { boundary: true },
   );
-  const finRoot = structuralNode('FIN_ROOT', 'Fin Root', 'fin_root');
-  const finSurface = structuralNode('FIN_SURFACE', 'Fin Surface', 'fin_surface');
-  const ambient = structuralNode('AMBIENT_PLACEHOLDER', 'Ambient', 'ambient', {
-    boundary: true,
-  });
 
-  const finStart = combineBaseAndFinRoot ? hsk : finRoot;
   return {
-    nodes: combineBaseAndFinRoot ? [hsk, finSurface, ambient] : [hsk, finRoot, finSurface, ambient],
+    nodes: [hsk, finSurface, ambient],
     edges: [
-      ...(!combineBaseAndFinRoot
-        ? [structuralEdge(hsk, finRoot, { type: 'conduction' as const, method: 'conduction_LkA' as const })]
-        : []),
-      structuralEdge(finStart, finSurface, {
+      structuralEdge(hsk, finSurface, {
         type: 'conduction',
         method: 'conduction_LkA',
         unresolvedNote: 'Fin equivalent conduction resistance not yet defined.',
       }),
-      // 05 §15 — structural endpoint only. No ambient temperature, no h.
       structuralEdge(finSurface, ambient, {
         type: 'custom',
         method: 'convection_hA',
         kind: 'BOUNDARY',
       }),
     ],
-    zones: [],
+    zones: [{ id: hsk.id, name: `${displayPrefix}HSK Base`.trim(), type: 'heat_sink_base' }],
   };
 }
 
 export function buildSharedStructure(preset: StructurePreset): StructureResult {
-  const tail = heatSinkTail(preset === 'SINGLE_MAIN_BASE');
-  const hsk = tail.nodes[0];
-
   switch (preset) {
-    case 'SINGLE_MAIN_BASE': {
+    case 'SINGLE_MAIN_BASE':
+      return heatSinkTail('', '');
+    case 'DUAL_HSK_BASE': {
+      const rf = heatSinkTail('RF_', 'RF ');
+      const digital = heatSinkTail('DIGITAL_', 'Digital ');
       return {
-        nodes: tail.nodes,
-        edges: tail.edges,
-        zones: [{ id: hsk.id, name: 'HSK Base', type: 'heat_sink_base' }],
+        nodes: [...rf.nodes, ...digital.nodes],
+        edges: [...rf.edges, ...digital.edges],
+        zones: [...rf.zones, ...digital.zones],
       };
     }
-
-    case 'THREE_ZONE': {
-      const top = structuralNode('BASE_TOP', 'Base Top', 'base_zone');
-      const mid = structuralNode('BASE_MID', 'Base Mid', 'base_zone');
-      const bottom = structuralNode('BASE_BOTTOM', 'Base Bottom', 'base_zone');
-      return {
-        nodes: [top, mid, bottom, ...tail.nodes],
-        edges: [
-          // Zones couple to each other through spreading, not a tree (05 §14).
-          structuralEdge(top, mid, { type: 'spreading', method: 'imported', kind: 'SPREAD' }),
-          structuralEdge(mid, bottom, { type: 'spreading', method: 'imported', kind: 'SPREAD' }),
-          structuralEdge(mid, hsk, { type: 'conduction', method: 'conduction_LkA' }),
-          ...tail.edges,
-        ],
-        zones: [
-          { id: top.id, name: 'Base Top', type: 'base_zone' },
-          { id: mid.id, name: 'Base Mid', type: 'base_zone' },
-          { id: bottom.id, name: 'Base Bottom', type: 'base_zone' },
-        ],
-      };
-    }
-
-    case 'FUNCTIONAL_ZONES': {
-      const zoneNodes = FUNCTIONAL_ZONE_PRESETS.map((zone) => ({
-        ...structuralNode(`ZONE_${zone.key}`, `${zone.name} Base`, 'base_zone'),
-        id: zoneNodeId(zone.key),
-      }));
-
-      return {
-        nodes: [...zoneNodes, ...tail.nodes],
-        edges: [
-          ...zoneNodes.map((zone) =>
-            structuralEdge(zone, hsk, { type: 'conduction', method: 'conduction_LkA' }),
-          ),
-          ...tail.edges,
-        ],
-        zones: zoneNodes.map((zone, index) => ({
-          id: zone.id,
-          name: FUNCTIONAL_ZONE_PRESETS[index].name,
-          type: 'base_zone' as NodeType,
-          linked_hsk: hsk.id,
-        })),
-      };
-    }
-
-    case 'SMALL_BASE_MAIN_BASE': {
-      const small = structuralNode('SMALL_BASE', 'Small Base', 'small_base');
-      const main = structuralNode('MAIN_BASE', 'Main Base', 'main_base');
-      return {
-        nodes: [small, main, ...tail.nodes],
-        edges: [
-          structuralEdge(small, main, { type: 'conduction', method: 'conduction_LkA' }),
-          structuralEdge(main, hsk, { type: 'conduction', method: 'conduction_LkA' }),
-          ...tail.edges,
-        ],
-        zones: [
-          { id: small.id, name: 'Small Base', type: 'small_base' },
-          { id: main.id, name: 'Main Base', type: 'main_base' },
-        ],
-      };
-    }
-
-    case 'HEAT_PIPE_MAIN_BASE': {
-      const small = structuralNode('SMALL_BASE', 'Small Base', 'small_base');
-      const evap = structuralNode('HP_EVAP', 'HP Evaporator', 'heat_pipe_evaporator');
-      const cond = structuralNode('HP_COND', 'HP Condenser', 'heat_pipe_condenser');
-      const main = structuralNode('MAIN_BASE', 'Main Base', 'main_base');
-      return {
-        nodes: [small, evap, cond, main, ...tail.nodes],
-        edges: [
-          // Two parallel routes from the small base to the main base (05 §17).
-          structuralEdge(small, main, {
-            type: 'conduction',
-            method: 'conduction_LkA',
-            kind: 'DIRECT',
-          }),
-          structuralEdge(small, evap, { type: 'contact', method: 'direct_rth' }),
-          structuralEdge(evap, cond, { type: 'heat_pipe', method: 'direct_rth', kind: 'HP' }),
-          structuralEdge(cond, main, { type: 'contact', method: 'direct_rth' }),
-          structuralEdge(main, hsk, { type: 'conduction', method: 'conduction_LkA' }),
-          ...tail.edges,
-        ],
-        zones: [
-          { id: small.id, name: 'Small Base', type: 'small_base' },
-          { id: main.id, name: 'Main Base', type: 'main_base' },
-        ],
-      };
-    }
-
-    case 'CUSTOM':
     default:
-      return { nodes: [], edges: [], zones: [] };
+      throw new Error(`Unsupported HSK structure preset: ${String(preset)}`);
   }
 }
 
-/** A zone added by hand from the structure panel (05 §42). */
+/** A zone added by hand from the structure panel. */
 export function createZoneNode(key: string, name: string, type: NodeType = 'base_zone'): ThermalNode {
   return {
     id: zoneNodeId(key),
@@ -314,7 +164,7 @@ export function createZoneNode(key: string, name: string, type: NodeType = 'base
   };
 }
 
-/** A spreading or coupling edge between two zones (05 §43). */
+/** A spreading or coupling edge between two manually created zones. */
 export function createSpreadingEdge(
   fromId: string,
   toId: string,

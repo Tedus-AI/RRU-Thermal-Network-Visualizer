@@ -12,7 +12,7 @@ import {
   previewGeneration,
   suggestedZoneFor,
 } from './networkBuilder';
-import { buildSharedStructure, createSpreadingEdge } from './sharedStructure';
+import { STRUCTURE_PRESETS, buildSharedStructure, createSpreadingEdge } from './sharedStructure';
 import { validateGraph, networkKpis } from './graphValidation';
 import { edgeId, instanceKeys, instanceMultiplier, nodeId } from './idFactory';
 import { getTemplate, TEMPLATE_LIST } from '../templates/templateRegistry';
@@ -578,14 +578,8 @@ describe('analytical edge resistance (05 §21)', () => {
 // --- Shared structure ------------------------------------------------------
 
 describe('shared structure (05 §13, §14, §15)', () => {
-  it('builds every preset with a boundary placeholder tail', () => {
-    for (const preset of [
-      'SINGLE_MAIN_BASE',
-      'THREE_ZONE',
-      'FUNCTIONAL_ZONES',
-      'SMALL_BASE_MAIN_BASE',
-      'HEAT_PIPE_MAIN_BASE',
-    ] as const) {
+  it('builds every supported preset with a boundary placeholder tail', () => {
+    for (const preset of STRUCTURE_PRESETS) {
       const structure = buildSharedStructure(preset);
       expect(structure.nodes.some((node) => node.boundary_role === 'placeholder')).toBe(true);
       expect(structure.nodes.some((node) => node.type === 'fin_surface')).toBe(true);
@@ -613,31 +607,25 @@ describe('shared structure (05 §13, §14, §15)', () => {
     expect(serialized).not.toContain('55');
   });
 
-  it('maps the persisted MAIN_BASE preference onto the corrected HSK Base node', () => {
+  it('maps the exact HSK_BASE preference onto the shared HSK node', () => {
     const subject = component();
-    subject.architecture_prep.preferred_base_zone = 'MAIN_BASE';
+    subject.architecture_prep.preferred_base_zone = 'HSK_BASE';
     const structure = buildSharedStructure('SINGLE_MAIN_BASE');
     expect(suggestedZoneFor(subject, structure.zones.map((zone) => zone.id))).toBe(
       'NODE_HSK_BASE',
     );
   });
 
-  it('gives the heat pipe preset two parallel routes to the main base (05 §59 case C)', () => {
-    const structure = buildSharedStructure('HEAT_PIPE_MAIN_BASE');
-    const small = structure.nodes.find((node) => node.type === 'small_base')!;
-    const main = structure.nodes.find((node) => node.type === 'main_base')!;
+  it('maps RF and Digital components to different HSK targets in dual mode', () => {
+    const structure = buildSharedStructure('DUAL_HSK_BASE');
+    const zoneIds = structure.zones.map((zone) => zone.id);
+    const rf = component();
+    const digital = component();
+    rf.architecture_prep.preferred_base_zone = 'RF_HSK_BASE';
+    digital.architecture_prep.preferred_base_zone = 'DIGITAL_HSK_BASE';
 
-    const direct = structure.edges.find((edge) => edge.from === small.id && edge.to === main.id);
-    const viaHeatPipe = structure.edges.some((edge) => edge.type === 'heat_pipe');
-    expect(direct).toBeDefined();
-    expect(viaHeatPipe).toBe(true);
-  });
-
-  it('creates functional zones without wiring components to them', () => {
-    const structure = buildSharedStructure('FUNCTIONAL_ZONES');
-    expect(structure.zones.map((zone) => zone.name)).toEqual(
-      expect.arrayContaining(['RF Left', 'RF Right', 'Digital', 'Power', 'Filter']),
-    );
+    expect(suggestedZoneFor(rf, zoneIds)).toBe('NODE_RF_HSK_BASE');
+    expect(suggestedZoneFor(digital, zoneIds)).toBe('NODE_DIGITAL_HSK_BASE');
   });
 });
 

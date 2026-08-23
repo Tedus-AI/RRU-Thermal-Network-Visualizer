@@ -127,12 +127,13 @@ describe('FR1 RRU Golden Demo', () => {
     expect(activeRth(installedTim.rth)).toBeCloseTo(1e-3 / (3 * 1508e-6), 6);
 
     expect(flow.components.every((component) => statusOf(component) === 'READY')).toBe(true);
-    expect(Object.values(flow.network.zones).map((zone) => zone.name).sort()).toEqual([
-      'Digital',
-      'Power',
-      'RF Left',
-      'RF Right',
-    ]);
+    expect(Object.values(flow.network.zones).map((zone) => zone.name)).toEqual(['HSK Base']);
+    expect(flow.network.nodes.NODE_HSK_BASE).toBeDefined();
+    expect(
+      Object.values(flow.network.edges).filter(
+        (edge) => edge.metadata?.connection_role === 'hsk_base_conduction',
+      ),
+    ).toHaveLength(11);
     expect(Object.values(flow.network.nodes).filter((node) => node.power_W > 0)).toHaveLength(11);
     expect(flow.networkValidation.errors).toBe(0);
     expect(flow.boundary.status).toBe('ready_for_solve');

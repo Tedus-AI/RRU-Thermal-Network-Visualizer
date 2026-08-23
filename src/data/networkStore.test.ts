@@ -193,7 +193,7 @@ describe('port connection (05 §16)', () => {
   });
 
   it('wires a port to a shared node and creates an unresolved interface edge', () => {
-    const structure = buildSharedStructure('FUNCTIONAL_ZONES');
+    const structure = buildSharedStructure('DUAL_HSK_BASE');
     useNetworkStore.getState().addSubgraph({
       nodes: structure.nodes,
       edges: structure.edges,
@@ -331,8 +331,8 @@ describe('port connection (05 §16)', () => {
 });
 
 describe('shared structure replacement', () => {
-  it('merges a legacy Main Base into HSK Base and retains component ports', () => {
-    const oldStructure = buildSharedStructure('SMALL_BASE_MAIN_BASE');
+  it('disconnects ports instead of guessing an RF/Digital target when switching to dual HSK', () => {
+    const oldStructure = buildSharedStructure('SINGLE_MAIN_BASE');
     const subgraph = buildComponentSubgraph(pa(), {
       materials: defaultMaterials(),
       templateId: 'BOTTOM_COOL_COIN',
@@ -345,24 +345,26 @@ describe('shared structure replacement', () => {
     });
     useNetworkStore.getState().addSubgraph(subgraph);
     const portNode = subgraph.nodes.find((node) => node.ports?.length)!;
-    const oldMainBase = oldStructure.zones.find((zone) => zone.id === 'NODE_MAIN_BASE')!;
     useNetworkStore
       .getState()
-      .connectPort(portNode.id, 'HEAT_OUT', oldMainBase.id);
+      .connectPort(portNode.id, 'HEAT_OUT', oldStructure.zones[0].id);
 
-    const next = buildSharedStructure('SINGLE_MAIN_BASE');
+    const next = buildSharedStructure('DUAL_HSK_BASE');
     useNetworkStore.getState().replaceSharedStructure(next);
     const network = useNetworkStore.getState().network!;
-    expect(network.nodes.NODE_MAIN_BASE).toBeUndefined();
-    expect(network.nodes.NODE_FIN_ROOT).toBeUndefined();
-    expect(network.nodes.NODE_HSK_BASE.name).toBe('HSK Base / Fin Root');
-    expect(network.nodes[portNode.id].ports?.[0].connected_to).toBe('NODE_HSK_BASE');
+    expect(network.nodes.NODE_HSK_BASE).toBeUndefined();
+    expect(network.nodes.NODE_RF_HSK_BASE.name).toBe('RF HSK Base / Fin Root');
+    expect(network.nodes.NODE_DIGITAL_HSK_BASE.name).toBe('Digital HSK Base / Fin Root');
+    expect(network.nodes[portNode.id].ports?.[0].connected_to).toBeNull();
     expect(
       Object.values(network.edges).some(
-        (edge) => edge.from === portNode.id && edge.to === 'NODE_HSK_BASE',
+        (edge) => edge.from === portNode.id && edge.to.includes('HSK_BASE'),
       ),
-    ).toBe(true);
-    expect(Object.keys(network.zones)).toEqual(['NODE_HSK_BASE']);
+    ).toBe(false);
+    expect(Object.keys(network.zones).sort()).toEqual([
+      'NODE_DIGITAL_HSK_BASE',
+      'NODE_RF_HSK_BASE',
+    ]);
   });
 });
 
@@ -404,7 +406,7 @@ describe('undo / redo (05 §41, AC-05-27)', () => {
   });
 
   it('restores nested port state as well as the generated connection edge', () => {
-    const structure = buildSharedStructure('FUNCTIONAL_ZONES');
+    const structure = buildSharedStructure('DUAL_HSK_BASE');
     const subgraph = buildComponentSubgraph(pa(), {
       materials: defaultMaterials(),
       templateId: 'BOTTOM_COOL_COIN',

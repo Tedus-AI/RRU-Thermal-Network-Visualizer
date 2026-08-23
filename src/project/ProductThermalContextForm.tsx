@@ -145,7 +145,7 @@ export function ProductThermalContextForm({ readOnly }: { readOnly: boolean }) {
           label="Base Structure"
           zh="基座結構"
           htmlFor="base_structure"
-          tip="共用基座怎麼分區。它決定 Screen 04 的「基座區域」可以選哪些，以及 Screen 05 會建出什麼結構。整片壓鑄散熱器是一個共用實體時選「單一共用散熱器底座」；想區分鰭片正下方與邊角的溫差再往下拆。"
+          tip="決定 Screen 04 的元件可連到哪些 HSK，以及 Screen 05 會建立幾條獨立散熱路徑。FR1 單面散熱通常選單一共用 HSK；FR2 若 RF 與 Digital 各自使用不同散熱器與鰭片面，選雙獨立 HSK，並在 Screen 06 分別設定兩個邊界。"
         >
           <Select
             id="base_structure"
@@ -162,9 +162,7 @@ export function ProductThermalContextForm({ readOnly }: { readOnly: boolean }) {
           {/* Naming the zones here is what makes the choice concrete: this is
               exactly the list Screen 04 will offer per component. */}
           <p className="mt-1.5 text-[11px] leading-relaxed text-ink-400">
-            {zones.length === 0
-              ? 'Zones are drawn by hand in Screen 05. / 區域於 Screen 05 自行建立。'
-              : `Zones / 可選區域：${zones.map((zone) => zone.zh).join('、')}`}
+            {`HSK targets / 可連接散熱器：${zones.map((zone) => zone.zh).join('、')}`}
           </p>
         </Field>
 
