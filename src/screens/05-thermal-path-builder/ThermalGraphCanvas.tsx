@@ -14,19 +14,12 @@ import {
   useRef,
   type MutableRefObject,
 } from 'react';
-import cytoscape, { type Core, type ElementDefinition } from 'cytoscape';
+import cytoscape, { type Core, type NodeSingular } from 'cytoscape';
 import dagre from 'cytoscape-dagre';
 
-import { activeRth } from '@/thermal/rth';
 import type { ThermalNetwork } from '@/thermal/types';
-import {
-  GROUP_COLORS,
-  cytoscapeStylesheet,
-  edgeColor,
-  edgeLineStyle,
-  labelBox,
-  nodeGroup,
-} from '@/ui/graphStyles';
+import { cytoscapeStylesheet } from '@/ui/graphStyles';
+import { buildElements } from './thermalGraphElements';
 
 cytoscape.use(dagre);
 
@@ -41,22 +34,6 @@ export interface CanvasHandle {
   /** Positions currently rendered, so the view can persist them (05 §30). */
   positions: () => Record<string, { x: number; y: number }>;
 }
-
-const EDGE_SHORT: Record<string, string> = {
-  package_rjc: 'Rjc',
-  package_rjb: 'Rjb',
-  package_rja: 'Rja',
-  conduction: 'Cond',
-  tim: 'TIM',
-  solder: 'Solder',
-  thermal_via: 'Via',
-  contact: 'Contact',
-  spreading: 'Spreading',
-  heat_pipe: 'Heat Pipe',
-  convection: 'Conv',
-  radiation: 'Rad',
-  custom: 'Custom',
-};
 
 function layoutOptions(mode: string) {
   switch (mode) {
@@ -73,73 +50,65 @@ function layoutOptions(mode: string) {
   }
 }
 
-function buildElements(
-  network: ThermalNetwork,
-  options: { showPorts: boolean; showLabels: boolean },
-): ElementDefinition[] {
-  const elements: ElementDefinition[] = [];
+function layoutElements(cy: Core) {
+  return cy.elements().filter((element) => {
+    if (element.isNode()) return !element.hasClass('view-only');
+    return element.hasClass('layout-only') ||
+      (!element.hasClass('view-only') && !element.hasClass('routed-port-edge'));
+  });
+}
 
-  for (const node of Object.values(network.nodes)) {
-    const group = nodeGroup(node);
-    const colors = GROUP_COLORS[group];
-    const unconnected = (node.ports ?? []).filter((port) => !port.connected_to);
+function positionViewBuses(cy: Core) {
+  cy.nodes('.hsk-bus').forEach((bus) => {
+    const shared = cy.getElementById(bus.data('sharedId') as string);
+    if (shared.length === 0) return;
+    const junctions = cy.nodes('.hsk-bus-junction').filter(
+      (junction) => junction.data('busId') === bus.id(),
+    );
+    if (junctions.length === 0) return;
 
-    const portLine =
-      options.showPorts && (node.ports ?? []).length > 0
-        ? `\n${(node.ports ?? [])
-            .map((port) => (port.connected_to ? `${port.kind} ✓` : port.kind))
-            .join(' · ')}`
-        : '';
-
-    const classes: string[] = [`role-${group}`];
-    if (group === 'boundary') classes.push('boundary');
-    if (unconnected.length > 0) classes.push('unconnected-port');
-    if (node.disabled) classes.push('disabled');
-    if (!options.showLabels) classes.push('hide-label');
-
-    const label = `${node.name}${node.power_W > 0 ? ` · ${node.power_W.toFixed(1)} W` : ''}${portLine}`;
-    const box = labelBox(label);
-
-    elements.push({
-      group: 'nodes',
-      data: {
-        id: node.id,
-        label,
-        w: box.w,
-        h: box.h,
-        fill: colors.fill,
-        border: colors.border,
-        text: colors.text,
-      },
-      classes: classes.join(' '),
-      position: network.layout.positions[node.id]
-        ? { ...network.layout.positions[node.id] }
-        : undefined,
+    const sourceEntries: Array<{ junction: NodeSingular; source: NodeSingular }> = [];
+    junctions.forEach((junction) => {
+      const source = cy.getElementById(junction.data('sourceId') as string);
+      if (source.isNode()) sourceEntries.push({ junction, source });
     });
-  }
+    if (sourceEntries.length === 0) return;
 
-  for (const edge of Object.values(network.edges)) {
-    if (!network.nodes[edge.from] || !network.nodes[edge.to]) continue;
-    const R = activeRth(edge.rth);
-    const short = EDGE_SHORT[edge.type] ?? edge.type;
-    const label = options.showLabels
-      ? `${short} ${R != null ? `${R.toFixed(3)} °C/W` : '—'}`
-      : '';
+    const sharedBox = shared.boundingBox();
+    const averageSourceX =
+      sourceEntries.reduce((sum, entry) => sum + entry.source.position('x'), 0) /
+      sourceEntries.length;
+    const targetOnRight = shared.position('x') >= averageSourceX;
+    const sourceFront = targetOnRight
+      ? Math.max(...sourceEntries.map((entry) => entry.source.boundingBox().x2))
+      : Math.min(...sourceEntries.map((entry) => entry.source.boundingBox().x1));
+    const targetFront = targetOnRight ? sharedBox.x1 : sharedBox.x2;
+    const busX = sourceFront + (targetFront - sourceFront) * 0.58;
+    const busY = shared.position('y');
+    const sourceYs = sourceEntries.map((entry) => entry.source.position('y'));
+    const maxDistanceY = Math.max(...sourceYs.map((value) => Math.abs(value - busY)));
 
-    elements.push({
-      group: 'edges',
-      data: {
-        id: edge.id,
-        source: edge.from,
-        target: edge.to,
-        label,
-        color: edgeColor(edge),
-        lineStyle: edgeLineStyle(edge),
-      },
+    bus.data('h', Math.max(80, maxDistanceY * 2 + 16));
+    bus.position({ x: busX, y: busY });
+    sourceEntries.forEach(({ junction, source }) => {
+      junction.position({ x: busX, y: source.position('y') });
+      const sourceBox = source.boundingBox();
+      const sourceEdge = targetOnRight ? sourceBox.x2 : sourceBox.x1;
+      cy.getElementById(junction.data('edgeId') as string).data(
+        'labelOffset',
+        Math.max(42, Math.abs(busX - sourceEdge) / 2),
+      );
     });
-  }
+  });
+}
 
-  return elements;
+function renderedDomainPositions(cy: Core): Record<string, { x: number; y: number }> {
+  const positions: Record<string, { x: number; y: number }> = {};
+  cy.nodes(':not(.view-only)').forEach((node) => {
+    const position = node.position();
+    positions[node.id() as string] = { x: position.x, y: position.y };
+  });
+  return positions;
 }
 
 export const ThermalGraphCanvas = forwardRef<
@@ -213,8 +182,8 @@ export const ThermalGraphCanvas = forwardRef<
   };
 
   const elements = useMemo(
-    () => buildElements(network, { showPorts, showLabels }),
-    [network, showPorts, showLabels],
+    () => buildElements(network, { showPorts, showLabels, layoutMode }),
+    [network, showPorts, showLabels, layoutMode],
   );
 
   useEffect(() => {
@@ -230,6 +199,7 @@ export const ThermalGraphCanvas = forwardRef<
     cyRef.current = cy;
 
     cy.on('tap', 'node', (event) => {
+      if (event.target.hasClass('view-only')) return;
       const id = event.target.id() as string;
       const mode = handlers.current.tool;
 
@@ -251,6 +221,7 @@ export const ThermalGraphCanvas = forwardRef<
     });
 
     cy.on('tap', 'edge', (event) => {
+      if (event.target.hasClass('view-only') || event.target.hasClass('layout-only')) return;
       handlers.current.onSelect({ kind: 'edge', id: event.target.id() as string });
     });
 
@@ -263,11 +234,13 @@ export const ThermalGraphCanvas = forwardRef<
     });
 
     cy.on('dragfree', 'node', (event) => {
+      if (event.target.hasClass('view-only')) return;
       const position = event.target.position();
       handlers.current.onNodeMoved(event.target.id() as string, { x: position.x, y: position.y });
     });
 
     cy.on('cxttap', 'node', (event) => {
+      if (event.target.hasClass('view-only')) return;
       handlers.current.onContextMenu(
         { kind: 'node', id: event.target.id() as string },
         { x: event.renderedPosition.x, y: event.renderedPosition.y },
@@ -275,6 +248,7 @@ export const ThermalGraphCanvas = forwardRef<
     });
 
     cy.on('cxttap', 'edge', (event) => {
+      if (event.target.hasClass('view-only') || event.target.hasClass('layout-only')) return;
       handlers.current.onContextMenu(
         { kind: 'edge', id: event.target.id() as string },
         { x: event.renderedPosition.x, y: event.renderedPosition.y },
@@ -319,6 +293,7 @@ export const ThermalGraphCanvas = forwardRef<
       cy.elements().remove();
       cy.add(elements);
     });
+    positionViewBuses(cy);
 
     const signature = elements
       .map((element) => element.data.id)
@@ -340,20 +315,18 @@ export const ThermalGraphCanvas = forwardRef<
 
     const unpositioned = cy
       .nodes()
-      .filter((node) => !network.layout.positions[node.id() as string]);
+      .filter((node) =>
+        !node.hasClass('view-only') && !network.layout.positions[node.id() as string],
+      );
 
     if (unpositioned.length > 0 && cy.nodes().length > 0) {
       // The layout applies positions asynchronously; they are written back to
       // the store on `layoutstop` so the next rebuild reuses them instead of
       // laying the graph out again under a viewport that no longer matches.
-      const layout = cy.layout(layoutOptions(layoutModeRef.current));
+      const layout = layoutElements(cy).layout(layoutOptions(layoutModeRef.current));
       layout.one('layoutstop', () => {
-        const positions: Record<string, { x: number; y: number }> = {};
-        cy.nodes().forEach((node) => {
-          const position = node.position();
-          positions[node.id() as string] = { x: position.x, y: position.y };
-        });
-        handlers.current.onLayout(positions);
+        positionViewBuses(cy);
+        handlers.current.onLayout(renderedDomainPositions(cy));
         refit();
       });
       layout.run();
@@ -401,14 +374,10 @@ export const ThermalGraphCanvas = forwardRef<
       runLayout: (mode) => {
         const cy = cyRef.current;
         if (!cy || cy.nodes().length === 0) return;
-        const layout = cy.layout(layoutOptions(mode));
+        const layout = layoutElements(cy).layout(layoutOptions(mode));
         layout.one('layoutstop', () => {
-          const positions: Record<string, { x: number; y: number }> = {};
-          cy.nodes().forEach((node) => {
-            const position = node.position();
-            positions[node.id() as string] = { x: position.x, y: position.y };
-          });
-          handlers.current.onLayout(positions);
+          positionViewBuses(cy);
+          handlers.current.onLayout(renderedDomainPositions(cy));
           cy.fit(undefined, 40);
         });
         layout.run();
@@ -424,12 +393,7 @@ export const ThermalGraphCanvas = forwardRef<
       positions: () => {
         const cy = cyRef.current;
         if (!cy) return {};
-        const result: Record<string, { x: number; y: number }> = {};
-        cy.nodes().forEach((node) => {
-          const position = node.position();
-          result[node.id() as string] = { x: position.x, y: position.y };
-        });
-        return result;
+        return renderedDomainPositions(cy);
       },
     }),
     [],
