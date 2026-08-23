@@ -22,7 +22,7 @@ export const STRUCTURE_PRESETS = [
 export type StructurePreset = (typeof STRUCTURE_PRESETS)[number];
 
 export const PRESET_LABELS: Record<StructurePreset, { label: string; zh: string }> = {
-  SINGLE_MAIN_BASE: { label: 'Single Main Base', zh: '單一主基座' },
+  SINGLE_MAIN_BASE: { label: 'Single Shared HSK Base', zh: '單一共用散熱器底座' },
   THREE_ZONE: { label: '3-Zone Base', zh: '三區基座' },
   FUNCTIONAL_ZONES: { label: 'Functional Zones', zh: '功能分區' },
   SMALL_BASE_MAIN_BASE: { label: 'Small Base + Main Base', zh: '小基座 + 主基座' },
@@ -59,7 +59,9 @@ export interface PresetZone {
 }
 
 const PRESET_ZONES: Record<StructurePreset, readonly PresetZone[]> = {
-  SINGLE_MAIN_BASE: [{ key: 'MAIN_BASE', name: 'Main Base', zh: '主基座' }],
+  // Keep MAIN_BASE as the stored compatibility key. The physical node is now
+  // NODE_HSK_BASE; `zoneKeyOf` and `suggestedZoneFor` bridge that old key.
+  SINGLE_MAIN_BASE: [{ key: 'MAIN_BASE', name: 'HSK Base', zh: '散熱器底座' }],
   THREE_ZONE: [
     { key: 'BASE_TOP', name: 'Base Top', zh: '基座上段' },
     { key: 'BASE_MID', name: 'Base Mid', zh: '基座中段' },
@@ -88,6 +90,7 @@ export function presetZones(preset: StructurePreset): readonly PresetZone[] {
 
 /** The zone key a structure node id ends with, or null when it names no zone. */
 export function zoneKeyOf(nodeId: string, preset: StructurePreset): string | null {
+  if (preset === 'SINGLE_MAIN_BASE' && nodeId.endsWith('HSK_BASE')) return 'MAIN_BASE';
   return presetZones(preset).find((zone) => nodeId.endsWith(zone.key))?.key ?? null;
 }
 
@@ -152,20 +155,31 @@ function structuralEdge(
   };
 }
 
-/** Builds the heat-sink tail every preset shares, ending at the boundary placeholder. */
-function heatSinkTail(): StructureResult {
-  const hsk = structuralNode('HSK_BASE', 'HSK Base', 'heat_sink_base');
+/** Builds the heat-sink tail, ending at the boundary placeholder. */
+function heatSinkTail(combineBaseAndFinRoot = false): StructureResult {
+  const hsk = structuralNode(
+    'HSK_BASE',
+    combineBaseAndFinRoot ? 'HSK Base / Fin Root' : 'HSK Base',
+    'heat_sink_base',
+  );
   const finRoot = structuralNode('FIN_ROOT', 'Fin Root', 'fin_root');
   const finSurface = structuralNode('FIN_SURFACE', 'Fin Surface', 'fin_surface');
   const ambient = structuralNode('AMBIENT_PLACEHOLDER', 'Ambient', 'ambient', {
     boundary: true,
   });
 
+  const finStart = combineBaseAndFinRoot ? hsk : finRoot;
   return {
-    nodes: [hsk, finRoot, finSurface, ambient],
+    nodes: combineBaseAndFinRoot ? [hsk, finSurface, ambient] : [hsk, finRoot, finSurface, ambient],
     edges: [
-      structuralEdge(hsk, finRoot, { type: 'conduction', method: 'conduction_LkA' }),
-      structuralEdge(finRoot, finSurface, { type: 'conduction', method: 'conduction_LkA' }),
+      ...(!combineBaseAndFinRoot
+        ? [structuralEdge(hsk, finRoot, { type: 'conduction' as const, method: 'conduction_LkA' as const })]
+        : []),
+      structuralEdge(finStart, finSurface, {
+        type: 'conduction',
+        method: 'conduction_LkA',
+        unresolvedNote: 'Fin equivalent conduction resistance not yet defined.',
+      }),
       // 05 §15 — structural endpoint only. No ambient temperature, no h.
       structuralEdge(finSurface, ambient, {
         type: 'custom',
@@ -178,19 +192,15 @@ function heatSinkTail(): StructureResult {
 }
 
 export function buildSharedStructure(preset: StructurePreset): StructureResult {
-  const tail = heatSinkTail();
+  const tail = heatSinkTail(preset === 'SINGLE_MAIN_BASE');
   const hsk = tail.nodes[0];
 
   switch (preset) {
     case 'SINGLE_MAIN_BASE': {
-      const main = structuralNode('MAIN_BASE', 'Main Base', 'main_base');
       return {
-        nodes: [main, ...tail.nodes],
-        edges: [
-          structuralEdge(main, hsk, { type: 'conduction', method: 'conduction_LkA' }),
-          ...tail.edges,
-        ],
-        zones: [{ id: main.id, name: 'Main Base', type: 'main_base' }],
+        nodes: tail.nodes,
+        edges: tail.edges,
+        zones: [{ id: hsk.id, name: 'HSK Base', type: 'heat_sink_base' }],
       };
     }
 

@@ -46,6 +46,7 @@ import { powerWOf, type Component } from '@/domain/component';
 import { defaultMaterials } from '@/domain/materials';
 import { createRth } from '@/thermal/rth';
 import { networkKpis, type GraphIssue } from '@/thermal/graph/graphValidation';
+import { refreshHskBaseConnectionEdges } from '@/thermal/graph/hskBaseConnection';
 import {
   buildComponentSubgraph,
   previewGeneration,
@@ -291,6 +292,62 @@ export function ThermalPathBuilderView() {
     useNetworkStore.getState().loadFor(projectId);
   }, [projectId]);
 
+  // Older saved networks may already contain linked HSK-base edges. Refresh
+  // their analytical value when the project is opened or Screen 01 changes
+  // the shared base inputs; no manual edge override is discarded.
+  useEffect(() => {
+    if (!draft || draft.project_id !== projectId) return;
+    const store = useNetworkStore.getState();
+    const current = store.network;
+    if (!current || current.project_id !== projectId) return;
+    const probe = structuredClone(current);
+    if (refreshHskBaseConnectionEdges(probe, materials) === 0) return;
+    store.mutate(
+      (next) => {
+        refreshHskBaseConnectionEdges(next, materials);
+      },
+      { skipHistory: true },
+    );
+  }, [
+    projectId,
+    draft?.project_id,
+    materials.hsk_base_k_W_mK.value,
+    materials.hsk_base_thickness_mm?.value,
+  ]);
+
+  // One-time migration for the legacy single-base graph, which represented one
+  // casting twice as Main Base → HSK Base. Existing component connections are
+  // retained and redirected to the one corrected HSK Base node.
+  useEffect(() => {
+    if (
+      !draft ||
+      draft.project_id !== projectId ||
+      projectStructure !== 'SINGLE_MAIN_BASE'
+    ) {
+      return;
+    }
+    const store = useNetworkStore.getState();
+    const current = store.network;
+    if (
+      !current ||
+      current.project_id !== projectId ||
+      current.nodes.NODE_MAIN_BASE?.origin?.kind !== 'shared_structure' ||
+      current.nodes.NODE_HSK_BASE?.origin?.kind !== 'shared_structure'
+    ) {
+      return;
+    }
+    store.replaceSharedStructure(buildSharedStructure('SINGLE_MAIN_BASE'), materials);
+    toast.success(
+      'Legacy Main Base was merged into the shared HSK Base; existing connections were migrated. / 舊 Main Base 已合併至共用 HSK Base，既有連線已遷移。',
+    );
+  }, [
+    draft?.project_id,
+    projectId,
+    projectStructure,
+    materials.hsk_base_k_W_mK.value,
+    materials.hsk_base_thickness_mm?.value,
+  ]);
+
   // One section at a time, matching the step. Three open panels in a 300 px
   // column is what made this side of the screen feel cramped; the engineer can
   // still open any of them by hand afterwards.
@@ -472,12 +529,10 @@ export function ThermalPathBuilderView() {
       );
       return;
     }
-    useNetworkStore.getState().addSubgraph({
-      nodes: structure.nodes,
-      edges: structure.edges,
-      zones: structure.zones,
-    });
-    toast.success('Shared structure applied / 已套用共用結構');
+    useNetworkStore.getState().replaceSharedStructure(structure, materials);
+    toast.success(
+      'Shared structure replaced; compatible component connections were preserved. / 已替換共用結構，並保留可相容的元件連線。',
+    );
   };
 
   const handleAddZone = (zoneDraft: NewZoneDraft) => {
@@ -557,7 +612,7 @@ export function ThermalPathBuilderView() {
 
     const openPort = (source.ports ?? []).find((port) => !port.connected_to);
     if (openPort && tool === 'connect') {
-      useNetworkStore.getState().connectPort(sourceId, openPort.kind, targetId);
+      useNetworkStore.getState().connectPort(sourceId, openPort.kind, targetId, materials);
       toast.success(`${openPort.kind} → ${target.name} / 已連接`);
       return;
     }
@@ -593,7 +648,7 @@ export function ThermalPathBuilderView() {
       if (!component) continue;
       const zoneId = suggestedZoneFor(component, Object.keys(network.zones));
       if (!zoneId || !network.nodes[zoneId]) continue;
-      useNetworkStore.getState().connectPort(node.id, port.kind, zoneId);
+      useNetworkStore.getState().connectPort(node.id, port.kind, zoneId, materials);
       connected++;
     }
     toast[connected > 0 ? 'success' : 'warning'](

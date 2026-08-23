@@ -15,15 +15,19 @@ import { useState } from 'react';
 
 import { Plus, Trash2 } from 'lucide-react';
 
-import { Button, NumberInput, SectionCard, TextInput } from '@/ui/primitives';
+import { Button, NumberInput, SectionCard, Select, TextInput } from '@/ui/primitives';
 import { FieldLabel } from '@/ui/FieldLabel';
 import {
   PROCESS_FIELDS,
+  HSK_BASE_MATERIAL_OPTIONS,
   assumedCount,
   coinAreaMm2,
+  hskBaseAreaMm2,
+  hskMaterialDefaultK,
   nextTimId,
   timUsageCount,
   type MaterialDefaults,
+  type HskBaseMaterial,
   type ProcessField,
   type TimMaterial,
 } from '@/domain/materials';
@@ -141,6 +145,10 @@ export function MaterialDefaultsForm({
   if (!draft) return null;
   const materials = draft.materials;
   const coinArea = coinAreaMm2(materials);
+  const hskArea = hskBaseAreaMm2(materials);
+  const hskConfigured =
+    (materials.hsk_base_thickness_mm?.value ?? 0) > 0 &&
+    (materials.hsk_base_k_W_mK.value ?? 0) > 0;
   const assumed = assumedCount(materials);
 
   const patchLibrary = (next: TimMaterial[]) => patchMaterials({ tim: next });
@@ -196,6 +204,7 @@ export function MaterialDefaultsForm({
         <>
           {materials.tim.length} TIM materials · {assumed} shipped defaults in use
           {coinArea == null ? ' · ⚠ coin size not set / 銅塊尺寸未設定' : ''}
+          {!hskConfigured ? ' · ⚠ HSK thickness not set / HSK 厚度未設定' : ''}
         </>
       }
     >
@@ -307,6 +316,105 @@ export function MaterialDefaultsForm({
               </span>
             </p>
           </div>
+        </fieldset>
+
+        {/* --- Shared HSK base ------------------------------------------------ */}
+        <fieldset>
+          <legend className="mb-2 text-[12px] font-semibold text-ink-700">
+            HSK Base / 散熱器底座
+          </legend>
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
+            <div className="flex flex-col gap-1.5">
+              <FieldLabel
+                label="Base Material"
+                zh="底座材料"
+                htmlFor="mat-hsk-material"
+                tooltip="選擇共用 HSK Base 的材料；k 會帶入建議值，但仍可依材料證明或實測值修改。"
+              />
+              <Select
+                id="mat-hsk-material"
+                value={materials.hsk_base_material}
+                disabled={readOnly}
+                items={HSK_BASE_MATERIAL_OPTIONS.map((option) => ({
+                  value: option.value,
+                  label: `${option.label} / ${option.zh}`,
+                }))}
+                onChange={(event) => {
+                  const material = event.target.value as HskBaseMaterial;
+                  patchMaterials({
+                    hsk_base_material: material,
+                    hsk_base_k_W_mK: sourced(hskMaterialDefaultK(material), 'Assumed', {
+                      confidence: 'medium',
+                    }),
+                  });
+                }}
+              />
+            </div>
+            <MaterialNumber
+              id="mat-hsk-k"
+              label="Base k"
+              zh="底座導熱係數"
+              unit="W/m·K"
+              value={materials.hsk_base_k_W_mK}
+              readOnly={readOnly}
+              onChange={(next) => {
+                if (next) patchMaterials({ hsk_base_k_W_mK: next });
+              }}
+            />
+            <MaterialNumber
+              id="mat-hsk-thickness"
+              label="Base Thickness"
+              zh="底座厚度"
+              unit="mm"
+              value={materials.hsk_base_thickness_mm}
+              readOnly={readOnly}
+              allowEmpty
+              placeholder="e.g. 5"
+              onChange={(next) => patchMaterials({ hsk_base_thickness_mm: next })}
+            />
+            <MaterialNumber
+              id="mat-hsk-l"
+              label="Base L"
+              zh="底座長"
+              unit="mm"
+              value={materials.hsk_base_L_mm}
+              readOnly={readOnly}
+              allowEmpty
+              placeholder="e.g. 300"
+              onChange={(next) => patchMaterials({ hsk_base_L_mm: next })}
+            />
+            <MaterialNumber
+              id="mat-hsk-w"
+              label="Base W"
+              zh="底座寬"
+              unit="mm"
+              value={materials.hsk_base_W_mm}
+              readOnly={readOnly}
+              allowEmpty
+              placeholder="e.g. 220"
+              onChange={(next) => patchMaterials({ hsk_base_W_mm: next })}
+            />
+            <div className="flex flex-col justify-end">
+              <span className="text-[12px] text-ink-500">Base area / 底座面積</span>
+              <span className="tabular text-[13px] font-bold">
+                {hskArea == null ? '—' : `${hskArea.toFixed(0)} mm²`}
+              </span>
+            </div>
+          </div>
+          <p
+            className={`mt-2 text-[11px] leading-relaxed ${
+              hskConfigured ? 'text-ink-400' : 'text-warn-600'
+            }`}
+          >
+            {hskConfigured
+              ? 'Screen 05 uses this thickness and k with each component’s TIM exit area to resolve TIM HEAT_OUT → HSK Base.'
+              : 'Base thickness is required before Screen 05 can resolve TIM HEAT_OUT → HSK Base.'}
+            <span className="block">
+              {hskConfigured
+                ? 'Screen 05 會以此厚度與 k，搭配各元件的 TIM 出口面積，自動計算至 HSK Base 的熱阻。'
+                : '必須先設定底座厚度，Screen 05 才能解析 TIM HEAT_OUT → HSK Base。'}
+            </span>
+          </p>
         </fieldset>
 
         {/* --- Process constants --- */}

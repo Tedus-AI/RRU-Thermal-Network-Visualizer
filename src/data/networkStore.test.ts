@@ -14,8 +14,9 @@ import { useSolverStore } from './solverStore';
 import { createComponent } from '@/domain/component';
 import { sourced } from '@/domain/sourcedValue';
 import { buildComponentSubgraph } from '@/thermal/graph/networkBuilder';
+import { refreshHskBaseConnectionEdges } from '@/thermal/graph/hskBaseConnection';
 import { buildSharedStructure } from '@/thermal/graph/sharedStructure';
-import { createRth } from '@/thermal/rth';
+import { createRth, setRthFromSource } from '@/thermal/rth';
 import type { ThermalEdge } from '@/thermal/types';
 
 class MemoryStorage implements Storage {
@@ -162,6 +163,145 @@ describe('port connection (05 §16)', () => {
     const after = useNetworkStore.getState().network!;
     expect(after.nodes[portNode.id].ports![0].connected_to).toBeNull();
     expect(after.edges[edge.id]).toBeUndefined();
+  });
+
+  it('automatically resolves TIM HEAT_OUT to a single shared HSK Base as L/(kA)', () => {
+    const materials = {
+      ...defaultMaterials(),
+      coin_L_mm: sourced(20, 'Manual'),
+      coin_W_mm: sourced(10, 'Manual'),
+      hsk_base_thickness_mm: sourced(5, 'Manual'),
+    };
+    const component = pa();
+    component.thermal_spec.heat_path.type = 'Coin';
+    component.thermal_spec.geometry.package_L_mm = 20;
+    component.thermal_spec.geometry.package_W_mm = 10;
+    component.thermal_spec.geometry.source_L_mm = 20;
+    component.thermal_spec.geometry.source_W_mm = 10;
+    component.thermal_spec.tim.tim_id = 'TIM_GREASE';
+
+    const structure = buildSharedStructure('SINGLE_MAIN_BASE');
+    const subgraph = buildComponentSubgraph(component, {
+      materials,
+      templateId: 'BOTTOM_COOL_COIN',
+      qtyModel: 'AGGREGATE',
+    })!;
+    useNetworkStore.getState().addSubgraph({
+      nodes: structure.nodes,
+      edges: structure.edges,
+      zones: structure.zones,
+    });
+    useNetworkStore.getState().addSubgraph(subgraph);
+
+    const portNode = subgraph.nodes.find((node) => node.ports?.length)!;
+    const hskBaseId = structure.zones[0].id;
+    useNetworkStore.getState().connectPort(portNode.id, 'HEAT_OUT', hskBaseId, materials);
+
+    const edge = Object.values(useNetworkStore.getState().network!.edges).find(
+      (candidate) => candidate.from === portNode.id && candidate.to === hskBaseId,
+    )!;
+    expect(edge.type).toBe('conduction');
+    expect(edge.method).toBe('conduction_LkA');
+    // AGGREGATE represents two PA devices, so the effective footprint is 2 x
+    // the 20 x 10 mm face.
+    expect(edge.parameters).toMatchObject({ length_mm: 5, k_W_mK: 96, area_mm2: 400 });
+    expect(edge.rth.analytical).toBeCloseTo(0.005 / (96 * 0.0004), 10);
+    expect(edge.resolution).toBe('resolved');
+    expect(edge.metadata?.connection_role).toBe('hsk_base_conduction');
+
+    const improvedMaterials = {
+      ...materials,
+      hsk_base_k_W_mK: sourced(192, 'Manual'),
+    };
+    useNetworkStore.getState().mutate((network) => {
+      network.edges[edge.id].rth = setRthFromSource(
+        network.edges[edge.id].rth,
+        'Manual',
+        0.08,
+        'high',
+        { makeActive: true },
+      );
+    });
+    useNetworkStore.getState().mutate((network) => {
+      expect(refreshHskBaseConnectionEdges(network, improvedMaterials)).toBe(1);
+    });
+    const refreshed = useNetworkStore.getState().network!.edges[edge.id];
+    expect(refreshed.parameters?.k_W_mK).toBe(192);
+    expect(refreshed.rth.analytical).toBeCloseTo(edge.rth.analytical! / 2, 10);
+    expect(refreshed.rth.active_source).toBe('Manual');
+    expect(refreshed.rth.manual).toBe(0.08);
+  });
+
+  it('leaves the HSK Base conduction unresolved when Screen 01 has no thickness', () => {
+    const materials = {
+      ...defaultMaterials(),
+      coin_L_mm: sourced(20, 'Manual'),
+      coin_W_mm: sourced(10, 'Manual'),
+    };
+    const component = pa();
+    component.thermal_spec.heat_path.type = 'Coin';
+    component.thermal_spec.geometry.package_L_mm = 20;
+    component.thermal_spec.geometry.package_W_mm = 10;
+    component.thermal_spec.tim.tim_id = 'TIM_GREASE';
+    const structure = buildSharedStructure('SINGLE_MAIN_BASE');
+    const subgraph = buildComponentSubgraph(component, {
+      materials,
+      templateId: 'BOTTOM_COOL_COIN',
+      qtyModel: 'AGGREGATE',
+    })!;
+    useNetworkStore.getState().addSubgraph({
+      nodes: structure.nodes,
+      edges: structure.edges,
+      zones: structure.zones,
+    });
+    useNetworkStore.getState().addSubgraph(subgraph);
+    const portNode = subgraph.nodes.find((node) => node.ports?.length)!;
+    useNetworkStore
+      .getState()
+      .connectPort(portNode.id, 'HEAT_OUT', structure.zones[0].id, materials);
+
+    const edge = Object.values(useNetworkStore.getState().network!.edges).find(
+      (candidate) => candidate.metadata?.connection_role === 'hsk_base_conduction',
+    )!;
+    expect(edge.rth.analytical).toBeNull();
+    expect(edge.resolution).toBe('unresolved');
+    expect(edge.resolution_note).toContain('length_mm');
+  });
+});
+
+describe('shared structure replacement', () => {
+  it('merges a legacy Main Base into HSK Base and retains component ports', () => {
+    const oldStructure = buildSharedStructure('SMALL_BASE_MAIN_BASE');
+    const subgraph = buildComponentSubgraph(pa(), {
+      materials: defaultMaterials(),
+      templateId: 'BOTTOM_COOL_COIN',
+      qtyModel: 'AGGREGATE',
+    })!;
+    useNetworkStore.getState().addSubgraph({
+      nodes: oldStructure.nodes,
+      edges: oldStructure.edges,
+      zones: oldStructure.zones,
+    });
+    useNetworkStore.getState().addSubgraph(subgraph);
+    const portNode = subgraph.nodes.find((node) => node.ports?.length)!;
+    const oldMainBase = oldStructure.zones.find((zone) => zone.id === 'NODE_MAIN_BASE')!;
+    useNetworkStore
+      .getState()
+      .connectPort(portNode.id, 'HEAT_OUT', oldMainBase.id);
+
+    const next = buildSharedStructure('SINGLE_MAIN_BASE');
+    useNetworkStore.getState().replaceSharedStructure(next);
+    const network = useNetworkStore.getState().network!;
+    expect(network.nodes.NODE_MAIN_BASE).toBeUndefined();
+    expect(network.nodes.NODE_FIN_ROOT).toBeUndefined();
+    expect(network.nodes.NODE_HSK_BASE.name).toBe('HSK Base / Fin Root');
+    expect(network.nodes[portNode.id].ports?.[0].connected_to).toBe('NODE_HSK_BASE');
+    expect(
+      Object.values(network.edges).some(
+        (edge) => edge.from === portNode.id && edge.to === 'NODE_HSK_BASE',
+      ),
+    ).toBe(true);
+    expect(Object.keys(network.zones)).toEqual(['NODE_HSK_BASE']);
   });
 });
 

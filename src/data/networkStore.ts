@@ -28,6 +28,8 @@ import type {
   ThermalNode,
 } from '@/thermal/types';
 import { validateGraph, type GraphValidationResult } from '@/thermal/graph/graphValidation';
+import { hskBaseConnectionPatch } from '@/thermal/graph/hskBaseConnection';
+import type { MaterialDefaults } from '@/domain/materials';
 
 export function emptyNetwork(projectId: string): ThermalNetwork {
   return {
@@ -83,6 +85,12 @@ interface NetworkStoreState {
     binding?: ComponentTemplateBinding;
     zones?: BaseZone[];
   }) => void;
+  /** Replaces generated shared structure without deleting component subgraphs. */
+  replaceSharedStructure: (input: {
+    nodes: ThermalNode[];
+    edges: ThermalEdge[];
+    zones: BaseZone[];
+  }, materials?: MaterialDefaults) => void;
   /** Replaces a component's generated objects, preserving manual edits (05 §40). */
   replaceComponentSubgraph: (
     componentId: string,
@@ -90,7 +98,12 @@ interface NetworkStoreState {
     mode: 'generated_only' | 'entire',
   ) => { preservedManual: number };
 
-  connectPort: (nodeId: string, portKind: string, targetNodeId: string) => void;
+  connectPort: (
+    nodeId: string,
+    portKind: string,
+    targetNodeId: string,
+    materials?: MaterialDefaults,
+  ) => void;
   disconnectPort: (nodeId: string, portKind: string) => void;
 
   undo: () => void;
@@ -117,6 +130,42 @@ function snapshot(network: ThermalNetwork): Snapshot {
     zones: network.zones,
     layout: network.layout,
   });
+}
+
+/** Creates the stored edge for a component port connection. */
+function portConnectionEdge(
+  network: ThermalNetwork,
+  nodeId: string,
+  targetNodeId: string,
+  materials?: MaterialDefaults,
+): ThermalEdge {
+  const edgeKey = `EDGE_PORT_${nodeId.replace(/^NODE_/, '')}_${targetNodeId.replace(/^NODE_/, '')}`;
+  const linkedBaseModel = materials
+    ? hskBaseConnectionPatch(network, nodeId, targetNodeId, materials)
+    : null;
+  return {
+    id: edgeKey,
+    from: nodeId,
+    to: targetNodeId,
+    type: 'contact',
+    method: 'direct_rth',
+    rth: {
+      analytical: null,
+      flotherm: null,
+      measurement: null,
+      manual: null,
+      active_source: 'Analytical',
+      provenance: {},
+    },
+    parameters: {},
+    heat_flow_W: null,
+    delta_T_C: null,
+    resolution: 'unresolved',
+    resolution_note: 'Interface resistance between the component port and the shared structure.',
+    enabled: true,
+    origin: { kind: 'manual', component_id: network.nodes[nodeId]?.component_ref },
+    ...(linkedBaseModel ?? {}),
+  };
 }
 
 export const useNetworkStore = create<NetworkStoreState>((set, get) => ({
@@ -239,6 +288,65 @@ export const useNetworkStore = create<NetworkStoreState>((set, get) => ({
       for (const zone of zones ?? []) network.zones[zone.id] = zone;
     }),
 
+  replaceSharedStructure: ({ nodes, edges, zones }, materials) =>
+    get().mutate((network) => {
+      const removedNodeIds = new Set(
+        Object.values(network.nodes)
+          .filter((node) => node.origin?.kind === 'shared_structure')
+          .map((node) => node.id),
+      );
+      const nextNodeIds = new Set(nodes.map((node) => node.id));
+      const replacementHsk = zones.find((zone) => zone.type === 'heat_sink_base')?.id ?? null;
+      const retainedConnections: Array<{ nodeId: string; targetNodeId: string }> = [];
+
+      for (const id of removedNodeIds) {
+        delete network.nodes[id];
+        delete network.layout.positions[id];
+      }
+      for (const [id, edge] of Object.entries(network.edges)) {
+        if (
+          edge.origin?.kind === 'shared_structure' ||
+          removedNodeIds.has(edge.from) ||
+          removedNodeIds.has(edge.to)
+        ) {
+          delete network.edges[id];
+        }
+      }
+      for (const [id] of Object.entries(network.zones)) {
+        if (removedNodeIds.has(id)) delete network.zones[id];
+      }
+      // Replacing the structure deliberately disconnects component ports. The
+      // same physical target is retained when it survives the replacement. A
+      // legacy single Main Base maps to the corrected single HSK Base.
+      for (const node of Object.values(network.nodes)) {
+        if (!node.ports?.length) continue;
+        node.ports = node.ports.map((port) => {
+          const oldTarget = port.connected_to;
+          if (!oldTarget || !removedNodeIds.has(oldTarget)) return port;
+          const targetNodeId = nextNodeIds.has(oldTarget)
+            ? oldTarget
+            : oldTarget === 'NODE_MAIN_BASE'
+              ? replacementHsk
+              : null;
+          if (targetNodeId) retainedConnections.push({ nodeId: node.id, targetNodeId });
+          return { ...port, connected_to: targetNodeId };
+        });
+      }
+
+      for (const node of nodes) network.nodes[node.id] = node;
+      for (const edge of edges) network.edges[edge.id] = edge;
+      for (const zone of zones) network.zones[zone.id] = zone;
+      for (const connection of retainedConnections) {
+        const edge = portConnectionEdge(
+          network,
+          connection.nodeId,
+          connection.targetNodeId,
+          materials,
+        );
+        network.edges[edge.id] = edge;
+      }
+    }),
+
   replaceComponentSubgraph: (componentId, next, mode) => {
     let preservedManual = 0;
 
@@ -274,7 +382,7 @@ export const useNetworkStore = create<NetworkStoreState>((set, get) => ({
     return { preservedManual };
   },
 
-  connectPort: (nodeId, portKind, targetNodeId) =>
+  connectPort: (nodeId, portKind, targetNodeId, materials) =>
     get().mutate((network) => {
       const node = network.nodes[nodeId];
       if (!node?.ports) return;
@@ -282,30 +390,10 @@ export const useNetworkStore = create<NetworkStoreState>((set, get) => ({
         port.kind === portKind ? { ...port, connected_to: targetNodeId } : port,
       );
 
-      // The port becomes a real edge; its resistance is not known yet.
-      const edgeKey = `EDGE_PORT_${nodeId.replace(/^NODE_/, '')}_${targetNodeId.replace(/^NODE_/, '')}`;
-      network.edges[edgeKey] = {
-        id: edgeKey,
-        from: nodeId,
-        to: targetNodeId,
-        type: 'contact',
-        method: 'direct_rth',
-        rth: {
-          analytical: null,
-          flotherm: null,
-          measurement: null,
-          manual: null,
-          active_source: 'Analytical',
-          provenance: {},
-        },
-        parameters: {},
-        heat_flow_W: null,
-        delta_T_C: null,
-        resolution: 'unresolved',
-        resolution_note: 'Interface resistance between the component port and the shared structure.',
-        enabled: true,
-        origin: { kind: 'manual', component_id: network.nodes[nodeId]?.component_ref },
-      };
+      // The port becomes a real edge. Single-HSK connections are resolved from
+      // Screen 01; other structures retain an explicit unresolved interface.
+      const edge = portConnectionEdge(network, nodeId, targetNodeId, materials);
+      network.edges[edge.id] = edge;
     }),
 
   disconnectPort: (nodeId, portKind) =>

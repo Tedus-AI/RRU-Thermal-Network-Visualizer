@@ -6,6 +6,7 @@ import {
   coinAreaMm2,
   defaultMaterials,
   findTimMaterial,
+  hskBaseAreaMm2,
   nextTimId,
   normalizeMaterials,
   resolveTim,
@@ -47,6 +48,9 @@ describe('shipped defaults', () => {
     }
     expect(materials.copper_k_W_mK.value).toBe(380);
     expect(materials.copper_k_W_mK.source).toBe('Assumed');
+    expect(materials.hsk_base_material).toBe('ADC12');
+    expect(materials.hsk_base_k_W_mK.value).toBe(96);
+    expect(materials.hsk_base_thickness_mm).toBeNull();
   });
 
   /**
@@ -82,9 +86,9 @@ describe('shipped defaults', () => {
 
   it('counts what is still on a shipped value', () => {
     const materials = defaultMaterials();
-    // 7 TIM materials x 2 properties, plus the 7 process constants.
-    expect(assumedCount(materials)).toBe(21);
-    expect(assumedCount({ ...materials, copper_k_W_mK: sourced(400, 'Manual') })).toBe(20);
+    // 7 TIM materials x 2 properties, 7 process constants, plus HSK-base k.
+    expect(assumedCount(materials)).toBe(22);
+    expect(assumedCount({ ...materials, copper_k_W_mK: sourced(400, 'Manual') })).toBe(21);
   });
 });
 
@@ -128,6 +132,22 @@ describe('normalizeMaterials', () => {
     expect(materials.copper_k_W_mK.source).toBe('Vendor');
     expect(findTimMaterial(materials, BUILTIN_TIM_IDS.grease)!.k_W_mK.value).toBe(3.0);
     expect(materials.via_efficiency.value).toBe(0.9);
+    expect(materials.hsk_base_material).toBe('ADC12');
+    expect(materials.hsk_base_k_W_mK.value).toBe(96);
+  });
+
+  it('hydrates the shared HSK material and geometry additively', () => {
+    const materials = normalizeMaterials({
+      hsk_base_material: 'HPDC_HIGH_K',
+      hsk_base_k_W_mK: 165,
+      hsk_base_thickness_mm: 6,
+      hsk_base_L_mm: 300,
+      hsk_base_W_mm: 220,
+    });
+    expect(materials.hsk_base_material).toBe('HPDC_HIGH_K');
+    expect(materials.hsk_base_k_W_mK.value).toBe(165);
+    expect(materials.hsk_base_thickness_mm?.value).toBe(6);
+    expect(hskBaseAreaMm2(materials)).toBe(66_000);
   });
 
   it('accepts a bare number from a hand-edited file and calls it Manual', () => {

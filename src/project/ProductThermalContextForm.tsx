@@ -145,7 +145,7 @@ export function ProductThermalContextForm({ readOnly }: { readOnly: boolean }) {
           label="Base Structure"
           zh="基座結構"
           htmlFor="base_structure"
-          tip="共用基座怎麼分區。它決定 Screen 04 的「基座區域」可以選哪些，以及 Screen 05 會建出什麼結構。整片壓鑄件當一塊就選「單一主基座」；想區分鰭片正下方與邊角的溫差再往下拆。"
+          tip="共用基座怎麼分區。它決定 Screen 04 的「基座區域」可以選哪些，以及 Screen 05 會建出什麼結構。整片壓鑄散熱器是一個共用實體時選「單一共用散熱器底座」；想區分鰭片正下方與邊角的溫差再往下拆。"
         >
           <Select
             id="base_structure"

@@ -53,6 +53,11 @@ export function demoProject(): Project {
       coin_L_mm: { value: 55, source: 'Manual', updated_at: DEMO_TIMESTAMP },
       coin_W_mm: { value: 35, source: 'Manual', updated_at: DEMO_TIMESTAMP },
       coin_thickness_mm: { value: 2.0, source: 'Manual', updated_at: DEMO_TIMESTAMP },
+      hsk_base_material: 'ADC12',
+      hsk_base_k_W_mK: { value: 96, source: 'Manual', updated_at: DEMO_TIMESTAMP },
+      hsk_base_thickness_mm: { value: 6, source: 'Manual', updated_at: DEMO_TIMESTAMP },
+      hsk_base_L_mm: { value: 300, source: 'Manual', updated_at: DEMO_TIMESTAMP },
+      hsk_base_W_mm: { value: 220, source: 'Manual', updated_at: DEMO_TIMESTAMP },
     },
     project_context: {
       customer: 'Synthetic Demo Program',

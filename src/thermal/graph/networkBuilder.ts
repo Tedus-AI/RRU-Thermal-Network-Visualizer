@@ -191,6 +191,10 @@ function effectiveEdgeSpec(
       method: 'direct_rth',
       parameterLinks: {
         R_C_per_W: 'thermal_spec.tim.measured_rth_C_per_W',
+        // Retain the physical exit face even when the interface itself is a
+        // measured resistance. The following HSK-base conduction still needs
+        // this area for L/(kA).
+        ...(links.area_mm2 ? { area_mm2: links.area_mm2 } : {}),
       },
     };
   }
@@ -561,6 +565,12 @@ export function previewGeneration(
 export function suggestedZoneFor(component: Component, zoneIds: string[]): string | null {
   const preferred = component.architecture_prep.preferred_base_zone;
   if (preferred === UNASSIGNED_ZONE) return null;
+  // SINGLE_MAIN_BASE keeps MAIN_BASE as its persisted compatibility key, while
+  // the corrected Screen 05 structure exposes the one physical NODE_HSK_BASE.
+  if (preferred === 'MAIN_BASE') {
+    const sharedHsk = zoneIds.find((id) => id.endsWith('HSK_BASE'));
+    if (sharedHsk) return sharedHsk;
+  }
   // The stored value IS the zone key now, so no name mangling: a renamed zone
   // used to break this link without saying anything.
   return zoneIds.find((id) => id.endsWith(preferred)) ?? null;
