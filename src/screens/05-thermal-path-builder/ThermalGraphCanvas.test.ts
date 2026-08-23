@@ -63,7 +63,7 @@ function fanInNetwork(count: number, reversedIndex = -1): ThermalNetwork {
     },
   };
 
-  const hskPosition = { x: 600, y: 200 };
+  const hskPosition = { x: 600, y: 120 };
   network.nodes.NODE_HSK_BASE = thermalNode(
     'NODE_HSK_BASE',
     'heat_sink_base',
@@ -94,7 +94,10 @@ describe('Screen 05 HSK Base bus projection', () => {
 
     const bus = elements.find((element) => String(element.classes).includes('hsk-bus'))!;
     const junctions = elements.filter((element) =>
-      String(element.classes).includes('hsk-bus-junction'),
+      String(element.classes).includes('hsk-bus-branch-junction'),
+    );
+    const outlet = elements.find((element) =>
+      String(element.classes).includes('hsk-bus-outlet'),
     );
     const trunk = elements.find((element) =>
       String(element.classes).includes('hsk-bus-trunk'),
@@ -105,9 +108,14 @@ describe('Screen 05 HSK Base bus projection', () => {
     );
 
     expect(bus.selectable).toBe(false);
+    expect(bus.data.w).toBe(2);
+    expect(bus.position?.y).toBe(200);
+    expect(bus.data.h).toBe(300);
     expect(bus.position?.x).toBeGreaterThan(100);
     expect(bus.position?.x).toBeLessThan(600);
     expect(junctions).toHaveLength(4);
+    expect(outlet?.position?.y).toBe(120);
+    expect(trunk?.data.source).toBe(outlet?.data.id);
     expect(trunk?.data.target).toBe('NODE_HSK_BASE');
     expect(String(routed.classes)).toContain('routed-port-edge');
     expect(routed.data.target).not.toBe('NODE_HSK_BASE');
@@ -138,7 +146,7 @@ describe('Screen 05 HSK Base bus projection', () => {
     ).toBe('NODE_HSK_BASE');
   });
 
-  it('preserves a reversed edge and places its label near the terminal', () => {
+  it('preserves a reversed edge while using the shared straight-edge label style', () => {
     const elements = buildElements(fanInNetwork(4, 0), {
       showPorts: true,
       showLabels: true,
@@ -149,6 +157,7 @@ describe('Screen 05 HSK Base bus projection', () => {
     )!;
 
     expect(reversed.data.target).toBe('NODE_TIM_1');
-    expect(String(reversed.classes)).toContain('label-at-target');
+    expect(reversed.data.label).toBe('0.050 °C/W');
+    expect(String(reversed.classes)).toBe('routed-port-edge');
   });
 });

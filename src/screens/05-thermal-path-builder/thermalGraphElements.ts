@@ -35,6 +35,7 @@ interface HskBusBranch {
 interface HskBusGroup {
   id: string;
   sharedId: string;
+  outletId: string;
   branches: HskBusBranch[];
 }
 
@@ -70,6 +71,7 @@ function hskBusGroups(network: ThermalNetwork, layoutMode: string): HskBusGroup[
       return {
         id,
         sharedId,
+        outletId: `${id}_OUTLET`,
         branches: branches.map((branch) => ({
           ...branch,
           junctionId: `${id}_JUNCTION_${branch.edgeId}`,
@@ -85,17 +87,25 @@ function storedBusGeometry(network: ThermalNetwork, group: HskBusGroup) {
     .filter((position): position is { x: number; y: number } => Boolean(position));
   const fallbackHeight = Math.max(80, group.branches.length * 54);
   if (!target || sources.length === 0) {
-    return { position: undefined, height: fallbackHeight, busX: null as number | null };
+    return {
+      position: undefined,
+      outletPosition: undefined,
+      height: fallbackHeight,
+      busX: null as number | null,
+    };
   }
 
   const sourceXs = sources.map((position) => position.x);
   const targetOnRight = target.x >= sourceXs.reduce((sum, value) => sum + value, 0) / sourceXs.length;
   const sourceFront = targetOnRight ? Math.max(...sourceXs) : Math.min(...sourceXs);
-  const busX = sourceFront + (target.x - sourceFront) * 0.58;
-  const maxDistanceY = Math.max(...sources.map((position) => Math.abs(position.y - target.y)));
+  const busX = sourceFront + (target.x - sourceFront) * 0.72;
+  const allYs = [...sources.map((position) => position.y), target.y];
+  const minY = Math.min(...allYs);
+  const maxY = Math.max(...allYs);
   return {
-    position: { x: busX, y: target.y },
-    height: Math.max(80, maxDistanceY * 2 + 16),
+    position: { x: busX, y: (minY + maxY) / 2 },
+    outletPosition: { x: busX, y: target.y },
+    height: Math.max(2, maxY - minY),
     busX,
   };
 }
@@ -153,7 +163,8 @@ export function buildElements(
       data: {
         id: group.id,
         sharedId: group.sharedId,
-        w: 5,
+        outletId: group.outletId,
+        w: 2,
         h: geometry.height,
         fill: '#0d9488',
         border: '#0d9488',
@@ -175,14 +186,14 @@ export function buildElements(
           busId: group.id,
           sourceId: branch.terminalId,
           edgeId: branch.edgeId,
-          w: 9,
-          h: 9,
+          w: 6,
+          h: 6,
           fill: '#0d9488',
           border: '#0d9488',
           text: '#0d9488',
           label: '',
         },
-        classes: 'view-only hsk-bus-junction',
+        classes: 'view-only hsk-bus-junction hsk-bus-branch-junction',
         position:
           geometry.busX != null && sourcePosition
             ? { x: geometry.busX, y: sourcePosition.y }
@@ -193,10 +204,29 @@ export function buildElements(
     }
 
     elements.push({
+      group: 'nodes',
+      data: {
+        id: group.outletId,
+        busId: group.id,
+        sharedId: group.sharedId,
+        w: 6,
+        h: 6,
+        fill: '#0d9488',
+        border: '#0d9488',
+        text: '#0d9488',
+        label: '',
+      },
+      classes: 'view-only hsk-bus-junction hsk-bus-outlet',
+      position: geometry.outletPosition,
+      selectable: false,
+      grabbable: false,
+    });
+
+    elements.push({
       group: 'edges',
       data: {
         id: `${group.id}_TRUNK`,
-        source: group.id,
+        source: group.outletId,
         target: group.sharedId,
         color: '#0d9488',
         lineStyle: 'solid',
@@ -230,11 +260,10 @@ export function buildElements(
           source: terminalIsSource ? routed.terminalId : routed.junctionId,
           target: terminalIsSource ? routed.junctionId : routed.terminalId,
           label: routedLabel,
-          labelOffset: 80,
           color: edgeColor(edge),
           lineStyle: edgeLineStyle(edge),
         },
-        classes: `routed-port-edge ${terminalIsSource ? 'label-at-source' : 'label-at-target'}`,
+        classes: 'routed-port-edge',
       });
       // Preserve the authoritative terminal-to-HSK relationship for Dagre;
       // the engineer only sees the routed branch above.

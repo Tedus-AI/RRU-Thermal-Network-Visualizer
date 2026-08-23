@@ -206,37 +206,14 @@ export function cytoscapeStylesheet(): StylesheetCSS[] {
       selector: 'edge.routed-port-edge',
       style: {
         'curve-style': 'straight',
-        label: '',
-        'arrow-scale': 0.65,
-        'text-background-opacity': 1,
-        'text-background-shape': 'roundrectangle',
-        'text-background-padding': '3px',
-        'text-border-opacity': 1,
-        'text-border-width': 1,
-        'text-border-color': '#cbd5e1',
+        'text-rotation': 'none',
         'z-index': 5,
-      },
-    },
-    {
-      selector: 'edge.routed-port-edge.label-at-source',
-      style: {
-        'source-label': 'data(label)',
-        'source-text-offset': 'data(labelOffset)',
-        'source-text-rotation': 'none',
-      },
-    },
-    {
-      selector: 'edge.routed-port-edge.label-at-target',
-      style: {
-        'target-label': 'data(label)',
-        'target-text-offset': 'data(labelOffset)',
-        'target-text-rotation': 'none',
       },
     },
     {
       selector: 'edge.hsk-bus-trunk',
       style: {
-        width: 3,
+        width: 2,
         'curve-style': 'straight',
         'line-color': '#0d9488',
         'target-arrow-shape': 'none',
