@@ -85,7 +85,6 @@ export interface Provenance {
 // ---------------------------------------------------------------------------
 
 export const NODE_TYPES = [
-  'heat_source',
   'junction',
   'die',
   'case',
@@ -98,20 +97,54 @@ export const NODE_TYPES = [
   'solder_interface',
   'pedestal',
   'small_base',
-  'main_base',
   'base_zone',
   'housing',
   'heat_pipe_evaporator',
   'heat_pipe_condenser',
   'heat_sink_base',
-  'fin_root',
   'fin_surface',
-  'internal_air',
-  'external_air',
   'ambient',
   'custom',
 ] as const;
 export type NodeType = (typeof NODE_TYPES)[number];
+
+/**
+ * Node types that were offered, meant nothing, and are gone.
+ *
+ * The list was written before the templates and the shared structure existed,
+ * so it accumulated names that nothing ever produced. Five were removed once
+ * that was checked against every template, the structure presets and the demo:
+ *
+ *   main_base, fin_root  → heat_sink_base. The shared structure's own node is
+ *     named "HSK Base / Fin Root" and typed `heat_sink_base`; these two were
+ *     the same physical thing under the names it had before the HSK rename
+ *     (the same rename `LEGACY_ZONE_KEYS` already handles for zone keys).
+ *   external_air → ambient. Every switch in the codebase listed the two
+ *     together and treated them identically — solver boundary, validation,
+ *     dataset. A second name for the same node.
+ *   heat_source → junction. Nothing decides heat-source-ness by this type;
+ *     `power_W > 0` is the test everywhere. Offering it invited someone to
+ *     believe selecting it declared something. It did not.
+ *   internal_air → ambient. Zero references in the whole codebase, not even a
+ *     colour in the graph stylesheet.
+ *
+ * A stored project can still contain any of them, because the Node Inspector
+ * offered the full list — so `normalizeNodeType` runs on load rather than the
+ * old values being left to fail a type check that only exists at compile time.
+ */
+export const LEGACY_NODE_TYPES: Record<string, NodeType> = {
+  main_base: 'heat_sink_base',
+  fin_root: 'heat_sink_base',
+  external_air: 'ambient',
+  internal_air: 'ambient',
+  heat_source: 'junction',
+};
+
+export function normalizeNodeType(value: unknown): NodeType {
+  if (typeof value !== 'string') return 'custom';
+  if ((NODE_TYPES as readonly string[]).includes(value)) return value as NodeType;
+  return LEGACY_NODE_TYPES[value] ?? 'custom';
+}
 
 export type NodeCategory = 'RF' | 'DIGITAL' | 'POWER' | 'FILTER' | 'MECH' | 'ENV';
 

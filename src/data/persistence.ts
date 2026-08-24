@@ -22,7 +22,12 @@ import {
   type ComponentRevisionSet,
 } from '@/domain/revision';
 import type { Component } from '@/domain/component';
-import { DEFAULT_SOLVER_SETTINGS, type ThermalNetwork } from '@/thermal/types';
+import {
+  DEFAULT_SOLVER_SETTINGS,
+  normalizeNodeType,
+  type ThermalNetwork,
+  type ThermalNode,
+} from '@/thermal/types';
 import type { ScenarioBoundaryConditionSet } from '@/thermal/boundary/types';
 import type { ThermalSolution } from '@/thermal/solver/solverTypes';
 import type {
@@ -323,6 +328,29 @@ export function saveComponentRevisions(
 // The graph lives in its own collection, never inside the shared project
 // document — it is far too large and changes on a different cadence (00 §35.2).
 
+/**
+ * Repairs a node whose type was removed from `NODE_TYPES`.
+ *
+ * The Node Inspector offered the whole list, so a stored project can name a
+ * type that no longer exists — `main_base`, `fin_root`, `external_air`,
+ * `internal_air`, `heat_source`. TypeScript cannot catch that: the file was
+ * written by an older build and is only checked at compile time. Left alone the
+ * node would drop out of every `switch` and `Set.has` that decides whether it
+ * is structural, a boundary, or a heat sink, and it would do so silently.
+ * `normalizeNodeType` maps each onto the survivor that always meant the same
+ * thing. Nothing else about the node is touched.
+ */
+function migrateNodeTypes(nodes: Record<string, ThermalNode>): Record<string, ThermalNode> {
+  let changed = false;
+  const migrated: Record<string, ThermalNode> = {};
+  for (const [id, node] of Object.entries(nodes)) {
+    const type = normalizeNodeType(node.type);
+    if (type !== node.type) changed = true;
+    migrated[id] = type === node.type ? node : { ...node, type };
+  }
+  return changed ? migrated : nodes;
+}
+
 export function loadNetwork(projectId: string): ThermalNetwork | null {
   const all = readCollection(NETWORKS_KEY);
   const stored = all[projectId];
@@ -338,7 +366,7 @@ export function loadNetwork(projectId: string): ThermalNetwork | null {
         loadProject(projectId)?.meta.updated_at ??
         projectId,
     ),
-    nodes: network.nodes ?? {},
+    nodes: migrateNodeTypes(network.nodes ?? {}),
     edges: network.edges ?? {},
     status: network.status ?? 'DRAFT',
     templates: network.templates ?? {},

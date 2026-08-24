@@ -20,9 +20,11 @@ import {
   type StructurePreset,
 } from '@/thermal/graph/sharedStructure';
 
+// 'Main Base' was here too, meaning the same thing as 'Heat Sink Base' — the
+// name the structure presets had before the HSK rename. Offering both invited
+// a project to end up with two names for one part.
 const ZONE_TYPES: Array<{ value: NodeType; label: string }> = [
   { value: 'base_zone', label: 'Base Zone' },
-  { value: 'main_base', label: 'Main Base' },
   { value: 'small_base', label: 'Small Base' },
   { value: 'housing', label: 'Housing' },
   { value: 'heat_sink_base', label: 'Heat Sink Base' },
@@ -92,7 +94,7 @@ export function SharedStructurePanel({
     (node) => node.origin?.kind === 'shared_structure' || node.origin?.kind === 'manual',
   );
   const zoneNodes = structureNodes.filter(
-    (node) => node.type === 'base_zone' || node.type === 'main_base' || node.type === 'small_base',
+    (node) => node.type === 'base_zone' || node.type === 'small_base',
   );
   const hskNodes = structureNodes.filter((node) => node.type === 'heat_sink_base');
 

@@ -140,7 +140,7 @@ describe('Bottleneck is not the largest Rth (08 §1, §33)', () => {
       node('SRC_A', { power: 100, component: 'CMP_A', limit: 110 }),
       node('SRC_B', { power: 100, component: 'CMP_B', limit: 110 }),
       node('TINY', { power: 0.05, component: 'CMP_TINY', limit: 125 }),
-      node('BASE', { type: 'main_base' }),
+      node('BASE', { type: 'heat_sink_base' }),
       node('AMB', { ambient: true }),
     ],
     [
@@ -273,7 +273,7 @@ describe('Metrics (08 §3, §12)', () => {
     [
       node('HOT', { power: 60, component: 'CMP_HOT', limit: 100 }),
       node('WARM', { power: 20, component: 'CMP_WARM', limit: 150 }),
-      node('BASE', { type: 'main_base' }),
+      node('BASE', { type: 'heat_sink_base' }),
       node('AMB', { ambient: true }),
     ],
     [

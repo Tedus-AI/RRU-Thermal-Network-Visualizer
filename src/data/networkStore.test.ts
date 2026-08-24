@@ -204,6 +204,40 @@ describe('port connection (05 §16)', () => {
     expect(useNetworkStore.getState().dirty).toBe(false);
   });
 
+  /**
+   * The Node Inspector used to offer types that nothing produced, so a project
+   * saved before they were removed can still name one. Left alone the node
+   * would silently fall out of every structural / boundary / heat-sink test.
+   */
+  it('repairs a stored node whose type was removed from the vocabulary', () => {
+    const structure = buildSharedStructure('SINGLE_MAIN_BASE');
+    useNetworkStore.getState().addSubgraph({
+      nodes: structure.nodes,
+      edges: structure.edges,
+      zones: structure.zones,
+    });
+    const stored = structuredClone(useNetworkStore.getState().network!);
+    const hskId = structure.zones[0].id;
+    // Exactly what an older build would have written.
+    (stored.nodes[hskId] as { type: string }).type = 'main_base';
+    stored.nodes.NODE_OLD_AIR = {
+      ...structure.nodes[0],
+      id: 'NODE_OLD_AIR',
+      name: 'Outside Air',
+      type: 'external_air' as never,
+    };
+    saveNetwork('OLD_TYPES', stored);
+
+    const loaded = loadNetwork('OLD_TYPES')!;
+    expect(loaded.nodes[hskId].type).toBe('heat_sink_base');
+    expect(loaded.nodes.NODE_OLD_AIR.type).toBe('ambient');
+    // Nothing else about the node is touched.
+    expect(loaded.nodes.NODE_OLD_AIR.name).toBe('Outside Air');
+
+    useNetworkStore.getState().loadFor('OLD_TYPES');
+    expect(useNetworkStore.getState().network!.nodes[hskId].type).toBe('heat_sink_base');
+  });
+
   it('wires a port to a shared node and creates an unresolved interface edge', () => {
     const structure = buildSharedStructure('DUAL_HSK_BASE');
     useNetworkStore.getState().addSubgraph({

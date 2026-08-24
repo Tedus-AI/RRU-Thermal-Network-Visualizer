@@ -20,6 +20,7 @@ import { computeRth, conductionRth, spreadingRth, timRth } from '../resistance/c
 import { emptyNetwork } from '@/data/networkStore';
 import { activeRth } from '../rth';
 import type { ThermalEdge, ThermalNetwork, ThermalNode } from '../types';
+import { LEGACY_NODE_TYPES, NODE_TYPES, normalizeNodeType } from '../types';
 import {
   emptyArchitecturePrep,
   emptyExternalMappings,
@@ -182,7 +183,10 @@ describe('Metal Base + Interface template', () => {
           package_H_mm: 20,
         },
         heat_path: { type: 'DirectMetal', parameters },
-        tim: { ...tim, blt_mm: tim.tim_id === BUILTIN_TIM_IDS.grease ? sourced(0.05, 'Vendor') : null },
+        tim: {
+          ...tim,
+          blt_mm: tim.tim_id === BUILTIN_TIM_IDS.grease ? sourced(0.05, 'Vendor') : null,
+        },
       },
       architecture_prep: {
         ...base.architecture_prep,
@@ -322,7 +326,7 @@ describe('quantity representation (05 §7)', () => {
   it('accounts for every device in each representation', () => {
     for (const model of ['AGGREGATE', 'INDIVIDUAL', 'GROUPED'] as const) {
       const graph = buildComponentSubgraph(component(), {
-      materials: defaultMaterials(),
+        materials: defaultMaterials(),
         templateId: 'BOTTOM_COOL_COIN',
         qtyModel: model,
       })!;
@@ -611,9 +615,12 @@ describe('shared structure (05 §13, §14, §15)', () => {
     const subject = component();
     subject.architecture_prep.preferred_base_zone = 'HSK_BASE';
     const structure = buildSharedStructure('SINGLE_MAIN_BASE');
-    expect(suggestedZoneFor(subject, structure.zones.map((zone) => zone.id))).toBe(
-      'NODE_HSK_BASE',
-    );
+    expect(
+      suggestedZoneFor(
+        subject,
+        structure.zones.map((zone) => zone.id),
+      ),
+    ).toBe('NODE_HSK_BASE');
   });
 
   it('maps RF and Digital components to different HSK targets in dual mode', () => {
@@ -835,7 +842,6 @@ describe('spreading edges (05 §43)', () => {
   });
 });
 
-
 /**
  * The point of linking the templates: a component carrying its own measurements,
  * in a project carrying its own constants, produces a chain the solver can use
@@ -1044,10 +1050,7 @@ describe('a qty model changes the drawing, not the answer', () => {
   it('widens an aggregated edge to N joints rather than leaving it one', () => {
     const one = build('INDIVIDUAL').edges.find((edge) => edge.type === 'solder')!;
     const four = build('AGGREGATE').edges.find((edge) => edge.type === 'solder')!;
-    expect(four.parameters?.area_mm2).toBeCloseTo(
-      (one.parameters?.area_mm2 as number) * 4,
-      6,
-    );
+    expect(four.parameters?.area_mm2).toBeCloseTo((one.parameters?.area_mm2 as number) * 4, 6);
     expect(activeRth(four.rth)).toBeCloseTo((activeRth(one.rth) as number) / 4, 9);
   });
 
@@ -1168,5 +1171,60 @@ describe('direct metal contact', () => {
     const edge = graph.edges.find((entry) => entry.type === 'tim')!;
     expect(edge.method).toBe('tim_thickness_k');
     expect(edge.parameters?.h_c_W_m2K).toBeUndefined();
+  });
+});
+
+// --- Node type vocabulary --------------------------------------------------
+
+describe('node types', () => {
+  /**
+   * The list is a picker, so every entry is a claim that this is a distinct
+   * thing worth choosing. Five entries were not: two names for the heat-sink
+   * base, a second name for ambient, a "heat source" nothing tested for, and
+   * one with no reference anywhere in the codebase.
+   */
+  it('no longer offers the removed synonyms', () => {
+    for (const gone of ['main_base', 'fin_root', 'external_air', 'internal_air', 'heat_source']) {
+      expect(NODE_TYPES as readonly string[]).not.toContain(gone);
+      expect(LEGACY_NODE_TYPES[gone]).toBeDefined();
+      // Whatever each maps to must itself still exist.
+      expect(NODE_TYPES as readonly string[]).toContain(LEGACY_NODE_TYPES[gone]);
+    }
+  });
+
+  it('maps every removed type onto the survivor that meant the same thing', () => {
+    expect(normalizeNodeType('main_base')).toBe('heat_sink_base');
+    expect(normalizeNodeType('fin_root')).toBe('heat_sink_base');
+    expect(normalizeNodeType('external_air')).toBe('ambient');
+    expect(normalizeNodeType('internal_air')).toBe('ambient');
+    expect(normalizeNodeType('heat_source')).toBe('junction');
+  });
+
+  it('leaves a live type alone and parks an unrecognisable one on custom', () => {
+    for (const type of NODE_TYPES) expect(normalizeNodeType(type)).toBe(type);
+    expect(normalizeNodeType('something_a_later_build_invented')).toBe('custom');
+    expect(normalizeNodeType(undefined)).toBe('custom');
+    expect(normalizeNodeType(42)).toBe('custom');
+  });
+
+  /**
+   * Every surviving type has to be reachable, or the picker is offering
+   * something no template, preset or inspector default can produce. `custom`
+   * is the deliberate exception: it is the escape hatch.
+   */
+  it('keeps every surviving type produced by a template, a preset, or reachable by hand', () => {
+    const produced = new Set<string>();
+    for (const template of TEMPLATE_LIST) {
+      for (const node of getTemplate(template.id)?.nodes ?? []) produced.add(node.type);
+    }
+    for (const preset of STRUCTURE_PRESETS) {
+      for (const node of buildSharedStructure(preset).nodes) produced.add(node.type);
+    }
+    // The rest are hand-build options with real distinct meanings: a bare PCB
+    // node, a heat pipe's cold end, a manually drawn zone, and the catch-all.
+    const handBuildOnly = ['pcb', 'heat_pipe_condenser', 'base_zone', 'custom'];
+    for (const type of NODE_TYPES) {
+      expect(produced.has(type) || handBuildOnly.includes(type)).toBe(true);
+    }
   });
 });
