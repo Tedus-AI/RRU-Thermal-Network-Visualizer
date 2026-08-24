@@ -9,6 +9,7 @@
 
 import {
   coinAreaMm2,
+  hskBaseAreaMm2,
   isDirectContact,
   isMeasuredInterface,
   resolveTim,
@@ -92,6 +93,10 @@ export function readLinkedInput(
       return materials.hsk_base_thickness_mm?.value ?? null;
     case 'materials.hsk_base_k_W_mK':
       return materials.hsk_base_k_W_mK.value;
+    // The base envelope, needed by the spreading edge. Ships empty like the
+    // coin, so a null here leaves that edge honestly unresolved.
+    case 'materials.hsk_base_area_mm2':
+      return hskBaseAreaMm2(materials);
   }
 
   // --- Derived component values ------------------------------------------

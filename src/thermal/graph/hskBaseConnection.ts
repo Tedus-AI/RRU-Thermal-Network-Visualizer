@@ -4,17 +4,52 @@
  * structure.
  *
  * The terminal node is the downstream face of the TIM. The edge after it is
- * therefore the HSK base thickness, matching the graph's existing convention:
- * Thermal Via resistance precedes the Via node and TIM resistance precedes the
- * TIM HEAT_OUT node.
+ * therefore the entry into the HSK base, matching the graph's existing
+ * convention: Thermal Via resistance precedes the Via node and TIM resistance
+ * precedes the TIM HEAT_OUT node.
+ *
+ * WHAT THIS EDGE IS
+ * -----------------
+ * It used to be t/(k·A_contact) — the base thickness, down a column exactly as
+ * wide as the component's contact patch. That is not what the base does. Heat
+ * arrives on a patch of tens of mm² and leaves through a base of tens of
+ * thousands of mm², fanning out on the way, and ignoring the fan-out overstates
+ * this step by roughly 2× for a small patch and 1.2× for a large one. The size
+ * dependence is the damaging part: it is not a constant offset that cancels out
+ * of a comparison, it reorders which component looks like the bottleneck.
+ *
+ * So the edge is now the Lee/Song/Au/Moran disc-spreading correlation over the
+ * REAL base envelope from Screen 01 (`hsk_base_L_mm × hsk_base_W_mm`). That
+ * result already contains the one-dimensional drop through the thickness, so
+ * nothing else may be placed in series with it across the same plate.
+ *
+ * Two consequences worth stating plainly:
+ *   • the edge now needs the base L and W. Those ship empty, so a project that
+ *     has not filled them gets an UNRESOLVED edge naming the missing fields
+ *     rather than a number computed from an invented base size;
+ *   • it stays `Analytical` at `medium` confidence, and carries the assumption
+ *     in its resolution note instead. `Assumed` was the first choice, but the
+ *     overview counts an `Assumed` source on the critical path as a
+ *     low-confidence input and downgrades the whole project to WARNING — and
+ *     this edge is on virtually every critical path, so that warning would be
+ *     permanently on for every project from one systemic cause and would stop
+ *     meaning anything. A closed-form correlation with a published accuracy is
+ *     a calculation, the same category as the L/kA edges beside it; what makes
+ *     it weaker than they are is the Bi → ∞ assumption, and that is stated on
+ *     the edge (`SPREADING_UNDER_ESTIMATE_NOTE`), in the Edge Inspector's
+ *     Model tab, and in the reference string.
  */
 
-import type { MaterialDefaults } from '@/domain/materials';
+import { hskBaseAreaMm2, type MaterialDefaults } from '@/domain/materials';
 import { activeRth, createRth, setRthFromSource } from '../rth';
 import { computeRth } from '../resistance/calculators';
 import type { ThermalEdge, ThermalNetwork } from '../types';
 
 export const HSK_BASE_CONNECTION_ROLE = 'hsk_base_conduction';
+
+const RTH_REFERENCE =
+  'Screen 01 HSK Base envelope, thickness and k; component TIM exit area. ' +
+  'Lee/Song/Au/Moran disc spreading.';
 
 interface BaseConductionInputs {
   parameters: NonNullable<ThermalEdge['parameters']>;
@@ -44,6 +79,25 @@ function terminalArea(
   };
 }
 
+/** Names the Screen 01 field behind each parameter, so the note is actionable. */
+const MISSING_LABELS: Record<string, string> = {
+  source_area_mm2: 'component TIM exit area',
+  plate_area_mm2: 'HSK Base L × W (Screen 01)',
+  thickness_mm: 'HSK Base thickness (Screen 01)',
+  k_W_mK: 'HSK Base conductivity k (Screen 01)',
+};
+
+function parameterLinks(areaSourceEdgeId: string | null): Record<string, string> {
+  return {
+    thickness_mm: 'materials.hsk_base_thickness_mm',
+    k_W_mK: 'materials.hsk_base_k_W_mK',
+    plate_area_mm2: 'materials.hsk_base_area_mm2',
+    source_area_mm2: areaSourceEdgeId
+      ? `${areaSourceEdgeId}.parameters.area_mm2`
+      : 'component.TIM_HEAT_OUT.area_mm2',
+  };
+}
+
 function baseConductionInputs(
   network: ThermalNetwork,
   sourceNodeId: string,
@@ -51,28 +105,35 @@ function baseConductionInputs(
 ): BaseConductionInputs {
   const area = terminalArea(network, sourceNodeId);
   const parameters: NonNullable<ThermalEdge['parameters']> = {};
-  const length = materials.hsk_base_thickness_mm?.value;
+  const thickness = materials.hsk_base_thickness_mm?.value;
   const k = materials.hsk_base_k_W_mK.value;
+  const plate = hskBaseAreaMm2(materials);
 
-  if (finitePositive(length)) parameters.length_mm = length;
+  if (finitePositive(thickness)) parameters.thickness_mm = thickness;
   if (finitePositive(k)) parameters.k_W_mK = k;
-  if (finitePositive(area.area_mm2)) parameters.area_mm2 = area.area_mm2;
+  if (finitePositive(plate)) parameters.plate_area_mm2 = plate;
+  if (finitePositive(area.area_mm2)) parameters.source_area_mm2 = area.area_mm2;
+  // Peak temperature under the source, not the base average: the junction chain
+  // upstream of this edge hangs off the hottest point of the contact patch, and
+  // sizing a margin against the average would flatter it.
+  parameters.psi_variant = 'max';
 
-  const computed = computeRth('conduction_LkA', parameters);
+  const computed = computeRth('spreading_disc', parameters);
   return {
     parameters,
     areaSourceEdgeId: area.edge_id,
     value: computed.value,
     resolution: computed.resolution,
     note:
-      computed.note ??
-      (computed.missing.length > 0
-        ? `Missing HSK Base input: ${computed.missing.join(', ')}.`
-        : undefined),
+      computed.missing.length > 0
+        ? `Missing HSK Base input: ${computed.missing
+            .map((key) => MISSING_LABELS[key] ?? key)
+            .join(', ')}.`
+        : computed.note,
   };
 }
 
-/** Returns the analytical HSK-thickness edge for any declared HSK target. */
+/** Returns the analytical HSK-base entry edge for any declared HSK target. */
 export function hskBaseConnectionPatch(
   network: ThermalNetwork,
   sourceNodeId: string,
@@ -93,22 +154,16 @@ export function hskBaseConnectionPatch(
 
   const inputs = baseConductionInputs(network, sourceNodeId, materials);
   return {
-    type: 'conduction',
-    method: 'conduction_LkA',
+    type: 'spreading',
+    method: 'spreading_disc',
     rth: createRth(
       inputs.value,
       'Analytical',
       inputs.value == null ? 'low' : 'medium',
-      'Screen 01 HSK Base thickness and k; component TIM exit area',
+      RTH_REFERENCE,
     ),
     parameters: inputs.parameters,
-    parameter_links: {
-      length_mm: 'materials.hsk_base_thickness_mm',
-      k_W_mK: 'materials.hsk_base_k_W_mK',
-      area_mm2: inputs.areaSourceEdgeId
-        ? `${inputs.areaSourceEdgeId}.parameters.area_mm2`
-        : 'component.TIM_HEAT_OUT.area_mm2',
-    },
+    parameter_links: parameterLinks(inputs.areaSourceEdgeId),
     resolution: inputs.resolution,
     resolution_note: inputs.note,
     confidence: inputs.value == null ? 'low' : 'medium',
@@ -120,7 +175,7 @@ export function hskBaseConnectionPatch(
   };
 }
 
-/** Refreshes existing linked edges after Screen 01 changes k or thickness. */
+/** Refreshes existing linked edges after Screen 01 changes k, thickness or size. */
 export function refreshHskBaseConnectionEdges(
   network: ThermalNetwork,
   materials: MaterialDefaults,
@@ -140,9 +195,11 @@ export function refreshHskBaseConnectionEdges(
     const previousAreaSource = edge.metadata?.area_source_edge_id ?? null;
 
     const same =
-      edge.parameters?.length_mm === inputs.parameters.length_mm &&
+      edge.method === 'spreading_disc' &&
+      edge.parameters?.thickness_mm === inputs.parameters.thickness_mm &&
       edge.parameters?.k_W_mK === inputs.parameters.k_W_mK &&
-      edge.parameters?.area_mm2 === inputs.parameters.area_mm2 &&
+      edge.parameters?.plate_area_mm2 === inputs.parameters.plate_area_mm2 &&
+      edge.parameters?.source_area_mm2 === inputs.parameters.source_area_mm2 &&
       edge.rth.analytical === inputs.value &&
       edge.resolution === nextResolution &&
       edge.resolution_note === nextNote &&
@@ -151,25 +208,20 @@ export function refreshHskBaseConnectionEdges(
 
     network.edges[id] = {
       ...edge,
-      type: 'conduction',
-      method: 'conduction_LkA',
-      parameters: inputs.parameters,
-      parameter_links: {
-        length_mm: 'materials.hsk_base_thickness_mm',
-        k_W_mK: 'materials.hsk_base_k_W_mK',
-        area_mm2: inputs.areaSourceEdgeId
-          ? `${inputs.areaSourceEdgeId}.parameters.area_mm2`
-          : 'component.TIM_HEAT_OUT.area_mm2',
+      type: 'spreading',
+      method: 'spreading_disc',
+      parameters: {
+        // A pre-spreading edge carries length_mm/area_mm2 that mean something
+        // else entirely; keeping them would leave stale numbers on the panel.
+        ...inputs.parameters,
       },
+      parameter_links: parameterLinks(inputs.areaSourceEdgeId),
       rth: setRthFromSource(
         edge.rth,
         'Analytical',
         inputs.value,
         inputs.value == null ? 'low' : 'medium',
-        {
-          reference: 'Screen 01 HSK Base thickness and k; component TIM exit area',
-          makeActive: !keepActiveOverride,
-        },
+        { reference: RTH_REFERENCE, makeActive: !keepActiveOverride },
       ),
       resolution: nextResolution,
       resolution_note: nextNote,

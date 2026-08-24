@@ -146,9 +146,13 @@ export function MaterialDefaultsForm({
   const materials = draft.materials;
   const coinArea = coinAreaMm2(materials);
   const hskArea = hskBaseAreaMm2(materials);
+  // L and W joined this list when the HSK-base edge became a spreading
+  // calculation: the fan-out is set by how much base the heat has to spread
+  // into, so without the envelope there is no answer to compute.
   const hskConfigured =
     (materials.hsk_base_thickness_mm?.value ?? 0) > 0 &&
-    (materials.hsk_base_k_W_mK.value ?? 0) > 0;
+    (materials.hsk_base_k_W_mK.value ?? 0) > 0 &&
+    hskArea != null;
   const assumed = assumedCount(materials);
 
   const patchLibrary = (next: TimMaterial[]) => patchMaterials({ tim: next });
@@ -204,7 +208,7 @@ export function MaterialDefaultsForm({
         <>
           {materials.tim.length} TIM materials · {assumed} shipped defaults in use
           {coinArea == null ? ' · ⚠ coin size not set / 銅塊尺寸未設定' : ''}
-          {!hskConfigured ? ' · ⚠ HSK thickness not set / HSK 厚度未設定' : ''}
+          {!hskConfigured ? ' · ⚠ HSK base not fully set / HSK 底座資料未齊' : ''}
         </>
       }
     >
@@ -407,12 +411,12 @@ export function MaterialDefaultsForm({
             }`}
           >
             {hskConfigured
-              ? 'Screen 05 uses this thickness and k with each component’s TIM exit area to resolve TIM HEAT_OUT → HSK Base.'
-              : 'Base thickness is required before Screen 05 can resolve TIM HEAT_OUT → HSK Base.'}
+              ? 'Screen 05 spreads each component’s TIM exit area into this base — L × W, thickness and k — to resolve TIM HEAT_OUT → HSK Base (Lee et al. disc spreading).'
+              : 'Base thickness, k and the full L × W envelope are all required before Screen 05 can resolve TIM HEAT_OUT → HSK Base. Heat fans out inside the base, so how much base there is changes the answer.'}
             <span className="block">
               {hskConfigured
-                ? 'Screen 05 會以此厚度與 k，搭配各元件的 TIM 出口面積，自動計算至 HSK Base 的熱阻。'
-                : '必須先設定底座厚度，Screen 05 才能解析 TIM HEAT_OUT → HSK Base。'}
+                ? 'Screen 05 會以此底座的 L × W、厚度與 k，搭配各元件的 TIM 出口面積計算擴散熱阻，得到至 HSK Base 的熱阻。'
+                : '必須先設定底座厚度、k 與完整的 L × W，Screen 05 才能解析 TIM HEAT_OUT → HSK Base；熱在底座內會擴散，底座多大會影響結果。'}
             </span>
           </p>
         </fieldset>
