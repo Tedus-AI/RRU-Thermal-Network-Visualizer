@@ -77,6 +77,17 @@ function ToolButton({
 
 const Divider = () => <span aria-hidden className="mx-1 h-6 w-px shrink-0 bg-line" />;
 
+/**
+ * Select is the resting state, so every other mode toggles back to it.
+ *
+ * Connect, Add Node and Add Edge used to latch: once armed there was no way
+ * off them but to pick a different tool, and clicking the lit button again did
+ * nothing. Zoom to Region already toggled, which made the row inconsistent as
+ * well as sticky.
+ */
+export const toggleTool = (current: CanvasTool, wanted: CanvasTool): CanvasTool =>
+  current === wanted ? 'select' : wanted;
+
 export function GraphToolbar({
   tool,
   layoutMode,
@@ -127,17 +138,17 @@ export function GraphToolbar({
       <div className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto">
         <ToolButton
           active={tool === 'select'}
-          label="Select"
-          zh="選取"
+          label="Select (drag to box-select)"
+          zh="選取（拖曳框選）"
           icon={<MousePointer2 size={14} />}
           onClick={() => onTool('select')}
         />
         <ToolButton
           active={tool === 'pan'}
-          label="Pan"
-          zh="平移"
+          label="Pan (drag to move the view)"
+          zh="平移（拖曳移動畫面）"
           icon={<Hand size={14} />}
-          onClick={() => onTool('pan')}
+          onClick={() => onTool(toggleTool(tool, 'pan'))}
         />
         <ToolButton
           active={tool === 'connect'}
@@ -145,7 +156,7 @@ export function GraphToolbar({
           label="Connect Port"
           zh="連接埠"
           icon={<Share2 size={14} />}
-          onClick={() => onTool('connect')}
+          onClick={() => onTool(toggleTool(tool, 'connect'))}
         />
         <ToolButton
           active={tool === 'add-node'}
@@ -153,7 +164,7 @@ export function GraphToolbar({
           label="Add Node"
           zh="新增節點"
           icon={<Plus size={14} />}
-          onClick={() => onTool('add-node')}
+          onClick={() => onTool(toggleTool(tool, 'add-node'))}
         />
         <ToolButton
           active={tool === 'add-edge'}
@@ -161,7 +172,7 @@ export function GraphToolbar({
           label="Add Edge (manual)"
           zh="新增連線（手動）"
           icon={<Spline size={14} />}
-          onClick={() => onTool('add-edge')}
+          onClick={() => onTool(toggleTool(tool, 'add-edge'))}
         />
         <ToolButton
           disabled={readOnly}
@@ -222,7 +233,7 @@ export function GraphToolbar({
           label="Zoom to Region"
           zh="框選放大"
           icon={<Scan size={14} />}
-          onClick={() => onTool(tool === 'zoom-box' ? 'select' : 'zoom-box')}
+          onClick={() => onTool(toggleTool(tool, 'zoom-box'))}
         />
         <ToolButton
           label="Fit Whole Network"
