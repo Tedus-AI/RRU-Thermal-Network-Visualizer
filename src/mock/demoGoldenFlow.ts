@@ -203,7 +203,6 @@ export function demoNetwork(
         component.architecture_prep.qty_model_preference === 'DECIDE_LATER'
           ? 'AGGREGATE'
           : component.architecture_prep.qty_model_preference,
-      suggestedZoneNodeId: zoneId,
       materials,
     });
     if (!subgraph) throw new Error(`Golden Demo template failed for ${component.id}.`);

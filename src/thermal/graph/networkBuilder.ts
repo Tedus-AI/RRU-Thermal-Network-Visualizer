@@ -328,8 +328,6 @@ export function buildComponentSubgraph(
     templateId: string;
     qtyModel: QtyModel;
     groupCount?: number;
-    /** Suggested shared node for the primary port, from 04's preferred zone. */
-    suggestedZoneNodeId?: string | null;
     /** Project constants the component inherits from. Required, never defaulted:
      *  falling back to the shipped values would quietly ignore a project that
      *  had changed them. */
