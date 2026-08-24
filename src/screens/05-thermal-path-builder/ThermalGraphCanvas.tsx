@@ -20,7 +20,7 @@ import dagre from 'cytoscape-dagre';
 
 import type { ThermalNetwork } from '@/thermal/types';
 import { cytoscapeStylesheet } from '@/ui/graphStyles';
-import { buildElements } from './thermalGraphElements';
+import { buildElements, busGeometry } from './thermalGraphElements';
 
 cytoscape.use(dagre);
 
@@ -43,8 +43,6 @@ function layoutOptions(mode: string) {
   switch (mode) {
     case 'TopBottom':
       return { name: 'dagre', rankDir: 'TB', nodeSep: 30, rankSep: 70, animate: false };
-    case 'Hierarchical':
-      return { name: 'breadthfirst', directed: true, spacingFactor: 1.2, animate: false };
     case 'Free':
       return { name: 'cose', animate: false };
     case 'LeftRight':
@@ -62,8 +60,18 @@ function layoutElements(cy: Core) {
   });
 }
 
+/**
+ * Re-places the view-only bus elements against the positions Cytoscape actually
+ * laid out, using the same `busGeometry` the element builder used against the
+ * stored ones — so the bar does not jump between the two.
+ *
+ * The live pass can do better on one point: it knows each node's real bounding
+ * box, so the bar is measured from the FACING EDGES of the boxes rather than
+ * from their centres, and never ends up drawn inside a node.
+ */
 function positionViewBuses(cy: Core) {
   cy.nodes('.hsk-bus').forEach((bus) => {
+    const axis = (bus.data('axis') as 'vertical' | 'horizontal' | null) ?? 'vertical';
     const shared = cy.getElementById(bus.data('sharedId') as string);
     if (shared.length === 0) return;
     const junctions = cy.nodes('.hsk-bus-branch-junction').filter(
@@ -80,26 +88,52 @@ function positionViewBuses(cy: Core) {
     const outlet = cy.getElementById(bus.data('outletId') as string);
     if (!outlet.isNode()) return;
 
+    const vertical = axis === 'vertical';
+    const flow = vertical ? 'x' : 'y';
     const sharedBox = shared.boundingBox();
-    const averageSourceX =
-      sourceEntries.reduce((sum, entry) => sum + entry.source.position('x'), 0) /
+    const mean =
+      sourceEntries.reduce((sum, entry) => sum + entry.source.position(flow), 0) /
       sourceEntries.length;
-    const targetOnRight = shared.position('x') >= averageSourceX;
-    const sourceFront = targetOnRight
-      ? Math.max(...sourceEntries.map((entry) => entry.source.boundingBox().x2))
-      : Math.min(...sourceEntries.map((entry) => entry.source.boundingBox().x1));
-    const targetFront = targetOnRight ? sharedBox.x1 : sharedBox.x2;
-    const busX = sourceFront + (targetFront - sourceFront) * 0.72;
-    const sourceYs = sourceEntries.map((entry) => entry.source.position('y'));
-    const allYs = [...sourceYs, shared.position('y')];
-    const minY = Math.min(...allYs);
-    const maxY = Math.max(...allYs);
+    const targetAfter = shared.position(flow) >= mean;
 
-    bus.data('h', Math.max(2, maxY - minY));
-    bus.position({ x: busX, y: (minY + maxY) / 2 });
-    outlet.position({ x: busX, y: shared.position('y') });
+    const boxFar = (entry: { source: NodeSingular }) =>
+      vertical ? entry.source.boundingBox().x2 : entry.source.boundingBox().y2;
+    const boxNear = (entry: { source: NodeSingular }) =>
+      vertical ? entry.source.boundingBox().x1 : entry.source.boundingBox().y1;
+
+    const sourceFront = targetAfter
+      ? Math.max(...sourceEntries.map(boxFar))
+      : Math.min(...sourceEntries.map(boxNear));
+    const targetFront = targetAfter
+      ? vertical
+        ? sharedBox.x1
+        : sharedBox.y1
+      : vertical
+        ? sharedBox.x2
+        : sharedBox.y2;
+
+    const geometry = busGeometry(
+      axis,
+      { x: shared.position('x'), y: shared.position('y') },
+      sourceEntries.map((entry) => ({
+        x: entry.source.position('x'),
+        y: entry.source.position('y'),
+      })),
+      sourceEntries.length,
+      { sourceFront, targetFront },
+    );
+    if (geometry.along == null || !geometry.position || !geometry.outletPosition) return;
+
+    bus.data('w', geometry.w);
+    bus.data('h', geometry.h);
+    bus.position(geometry.position);
+    outlet.position(geometry.outletPosition);
     sourceEntries.forEach(({ junction, source }) => {
-      junction.position({ x: busX, y: source.position('y') });
+      junction.position(
+        vertical
+          ? { x: geometry.along!, y: source.position('y') }
+          : { x: source.position('x'), y: geometry.along! },
+      );
     });
   });
 }
@@ -271,6 +305,14 @@ export const ThermalGraphCanvas = forwardRef<
 
     cy.on('zoom', () => handlers.current.onZoomChange(cy.zoom()));
 
+    // Cytoscape's `cxttap` reports the right-click but does not stop the
+    // browser's own menu, so both opened and the native one covered ours.
+    // Bound on the container rather than through Cytoscape because the event
+    // has to be cancelled on the DOM node that receives it.
+    const suppressNativeMenu = (event: MouseEvent) => event.preventDefault();
+    const container = containerRef.current;
+    container.addEventListener('contextmenu', suppressNativeMenu);
+
     // The container is often still 0×0 on the first paint; without this the
     // graph renders outside the visible viewport and the canvas looks empty.
     const observer = new ResizeObserver((entries) => {
@@ -288,6 +330,7 @@ export const ThermalGraphCanvas = forwardRef<
 
     return () => {
       observer.disconnect();
+      container.removeEventListener('contextmenu', suppressNativeMenu);
       cy.destroy();
       cyRef.current = null;
     };

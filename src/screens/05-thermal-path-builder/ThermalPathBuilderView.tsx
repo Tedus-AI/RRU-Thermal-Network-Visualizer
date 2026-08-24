@@ -146,7 +146,11 @@ function LegendSwatch({ entry }: { entry: LegendEntry }) {
       <span
         aria-hidden
         className="h-0 w-5 shrink-0 border-t-2"
-        style={{ borderTopStyle: entry.style as 'solid', borderTopColor: '#64748b' }}
+        style={{
+          borderTopStyle: entry.style as 'solid',
+          // Grey unless the entry names a real line colour on the canvas.
+          borderTopColor: entry.color ?? '#64748b',
+        }}
       />
     );
   }

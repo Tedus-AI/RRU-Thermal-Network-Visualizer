@@ -63,9 +63,22 @@ describe('the legend describes what the canvas actually paints', () => {
     }
   });
 
+  // The resolution styles carry no colour of their own, so their swatches are
+  // grey; a coloured line entry is pointing at one specific line on the canvas.
   it('covers the three line styles edgeLineStyle can return', () => {
-    const lines = LEGEND.filter((entry) => entry.kind === 'line').map((entry) => entry.style);
+    const lines = LEGEND.filter((entry) => entry.kind === 'line' && !entry.color).map(
+      (entry) => entry.style,
+    );
     expect(lines.sort()).toEqual(['dashed', 'dotted', 'solid']);
+  });
+
+  it('draws the shared HSK bus as a line in the teal the canvas paints it', () => {
+    const bus = LEGEND.find((entry) => entry.color === HSK_BUS_COLOR);
+    expect(bus?.kind).toBe('line');
+    expect(bus?.style).toBe('solid');
+    // Same constant the bus node, its junctions and its trunk edge all use.
+    expect(styleFor('node.hsk-bus')['background-color']).toBe(HSK_BUS_COLOR);
+    expect(styleFor('edge.hsk-bus-trunk')['line-color']).toBe(HSK_BUS_COLOR);
   });
 
   it('reads the open-port ring off the same constant the stylesheet uses', () => {

@@ -38,7 +38,6 @@ export const LAYOUT_MODES = [
   { value: 'Auto', label: 'Auto' },
   { value: 'LeftRight', label: 'Left → Right' },
   { value: 'TopBottom', label: 'Top → Bottom' },
-  { value: 'Hierarchical', label: 'Hierarchical' },
   { value: 'Free', label: 'Free' },
 ];
 
@@ -197,13 +196,24 @@ export function GraphToolbar({
           icon={<Workflow size={14} />}
           onClick={onAutoLayout}
         />
-        <Select
-          aria-label="Layout mode / 版面模式"
-          className="h-8 w-[5.75rem] shrink-0 !text-[11px]"
-          value={layoutMode}
-          items={LAYOUT_MODES}
-          onChange={(event) => onLayoutMode(event.target.value)}
-        />
+        {/*
+          Wrapped rather than sized directly. `Select` carries `w-full` in its
+          shared base class, and a `w-*` utility passed through `className` does
+          not reliably beat it — so the select was claiming the full width of the
+          toolbar and, being `shrink-0`, refusing to give any back. Everything to
+          its right (zoom, fit, validate, the view toggles) was pushed outside
+          the scroll area and could not be reached at all. Constraining the
+          wrapper makes its `w-full` mean 100% of these 5.75rem.
+        */}
+        <div className="w-[5.75rem] shrink-0">
+          <Select
+            aria-label="Layout mode / 版面模式"
+            className="h-8 !text-[11px]"
+            value={layoutMode}
+            items={LAYOUT_MODES}
+            onChange={(event) => onLayoutMode(event.target.value)}
+          />
+        </div>
         {/* Marquee zoom and its way back. `Fit` is the only route to the whole
             network once you have zoomed into a corner, so the two sit together
             rather than the zoom being offered without an escape from it. */}
