@@ -1,7 +1,13 @@
 /**
  * Node Inspector — 05 §26.
  *
- * Tabs: Overview / Thermal Role / Connections / Source / External Mapping.
+ * Tabs: Overview / Thermal Role / Connections / External Mapping.
+ *
+ * There was a fifth, Source, whose four rows were the origin kind, the template
+ * id, the template version and the modified flag — the first three of which the
+ * Overview's Origin row already says in one line. Only the modified flag was new,
+ * and it belongs beside that origin, since it is what decides whether a rebuild
+ * keeps the object.
  *
  * No solved temperature is shown: Screen 05 has no boundary conditions, so it
  * cannot know a node temperature and must not pretend otherwise (05 §22).
@@ -22,11 +28,52 @@ const TABS = [
   { id: 'overview', label: 'Overview', zh: '總覽' },
   { id: 'role', label: 'Thermal Role', zh: '熱角色' },
   { id: 'connections', label: 'Connections', zh: '連線' },
-  { id: 'source', label: 'Source', zh: '來源' },
   { id: 'mapping', label: 'External Mapping', zh: '外部對照' },
 ] as const;
 
 type Tab = (typeof TABS)[number]['id'];
+
+/**
+ * Where this node's heat actually lands on the shared structure.
+ *
+ * `zone_id` is only ever set on the structure's own zone nodes, so on a
+ * component node it was always empty and the row read as missing data. What an
+ * engineer means by "which zone is this on" is where the component's chain
+ * terminates, which is the port connection — so that is what is followed.
+ */
+function attachedZone(network: ThermalNetwork, node: ThermalNode): string | null {
+  if (node.zone_id) return network.nodes[node.zone_id]?.name ?? node.zone_id;
+  if (!node.component_ref) return null;
+
+  for (const candidate of Object.values(network.nodes)) {
+    if (candidate.component_ref !== node.component_ref) continue;
+    for (const port of candidate.ports ?? []) {
+      const target = port.connected_to ? network.nodes[port.connected_to] : null;
+      if (target) return target.name;
+    }
+  }
+  return null;
+}
+
+/**
+ * A node built from a template carries the component's numbers, copied at build
+ * time (`networkBuilder` sets power, limit and limit type from Screen 04). Two
+ * consequences the panel has to respect:
+ *
+ *   - On a heat source they are Screen 04's answer, so editing them here forks
+ *     the truth into a second place Screen 04 does not know about — and the
+ *     next template rebuild silently overwrites whatever was typed.
+ *   - On everything else (case, TIM, coin …) they are 0 and null, because a TIM
+ *     interface has no junction limit. Rendering empty inputs there reads as
+ *     missing input when the fields are simply not applicable.
+ */
+function derivedFromComponent(node: ThermalNode): boolean {
+  return node.origin?.kind === 'template' && Boolean(node.component_ref);
+}
+
+function carriesSourceData(node: ThermalNode): boolean {
+  return node.power_W > 0 || node.limit_C != null || node.limit_type != null;
+}
 
 function Row({ label, zh, children }: { label: string; zh?: string; children: React.ReactNode }) {
   return (
@@ -129,10 +176,10 @@ export function NodeInspector({
               {component ?? <span className="text-ink-400">—</span>}
             </Row>
             <Row label="Zone" zh="區域">
-              {node.zone_id ? (
-                (network.nodes[node.zone_id]?.name ?? node.zone_id)
-              ) : (
-                <span className="text-ink-400">—</span>
+              {attachedZone(network, node) ?? (
+                <span className="text-ink-400">
+                  {node.component_ref ? 'Not connected yet / 尚未連接' : 'n/a'}
+                </span>
               )}
             </Row>
             <Row label="Origin" zh="來源">
@@ -141,7 +188,14 @@ export function NodeInspector({
                 : node.origin?.kind === 'shared_structure'
                   ? 'Shared structure'
                   : 'Manual'}
-              {node.origin?.modified && <span className="ml-1 text-warn-600">· modified</span>}
+              {node.origin?.modified && (
+                <BilingualTooltip
+                  zh="此物件已被手動修改。模板重建時選「僅自動產生」會保留它，選「全部取代」則會一併刪除。"
+                  align="left"
+                >
+                  <span className="ml-1 text-warn-600">· manually modified</span>
+                </BilingualTooltip>
+              )}
             </Row>
             <Row label="Status" zh="狀態">
               {node.disabled ? (
@@ -186,51 +240,101 @@ export function NodeInspector({
 
         {tab === 'role' && (
           <div>
-            <FieldLabel
-              label="Source Power"
-              zh="節點功耗"
-              unit="W"
-              htmlFor="node-power"
-              tooltip={TOOLTIPS_ZH.totalPower}
-            />
-            <NumberInput
-              id="node-power"
-              className="mt-1 mb-1 h-8 !text-[12px]"
-              value={node.power_W}
-              disabled={readOnly}
-              onChange={(event) => onPatch({ power_W: Number(event.target.value) || 0 })}
-            />
-            <p className="mb-3 text-[10px] leading-relaxed text-ink-400">
-              Source aggregation only. This is never the heat flow of any edge leaving the node. /
-              僅為熱源聚合，不代表任何連線的 Heat Flow Q。
-            </p>
+            {derivedFromComponent(node) ? (
+              carriesSourceData(node) ? (
+                <div className="mb-3">
+                  <p className="mb-2 rounded-md border border-line bg-surface-muted p-2.5 text-[10px] leading-relaxed text-ink-500">
+                    These come from the component in Screen 04 and are read-only here — editing
+                    them would put a second answer where Screen 04 cannot see it, and the next
+                    template rebuild would overwrite it.
+                    <span className="mt-0.5 block">
+                      以下數值來自 Screen 04 的元件資料，此處唯讀。在這裡改會產生 Screen 04
+                      不知道的第二份數值，且下次重建模板時會被覆蓋。請至 Screen 04 修改。
+                    </span>
+                  </p>
+                  <Row label="Source Power" zh="節點功耗">
+                    {node.power_W.toFixed(2)} W
+                  </Row>
+                  <Row label="Limit Type" zh="溫度上限類型">
+                    {node.limit_type ?? <span className="text-ink-400">—</span>}
+                  </Row>
+                  <Row label="Thermal Limit" zh="溫度上限">
+                    {node.limit_C == null ? (
+                      <span className="text-ink-400">—</span>
+                    ) : (
+                      `${node.limit_C} °C`
+                    )}
+                  </Row>
+                  <p className="mt-2 text-[10px] leading-relaxed text-ink-400">
+                    Source aggregation only. This is never the heat flow of any edge leaving the
+                    node. / 僅為熱源聚合，不代表任何連線的 Heat Flow Q。
+                  </p>
+                </div>
+              ) : (
+                /*
+                  Not a gap to fill. A case, TIM or coin node dissipates nothing
+                  and has no junction limit of its own, so the fields are hidden
+                  rather than shown empty — blank inputs here were being read as
+                  missing input.
+                */
+                <p className="mb-3 rounded-md border border-line bg-surface-muted p-2.5 text-[11px] leading-relaxed text-ink-500">
+                  This node carries no source data: it dissipates nothing and has no thermal limit
+                  of its own. Its resistance lives on the connections, not here.
+                  <span className="mt-0.5 block">
+                    此節點不帶熱源資料 —— 它本身不發熱，也沒有自己的溫度上限。
+                    它的熱阻在「連線」分頁上，不在這裡。
+                  </span>
+                </p>
+              )
+            ) : (
+              <>
+                <FieldLabel
+                  label="Source Power"
+                  zh="節點功耗"
+                  unit="W"
+                  htmlFor="node-power"
+                  tooltip={TOOLTIPS_ZH.totalPower}
+                />
+                <NumberInput
+                  id="node-power"
+                  className="mt-1 mb-1 h-8 !text-[12px]"
+                  value={node.power_W}
+                  disabled={readOnly}
+                  onChange={(event) => onPatch({ power_W: Number(event.target.value) || 0 })}
+                />
+                <p className="mb-3 text-[10px] leading-relaxed text-ink-400">
+                  Source aggregation only. This is never the heat flow of any edge leaving the
+                  node. / 僅為熱源聚合，不代表任何連線的 Heat Flow Q。
+                </p>
 
-            <FieldLabel label="Limit Type" zh="溫度上限類型" htmlFor="node-limit-type" />
-            <Select
-              id="node-limit-type"
-              className="mt-1 mb-2 h-8 !text-[12px]"
-              value={node.limit_type ?? 'Tj'}
-              disabled={readOnly}
-              options={LIMIT_TYPES}
-              onChange={(event) =>
-                onPatch({
-                  limit_type: event.target.value as ThermalNode['limit_type'],
-                })
-              }
-            />
+                <FieldLabel label="Limit Type" zh="溫度上限類型" htmlFor="node-limit-type" />
+                <Select
+                  id="node-limit-type"
+                  className="mt-1 mb-2 h-8 !text-[12px]"
+                  value={node.limit_type ?? 'Tj'}
+                  disabled={readOnly}
+                  options={LIMIT_TYPES}
+                  onChange={(event) =>
+                    onPatch({
+                      limit_type: event.target.value as ThermalNode['limit_type'],
+                    })
+                  }
+                />
 
-            <FieldLabel label="Thermal Limit" zh="溫度上限" unit="°C" htmlFor="node-limit" />
-            <NumberInput
-              id="node-limit"
-              className="mt-1 h-8 !text-[12px]"
-              value={node.limit_C ?? ''}
-              disabled={readOnly}
-              onChange={(event) =>
-                onPatch({
-                  limit_C: event.target.value === '' ? null : Number(event.target.value),
-                })
-              }
-            />
+                <FieldLabel label="Thermal Limit" zh="溫度上限" unit="°C" htmlFor="node-limit" />
+                <NumberInput
+                  id="node-limit"
+                  className="mt-1 h-8 !text-[12px]"
+                  value={node.limit_C ?? ''}
+                  disabled={readOnly}
+                  onChange={(event) =>
+                    onPatch({
+                      limit_C: event.target.value === '' ? null : Number(event.target.value),
+                    })
+                  }
+                />
+              </>
+            )}
 
             <div className="mt-3 rounded-md border border-line bg-surface-muted p-2.5">
               <p className="text-[11px] font-bold text-ink-700">Temperature results</p>
@@ -332,27 +436,6 @@ export function NodeInspector({
                 </li>
               )}
             </ul>
-          </div>
-        )}
-
-        {tab === 'source' && (
-          <div>
-            <Row label="Origin" zh="產生方式">
-              {node.origin?.kind ?? 'manual'}
-            </Row>
-            {node.origin?.template_id && (
-              <>
-                <Row label="Template">{node.origin.template_id}</Row>
-                <Row label="Template Version">{node.origin.template_version}</Row>
-              </>
-            )}
-            <Row label="Manually modified" zh="已手動修改">
-              {node.origin?.modified ? 'Yes' : 'No'}
-            </Row>
-            <p className="mt-2 text-[10px] leading-relaxed text-ink-400">
-              A manually modified object is preserved when its template is rebuilt (05 §40). /
-              手動修改過的物件在模板重建時會被保留。
-            </p>
           </div>
         )}
 
