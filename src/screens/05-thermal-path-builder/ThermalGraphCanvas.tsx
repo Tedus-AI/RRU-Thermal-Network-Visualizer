@@ -409,11 +409,20 @@ export const ThermalGraphCanvas = forwardRef<
   useEffect(() => {
     const cy = cyRef.current;
     if (!cy) return;
-    // In marquee mode the overlay swallows the drag, so Cytoscape must not also
-    // treat it as a pan — otherwise the graph slides out from under the box.
-    cy.userPanningEnabled(tool !== 'zoom-box');
+    /**
+     * Select and Pan were all but the same tool: dragging the background panned
+     * in BOTH, so the only difference was that Pan also froze the nodes —
+     * invisible unless you happened to try dragging one.
+     *
+     * They are now the two halves of that, the way a drawing tool usually
+     * splits them. Dragging the background selects a region in Select and moves
+     * the view in Pan; nodes are grabbable only in Select. Wheel zoom and the
+     * zoom buttons work in both, so nothing becomes unreachable.
+     */
+    const panning = tool !== 'select' && tool !== 'zoom-box';
+    cy.userPanningEnabled(panning);
     cy.boxSelectionEnabled(tool === 'select');
-    cy.autoungrabify(tool === 'pan' || tool === 'zoom-box');
+    cy.autoungrabify(tool !== 'select');
     if (tool !== 'connect' && tool !== 'add-edge') {
       pendingSourceRef.current = null;
       cy.nodes().removeClass('connect-source');
