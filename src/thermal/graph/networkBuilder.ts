@@ -572,6 +572,32 @@ export function suggestedZoneFor(component: Component, zoneIds: string[]): strin
   return zoneIds.find((id) => id === structureNodeId(preferred)) ?? null;
 }
 
+export type PortTargetReason = 'preferred' | 'sole_base';
+
+/**
+ * Where an open port should be wired, when that is not a decision at all.
+ *
+ * Two cases qualify. The first is the engineer's own answer, carried from
+ * Screen 04 as the preferred base zone. The second is a structure that exposes
+ * exactly ONE base: on a single shared HSK there is nowhere else the heat can
+ * go, so making someone click each port onto the only available target is
+ * busywork rather than rigour — and Generate leaving them all unconnected is
+ * how a freshly generated single-base network came out with every port dangling
+ * and no explanation.
+ *
+ * Anything else — two bases, no stated preference — is a real choice about
+ * where a part sits, and returns null so the engineer makes it.
+ */
+export function resolvePortTarget(
+  component: Component,
+  zoneIds: string[],
+): { zoneId: string; reason: PortTargetReason } | null {
+  const preferred = suggestedZoneFor(component, zoneIds);
+  if (preferred) return { zoneId: preferred, reason: 'preferred' };
+  if (zoneIds.length === 1) return { zoneId: zoneIds[0], reason: 'sole_base' };
+  return null;
+}
+
 export const PORT_LABELS: Record<PortKind, { label: string; zh: string }> = {
   HEAT_OUT: { label: 'Heat Out', zh: '主要散熱出口' },
   BOARD_OUT: { label: 'Board Out', zh: '板級出口' },

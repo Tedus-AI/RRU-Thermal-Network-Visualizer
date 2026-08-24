@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
+import { normalizeZoneKey, UNASSIGNED_ZONE } from '@/domain/component';
+import { resolvePortTarget, suggestedZoneFor } from './networkBuilder';
+import { structureNodeId } from './idFactory';
 import {
   STRUCTURE_PRESETS,
   buildSharedStructure,
@@ -90,5 +93,78 @@ describe('independent heat-sink tails', () => {
     expect(zoneKeyOf('NODE_RF_HSK_BASE', 'DUAL_HSK_BASE')).toBe('RF_HSK_BASE');
     expect(zoneKeyOf('NODE_DIGITAL_HSK_BASE', 'DUAL_HSK_BASE')).toBe('DIGITAL_HSK_BASE');
     expect(zoneKeyOf('NODE_RF_FIN_SURFACE', 'DUAL_HSK_BASE')).toBeNull();
+  });
+});
+
+/**
+ * The preset rework renamed the single-base zone key from `MAIN_BASE` to
+ * `HSK_BASE`. `suggestedZoneFor` matches the stored key against the built zone
+ * ids exactly, so a project saved before the rename kept a key that matches
+ * nothing — and nothing said so. Generate produced the structure and the
+ * subgraphs and then left every port unconnected, with no error to explain it.
+ */
+describe('a component saved before the zone-key rename', () => {
+  it('still points at the base it was pointing at', () => {
+    expect(normalizeZoneKey('MAIN_BASE')).toBe('HSK_BASE');
+    expect(normalizeZoneKey('Main Base')).toBe('HSK_BASE');
+  });
+
+  it('resolves to the zone the single-base structure actually builds', () => {
+    const [zone] = buildSharedStructure('SINGLE_MAIN_BASE').zones;
+    const legacy = { architecture_prep: { preferred_base_zone: normalizeZoneKey('MAIN_BASE') } };
+    expect(suggestedZoneFor(legacy as never, [zone.id])).toBe(zone.id);
+  });
+
+  it('leaves every other key exactly as stored', () => {
+    for (const key of ['HSK_BASE', 'RF_HSK_BASE', 'DIGITAL_HSK_BASE']) {
+      expect(normalizeZoneKey(key)).toBe(key);
+    }
+    expect(normalizeZoneKey('')).toBe(UNASSIGNED_ZONE);
+    expect(normalizeZoneKey(null)).toBe(UNASSIGNED_ZONE);
+  });
+});
+
+/**
+ * Generate used to build the structure and every component subgraph and then
+ * stop, telling the engineer to wire all the ports by hand — including on a
+ * single shared HSK, where there is exactly one place the heat can go and so
+ * nothing to decide.
+ */
+describe('resolvePortTarget', () => {
+  const withZone = (zone: string) =>
+    ({ architecture_prep: { preferred_base_zone: zone } }) as never;
+
+  it('follows the zone the engineer chose in Screen 04', () => {
+    const zones = buildSharedStructure('DUAL_HSK_BASE').zones.map((zone) => zone.id);
+    const target = resolvePortTarget(withZone('RF_HSK_BASE'), zones);
+    expect(target).toEqual({ zoneId: structureNodeId('RF_HSK_BASE'), reason: 'preferred' });
+  });
+
+  it('wires an unassigned component to the only base there is', () => {
+    const zones = buildSharedStructure('SINGLE_MAIN_BASE').zones.map((zone) => zone.id);
+    const target = resolvePortTarget(withZone(UNASSIGNED_ZONE), zones);
+    expect(target).toEqual({ zoneId: structureNodeId('HSK_BASE'), reason: 'sole_base' });
+  });
+
+  // Two bases IS a choice about where the part sits, and guessing it would put
+  // a component's whole chain on the wrong heat sink without saying so.
+  it('refuses to guess when the structure offers more than one base', () => {
+    const zones = buildSharedStructure('DUAL_HSK_BASE').zones.map((zone) => zone.id);
+    expect(resolvePortTarget(withZone(UNASSIGNED_ZONE), zones)).toBeNull();
+  });
+
+  it('refuses when a stated preference names no zone this structure built', () => {
+    const zones = buildSharedStructure('DUAL_HSK_BASE').zones.map((zone) => zone.id);
+    expect(resolvePortTarget(withZone('SOMETHING_ELSE'), zones)).toBeNull();
+  });
+
+  it('carries a legacy key through to the sole base by preference, not by luck', () => {
+    const zones = buildSharedStructure('SINGLE_MAIN_BASE').zones.map((zone) => zone.id);
+    const target = resolvePortTarget(withZone(normalizeZoneKey('MAIN_BASE')), zones);
+    expect(target?.reason).toBe('preferred');
+  });
+
+  it('has nothing to offer before a structure exists', () => {
+    expect(resolvePortTarget(withZone('HSK_BASE'), [])).toBeNull();
   });
 });

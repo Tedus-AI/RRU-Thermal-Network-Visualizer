@@ -22,6 +22,7 @@ import {
   Spline,
   Tags,
   Undo2,
+  Scan,
   Waypoints,
   Workflow,
   ZoomIn,
@@ -31,7 +32,7 @@ import type { ReactNode } from 'react';
 
 import { Select } from '@/ui/primitives';
 
-export type CanvasTool = 'select' | 'pan' | 'connect' | 'add-node' | 'add-edge';
+export type CanvasTool = 'select' | 'pan' | 'connect' | 'add-node' | 'add-edge' | 'zoom-box';
 
 export const LAYOUT_MODES = [
   { value: 'Auto', label: 'Auto' },
@@ -142,7 +143,7 @@ export function GraphToolbar({
         <ToolButton
           active={tool === 'connect'}
           disabled={readOnly}
-          label="Connect"
+          label="Connect Port"
           zh="連接埠"
           icon={<Share2 size={14} />}
           onClick={() => onTool('connect')}
@@ -158,8 +159,8 @@ export function GraphToolbar({
         <ToolButton
           active={tool === 'add-edge'}
           disabled={readOnly}
-          label="Add Edge"
-          zh="新增連線"
+          label="Add Edge (manual)"
+          zh="新增連線（手動）"
           icon={<Spline size={14} />}
           onClick={() => onTool('add-edge')}
         />
@@ -203,7 +204,22 @@ export function GraphToolbar({
           items={LAYOUT_MODES}
           onChange={(event) => onLayoutMode(event.target.value)}
         />
-        <ToolButton label="Fit" zh="全覽" icon={<Maximize size={14} />} onClick={onFit} />
+        {/* Marquee zoom and its way back. `Fit` is the only route to the whole
+            network once you have zoomed into a corner, so the two sit together
+            rather than the zoom being offered without an escape from it. */}
+        <ToolButton
+          active={tool === 'zoom-box'}
+          label="Zoom to Region"
+          zh="框選放大"
+          icon={<Scan size={14} />}
+          onClick={() => onTool(tool === 'zoom-box' ? 'select' : 'zoom-box')}
+        />
+        <ToolButton
+          label="Fit Whole Network"
+          zh="全網路顯示"
+          icon={<Maximize size={14} />}
+          onClick={onFit}
+        />
 
         <div className="ml-1 flex shrink-0 items-center gap-1">
           <button

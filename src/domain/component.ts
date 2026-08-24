@@ -356,9 +356,25 @@ export const HEAT_PATH_PATCH_FIELDS = ['heat_path.type', 'architecture_prep'];
 export const UNASSIGNED_ZONE = 'Unassigned';
 export type BaseZone = string;
 
+/**
+ * Keys that named the same physical place under an earlier vocabulary.
+ *
+ * A rename here is silent damage: `suggestedZoneFor` matches the stored key
+ * against the structure's zone ids exactly, so a component still carrying the
+ * old key simply stops matching — no error, no warning, it just never gets
+ * wired and the engineer is left connecting ports by hand wondering why.
+ * `MAIN_BASE` became `HSK_BASE` when the presets were reworked around a single
+ * shared base and a dual-base split.
+ */
+const LEGACY_ZONE_KEYS: Record<string, BaseZone> = {
+  MAIN_BASE: 'HSK_BASE',
+  'Main Base': 'HSK_BASE',
+};
+
 export function normalizeZoneKey(value: unknown): BaseZone {
   if (typeof value !== 'string' || value.trim() === '') return UNASSIGNED_ZONE;
-  return value.trim();
+  const trimmed = value.trim();
+  return LEGACY_ZONE_KEYS[trimmed] ?? trimmed;
 }
 
 /** 04 §21 — Screen 05 decides whether Qty 4 becomes 1, 4 or grouped nodes. */
