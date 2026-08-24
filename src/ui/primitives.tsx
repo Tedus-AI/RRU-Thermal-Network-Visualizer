@@ -38,7 +38,12 @@ export function Button({
     <button
       type="button"
       {...props}
-      className={`inline-flex h-9 items-center justify-center gap-2 rounded-md border px-3.5 text-[13px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${BUTTON_STYLES[variant]} ${className}`}
+      // `whitespace-nowrap` and `shrink-0` go together with the fixed height:
+      // a flex row that runs out of room shrinks its children, and a bilingual
+      // label wrapping to two lines inside a one-line-tall button is what
+      // produced the overlapping text in the rebuild dialog. It wraps to the
+      // next row now instead of being squeezed.
+      className={`inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-md border px-3.5 text-[13px] font-semibold whitespace-nowrap transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${BUTTON_STYLES[variant]} ${className}`}
     >
       {icon}
       {children}
@@ -409,7 +414,7 @@ export function Modal({
           {description && <p className="mt-1 text-[13px] text-ink-500">{description}</p>}
         </header>
         {children && <div className="px-5 py-4">{children}</div>}
-        <footer className="flex justify-end gap-2 border-t border-line bg-surface-muted px-5 py-3">
+        <footer className="flex flex-wrap justify-end gap-2 border-t border-line bg-surface-muted px-5 py-3">
           {footer}
         </footer>
       </div>

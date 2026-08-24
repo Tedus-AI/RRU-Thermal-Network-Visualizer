@@ -50,7 +50,7 @@ import { refreshHskBaseConnectionEdges } from '@/thermal/graph/hskBaseConnection
 import {
   buildComponentSubgraph,
   previewGeneration,
-  suggestedZoneFor,
+  resolvePortTarget,
 } from '@/thermal/graph/networkBuilder';
 import {
   buildSharedStructure,
@@ -75,7 +75,7 @@ import { NodeInspector } from './NodeInspector';
 import { EdgeInspector } from './EdgeInspector';
 import { NetworkValidationPanel } from './NetworkValidationPanel';
 import { EmptyNetworkState, GenerateNetworkPreview } from './GenerateNetworkPreview';
-import { LEGEND } from '@/ui/graphStyles';
+import { LEGEND, type LegendEntry } from '@/ui/graphStyles';
 
 // --- Small building blocks -------------------------------------------------
 
@@ -140,11 +140,46 @@ function Collapsible({
   );
 }
 
+function LegendSwatch({ entry }: { entry: LegendEntry }) {
+  if (entry.kind === 'line') {
+    return (
+      <span
+        aria-hidden
+        className="h-0 w-5 shrink-0 border-t-2"
+        style={{ borderTopStyle: entry.style as 'solid', borderTopColor: '#64748b' }}
+      />
+    );
+  }
+  if (entry.kind === 'state') {
+    // A ring, not a filled chip: these are painted ON a node of some other
+    // colour, so showing them as a fill would imply a node group of their own.
+    return (
+      <span
+        aria-hidden
+        className="size-2.5 shrink-0 rounded-sm"
+        style={{ boxShadow: `inset 0 0 0 2.5px ${entry.style}` }}
+      />
+    );
+  }
+  return (
+    <span
+      aria-hidden
+      className="size-2.5 shrink-0 rounded-sm border"
+      style={{ borderColor: entry.style, background: `${entry.style}33` }}
+    />
+  );
+}
+
+/**
+ * Top-left and collapsed by default: the canvas is the work surface, and a
+ * permanently open key over one of its corners costs more room than it earns
+ * once the vocabulary is familiar.
+ */
 function Legend() {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
 
   return (
-    <div className="absolute bottom-3 left-3 z-10 w-[11rem] rounded-md border border-line bg-surface/95 px-3 py-2.5 shadow-sm">
+    <div className="absolute top-3 left-3 z-10 w-[11.5rem] rounded-md border border-line bg-surface/95 px-3 py-2.5 shadow-sm">
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
@@ -157,30 +192,16 @@ function Legend() {
       {open && (
         <ul className="mt-2 grid grid-cols-1 gap-1">
           {LEGEND.map((entry) => (
-            <li
-              key={entry.label}
-              className="flex items-center gap-2 whitespace-nowrap text-[11px] text-ink-500"
-            >
-              {entry.kind === 'node' ? (
-                <span
-                  aria-hidden
-                  className="size-2.5 shrink-0 rounded-sm border"
-                  style={{
-                    borderColor: entry.style,
-                    background: `${entry.style}33`,
-                  }}
-                />
-              ) : (
-                <span
-                  aria-hidden
-                  className="h-0 w-5 shrink-0 border-t-2"
-                  style={{
-                    borderTopStyle: entry.style as 'solid',
-                    borderTopColor: '#64748b',
-                  }}
-                />
+            <li key={entry.label}>
+              {entry.section && (
+                <p className="mt-1.5 mb-1 text-[10px] font-bold text-ink-400 first:mt-0">
+                  {entry.section} / {entry.sectionZh}
+                </p>
               )}
-              {entry.label}
+              <span className="flex items-center gap-2 whitespace-nowrap text-[11px] text-ink-500">
+                <LegendSwatch entry={entry} />
+                {entry.label}
+              </span>
             </li>
           ))}
         </ul>
@@ -416,7 +437,7 @@ export function ThermalPathBuilderView() {
       templateId: pref.templateId,
       qtyModel: pref.qtyModel,
       groupCount: pref.groupCount,
-      suggestedZoneNodeId: suggestedZoneFor(component, zoneIds),
+      suggestedZoneNodeId: resolvePortTarget(component, zoneIds)?.zoneId ?? null,
     });
     if (!subgraph) {
       toast.error('Template not found / 找不到模板');
@@ -481,10 +502,22 @@ export function ThermalPathBuilderView() {
       if (subgraph) store.addSubgraph(subgraph);
     }
 
+    // Generate used to stop here and tell the engineer to go and wire every
+    // port by hand — including the case where the structure offers a single
+    // shared base and there is nothing to decide. It now does the connections
+    // that follow from what has already been answered, and reports how many
+    // are genuinely left.
+    const { connected } = connectSuggestedPorts();
+    const remaining = Object.values(useNetworkStore.getState().network?.nodes ?? {}).filter(
+      (node) => (node.ports ?? []).some((port) => !port.connected_to),
+    ).length;
+
     setShowGenerate(false);
     setStep('connections');
     toast.success(
-      'Network generated. Connect the ports in Step 4. / 已產生網路，請於步驟 4 連接埠。',
+      remaining > 0
+        ? `Network generated — ${connected} port(s) connected, ${remaining} still need a target. / 已產生網路，已連接 ${connected} 個埠，尚有 ${remaining} 個待指定。`
+        : `Network generated — all ${connected} port(s) connected. / 已產生網路，${connected} 個埠皆已連接。`,
     );
   };
 
@@ -568,8 +601,20 @@ export function ThermalPathBuilderView() {
   };
 
   /**
-   * Connect two nodes. When the source has an unconnected port this becomes a
-   * port connection; otherwise it is a plain manual edge (05 §16, §29).
+   * The two wiring tools, kept genuinely apart.
+   *
+   * They used to be near-indistinguishable: both asked for a source then a
+   * target, and Connect quietly fell back to creating the same blank manual edge
+   * whenever the source had no open port. So the only difference was invisible,
+   * happened in one case out of two, and the fallback was the worse outcome —
+   * a port that should have been wired through its material instead became a
+   * `custom` edge with no resistance and no note saying why.
+   *
+   *   Connect  — port wiring only. It resolves the interface through the
+   *              project's materials. If the source has no open port it says so
+   *              and does nothing.
+   *   Add Edge — always a blank manual edge, for a route the templates do not
+   *              describe. The resistance is yours to enter.
    */
   const handleConnect = (sourceId: string, targetId: string) => {
     if (!network) return;
@@ -577,8 +622,14 @@ export function ThermalPathBuilderView() {
     const target = network.nodes[targetId];
     if (!source || !target) return;
 
-    const openPort = (source.ports ?? []).find((port) => !port.connected_to);
-    if (openPort && tool === 'connect') {
+    if (tool === 'connect') {
+      const openPort = (source.ports ?? []).find((port) => !port.connected_to);
+      if (!openPort) {
+        toast.warning(
+          `"${source.name}" has no unconnected port. Use Add Edge for a manual route. / 此節點沒有未連接的埠，請改用「新增連線」。`,
+        );
+        return;
+      }
       useNetworkStore.getState().connectPort(sourceId, openPort.kind, targetId, materials);
       toast.success(`${openPort.kind} → ${target.name} / 已連接`);
       return;
@@ -605,22 +656,47 @@ export function ThermalPathBuilderView() {
     toast.success('Edge created — define its model / 已建立連線，請設定模型');
   };
 
-  const autoConnectSuggested = () => {
-    if (!network) return;
+  /**
+   * Wires every open port whose destination is not in doubt, and leaves the
+   * rest alone.
+   *
+   * Two things count as "not in doubt". The first is the engineer's own answer:
+   * Screen 04's preferred base zone, matched against the zones this structure
+   * actually built. The second is a structure that offers exactly one base —
+   * on a single shared HSK there is no choice to make, so asking the engineer
+   * to click each port onto the only available target is busywork, not rigour.
+   *
+   * Anything else is a real decision and is left for them.
+   */
+  const connectSuggestedPorts = (): { connected: number; soleBase: boolean } => {
+    const store = useNetworkStore.getState();
+    const live = store.network;
+    if (!live) return { connected: 0, soleBase: false };
+    const zoneIds = Object.keys(live.zones);
+
     let connected = 0;
-    for (const node of Object.values(network.nodes)) {
+    let usedSoleBase = false;
+    for (const node of Object.values(live.nodes)) {
       const port = (node.ports ?? []).find((entry) => !entry.connected_to);
       if (!port || !node.component_ref) continue;
       const component = components.find((entry) => entry.id === node.component_ref);
       if (!component) continue;
-      const zoneId = suggestedZoneFor(component, Object.keys(network.zones));
-      if (!zoneId || !network.nodes[zoneId]) continue;
-      useNetworkStore.getState().connectPort(node.id, port.kind, zoneId, materials);
+
+      const target = resolvePortTarget(component, zoneIds);
+      if (!target || !live.nodes[target.zoneId]) continue;
+      if (target.reason === 'sole_base') usedSoleBase = true;
+
+      store.connectPort(node.id, port.kind, target.zoneId, materials);
       connected++;
     }
+    return { connected, soleBase: usedSoleBase };
+  };
+
+  const autoConnectSuggested = () => {
+    const { connected, soleBase } = connectSuggestedPorts();
     toast[connected > 0 ? 'success' : 'warning'](
       connected > 0
-        ? `${connected} port(s) connected to the suggested zone / 已依建議連接`
+        ? `${connected} port(s) connected${soleBase ? ' to the only shared base' : ' to the suggested zone'} / 已${soleBase ? '連接至唯一共用基座' : '依建議連接'}`
         : 'No suggested zone matched. Connect the ports manually. / 沒有可用的建議區域。',
     );
   };
@@ -675,6 +751,46 @@ export function ThermalPathBuilderView() {
 
   const selectedNode = selection?.kind === 'node' ? network.nodes[selection.id] : null;
   const selectedEdge = selection?.kind === 'edge' ? network.edges[selection.id] : null;
+
+  /**
+   * Delete removes whatever is selected on the canvas.
+   *
+   * Bound to the window rather than to the canvas element: Cytoscape draws into
+   * a canvas that never takes focus, so a listener on the container would only
+   * ever fire if the engineer happened to have tabbed to it.
+   *
+   * Which means the guards matter more than usual — the same key press must not
+   * eat a character out of a field in the inspector, or delete anything at all
+   * in a read-only project. Undo covers the rest (05 §46).
+   */
+  useEffect(() => {
+    if (readOnly || !selection) return;
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Delete' && event.key !== 'Backspace') return;
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+
+      const target = event.target as HTMLElement | null;
+      if (
+        target &&
+        (target.isContentEditable ||
+          ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName) ||
+          target.closest('[role="dialog"]'))
+      ) {
+        return;
+      }
+
+      event.preventDefault();
+      const store = useNetworkStore.getState();
+      if (selection.kind === 'node') store.removeNode(selection.id);
+      else store.removeEdge(selection.id);
+      setSelection(null);
+      toast.success('Deleted — Undo restores it / 已刪除，可用復原還原');
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [readOnly, selection]);
 
   const completedSteps: BuilderStep[] = [];
   if (components.length > 0) completedSteps.push('components');
@@ -984,9 +1100,14 @@ export function ThermalPathBuilderView() {
                 />
                 <Legend />
                 <NetworkValidationPanel validation={validation} onFocus={focusIssue} />
+                {/* Beside the legend, not on top of it — and it names which of
+                    the two wiring tools is armed, since they ask for the same
+                    two clicks but do different things with them. */}
                 {(tool === 'connect' || tool === 'add-edge') && (
-                  <p className="absolute top-3 left-3 z-10 rounded-md border border-accent-500 bg-accent-100 px-2.5 py-1.5 text-[11px] font-semibold text-accent-700">
-                    Click the source node, then the target. / 先點起點節點，再點終點。
+                  <p className="absolute top-3 left-[13rem] z-10 rounded-md border border-accent-500 bg-accent-100 px-2.5 py-1.5 text-[11px] font-semibold text-accent-700">
+                    {tool === 'connect'
+                      ? 'Connect port: click a node with an open port, then its target. / 連接埠：先點有未連接埠的節點，再點目標。'
+                      : 'Add edge: click the source node, then the target. / 新增連線：先點起點節點，再點終點。'}
                   </p>
                 )}
               </>
@@ -1283,6 +1404,8 @@ export function ThermalPathBuilderView() {
         <Modal
           title="Rebuild component subgraph / 重建元件子圖"
           description="This component already has a subgraph. Manual objects are never deleted silently. / 此元件已有子圖，手動物件不會被靜默刪除。"
+          // Three bilingual choices do not fit the default width on one row.
+          width="max-w-2xl"
           onClose={() => setRebuildFor(null)}
           footer={
             <>
@@ -1293,7 +1416,7 @@ export function ThermalPathBuilderView() {
                   setRebuildFor(null);
                 }}
               >
-                Replace Entire Subgraph / 全部取代
+                Entire Subgraph / 全部取代
               </Button>
               <Button
                 variant="primary"
@@ -1302,7 +1425,7 @@ export function ThermalPathBuilderView() {
                   setRebuildFor(null);
                 }}
               >
-                Replace Auto-generated Only / 僅取代自動產生
+                Auto-generated Only / 僅自動產生
               </Button>
             </>
           }

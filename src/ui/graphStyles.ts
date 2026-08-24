@@ -62,16 +62,88 @@ export const GROUP_COLORS: Record<NodeVisualGroup, { fill: string; border: strin
   custom: { fill: '#e2e8f0', border: '#64748b', text: '#1e293b' },
 };
 
-export const LEGEND: Array<{ label: string; zh: string; kind: 'node' | 'line'; style: string }> = [
-  { label: 'Heat Source / Junction', zh: '熱源 / 接面', kind: 'node', style: GROUP_COLORS.source.border },
-  { label: 'Interface / Case', zh: '介面 / 外殼', kind: 'node', style: GROUP_COLORS.spreader.border },
-  { label: 'Interface / TIM', zh: '介面 / 熱介面材料', kind: 'node', style: GROUP_COLORS.interface.border },
+/**
+ * Amber ring on a node that still has an unconnected port, and the teal of the
+ * view-only HSK bus. Neither is a `nodeGroup` colour — they are painted by
+ * `node.unconnected-port` and `node.hsk-bus` in the stylesheet — so they are
+ * named here to keep the legend and the stylesheet reading from one place.
+ */
+export const UNCONNECTED_PORT_COLOR = '#f59e0b';
+export const HSK_BUS_COLOR = '#0d9488';
+
+export interface LegendEntry {
+  label: string;
+  zh: string;
+  kind: 'node' | 'line' | 'state';
+  style: string;
+  /** Rendered as a section heading above this entry. */
+  section?: string;
+  sectionZh?: string;
+}
+
+/**
+ * Every colour and line style the canvas actually paints, in the order it
+ * paints them.
+ *
+ * Derived from `GROUP_COLORS` rather than restated, so a palette change cannot
+ * leave the legend describing colours that are no longer on screen. Two entries
+ * used to be wrong in exactly that way: the amber swatch was labelled
+ * "Interface / Case" while it is the SPREADER group (case, lid, E-PAD, PCB,
+ * copper coin, pedestal), and `custom` — what every node that matches none of
+ * the type lists falls back to — had no entry at all, so a slate-grey node on
+ * the canvas could not be looked up.
+ */
+export const LEGEND: LegendEntry[] = [
+  {
+    label: 'Heat Source / Junction',
+    zh: '熱源 / 接面',
+    kind: 'node',
+    style: GROUP_COLORS.source.border,
+    section: 'Nodes',
+    sectionZh: '節點',
+  },
+  {
+    label: 'Case / Spreader',
+    zh: '外殼 / 擴散件',
+    kind: 'node',
+    style: GROUP_COLORS.spreader.border,
+  },
+  {
+    label: 'Interface / TIM',
+    zh: '介面 / 熱介面材料',
+    kind: 'node',
+    style: GROUP_COLORS.interface.border,
+  },
   { label: 'Base / Shared Zone', zh: '基座 / 共用區', kind: 'node', style: GROUP_COLORS.zone.border },
   { label: 'HSK / Structure', zh: '散熱器 / 結構', kind: 'node', style: GROUP_COLORS.heatsink.border },
-  { label: 'Boundary / Ambient', zh: '邊界 / 環境', kind: 'node', style: GROUP_COLORS.boundary.border },
-  { label: 'Resolved Rth', zh: '已解析熱阻', kind: 'line', style: 'solid' },
+  {
+    label: 'Boundary / Ambient',
+    zh: '邊界 / 環境',
+    kind: 'node',
+    style: GROUP_COLORS.boundary.border,
+  },
+  { label: 'Other / Custom', zh: '其他 / 自訂', kind: 'node', style: GROUP_COLORS.custom.border },
+
+  {
+    label: 'Resolved Rth',
+    zh: '已解析熱阻',
+    kind: 'line',
+    style: 'solid',
+    section: 'Connections',
+    sectionZh: '連線',
+  },
   { label: 'Unresolved Rth', zh: '未解析熱阻', kind: 'line', style: 'dashed' },
   { label: 'Disabled / Tentative', zh: '停用 / 暫定', kind: 'line', style: 'dotted' },
+
+  {
+    label: 'Open port',
+    zh: '尚有未連接的埠',
+    kind: 'state',
+    style: UNCONNECTED_PORT_COLOR,
+    section: 'States',
+    sectionZh: '狀態',
+  },
+  { label: 'Shared HSK bus', zh: '共用散熱器匯流', kind: 'state', style: HSK_BUS_COLOR },
 ];
 
 /** Edge line style follows resolution, never a solved heat flow (05 §31). */
@@ -142,7 +214,7 @@ export function cytoscapeStylesheet(): StylesheetCSS[] {
     },
     {
       selector: 'node.unconnected-port',
-      style: { 'border-color': '#f59e0b', 'border-width': 2.5 },
+      style: { 'border-color': UNCONNECTED_PORT_COLOR, 'border-width': 2.5 },
     },
     {
       selector: 'node.disabled',
@@ -163,7 +235,7 @@ export function cytoscapeStylesheet(): StylesheetCSS[] {
         width: 'data(w)',
         height: 'data(h)',
         label: '',
-        'background-color': '#0d9488',
+        'background-color': HSK_BUS_COLOR,
         'border-width': 0,
         events: 'no',
         'z-index': 1,
@@ -176,7 +248,7 @@ export function cytoscapeStylesheet(): StylesheetCSS[] {
         width: 'data(w)',
         height: 'data(h)',
         label: '',
-        'background-color': '#0d9488',
+        'background-color': HSK_BUS_COLOR,
         'border-width': 0,
         events: 'no',
         'z-index': 8,
@@ -196,9 +268,18 @@ export function cytoscapeStylesheet(): StylesheetCSS[] {
         'font-size': 9,
         color: '#475569',
         'text-background-color': '#ffffff',
-        'text-background-opacity': 0.85,
+        'text-background-opacity': 0.92,
         'text-background-padding': '2px',
         'text-rotation': 'autorotate',
+        // The label rides ABOVE the line rather than on it.
+        //
+        // It used to sit centred on the edge behind an opaque white box, so how
+        // much of the connector you could still see depended on how long the
+        // text happened to be: "Cond 0.035 °C/W" left the ends showing, while
+        // "Contact 0.035 °C/W" covered the line end to end, arrowhead included.
+        // Offsetting it perpendicular makes that independent of length — the
+        // full line, tail and head, is visible under every label.
+        'text-margin-y': -9,
         'min-zoomed-font-size': 7,
       },
     },
@@ -207,6 +288,7 @@ export function cytoscapeStylesheet(): StylesheetCSS[] {
       style: {
         'curve-style': 'straight',
         'text-rotation': 'none',
+        'text-margin-y': -9,
         'z-index': 5,
       },
     },
@@ -215,7 +297,7 @@ export function cytoscapeStylesheet(): StylesheetCSS[] {
       style: {
         width: 2,
         'curve-style': 'straight',
-        'line-color': '#0d9488',
+        'line-color': HSK_BUS_COLOR,
         'target-arrow-shape': 'none',
         label: '',
         events: 'no',

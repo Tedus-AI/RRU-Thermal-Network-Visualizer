@@ -12,6 +12,7 @@ import {
   useImperativeHandle,
   useMemo,
   useRef,
+  useState,
   type MutableRefObject,
 } from 'react';
 import cytoscape, { type Core, type NodeSingular } from 'cytoscape';
@@ -34,6 +35,9 @@ export interface CanvasHandle {
   /** Positions currently rendered, so the view can persist them (05 §30). */
   positions: () => Record<string, { x: number; y: number }>;
 }
+
+/** Anything smaller than this is a click that slipped, not a chosen region. */
+const MIN_MARQUEE_PX = 12;
 
 function layoutOptions(mode: string) {
   switch (mode) {
@@ -114,8 +118,12 @@ export const ThermalGraphCanvas = forwardRef<
   {
     network: ThermalNetwork;
     selection: GraphSelection;
-    /** 'connect' and 'add-edge' both wire two nodes; 'pan' disables box select. */
-    tool: 'select' | 'pan' | 'connect' | 'add-node' | 'add-edge';
+    /**
+     * 'connect' and 'add-edge' both ask for two clicks (the view decides what
+     * to do with them); 'pan' disables box select; 'zoom-box' hands pointer
+     * input to the marquee overlay instead of to Cytoscape.
+     */
+    tool: 'select' | 'pan' | 'connect' | 'add-node' | 'add-edge' | 'zoom-box';
     showPorts: boolean;
     showLabels: boolean;
     layoutMode: string;
@@ -151,6 +159,14 @@ export const ThermalGraphCanvas = forwardRef<
   ref,
 ) {
   const containerRef = useRef<HTMLDivElement | null>(null);
+  // Marquee zoom, in container pixels. `null` while no drag is in progress.
+  const [marquee, setMarquee] = useState<{
+    x1: number;
+    y1: number;
+    x2: number;
+    y2: number;
+  } | null>(null);
+  const marqueeStart = useRef<{ x: number; y: number } | null>(null);
   // Read inside effects without making the layout re-run on every mode change.
   const layoutModeRef = useRef(layoutMode);
   layoutModeRef.current = layoutMode;
@@ -350,14 +366,60 @@ export const ThermalGraphCanvas = forwardRef<
   useEffect(() => {
     const cy = cyRef.current;
     if (!cy) return;
-    cy.userPanningEnabled(true);
+    // In marquee mode the overlay swallows the drag, so Cytoscape must not also
+    // treat it as a pan — otherwise the graph slides out from under the box.
+    cy.userPanningEnabled(tool !== 'zoom-box');
     cy.boxSelectionEnabled(tool === 'select');
-    cy.autoungrabify(tool === 'pan');
+    cy.autoungrabify(tool === 'pan' || tool === 'zoom-box');
     if (tool !== 'connect' && tool !== 'add-edge') {
       pendingSourceRef.current = null;
       cy.nodes().removeClass('connect-source');
     }
+    if (tool !== 'zoom-box') {
+      marqueeStart.current = null;
+      setMarquee(null);
+    }
   }, [tool, pendingSourceRef]);
+
+  /**
+   * Zoom the viewport onto a region the engineer drew, in container pixels.
+   *
+   * Rendered pixels map to model space as `model = (rendered - pan) / zoom`, so
+   * the level that makes the region fill the viewport is whichever of the two
+   * axes runs out of room first, and the pan is then whatever puts the region's
+   * centre in the middle of the canvas.
+   */
+  const zoomToRegion = (box: { x1: number; y1: number; x2: number; y2: number }) => {
+    const cy = cyRef.current;
+    if (!cy) return;
+    const width = Math.abs(box.x2 - box.x1);
+    const height = Math.abs(box.y2 - box.y1);
+    if (width < MIN_MARQUEE_PX || height < MIN_MARQUEE_PX) return;
+
+    const pan = cy.pan();
+    const zoom = cy.zoom();
+    const modelWidth = width / zoom;
+    const modelHeight = height / zoom;
+    const centerModel = {
+      x: (Math.min(box.x1, box.x2) + width / 2 - pan.x) / zoom,
+      y: (Math.min(box.y1, box.y2) + height / 2 - pan.y) / zoom,
+    };
+
+    const viewWidth = cy.width();
+    const viewHeight = cy.height();
+    if (viewWidth === 0 || viewHeight === 0) return;
+
+    const wanted = Math.min(viewWidth / modelWidth, viewHeight / modelHeight);
+    const next = Math.min(Math.max(wanted, cy.minZoom()), cy.maxZoom());
+    cy.viewport({
+      zoom: next,
+      pan: {
+        x: viewWidth / 2 - centerModel.x * next,
+        y: viewHeight / 2 - centerModel.y * next,
+      },
+    });
+    handlers.current.onZoomChange(cy.zoom());
+  };
 
   useImperativeHandle(
     ref,
@@ -397,5 +459,68 @@ export const ThermalGraphCanvas = forwardRef<
     [],
   );
 
-  return <div ref={containerRef} className="size-full" data-testid="thermal-graph-canvas" />;
+  const marqueeRect = marquee
+    ? {
+        left: Math.min(marquee.x1, marquee.x2),
+        top: Math.min(marquee.y1, marquee.y2),
+        width: Math.abs(marquee.x2 - marquee.x1),
+        height: Math.abs(marquee.y2 - marquee.y1),
+      }
+    : null;
+
+  return (
+    <div className="relative size-full">
+      <div ref={containerRef} className="size-full" data-testid="thermal-graph-canvas" />
+      {tool === 'zoom-box' && (
+        <div
+          data-testid="zoom-marquee-layer"
+          className="absolute inset-0 z-10 cursor-crosshair"
+          onPointerDown={(event) => {
+            const bounds = event.currentTarget.getBoundingClientRect();
+            const point = { x: event.clientX - bounds.left, y: event.clientY - bounds.top };
+            marqueeStart.current = point;
+            setMarquee({ x1: point.x, y1: point.y, x2: point.x, y2: point.y });
+            event.currentTarget.setPointerCapture(event.pointerId);
+          }}
+          onPointerMove={(event) => {
+            const start = marqueeStart.current;
+            if (!start) return;
+            const bounds = event.currentTarget.getBoundingClientRect();
+            setMarquee({
+              x1: start.x,
+              y1: start.y,
+              x2: event.clientX - bounds.left,
+              y2: event.clientY - bounds.top,
+            });
+          }}
+          onPointerUp={(event) => {
+            const start = marqueeStart.current;
+            marqueeStart.current = null;
+            const bounds = event.currentTarget.getBoundingClientRect();
+            if (start) {
+              zoomToRegion({
+                x1: start.x,
+                y1: start.y,
+                x2: event.clientX - bounds.left,
+                y2: event.clientY - bounds.top,
+              });
+            }
+            setMarquee(null);
+          }}
+          onPointerCancel={() => {
+            marqueeStart.current = null;
+            setMarquee(null);
+          }}
+        >
+          {marqueeRect && (
+            <div
+              aria-hidden
+              className="absolute border-2 border-accent-600 bg-accent-500/15"
+              style={marqueeRect}
+            />
+          )}
+        </div>
+      )}
+    </div>
+  );
 });
