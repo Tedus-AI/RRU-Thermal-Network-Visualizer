@@ -279,6 +279,8 @@ export function ThermalPathBuilderView() {
   );
   const [showGenerate, setShowGenerate] = useState(false);
   const [rebuildFor, setRebuildFor] = useState<string | null>(null);
+  /** Arms the destructive rebuild; the second click is the one that fires. */
+  const [confirmEntireRebuild, setConfirmEntireRebuild] = useState(false);
   const [qtyWarning, setQtyWarning] = useState<{
     componentId: string;
     next: BuilderPref;
@@ -427,7 +429,22 @@ export function ThermalPathBuilderView() {
     ? (prefs[selectedComponent.id] ?? defaultPrefFor(selectedComponent))
     : null;
 
-  const zoneIds = useMemo(() => Object.keys(network?.zones ?? {}), [network?.zones]);
+  /**
+   * How many of this component's objects "Entire Subgraph" would destroy.
+   *
+   * Deliberately the same test `replaceComponentSubgraph` deletes by — manual
+   * origin, or generated-then-edited — so the number the dialog promises is the
+   * number that actually goes.
+   */
+  const manualObjectsFor = (componentId: string): number => {
+    if (!network) return 0;
+    const belongs = (origin?: { component_id?: string; kind?: string; modified?: boolean }) =>
+      origin?.component_id === componentId && (origin.kind === 'manual' || origin.modified);
+    return (
+      Object.values(network.nodes).filter((node) => belongs(node.origin)).length +
+      Object.values(network.edges).filter((edge) => belongs(edge.origin)).length
+    );
+  };
 
   // --- Actions -------------------------------------------------------------
 
@@ -441,7 +458,6 @@ export function ThermalPathBuilderView() {
       templateId: pref.templateId,
       qtyModel: pref.qtyModel,
       groupCount: pref.groupCount,
-      suggestedZoneNodeId: resolvePortTarget(component, zoneIds)?.zoneId ?? null,
     });
     if (!subgraph) {
       toast.error('Template not found / 找不到模板');
@@ -450,8 +466,16 @@ export function ThermalPathBuilderView() {
 
     if (mode === 'new') {
       useNetworkStore.getState().addSubgraph(subgraph);
+      // Same wiring pass Generate runs. Building one component's subgraph on
+      // its own used to skip it entirely, so rebuilding a single part left its
+      // HEAT_OUT dangling while "Generate from Preferences" over the very same
+      // component connected it — the difference being invisible and, from the
+      // engineer's side, arbitrary.
+      const { connected } = connectSuggestedPorts();
       toast.success(
-        `${component.name}: ${subgraph.nodes.length} nodes, ${subgraph.edges.length} edges / 已建立子圖`,
+        `${component.name}: ${subgraph.nodes.length} nodes, ${subgraph.edges.length} edges${
+          connected > 0 ? `, ${connected} port(s) connected` : ''
+        } / 已建立子圖`,
       );
       return;
     }
@@ -459,10 +483,11 @@ export function ThermalPathBuilderView() {
     const { preservedManual } = useNetworkStore
       .getState()
       .replaceComponentSubgraph(componentId, subgraph, mode);
+    const { connected } = connectSuggestedPorts();
     toast.success(
       preservedManual > 0
         ? `Rebuilt "${component.name}", ${preservedManual} manual object(s) preserved / 已保留手動物件`
-        : `Rebuilt "${component.name}" / 已重建子圖`,
+        : `Rebuilt "${component.name}"${connected > 0 ? `, ${connected} port(s) reconnected` : ''} / 已重建子圖`,
     );
   };
 
@@ -716,6 +741,52 @@ export function ThermalPathBuilderView() {
 
   // --- Guards --------------------------------------------------------------
 
+  /**
+   * Delete removes whatever is selected on the canvas.
+   *
+   * Bound to the window rather than to the canvas element: Cytoscape draws into
+   * a canvas that never takes focus, so a listener on the container would only
+   * ever fire if the engineer happened to have tabbed to it.
+   *
+   * Which means the guards matter more than usual — the same key press must not
+   * eat a character out of a field in the inspector, or delete anything at all
+   * in a read-only project. Undo covers the rest (05 §46).
+   *
+   * It lives up here with the other effects, ABOVE the loading and error
+   * returns, because hooks must run in the same order on every render. Placed
+   * below them it ran only once the project had loaded — so the first render
+   * after a page reload, which starts in the loading state, called one hook
+   * fewer than the next one and React tore the whole screen down.
+   */
+  useEffect(() => {
+    if (readOnly || !selection) return;
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Delete' && event.key !== 'Backspace') return;
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+
+      const target = event.target as HTMLElement | null;
+      if (
+        target &&
+        (target.isContentEditable ||
+          ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName) ||
+          target.closest('[role="dialog"]'))
+      ) {
+        return;
+      }
+
+      event.preventDefault();
+      const store = useNetworkStore.getState();
+      if (selection.kind === 'node') store.removeNode(selection.id);
+      else store.removeEdge(selection.id);
+      setSelection(null);
+      toast.success('Deleted — Undo restores it / 已刪除，可用復原還原');
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [readOnly, selection]);
+
   if (!projectId || projectStatus === 'error') {
     return (
       <div className="flex h-full items-center justify-center p-8">
@@ -755,46 +826,6 @@ export function ThermalPathBuilderView() {
 
   const selectedNode = selection?.kind === 'node' ? network.nodes[selection.id] : null;
   const selectedEdge = selection?.kind === 'edge' ? network.edges[selection.id] : null;
-
-  /**
-   * Delete removes whatever is selected on the canvas.
-   *
-   * Bound to the window rather than to the canvas element: Cytoscape draws into
-   * a canvas that never takes focus, so a listener on the container would only
-   * ever fire if the engineer happened to have tabbed to it.
-   *
-   * Which means the guards matter more than usual — the same key press must not
-   * eat a character out of a field in the inspector, or delete anything at all
-   * in a read-only project. Undo covers the rest (05 §46).
-   */
-  useEffect(() => {
-    if (readOnly || !selection) return;
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Delete' && event.key !== 'Backspace') return;
-      if (event.metaKey || event.ctrlKey || event.altKey) return;
-
-      const target = event.target as HTMLElement | null;
-      if (
-        target &&
-        (target.isContentEditable ||
-          ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName) ||
-          target.closest('[role="dialog"]'))
-      ) {
-        return;
-      }
-
-      event.preventDefault();
-      const store = useNetworkStore.getState();
-      if (selection.kind === 'node') store.removeNode(selection.id);
-      else store.removeEdge(selection.id);
-      setSelection(null);
-      toast.success('Deleted — Undo restores it / 已刪除，可用復原還原');
-    };
-
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [readOnly, selection]);
 
   const completedSteps: BuilderStep[] = [];
   if (components.length > 0) completedSteps.push('components');
@@ -1051,8 +1082,24 @@ export function ThermalPathBuilderView() {
             onUndo={() => useNetworkStore.getState().undo()}
             onRedo={() => useNetworkStore.getState().redo()}
             onValidate={() => {
-              useNetworkStore.getState().revalidate();
+              const result = useNetworkStore.getState().revalidate();
               setStep('validate');
+              // It always did re-run validation, but said nothing — and on an
+              // already-valid network nothing on screen changed either, so the
+              // button read as broken.
+              if (!result) {
+                toast.warning('Nothing to validate yet / 尚無可驗證的網路');
+              } else if (result.errors > 0) {
+                toast.error(
+                  `${result.errors} error(s), ${result.warnings} warning(s) / ${result.errors} 個錯誤、${result.warnings} 個警告`,
+                );
+              } else if (result.warnings > 0) {
+                toast.warning(
+                  `No errors, ${result.warnings} warning(s) / 無錯誤，${result.warnings} 個警告`,
+                );
+              } else {
+                toast.success('Network is valid / 熱網路驗證通過');
+              }
             }}
             onTogglePorts={() => setShowPorts((value) => !value)}
             onToggleLabels={() => setShowLabels((value) => !value)}
@@ -1407,33 +1454,105 @@ export function ThermalPathBuilderView() {
       {rebuildFor && (
         <Modal
           title="Rebuild component subgraph / 重建元件子圖"
-          description="This component already has a subgraph. Manual objects are never deleted silently. / 此元件已有子圖，手動物件不會被靜默刪除。"
+          description="Both options rebuild this component from its template. They differ in what happens to anything you added or edited by hand. / 兩個選項都會依模板重建此元件，差別在於你手動新增或修改過的物件會怎麼處理。"
           // Three bilingual choices do not fit the default width on one row.
           width="max-w-2xl"
-          onClose={() => setRebuildFor(null)}
+          onClose={() => {
+            setRebuildFor(null);
+            setConfirmEntireRebuild(false);
+          }}
           footer={
             <>
-              <Button onClick={() => setRebuildFor(null)}>Cancel / 取消</Button>
               <Button
                 onClick={() => {
-                  applyTemplate(rebuildFor, 'entire');
                   setRebuildFor(null);
+                  setConfirmEntireRebuild(false);
                 }}
               >
-                Entire Subgraph / 全部取代
+                Cancel / 取消
+              </Button>
+              {/*
+                Destructive, so it is armed before it fires. The first click
+                turns it red and spells out exactly what disappears; only the
+                second click does it. The count comes from the same
+                `origin.kind === 'manual' || origin.modified` test the store
+                uses, so the number shown is the number that will be deleted.
+              */}
+              <Button
+                variant={confirmEntireRebuild ? 'danger' : undefined}
+                onClick={() => {
+                  if (!confirmEntireRebuild) {
+                    setConfirmEntireRebuild(true);
+                    return;
+                  }
+                  applyTemplate(rebuildFor, 'entire');
+                  setRebuildFor(null);
+                  setConfirmEntireRebuild(false);
+                }}
+              >
+                {confirmEntireRebuild
+                  ? 'Confirm delete / 確定刪除'
+                  : 'Entire Subgraph / 全部取代'}
               </Button>
               <Button
                 variant="primary"
                 onClick={() => {
                   applyTemplate(rebuildFor, 'generated_only');
                   setRebuildFor(null);
+                  setConfirmEntireRebuild(false);
                 }}
               >
                 Auto-generated Only / 僅自動產生
               </Button>
             </>
           }
-        />
+        >
+          <dl className="flex flex-col gap-2.5 text-[13px]">
+            <div className="rounded-md border border-line bg-surface-muted px-3 py-2">
+              <dt className="font-semibold text-ink-900">Auto-generated Only / 僅自動產生</dt>
+              <dd className="mt-0.5 text-[12px] leading-relaxed text-ink-500">
+                Replaces what the template made and <strong>keeps</strong> everything you added or
+                edited by hand.
+                <span className="block">
+                  只取代模板產生的部分，你手動新增或修改過的物件會<strong>保留</strong>。
+                </span>
+              </dd>
+            </div>
+            <div
+              className={`rounded-md border px-3 py-2 ${
+                confirmEntireRebuild
+                  ? 'border-danger-500 bg-danger-100/50'
+                  : 'border-line bg-surface-muted'
+              }`}
+            >
+              <dt className="font-semibold text-ink-900">Entire Subgraph / 全部取代</dt>
+              <dd className="mt-0.5 text-[12px] leading-relaxed text-ink-500">
+                Deletes <strong>every</strong> node and edge belonging to this component, including
+                the ones you added or edited by hand, then rebuilds from the template.
+                <span className="block">
+                  刪除此元件的<strong>所有</strong>節點與連線（含手動新增與修改過的），再依模板重建。
+                </span>
+              </dd>
+              {manualObjectsFor(rebuildFor) > 0 ? (
+                <p
+                  className={`mt-1.5 text-[12px] font-semibold ${
+                    confirmEntireRebuild ? 'text-danger-600' : 'text-warn-600'
+                  }`}
+                >
+                  {manualObjectsFor(rebuildFor)} hand-made object(s) will be permanently deleted.
+                  <span className="block">
+                    將永久刪除 {manualObjectsFor(rebuildFor)} 個手動建立／修改的物件。
+                  </span>
+                </p>
+              ) : (
+                <p className="mt-1.5 text-[12px] text-ink-400">
+                  This component has no hand-made objects, so both options do the same thing here.
+                  <span className="block">此元件沒有手動物件，因此兩個選項結果相同。</span>
+                </p>
+              )}
+            </div>
+          </dl>
+        </Modal>
       )}
 
       {qtyWarning && (
