@@ -22,12 +22,24 @@ import type { ThermalEdge } from '@/thermal/types';
 
 class MemoryStorage implements Storage {
   private data = new Map<string, string>();
-  get length() { return this.data.size; }
-  clear() { this.data.clear(); }
-  getItem(key: string) { return this.data.get(key) ?? null; }
-  key(index: number) { return [...this.data.keys()][index] ?? null; }
-  removeItem(key: string) { this.data.delete(key); }
-  setItem(key: string, value: string) { this.data.set(key, String(value)); }
+  get length() {
+    return this.data.size;
+  }
+  clear() {
+    this.data.clear();
+  }
+  getItem(key: string) {
+    return this.data.get(key) ?? null;
+  }
+  key(index: number) {
+    return [...this.data.keys()][index] ?? null;
+  }
+  removeItem(key: string) {
+    this.data.delete(key);
+  }
+  setItem(key: string, value: string) {
+    this.data.set(key, String(value));
+  }
 }
 
 function pa() {
@@ -274,11 +286,11 @@ describe('port connection (05 §16)', () => {
       plate_area_mm2: 66000,
       psi_variant: 'max',
     });
-    // Hand-computed from Lee et al.: a = 11.284 mm, b = 144.94 mm, ε = 0.07785,
-    // τ = 0.03450, λ = 10.3883, Φ = 0.34370, Ψ_max = 0.15998. The one-dimensional
-    // t/(k·A) over the SAME contact patch would be 0.1302 — 56% higher — which is
-    // the whole reason this edge stopped being conduction_LkA.
-    expect(edge.rth.analytical).toBeCloseTo(0.08335, 5);
+    // Lee's exact series at Bi → ∞: ε = 0.0778499, τ = 0.0344963 give
+    // Ψ_max = 0.2333208, so R_c = 0.1215213 and R_m = t/(k·A_plate) = 0.0007891.
+    // The one-dimensional t/(k·A) over the SAME contact patch would be 0.1302,
+    // which is what this edge used to report.
+    expect(edge.rth.analytical).toBeCloseTo(0.1223104, 6);
     expect(edge.resolution).toBe('resolved');
     expect(edge.resolution_note).toContain('UNDER-estimates');
     expect(edge.metadata?.connection_role).toBe('hsk_base_conduction');
@@ -360,9 +372,7 @@ describe('shared structure replacement', () => {
     });
     useNetworkStore.getState().addSubgraph(subgraph);
     const portNode = subgraph.nodes.find((node) => node.ports?.length)!;
-    useNetworkStore
-      .getState()
-      .connectPort(portNode.id, 'HEAT_OUT', oldStructure.zones[0].id);
+    useNetworkStore.getState().connectPort(portNode.id, 'HEAT_OUT', oldStructure.zones[0].id);
 
     const next = buildSharedStructure('DUAL_HSK_BASE');
     useNetworkStore.getState().replaceSharedStructure(next);
