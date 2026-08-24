@@ -17,6 +17,7 @@ import { TOOLTIPS_ZH } from './tooltips';
 
 import { activeRth, setRthFromSource } from '@/thermal/rth';
 import { computeRth } from '@/thermal/resistance/calculators';
+import { discSpreadingResistance, type SpreadingVariant } from '@/thermal/resistance/spreading';
 import {
   EDGE_TYPES,
   type Confidence,
@@ -44,6 +45,7 @@ const METHODS: Array<{ value: EdgeMethod; label: string }> = [
   { value: 'via_array', label: 'Thermal via equivalent' },
   { value: 'contact_area', label: 'Contact (quoted Rth)' },
   { value: 'contact_hc', label: 'Bare metal contact 1/h·A' },
+  { value: 'spreading_disc', label: 'Spreading into a plate (Lee et al.)' },
   { value: 'solder_voiding', label: 'Solder' },
   { value: 'convection_hA', label: 'Boundary derived (convection)' },
   { value: 'radiation_hA', label: 'Boundary derived (radiation)' },
@@ -103,6 +105,27 @@ const METHOD_PARAMETERS: Record<
     },
     { key: 'via_efficiency', label: 'Efficiency', zh: '效率係數', unit: '—' },
   ],
+  spreading_disc: [
+    {
+      key: 'source_area_mm2',
+      label: 'Contact area',
+      zh: '接觸面積',
+      unit: 'mm²',
+    },
+    {
+      key: 'plate_area_mm2',
+      label: 'Plate area',
+      zh: '底座面積',
+      unit: 'mm²',
+    },
+    {
+      key: 'thickness_mm',
+      label: 'Plate thickness',
+      zh: '底座厚度',
+      unit: 'mm',
+    },
+    { key: 'k_W_mK', label: 'Conductivity k', zh: '熱傳導率', unit: 'W/m·K' },
+  ],
   convection_hA: [],
   radiation_hA: [],
   imported: [],
@@ -117,6 +140,123 @@ function Row({ label, zh, children }: { label: string; zh?: string; children: Re
       </span>
       <span className="min-w-0 text-right text-[11px] font-semibold text-ink-900">{children}</span>
     </div>
+  );
+}
+
+/**
+ * The spreading edge, shown as the formula it came from.
+ *
+ * A single number here would be indistinguishable from the t/(k·A) it replaced,
+ * and the whole point is that they differ — so the panel prints ε, τ, λ, Φ and
+ * Ψ, and splits the result into the one-dimensional drop through the plate and
+ * what the fan-out adds on top of it. It also states the Bi → ∞ assumption,
+ * because that one biases the answer LOW and a reader has a right to know which
+ * way an assumption cuts.
+ */
+function SpreadingBreakdown({
+  edge,
+  readOnly,
+  onVariant,
+}: {
+  edge: ThermalEdge;
+  readOnly: boolean;
+  onVariant: (variant: SpreadingVariant) => void;
+}) {
+  const params = edge.parameters ?? {};
+  const number = (key: string) =>
+    typeof params[key] === 'number' ? (params[key] as number) : null;
+  const variant: SpreadingVariant = params.psi_variant === 'avg' ? 'avg' : 'max';
+  const A_s = number('source_area_mm2');
+  const A_p = number('plate_area_mm2');
+  const t = number('thickness_mm');
+  const k = number('k_W_mK');
+
+  const result =
+    A_s != null && A_p != null && t != null && k != null
+      ? discSpreadingResistance({
+          source_area_mm2: A_s,
+          plate_area_mm2: A_p,
+          thickness_mm: t,
+          k_W_mK: k,
+          bi: number('bi'),
+          variant,
+        })
+      : null;
+
+  return (
+    <section className="mt-3 rounded-md border border-line p-2.5">
+      <p className="text-[11px] font-bold text-ink-700">
+        Spreading model <span className="font-semibold text-ink-400">/ 擴散熱阻模型</span>
+      </p>
+      <p className="mt-1 font-mono text-[10px] leading-relaxed text-ink-500">
+        R = Ψ / (k·a·√π), a = √(A_s/π), b = √(A_p/π), ε = a/b, τ = t/b
+        <br />
+        λ = π + 1/(√π·ε), Φ = tanh(λτ) at Bi → ∞
+        <br />
+        {variant === 'avg' ? 'Ψ_avg = ετ/√π + ½(1−ε)^1.5·Φ' : 'Ψ_max = ετ/√π + ½(1−ε)·Φ'}
+      </p>
+
+      <div className="mt-2">
+        <FieldLabel label="Source temperature" zh="熱源溫度取法" htmlFor="edge-psi-variant" />
+        <Select
+          id="edge-psi-variant"
+          className="mt-1 h-8 !text-[12px]"
+          value={variant}
+          disabled={readOnly}
+          items={[
+            { value: 'max', label: 'Peak, under the source (Ψ_max)' },
+            { value: 'avg', label: 'Average over the contact patch (Ψ_avg)' },
+          ]}
+          onChange={(event) => onVariant(event.target.value as SpreadingVariant)}
+        />
+        <p className="mt-1 text-[10px] leading-relaxed text-ink-400">
+          Peak is the default: the junction chain above this edge hangs off the hottest point of the
+          contact patch, so sizing a margin against the average would flatter it. /
+          預設取峰值，因為接面餘裕要看熱源正下方最高溫。
+        </p>
+      </div>
+
+      {result ? (
+        <div className="mt-2">
+          <Row label="ε = a/b" zh="相對熱源尺寸">
+            {result.epsilon.toFixed(4)}
+          </Row>
+          <Row label="τ = t/b" zh="相對板厚">
+            {result.tau.toFixed(4)}
+          </Row>
+          <Row label="λ">{result.lambda.toFixed(4)}</Row>
+          <Row label="Φ">{result.phi.toFixed(4)}</Row>
+          <Row label="Ψ">{result.psi.toFixed(4)}</Row>
+          <Row label="1D through plate" zh="板厚一維">
+            {result.R_1d_C_per_W.toFixed(4)} °C/W
+          </Row>
+          <Row label="Spreading" zh="擴散">
+            {result.R_spreading_C_per_W.toFixed(4)} °C/W
+          </Row>
+          <Row label="Total" zh="合計">
+            {result.R_C_per_W.toFixed(4)} °C/W
+          </Row>
+          {result.saturated && (
+            <p className="mt-1.5 text-[10px] leading-relaxed text-warn-600">
+              The contact patch is as large as the plate, so there is nothing left to spread into
+              and this is plain 1D conduction. / 接觸面積已等於底座面積，無擴散可言。
+            </p>
+          )}
+        </div>
+      ) : (
+        <p className="mt-2 text-[10px] leading-relaxed text-warn-600">
+          Fill the four parameters on the Parameters tab to see the breakdown. /
+          請在「參數」分頁補齊四項輸入。
+        </p>
+      )}
+
+      <p className="mt-2 text-[10px] leading-relaxed text-ink-400">
+        Lee, Song, Au &amp; Moran (1995), as printed in Qpedia Sept 2010 eq. (2)–(9); ~10% against
+        measurement for a heat-sink base. This result already includes the drop through the plate
+        thickness — do not add a separate L/kA edge across the same plate. /
+        此結果已含板厚一維熱阻，勿再串一段 L/kA。
+      </p>
+    </section>
   );
 }
 
@@ -405,7 +545,7 @@ export function EdgeInspector({
                   not assume them.
                 </p>
               )}
-              {edge.type === 'spreading' && (
+              {edge.type === 'spreading' && edge.method !== 'spreading_disc' && (
                 <p className="mt-1.5 text-[10px] leading-relaxed text-ink-500">
                   <BilingualTooltip zh={TOOLTIPS_ZH.spreadingResistance} align="left">
                     <span>Spreading resistance.</span>
@@ -414,6 +554,19 @@ export function EdgeInspector({
                 </p>
               )}
             </div>
+
+            {edge.method === 'spreading_disc' && (
+              <SpreadingBreakdown
+                edge={edge}
+                readOnly={readOnly}
+                onVariant={(variant) =>
+                  applyParameters({
+                    ...(edge.parameters ?? {}),
+                    psi_variant: variant,
+                  })
+                }
+              />
+            )}
           </div>
         )}
 

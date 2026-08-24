@@ -226,12 +226,14 @@ describe('port connection (05 §16)', () => {
     expect(after.edges[edge.id]).toBeUndefined();
   });
 
-  it('automatically resolves TIM HEAT_OUT to a single shared HSK Base as L/(kA)', () => {
+  it('resolves TIM HEAT_OUT into the shared HSK Base as spreading, not L/(kA)', () => {
     const materials = {
       ...defaultMaterials(),
       coin_L_mm: sourced(20, 'Manual'),
       coin_W_mm: sourced(10, 'Manual'),
       hsk_base_thickness_mm: sourced(5, 'Manual'),
+      hsk_base_L_mm: sourced(300, 'Manual'),
+      hsk_base_W_mm: sourced(220, 'Manual'),
     };
     const component = pa();
     component.thermal_spec.heat_path.type = 'Coin';
@@ -261,13 +263,24 @@ describe('port connection (05 §16)', () => {
     const edge = Object.values(useNetworkStore.getState().network!.edges).find(
       (candidate) => candidate.from === portNode.id && candidate.to === hskBaseId,
     )!;
-    expect(edge.type).toBe('conduction');
-    expect(edge.method).toBe('conduction_LkA');
+    expect(edge.type).toBe('spreading');
+    expect(edge.method).toBe('spreading_disc');
     // AGGREGATE represents two PA devices, so the effective footprint is 2 x
-    // the 20 x 10 mm face.
-    expect(edge.parameters).toMatchObject({ length_mm: 5, k_W_mK: 96, area_mm2: 400 });
-    expect(edge.rth.analytical).toBeCloseTo(0.005 / (96 * 0.0004), 10);
+    // the 20 x 10 mm face; the plate is the whole 300 x 220 mm base.
+    expect(edge.parameters).toMatchObject({
+      thickness_mm: 5,
+      k_W_mK: 96,
+      source_area_mm2: 400,
+      plate_area_mm2: 66000,
+      psi_variant: 'max',
+    });
+    // Hand-computed from Lee et al.: a = 11.284 mm, b = 144.94 mm, ε = 0.07785,
+    // τ = 0.03450, λ = 10.3883, Φ = 0.34370, Ψ_max = 0.15998. The one-dimensional
+    // t/(k·A) over the SAME contact patch would be 0.1302 — 56% higher — which is
+    // the whole reason this edge stopped being conduction_LkA.
+    expect(edge.rth.analytical).toBeCloseTo(0.08335, 5);
     expect(edge.resolution).toBe('resolved');
+    expect(edge.resolution_note).toContain('UNDER-estimates');
     expect(edge.metadata?.connection_role).toBe('hsk_base_conduction');
 
     const improvedMaterials = {
@@ -326,7 +339,9 @@ describe('port connection (05 §16)', () => {
     )!;
     expect(edge.rth.analytical).toBeNull();
     expect(edge.resolution).toBe('unresolved');
-    expect(edge.resolution_note).toContain('length_mm');
+    // Named in words, because the fix is a Screen 01 field and not a parameter key.
+    expect(edge.resolution_note).toContain('HSK Base thickness (Screen 01)');
+    expect(edge.resolution_note).toContain('HSK Base L × W (Screen 01)');
   });
 });
 

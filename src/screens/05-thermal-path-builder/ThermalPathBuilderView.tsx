@@ -322,6 +322,12 @@ export function ThermalPathBuilderView() {
   // Older saved networks may already contain linked HSK-base edges. Refresh
   // their analytical value when the project is opened or Screen 01 changes
   // the shared base inputs; no manual edge override is discarded.
+  //
+  // Opening the project is what migrates a pre-spreading edge: those were
+  // stored as `conduction_LkA` over the contact patch, which the refresh
+  // rewrites into `spreading_disc` over the base envelope. A project that never
+  // filled the base L and W lands on UNRESOLVED, which is the point — the old
+  // number was computed from a base size nobody had stated.
   useEffect(() => {
     if (!draft || draft.project_id !== projectId) return;
     const store = useNetworkStore.getState();
@@ -340,6 +346,8 @@ export function ThermalPathBuilderView() {
     draft?.project_id,
     materials.hsk_base_k_W_mK.value,
     materials.hsk_base_thickness_mm?.value,
+    materials.hsk_base_L_mm?.value,
+    materials.hsk_base_W_mm?.value,
   ]);
 
   // One section at a time, matching the step. Three open panels in a 300 px

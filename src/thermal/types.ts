@@ -239,6 +239,13 @@ export type EdgeMethod =
   | 'contact_area'
   /** Bare metal-to-metal joint: R = 1 / (h_c · A). No TIM in the gap. */
   | 'contact_hc'
+  /**
+   * Heat entering a plate through a patch smaller than the plate: the
+   * one-dimensional drop through the thickness AND the sideways fan-out, from
+   * the Lee/Song/Au/Moran disc correlation. Not interchangeable with
+   * `conduction_LkA` — see `resistance/spreading.ts`.
+   */
+  | 'spreading_disc'
   | 'convection_hA'
   | 'radiation_hA'
   | 'imported';

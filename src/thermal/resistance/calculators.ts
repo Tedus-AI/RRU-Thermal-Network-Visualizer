@@ -9,6 +9,7 @@
  */
 
 import type { EdgeMethod, ResolutionState } from '../types';
+import { sharedPlateSpreading, type SpreadingVariant } from './spreading';
 
 export interface RthComputation {
   value: number | null;
@@ -155,6 +156,57 @@ export function spreadingRth(params: EdgeParameters): RthComputation {
   return unresolved(['R_C_per_W'], 'Selected correlation still needs its input parameters.');
 }
 
+export const SPREADING_UNDER_ESTIMATE_NOTE =
+  'Assumption: Lee/Song/Au/Moran disc spreading with Bi → ∞ (a perfectly cooled far ' +
+  'face). Bi needs h, which is a Screen 06 boundary condition, and Bi → ∞ gives ' +
+  'the smallest spreading the correlation can produce — so this UNDER-estimates. ' +
+  'The correlation itself is quoted at about 10% for a heat-sink base.';
+
+/**
+ * Spreading into a plate — the Lee/Song/Au/Moran disc correlation.
+ *
+ * This result already contains the one-dimensional drop through the thickness
+ * (see `resistance/spreading.ts`), so an edge using it must NOT be paired with a
+ * separate t/(k·A) edge across the same plate.
+ */
+export function spreadingDiscRth(params: EdgeParameters): RthComputation {
+  const A_s = numeric(params, 'source_area_mm2');
+  const A_p = numeric(params, 'plate_area_mm2');
+  const t = numeric(params, 'thickness_mm');
+  const k = numeric(params, 'k_W_mK');
+
+  const missing: string[] = [];
+  if (A_s == null) missing.push('source_area_mm2');
+  if (A_p == null) missing.push('plate_area_mm2');
+  if (t == null) missing.push('thickness_mm');
+  if (k == null) missing.push('k_W_mK');
+  if (missing.length > 0) return unresolved(missing);
+
+  const variant = params.psi_variant === 'avg' ? 'avg' : ('max' as SpreadingVariant);
+  const result = sharedPlateSpreading(
+    {
+      source_area_mm2: A_s!,
+      plate_area_mm2: A_p!,
+      thickness_mm: t!,
+      k_W_mK: k!,
+      bi: numeric(params, 'bi'),
+      variant,
+    },
+    numeric(params, 'devices') ?? 1,
+  );
+
+  if (!result) {
+    return unresolved([], 'Areas, thickness and conductivity must all be positive.');
+  }
+
+  return {
+    value: result.R_C_per_W,
+    resolution: 'resolved',
+    missing: [],
+    note: numeric(params, 'bi') != null ? undefined : SPREADING_UNDER_ESTIMATE_NOTE,
+  };
+}
+
 /**
  * A boundary-derived edge cannot be resolved in Screen 05 at all: it depends on
  * ambient temperature, h and radiation, which Screen 06 supplies (05 §15).
@@ -241,6 +293,10 @@ export function scaleParametersForDevices(
       const R = numeric(params, 'R_C_per_W');
       return R == null ? params : { ...params, R_C_per_W: R / devices };
     }
+    // Spreading does not scale by area: N patches on one plate each get their
+    // own share of it, and the calculator needs the count to say so.
+    case 'spreading_disc':
+      return { ...params, devices };
     // Boundary and imported edges are never component-owned, so a device count
     // has nothing to say about them.
     default:
@@ -260,6 +316,8 @@ export function computeRth(method: EdgeMethod, params: EdgeParameters): RthCompu
       return solderVoidingRth(params);
     case 'contact_hc':
       return contactConductanceRth(params);
+    case 'spreading_disc':
+      return spreadingDiscRth(params);
     case 'direct_rth':
     case 'contact_area':
       return directRth(params);
