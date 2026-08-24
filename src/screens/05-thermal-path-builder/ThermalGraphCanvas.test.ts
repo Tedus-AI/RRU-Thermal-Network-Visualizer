@@ -126,24 +126,77 @@ describe('Screen 05 HSK Base bus projection', () => {
     expect(Object.keys(network.nodes)).toHaveLength(5);
   });
 
-  it('keeps TopBottom mode and small fan-ins on the ordinary edge renderer', () => {
-    const topBottom = buildElements(fanInNetwork(4), {
-      showPorts: true,
-      showLabels: true,
-      layoutMode: 'TopBottom',
-    });
+  it('keeps small fan-ins and force layouts on the ordinary edge renderer', () => {
     const small = buildElements(fanInNetwork(3), {
       showPorts: true,
       showLabels: true,
       layoutMode: 'Auto',
     });
+    const free = buildElements(fanInNetwork(4), {
+      showPorts: true,
+      showLabels: true,
+      layoutMode: 'Free',
+    });
 
-    expect(topBottom.some((element) => String(element.classes).includes('hsk-bus'))).toBe(false);
     expect(small.some((element) => String(element.classes).includes('hsk-bus'))).toBe(false);
+    // A force layout has no rank direction for the bar to run across.
+    expect(free.some((element) => String(element.classes).includes('hsk-bus'))).toBe(false);
     expect(
-      topBottom.find((element) => element.data.id === 'EDGE_PORT_TIM_1_HEAT_OUT_HSK_BASE')?.data
-        .target,
+      free.find((element) => element.data.id === 'EDGE_PORT_TIM_1_HEAT_OUT_HSK_BASE')?.data.target,
     ).toBe('NODE_HSK_BASE');
+  });
+
+  /**
+   * Top → Bottom used to be excluded from the bus outright, so a fan-in of a
+   * dozen components drew as a dozen long diagonals converging on one node —
+   * with the Rth labels rotated along them and landing on top of the boxes.
+   *
+   * The bar runs ACROSS the flow, so a top-to-bottom graph collects on a
+   * HORIZONTAL bar, the mirror of the left-to-right case.
+   */
+  describe('Top → Bottom', () => {
+    const elements = () =>
+      buildElements(fanInNetwork(4), {
+        showPorts: true,
+        showLabels: true,
+        layoutMode: 'TopBottom',
+      });
+
+    it('routes the branches through a bus, same as Left → Right', () => {
+      const bus = elements().find((element) => String(element.classes).includes('hsk-bus'));
+      expect(bus).toBeDefined();
+      expect(
+        elements().filter((element) =>
+          String(element.classes).includes('hsk-bus-branch-junction'),
+        ),
+      ).toHaveLength(4);
+    });
+
+    it('lays the bar out horizontally, not vertically', () => {
+      const bus = elements().find((element) => String(element.classes).includes('hsk-bus'))!;
+      expect(bus.data.axis).toBe('horizontal');
+      // Thin on the flow axis, long across it — the opposite way round to LR.
+      expect(bus.data.h).toBe(2);
+      expect(bus.data.w).toBeGreaterThan(2);
+    });
+
+    it('puts each junction level with its own terminal across the bar', () => {
+      const junctions = elements().filter((element) =>
+        String(element.classes).includes('hsk-bus-branch-junction'),
+      );
+      // Sources sit at x = 100 for every branch in this fixture and differ in
+      // y, so on a horizontal bar the junctions share a y and differ in x.
+      const ys = new Set(junctions.map((junction) => junction.position?.y));
+      expect(ys.size).toBe(1);
+      expect(new Set(junctions.map((junction) => junction.position?.x)).size).toBe(1);
+    });
+
+    it('still leaves the authoritative topology alone', () => {
+      const network = fanInNetwork(4);
+      buildElements(network, { showPorts: true, showLabels: true, layoutMode: 'TopBottom' });
+      expect(network.edges.EDGE_PORT_TIM_1_HEAT_OUT_HSK_BASE.to).toBe('NODE_HSK_BASE');
+      expect(Object.keys(network.nodes)).toHaveLength(5);
+    });
   });
 
   it('preserves a reversed edge while using the shared straight-edge label style', () => {

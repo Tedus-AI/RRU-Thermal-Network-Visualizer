@@ -4,7 +4,14 @@ import type { ElementDefinition } from 'cytoscape';
 
 import { activeRth } from '@/thermal/rth';
 import type { ThermalNetwork } from '@/thermal/types';
-import { GROUP_COLORS, edgeColor, edgeLineStyle, labelBox, nodeGroup } from '@/ui/graphStyles';
+import {
+  GROUP_COLORS,
+  HSK_BUS_COLOR,
+  edgeColor,
+  edgeLineStyle,
+  labelBox,
+  nodeGroup,
+} from '@/ui/graphStyles';
 
 const EDGE_SHORT: Record<string, string> = {
   package_rjc: 'Rjc',
@@ -39,8 +46,27 @@ interface HskBusGroup {
   branches: HskBusBranch[];
 }
 
+/**
+ * Which way the bus runs, or null when this layout gets no bus at all.
+ *
+ * The bus is a bar drawn ACROSS the flow, so its orientation is the opposite of
+ * the layout's rank direction: a left-to-right graph collects its branches on a
+ * vertical bar, a top-to-bottom graph on a horizontal one. Top → Bottom used to
+ * be excluded outright, which is why a fan-in of a dozen components drew as a
+ * dozen long diagonals converging on one node, with the Rth labels rotated
+ * along them and landing on top of the boxes.
+ *
+ * `Free` is a force layout with no rank direction to run across, so it keeps
+ * the plain renderer.
+ */
+export function busAxis(layoutMode: string): 'vertical' | 'horizontal' | null {
+  if (layoutMode === 'Auto' || layoutMode === 'LeftRight') return 'vertical';
+  if (layoutMode === 'TopBottom') return 'horizontal';
+  return null;
+}
+
 function hskBusGroups(network: ThermalNetwork, layoutMode: string): HskBusGroup[] {
-  if (!['Auto', 'LeftRight'].includes(layoutMode)) return [];
+  if (busAxis(layoutMode) == null) return [];
 
   const grouped = new Map<string, Array<Omit<HskBusBranch, 'junctionId'>>>();
   for (const edge of Object.values(network.edges)) {
@@ -80,34 +106,80 @@ function hskBusGroups(network: ThermalNetwork, layoutMode: string): HskBusGroup[
     });
 }
 
-function storedBusGeometry(network: ThermalNetwork, group: HskBusGroup) {
-  const target = network.layout.positions[group.sharedId];
+export interface BusGeometry {
+  /** Centre of the bus bar, or undefined when positions are not known yet. */
+  position?: { x: number; y: number };
+  outletPosition?: { x: number; y: number };
+  /** Bar size. The thin dimension is 2px; the long one spans the branches. */
+  w: number;
+  h: number;
+  /** Coordinate of the bar on the flow axis, for placing the junctions. */
+  along: number | null;
+}
+
+/**
+ * The bar sits between the branch terminals and the shared node, 72% of the way
+ * across the gap, and spans far enough to reach every branch.
+ *
+ * Written once against an axis rather than twice per orientation: this same
+ * geometry is recomputed from live Cytoscape positions after a layout runs, and
+ * the two answers have to agree or the bus jumps on the first re-render.
+ */
+export function busGeometry(
+  axis: 'vertical' | 'horizontal',
+  target: { x: number; y: number } | undefined,
+  sources: Array<{ x: number; y: number }>,
+  branchCount: number,
+  /** Front edge of the source cluster and of the target, when known. */
+  fronts?: { sourceFront: number; targetFront: number },
+): BusGeometry {
+  const fallbackSpan = Math.max(80, branchCount * 54);
+  // `flow` is the axis heat travels along; `cross` is the one the bar spans.
+  const flow = axis === 'vertical' ? 'x' : 'y';
+  const cross = axis === 'vertical' ? 'y' : 'x';
+  const sized = (span: number) =>
+    axis === 'vertical' ? { w: 2, h: span } : { w: span, h: 2 };
+
+  if (!target || sources.length === 0) {
+    return { ...sized(fallbackSpan), along: null };
+  }
+
+  const flows = sources.map((position) => position[flow]);
+  const mean = flows.reduce((sum, value) => sum + value, 0) / flows.length;
+  const targetAfter = target[flow] >= mean;
+  const sourceFront =
+    fronts?.sourceFront ?? (targetAfter ? Math.max(...flows) : Math.min(...flows));
+  const targetFront = fronts?.targetFront ?? target[flow];
+  const along = sourceFront + (targetFront - sourceFront) * 0.72;
+
+  const crosses = [...sources.map((position) => position[cross]), target[cross]];
+  const min = Math.min(...crosses);
+  const max = Math.max(...crosses);
+  const centre = (min + max) / 2;
+
+  return {
+    ...sized(Math.max(2, max - min)),
+    along,
+    position: axis === 'vertical' ? { x: along, y: centre } : { x: centre, y: along },
+    outletPosition:
+      axis === 'vertical' ? { x: along, y: target.y } : { x: target.x, y: along },
+  };
+}
+
+function storedBusGeometry(
+  network: ThermalNetwork,
+  group: HskBusGroup,
+  axis: 'vertical' | 'horizontal',
+): BusGeometry {
   const sources = group.branches
     .map((branch) => network.layout.positions[branch.terminalId])
     .filter((position): position is { x: number; y: number } => Boolean(position));
-  const fallbackHeight = Math.max(80, group.branches.length * 54);
-  if (!target || sources.length === 0) {
-    return {
-      position: undefined,
-      outletPosition: undefined,
-      height: fallbackHeight,
-      busX: null as number | null,
-    };
-  }
-
-  const sourceXs = sources.map((position) => position.x);
-  const targetOnRight = target.x >= sourceXs.reduce((sum, value) => sum + value, 0) / sourceXs.length;
-  const sourceFront = targetOnRight ? Math.max(...sourceXs) : Math.min(...sourceXs);
-  const busX = sourceFront + (target.x - sourceFront) * 0.72;
-  const allYs = [...sources.map((position) => position.y), target.y];
-  const minY = Math.min(...allYs);
-  const maxY = Math.max(...allYs);
-  return {
-    position: { x: busX, y: (minY + maxY) / 2 },
-    outletPosition: { x: busX, y: target.y },
-    height: Math.max(2, maxY - minY),
-    busX,
-  };
+  return busGeometry(
+    axis,
+    network.layout.positions[group.sharedId],
+    sources,
+    group.branches.length,
+  );
 }
 
 export function buildElements(
@@ -115,6 +187,7 @@ export function buildElements(
   options: { showPorts: boolean; showLabels: boolean; layoutMode: string },
 ): ElementDefinition[] {
   const elements: ElementDefinition[] = [];
+  const axis = busAxis(options.layoutMode);
   const busGroups = hskBusGroups(network, options.layoutMode);
   const routedBranches = new Map(
     busGroups.flatMap((group) => group.branches.map((branch) => [branch.edgeId, branch] as const)),
@@ -157,18 +230,20 @@ export function buildElements(
   }
 
   for (const group of busGroups) {
-    const geometry = storedBusGeometry(network, group);
+    const geometry = storedBusGeometry(network, group, axis!);
     elements.push({
       group: 'nodes',
       data: {
         id: group.id,
         sharedId: group.sharedId,
         outletId: group.outletId,
-        w: 2,
-        h: geometry.height,
-        fill: '#0d9488',
-        border: '#0d9488',
-        text: '#0d9488',
+        // The canvas re-reads this to reposition the bus after a layout runs.
+        axis,
+        w: geometry.w,
+        h: geometry.h,
+        fill: HSK_BUS_COLOR,
+        border: HSK_BUS_COLOR,
+        text: HSK_BUS_COLOR,
         label: '',
       },
       classes: 'view-only hsk-bus',
@@ -188,15 +263,20 @@ export function buildElements(
           edgeId: branch.edgeId,
           w: 6,
           h: 6,
-          fill: '#0d9488',
-          border: '#0d9488',
-          text: '#0d9488',
+          fill: HSK_BUS_COLOR,
+          border: HSK_BUS_COLOR,
+          text: HSK_BUS_COLOR,
           label: '',
         },
         classes: 'view-only hsk-bus-junction hsk-bus-branch-junction',
+        // A junction sits on the bar, level with its own terminal — so it
+        // takes the bar's coordinate on the flow axis and the terminal's on
+        // the cross axis, whichever way round those are.
         position:
-          geometry.busX != null && sourcePosition
-            ? { x: geometry.busX, y: sourcePosition.y }
+          geometry.along != null && sourcePosition
+            ? axis === 'vertical'
+              ? { x: geometry.along, y: sourcePosition.y }
+              : { x: sourcePosition.x, y: geometry.along }
             : undefined,
         selectable: false,
         grabbable: false,
@@ -211,9 +291,9 @@ export function buildElements(
         sharedId: group.sharedId,
         w: 6,
         h: 6,
-        fill: '#0d9488',
-        border: '#0d9488',
-        text: '#0d9488',
+        fill: HSK_BUS_COLOR,
+        border: HSK_BUS_COLOR,
+        text: HSK_BUS_COLOR,
         label: '',
       },
       classes: 'view-only hsk-bus-junction hsk-bus-outlet',
@@ -228,7 +308,7 @@ export function buildElements(
         id: `${group.id}_TRUNK`,
         source: group.outletId,
         target: group.sharedId,
-        color: '#0d9488',
+        color: HSK_BUS_COLOR,
         lineStyle: 'solid',
         label: '',
       },

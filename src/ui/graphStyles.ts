@@ -76,6 +76,13 @@ export interface LegendEntry {
   zh: string;
   kind: 'node' | 'line' | 'state';
   style: string;
+  /**
+   * Line colour, for entries whose swatch is a line rather than a chip. The
+   * three resolution styles are drawn grey because they say nothing about
+   * colour; the HSK bus is a specific teal line on the canvas, so its swatch
+   * has to be that same teal or it is not the thing being pointed at.
+   */
+  color?: string;
   /** Rendered as a section heading above this entry. */
   section?: string;
   sectionZh?: string;
@@ -143,7 +150,14 @@ export const LEGEND: LegendEntry[] = [
     section: 'States',
     sectionZh: '狀態',
   },
-  { label: 'Shared HSK bus', zh: '共用散熱器匯流', kind: 'state', style: HSK_BUS_COLOR },
+  // A line on the canvas, not a ring on a node — so it is drawn as one.
+  {
+    label: 'Shared HSK bus',
+    zh: '共用散熱器匯流',
+    kind: 'line',
+    style: 'solid',
+    color: HSK_BUS_COLOR,
+  },
 ];
 
 /** Edge line style follows resolution, never a solved heat flow (05 §31). */
