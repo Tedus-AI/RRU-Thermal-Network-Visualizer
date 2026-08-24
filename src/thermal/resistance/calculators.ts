@@ -47,7 +47,7 @@ export function conductionRth(params: EdgeParameters): RthComputation {
   }
 
   // mm / (W/m·K × mm²) → multiply by 1000 to convert mm→m against k's metre basis.
-  const value = (L! / 1000) / (k! * (A! / 1e6));
+  const value = L! / 1000 / (k! * (A! / 1e6));
   return { value, resolution: 'resolved', missing: [] };
 }
 
@@ -65,7 +65,7 @@ export function timRth(params: EdgeParameters): RthComputation {
 
   if (k! <= 0 || A! <= 0) return unresolved([], 'Conductivity and area must be positive.');
 
-  const value = (t! / 1000) / (k! * (A! / 1e6));
+  const value = t! / 1000 / (k! * (A! / 1e6));
   return { value, resolution: 'resolved', missing: [] };
 }
 
@@ -87,7 +87,7 @@ export function viaArrayRth(params: EdgeParameters): RthComputation {
   if (k! <= 0 || A! <= 0) return unresolved([], 'Effective k and area must be positive.');
 
   const efficiency = numeric(params, 'via_efficiency') ?? 1;
-  const value = (t! / 1000) / (k! * (A! / 1e6) * efficiency);
+  const value = t! / 1000 / (k! * (A! / 1e6) * efficiency);
   return { value, resolution: 'resolved', missing: [] };
 }
 
@@ -157,13 +157,14 @@ export function spreadingRth(params: EdgeParameters): RthComputation {
 }
 
 export const SPREADING_UNDER_ESTIMATE_NOTE =
-  'Assumption: Lee/Song/Au/Moran disc spreading with Bi → ∞ (a perfectly cooled far ' +
-  'face). Bi needs h, which is a Screen 06 boundary condition, and Bi → ∞ gives ' +
-  'the smallest spreading the correlation can produce — so this UNDER-estimates. ' +
-  'The correlation itself is quoted at about 10% for a heat-sink base.';
+  'Assumption: Lee/Song/Au/Moran disc spreading, exact series, with Bi → ∞ (a ' +
+  'perfectly cooled far face). Bi needs h, which is a Screen 06 boundary ' +
+  'condition, and Bi → ∞ gives the smallest spreading the model can produce — so ' +
+  'this UNDER-estimates. The series itself is exact for the stated geometry; the ' +
+  'equal-area circular substitution for a rectangular base costs under ~10%.';
 
 /**
- * Spreading into a plate — the Lee/Song/Au/Moran disc correlation.
+ * Spreading into a plate — Lee's exact series, not the p.205 correlation.
  *
  * This result already contains the one-dimensional drop through the thickness
  * (see `resistance/spreading.ts`), so an edge using it must NOT be paired with a

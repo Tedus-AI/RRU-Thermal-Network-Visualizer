@@ -24,11 +24,14 @@ function orientationFor(node: ThermalNode): string {
   switch (node.type) {
     case 'fin_surface':
       return 'vertical_fins';
-    case 'fin_root':
+    // The shared structure's heat-sink node IS the fin root — that is what it
+    // is called on screen — so it carries the fin-root orientation. It used to
+    // fall through to 'unspecified' because only the removed `fin_root` type
+    // was listed here.
+    case 'heat_sink_base':
       return 'fin_root';
     case 'housing':
       return 'housing_wall';
-    case 'main_base':
     case 'small_base':
     case 'base_zone':
       return 'base_plate';
@@ -68,15 +71,13 @@ function allowedTypesFor(node: ThermalNode): BoundaryConditionType[] {
 
   switch (node.type) {
     case 'fin_surface':
-    case 'fin_root':
     case 'housing':
       return external;
-    case 'main_base':
+    case 'heat_sink_base':
     case 'small_base':
     case 'base_zone':
       return [...contact, 'convection_to_ambient', 'radiation_to_surroundings'];
     case 'ambient':
-    case 'external_air':
       return ['ambient_reservoir', 'external_cfd_placeholder'];
     default:
       return [...external, ...contact];

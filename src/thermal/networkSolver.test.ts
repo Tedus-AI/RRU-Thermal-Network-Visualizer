@@ -9,7 +9,7 @@ function node(id: string, power: number, fixedT?: number): ThermalNode {
   return {
     id,
     name: id,
-    type: fixedT != null ? 'ambient' : power > 0 ? 'heat_source' : 'custom',
+    type: fixedT != null ? 'ambient' : power > 0 ? 'junction' : 'custom',
     power_W: power,
     temperature_C: null,
     temperature_source: null,

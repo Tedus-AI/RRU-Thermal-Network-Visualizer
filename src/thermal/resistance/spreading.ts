@@ -8,42 +8,73 @@
  * the fins. Modelling that step as t/(k·A_contact) — one-dimensional flow down a
  * column the width of the patch — ignores the fan-out entirely, and it is not a
  * small error: for a 10 × 10 mm patch on a 300 × 220 × 6 mm ADC12 base it is
- * about 2× too high, while for a 50 × 50 mm patch it is about 1.2× too high.
- * Because the distortion depends on patch size, it does not cancel out of a
- * comparison — it reorders the bottleneck ranking.
+ * about 2× too high. Because the distortion depends on patch size, it does not
+ * cancel out of a comparison — it reorders the bottleneck ranking.
  *
- * THE CORRELATION
- * ---------------
+ * THE GEOMETRY
+ * ------------
  * Circular source of radius `a` centred on a circular plate of radius `b` and
  * thickness `t`, cooled on the far face. Non-circular footprints are converted
- * by equal area, which is the standard practice this correlation is quoted with.
+ * by equal area (Lee eq. 1–2), which is how the model is normally applied;
+ * Muzychka et al. report that equivalence costs under ~10% for τ < 1, improving
+ * as the plate gets thinner.
  *
- *   ε  = a / b                        (relative source size)
- *   τ  = t / b                        (relative plate thickness)
- *   Bi = h·b / k                      (biot number of the far face)
- *   λ  = π + 1 / (√π · ε)
- *   Φ  = (tanh(λτ) + λ/Bi) / (1 + (λ/Bi)·tanh(λτ))
+ *   a = √(A_s/π),  b = √(A_p/π),  ε = a/b,  τ = t/b,  Bi = h·b/k
  *
- *   Ψ_avg = ετ/√π + (1/2)·(1−ε)^{3/2}·Φ      average source temperature
- *   Ψ_max = ετ/√π + (1/2)·(1−ε)·Φ            peak (source centre) temperature
+ * Note Bi uses the plate radius, NOT the thickness. `Bi = h·t/k` is a classic
+ * misreading of this model and it is not what Lee eq. (11) says.
  *
- *   R = Ψ / (k · a · √π)              because Ψ ≡ k·√A_s·R and √A_s = a·√π
+ * WHY THE EXACT SERIES AND NOT THE FAMILIAR CORRELATION
+ * ----------------------------------------------------
+ * Lee gives an exact solution as a series over the zeros of J₁ (eq. 19–21) and,
+ * separately, a much-quoted algebraic correlation (p. 205). We compute the
+ * exact series. Three reasons, in order of weight:
  *
- * Source: R. Lee, S. Song, V. Au, K. Moran, "Constriction/Spreading Resistance
- * Model for Electronics Packaging", ASME/JSME Thermal Engineering Conference,
- * 1995 — as printed in Qpedia Thermal eMagazine, September 2010, eq. (2)–(9).
- * Song et al. quote ~10% accuracy against measurement when the plate is a heat
- * sink base. That 10% — plus the Bi assumption below — is why an edge built on
- * this carries its assumption in the note the caller shows beside the number.
+ *  1. The correlation is systematically LOW in precisely this tool's regime. A
+ *     5G RRU heat-sink base is thin relative to its span — the demo's is
+ *     τ = 0.041 — and against the exact series the correlation under-predicts
+ *     the spreading resistance by 7–17% (average variant) and 3–21% (maximum
+ *     variant) across contact patches from 100 to 2500 mm². Low is the
+ *     dangerous direction: it flatters the design.
+ *  2. Lee's own validation of the correlation covers 0.05 ≤ ε ≤ 0.833. Small
+ *     parts sit below that floor — the demo's Driver is ε = 0.037 — so for them
+ *     the correlation is being extrapolated, not applied.
+ *  3. Two reputable printings of the correlation disagree. Qpedia (Sept 2010,
+ *     eq. 6) prints ½ as the coefficient of BOTH variants; the coefficient that
+ *     actually reproduces Lee's own tabulated Ψ_max is 1/√π. Checking against
+ *     the exact series settles it — 1/√π is right and the ½ in the magazine's
+ *     maximum-variant line is a misprint — but a correlation whose published
+ *     forms conflict is a poor thing to hang every project's numbers on.
  *
- * R IS THE WHOLE STEP, NOT AN EXTRA
- * ---------------------------------
- * Setting ε = 1 (source covers the plate) collapses Ψ to τ/√π, and
- * τ/√π / (k·a·√π) = t/(k·π·b²) = t/(k·A_plate). So the first term of Ψ IS the
- * one-dimensional resistance through the thickness and the second term is the
- * spreading on top of it. Adding a separate t/(k·A) edge beside this one would
- * count the thickness twice. The result carries the two parts separately so the
- * inspector can show the split without anyone re-deriving it.
+ * The correlation is still computed, and the Edge Inspector shows it beside the
+ * series, because an engineer checking this by hand will reach for it and needs
+ * to see the gap rather than be surprised by it.
+ *
+ *   Exact (Lee eq. 19–21):
+ *     Ψ_ave = (4/(√π·ε)) Σ J₁²(λₙε) / (λₙ³·J₀²(λₙ)) · Φₙ
+ *     Ψ_max = (2/√π)     Σ J₁(λₙε)  / (λₙ²·J₀²(λₙ)) · Φₙ
+ *     Φₙ    = (tanh(λₙτ) + λₙ/Bi) / (1 + (λₙ/Bi)·tanh(λₙτ)),   J₁(λₙ) = 0
+ *
+ *   Correlation (Lee p. 205), kept for comparison:
+ *     Ψ_ave = ½(1−ε)^{3/2}·Φ_c,   Ψ_max = (1/√π)(1−ε)·Φ_c,   λ_c = π + 1/(ε√π)
+ *
+ *   R_spreading = Ψ / (k·√A_s)
+ *
+ * λ_c is π + 1/(ε·√π) — ε OUTSIDE the root. Coding it as 1/√(πε) is the other
+ * classic error in this model.
+ *
+ * WHAT THIS RESISTANCE IS, AND WHAT IT IS NOT
+ * -------------------------------------------
+ * Lee eq. (12–13) decomposes the whole path as R = R_f + R_m + R_c, where
+ * R_m = t/(k·A_p) is the plain one-dimensional drop through the plate, R_f is
+ * the far-face boundary, and R_c — the Ψ above — is the spreading term ALONE.
+ * The graph edge this feeds runs from the contact face to the heat-sink base
+ * node, so it carries R_m + R_c; R_f lives further downstream on the fin and
+ * ambient edges. `R_1d_C_per_W` and `R_spreading_C_per_W` are returned
+ * separately so nobody has to guess which convention a total follows.
+ *
+ * (Qpedia's eq. 6 folds R_m into Ψ as a leading ετ/√π term. That is the same
+ * total, written differently: ετ/√π ÷ (k·a·√π) is identically t/(k·A_p).)
  *
  * THE BIOT NUMBER
  * ---------------
@@ -53,9 +84,29 @@
  * spreading resistance — the assumption UNDER-estimates, and the caller is
  * expected to say so rather than present the number as tight. A caller that
  * does know h (Screen 06, later) can pass `bi` and get the finite-Bi answer.
+ *
+ * Sources
+ *   [1] S. Lee, S. Song, V. Au, K. P. Moran, "Constriction/Spreading Resistance
+ *       Model for Electronics Packaging", Proc. 4th ASME/JSME Thermal
+ *       Engineering Joint Conference, Vol. 4, 1995, pp. 199–206.
+ *   [2] Qpedia Thermal eMagazine, September 2010, pp. 24–27 — reprints [1]'s
+ *       correlation as eq. (2)–(9); see the misprint noted above.
+ *   [3] Y. S. Muzychka, M. M. Yovanovich, J. R. Culham, "Thermal Spreading
+ *       Resistances in Rectangular Flux Channels, Part I", AIAA 2003-4187 —
+ *       the equal-area circular equivalence.
  */
 
+import { besselJ1, j1Eigenvalues } from './bessel';
+
 export type SpreadingVariant = 'avg' | 'max';
+
+/**
+ * Terms in the series. Ψ_ave converges fast; Ψ_max alternates and settles more
+ * slowly, so this is sized for it: at 2000 terms both variants are inside
+ * 0.05% of their limit across the ε and τ range this tool sees, which is two
+ * orders of magnitude tighter than the model's own accuracy.
+ */
+const SERIES_TERMS = 2000;
 
 export interface SpreadingInput {
   /** Contact footprint the heat enters through, mm². */
@@ -66,7 +117,7 @@ export interface SpreadingInput {
   thickness_mm: number;
   /** Plate conductivity, W/m·K. */
   k_W_mK: number;
-  /** Far-face Biot number. Omitted or non-finite means Bi → ∞. */
+  /** Far-face Biot number, h·b/k. Omitted or non-finite means Bi → ∞. */
   bi?: number | null;
   /** Peak source temperature by default; see the header. */
   variant?: SpreadingVariant;
@@ -75,22 +126,80 @@ export interface SpreadingInput {
 export interface SpreadingResult {
   /** Total resistance of the step, °C/W — 1D through the thickness + spreading. */
   R_C_per_W: number;
-  /** t / (k·A_plate): the part that is plain one-dimensional conduction. */
+  /** Lee's R_m = t/(k·A_plate): the part that is plain 1D conduction. */
   R_1d_C_per_W: number;
-  /** What the fan-out costs on top of R_1d. */
+  /** Lee's R_c: what the fan-out costs on top of R_1d. */
   R_spreading_C_per_W: number;
+  /** Dimensionless spreading resistance from the exact series. */
+  psi: number;
+  /** The p. 205 correlation's Ψ for the same inputs, for comparison only. */
+  psi_correlation: number;
   epsilon: number;
   tau: number;
-  lambda: number;
-  phi: number;
-  psi: number;
+  /** The correlation's single eigenvalue. The series uses the real spectrum. */
+  lambda_c: number;
+  /** The correlation's Φ_c. */
+  phi_c: number;
   variant: SpreadingVariant;
   /** True when the source is at least as large as the plate: no spreading left. */
   saturated: boolean;
+  /** ε is outside 0.05–0.833, where Lee validated the model. */
+  epsilon_out_of_range: boolean;
 }
 
 const positive = (value: unknown): value is number =>
   typeof value === 'number' && Number.isFinite(value) && value > 0;
+
+/** Lee eq. (21). `biRatio` is λ/Bi, which is 0 at Bi → ∞. */
+const phiOf = (lambdaTau: number, biRatio: number): number => {
+  const th = Math.tanh(lambdaTau);
+  return biRatio === 0 ? th : (th + biRatio) / (1 + biRatio * th);
+};
+
+/** Lee eq. (19)–(20), the exact solution. Returns the dimensionless Ψ. */
+function seriesPsi(
+  epsilon: number,
+  tau: number,
+  bi: number | null | undefined,
+  variant: SpreadingVariant,
+): number {
+  const { zeros, j0Squared } = j1Eigenvalues(SERIES_TERMS);
+  const finiteBi = positive(bi);
+  let sum = 0;
+
+  for (let n = 0; n < SERIES_TERMS; n += 1) {
+    const lambda = zeros[n];
+    const phi = phiOf(lambda * tau, finiteBi ? lambda / (bi as number) : 0);
+    const j1 = besselJ1(lambda * epsilon);
+    sum +=
+      variant === 'avg'
+        ? ((j1 * j1) / (lambda ** 3 * j0Squared[n])) * phi
+        : (j1 / (lambda ** 2 * j0Squared[n])) * phi;
+  }
+
+  return variant === 'avg'
+    ? (4 / (Math.sqrt(Math.PI) * epsilon)) * sum
+    : (2 / Math.sqrt(Math.PI)) * sum;
+}
+
+/**
+ * Lee p. 205's algebraic correlation. Not used for the answer — see the header
+ * — but shown beside it so a hand-check has something to land on.
+ */
+export function leeCorrelationPsi(
+  epsilon: number,
+  tau: number,
+  bi: number | null | undefined,
+  variant: SpreadingVariant,
+): { psi: number; lambda_c: number; phi_c: number } {
+  const lambda_c = Math.PI + 1 / (epsilon * Math.sqrt(Math.PI));
+  const phi_c = phiOf(lambda_c * tau, positive(bi) ? lambda_c / (bi as number) : 0);
+  const psi =
+    variant === 'avg'
+      ? 0.5 * (1 - epsilon) ** 1.5 * phi_c
+      : ((1 - epsilon) * phi_c) / Math.sqrt(Math.PI);
+  return { psi, lambda_c, phi_c };
+}
 
 /**
  * Returns null when any input is missing or non-positive. It never substitutes a
@@ -114,54 +223,51 @@ export function discSpreadingResistance(input: SpreadingInput): SpreadingResult 
   const t = thickness_mm / 1000;
   const k = k_W_mK;
 
-  // Equal-area circles. `a` is the source radius, `b` the plate radius.
-  const a = Math.sqrt(A_s / Math.PI);
   const b = Math.sqrt(A_p / Math.PI);
   const tau = t / b;
+  const R_1d = t / (k * A_p);
 
-  // A source that fills the plate has nowhere to spread to, and (1−ε)^{3/2}
-  // would go imaginary past it. Fall back to the one-dimensional answer over
-  // the plate, which is what the correlation itself converges to at ε = 1.
+  // A source at least as large as the plate has nowhere to spread to. The
+  // series already returns 0 at ε = 1 (J₁(λₙ) is 0 by definition), so this
+  // guard exists for ε > 1, which is unphysical rather than merely extreme.
   if (A_s >= A_p) {
-    const R_1d = t / (k * A_p);
     return {
       R_C_per_W: R_1d,
       R_1d_C_per_W: R_1d,
       R_spreading_C_per_W: 0,
+      psi: 0,
+      psi_correlation: 0,
       epsilon: 1,
       tau,
-      lambda: Math.PI + 1 / Math.sqrt(Math.PI),
-      phi: Math.tanh((Math.PI + 1 / Math.sqrt(Math.PI)) * tau),
-      psi: tau / Math.sqrt(Math.PI),
+      lambda_c: Math.PI + 1 / Math.sqrt(Math.PI),
+      phi_c: Math.tanh((Math.PI + 1 / Math.sqrt(Math.PI)) * tau),
       variant,
       saturated: true,
+      epsilon_out_of_range: true,
     };
   }
 
-  const epsilon = a / b;
-  const lambda = Math.PI + 1 / (Math.sqrt(Math.PI) * epsilon);
+  const epsilon = Math.sqrt(A_s / Math.PI) / b;
+  const psi = seriesPsi(epsilon, tau, input.bi, variant);
+  const correlation = leeCorrelationPsi(epsilon, tau, input.bi, variant);
 
-  // Bi → ∞ drops the λ/Bi terms and leaves Φ = tanh(λτ).
-  const ratio = positive(input.bi) ? lambda / input.bi! : 0;
-  const th = Math.tanh(lambda * tau);
-  const phi = (th + ratio) / (1 + ratio * th);
+  // R = Ψ / (k·√A_s) — Lee eq. (5). The characteristic length is the SOURCE
+  // area's root, not the plate's and not the thickness.
+  const R_spreading = psi / (k * Math.sqrt(A_s));
 
-  const oneD = (epsilon * tau) / Math.sqrt(Math.PI);
-  const spread = variant === 'avg' ? 0.5 * (1 - epsilon) ** 1.5 * phi : 0.5 * (1 - epsilon) * phi;
-  const psi = oneD + spread;
-
-  const denominator = k * a * Math.sqrt(Math.PI);
   return {
-    R_C_per_W: psi / denominator,
-    R_1d_C_per_W: oneD / denominator,
-    R_spreading_C_per_W: spread / denominator,
+    R_C_per_W: R_1d + R_spreading,
+    R_1d_C_per_W: R_1d,
+    R_spreading_C_per_W: R_spreading,
+    psi,
+    psi_correlation: correlation.psi,
     epsilon,
     tau,
-    lambda,
-    phi,
-    psi,
+    lambda_c: correlation.lambda_c,
+    phi_c: correlation.phi_c,
     variant,
     saturated: false,
+    epsilon_out_of_range: epsilon < 0.05 || epsilon > 0.833,
   };
 }
 

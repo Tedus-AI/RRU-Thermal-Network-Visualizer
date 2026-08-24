@@ -37,7 +37,6 @@ function isBoundarySide(node: ThermalNode): boolean {
     node.boundary_role === 'placeholder' ||
     node.boundary_type === 'fixed_temperature' ||
     node.type === 'ambient' ||
-    node.type === 'external_air' ||
     node.type === 'fin_surface'
   );
 }

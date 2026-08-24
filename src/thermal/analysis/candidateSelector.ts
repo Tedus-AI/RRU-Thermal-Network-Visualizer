@@ -52,17 +52,14 @@ export function isBoundaryDerived(edge: ThermalEdge): boolean {
  */
 function isShared(network: ThermalNetwork, edge: ThermalEdge): boolean {
   const structural: Array<string | undefined> = [
-    'main_base',
     'small_base',
     'base_zone',
     'heat_sink_base',
-    'fin_root',
     'fin_surface',
     'housing',
     'heat_pipe_evaporator',
     'heat_pipe_condenser',
     'ambient',
-    'external_air',
   ];
   const from = network.nodes[edge.from];
   const to = network.nodes[edge.to];

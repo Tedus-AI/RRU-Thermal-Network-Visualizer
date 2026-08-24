@@ -46,10 +46,9 @@ export const FAMILY_LABELS: Array<{ family: NodeFamily; label: string; zh: strin
   { family: 'boundary', label: 'Boundary', zh: '邊界' },
 ];
 
-const SHARED_BASE_TYPES = new Set(['main_base', 'small_base', 'base_zone', 'housing']);
+const SHARED_BASE_TYPES = new Set(['small_base', 'base_zone', 'housing']);
 const HEAT_SINK_TYPES = new Set([
   'heat_sink_base',
-  'fin_root',
   'fin_surface',
   'heat_pipe_evaporator',
   'heat_pipe_condenser',

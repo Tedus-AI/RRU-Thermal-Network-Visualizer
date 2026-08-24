@@ -198,7 +198,7 @@ export function buildSolveInput(options: BuildSolveInputOptions): SolveInput {
   // temperature (05 §15). The scenario supplies it here, and nowhere else.
   if (ambient_C != null) {
     for (const node of Object.values(clone.nodes)) {
-      if (node.type === 'ambient' || node.type === 'external_air' || node.boundary_role === 'placeholder') {
+      if (node.type === 'ambient' || node.boundary_role === 'placeholder') {
         node.boundary_type = 'fixed_temperature';
         node.fixed_temperature_C = ambient_C;
         node.boundary_role = 'configured';

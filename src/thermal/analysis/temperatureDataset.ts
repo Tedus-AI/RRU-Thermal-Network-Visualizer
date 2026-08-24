@@ -126,11 +126,9 @@ export function emptyFilters(): DistributionFilters {
 }
 
 const STRUCTURAL_TYPES: Array<ThermalNode['type']> = [
-  'main_base',
   'small_base',
   'base_zone',
   'heat_sink_base',
-  'fin_root',
   'fin_surface',
   'housing',
   'heat_pipe_evaporator',
@@ -141,8 +139,7 @@ export function isBoundaryNode(node: ThermalNode): boolean {
   return (
     node.boundary_type === 'fixed_temperature' ||
     node.boundary_role === 'placeholder' ||
-    node.type === 'ambient' ||
-    node.type === 'external_air'
+    node.type === 'ambient'
   );
 }
 

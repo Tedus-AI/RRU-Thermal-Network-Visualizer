@@ -78,7 +78,7 @@ function network(): ThermalNetwork {
       N_BASE: {
         id: 'N_BASE',
         name: 'Main Base',
-        type: 'main_base',
+        type: 'heat_sink_base',
         power_W: 0,
         temperature_C: null,
         temperature_source: null,

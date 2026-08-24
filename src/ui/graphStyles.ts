@@ -24,10 +24,10 @@ export type NodeVisualGroup =
 
 /** Role, not temperature (05 §31). */
 export function nodeGroup(node: ThermalNode): NodeVisualGroup {
-  if (node.boundary_role === 'placeholder' || node.type === 'ambient' || node.type === 'external_air') {
+  if (node.boundary_role === 'placeholder' || node.type === 'ambient') {
     return 'boundary';
   }
-  if (node.power_W > 0 || node.type === 'heat_source' || node.type === 'junction' || node.type === 'die') {
+  if (node.power_W > 0 || node.type === 'junction' || node.type === 'die') {
     return 'source';
   }
 
@@ -37,12 +37,11 @@ export function nodeGroup(node: ThermalNode): NodeVisualGroup {
   const spreaders: NodeType[] = ['case', 'lid', 'epad', 'pcb', 'copper_coin', 'pedestal'];
   if (spreaders.includes(node.type)) return 'spreader';
 
-  const zones: NodeType[] = ['main_base', 'small_base', 'base_zone', 'housing'];
+  const zones: NodeType[] = ['small_base', 'base_zone', 'housing'];
   if (zones.includes(node.type)) return 'zone';
 
   const sinks: NodeType[] = [
     'heat_sink_base',
-    'fin_root',
     'fin_surface',
     'heat_pipe_evaporator',
     'heat_pipe_condenser',

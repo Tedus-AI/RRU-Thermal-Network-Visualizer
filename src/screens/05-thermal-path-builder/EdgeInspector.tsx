@@ -144,14 +144,19 @@ function Row({ label, zh, children }: { label: string; zh?: string; children: Re
 }
 
 /**
- * The spreading edge, shown as the formula it came from.
+ * The spreading edge, shown as the model it came from.
  *
  * A single number here would be indistinguishable from the t/(k·A) it replaced,
- * and the whole point is that they differ — so the panel prints ε, τ, λ, Φ and
- * Ψ, and splits the result into the one-dimensional drop through the plate and
- * what the fan-out adds on top of it. It also states the Bi → ∞ assumption,
- * because that one biases the answer LOW and a reader has a right to know which
- * way an assumption cuts.
+ * and the whole point is that they differ — so the panel prints ε and τ, splits
+ * the result into the one-dimensional drop through the plate and what the
+ * fan-out adds on top of it, and states the Bi → ∞ assumption, because that one
+ * biases the answer LOW and a reader has a right to know which way an
+ * assumption cuts.
+ *
+ * It also prints the familiar p.205 correlation beside the exact series. An
+ * engineer checking this by hand will reach for the correlation, and at the
+ * thin bases this tool models the two differ by 3–21% — better to show the gap
+ * than to let someone find it and assume the tool is wrong.
  */
 function SpreadingBreakdown({
   edge,
@@ -189,11 +194,13 @@ function SpreadingBreakdown({
         Spreading model <span className="font-semibold text-ink-400">/ 擴散熱阻模型</span>
       </p>
       <p className="mt-1 font-mono text-[10px] leading-relaxed text-ink-500">
-        R = Ψ / (k·a·√π), a = √(A_s/π), b = √(A_p/π), ε = a/b, τ = t/b
+        a = √(A_s/π), b = √(A_p/π), ε = a/b, τ = t/b, Φₙ = tanh(λₙτ) at Bi → ∞
         <br />
-        λ = π + 1/(√π·ε), Φ = tanh(λτ) at Bi → ∞
+        {variant === 'avg'
+          ? 'Ψ_ave = (4/√π·ε) Σ J₁²(λₙε)/(λₙ³J₀²(λₙ))·Φₙ'
+          : 'Ψ_max = (2/√π) Σ J₁(λₙε)/(λₙ²J₀²(λₙ))·Φₙ'}
         <br />
-        {variant === 'avg' ? 'Ψ_avg = ετ/√π + ½(1−ε)^1.5·Φ' : 'Ψ_max = ετ/√π + ½(1−ε)·Φ'}
+        J₁(λₙ) = 0 · R = R_m + Ψ/(k·√A_s), R_m = t/(k·A_p)
       </p>
 
       <div className="mt-2">
@@ -224,13 +231,23 @@ function SpreadingBreakdown({
           <Row label="τ = t/b" zh="相對板厚">
             {result.tau.toFixed(4)}
           </Row>
-          <Row label="λ">{result.lambda.toFixed(4)}</Row>
-          <Row label="Φ">{result.phi.toFixed(4)}</Row>
-          <Row label="Ψ">{result.psi.toFixed(4)}</Row>
-          <Row label="1D through plate" zh="板厚一維">
+          <Row label="Ψ (exact series)" zh="精確級數">
+            {result.psi.toFixed(4)}
+          </Row>
+          <Row label="Ψ (p.205 correlation)" zh="封閉解對照">
+            <span className="text-ink-500">
+              {result.psi_correlation.toFixed(4)}
+              {result.psi > 0 && (
+                <span className="ml-1 text-ink-400">
+                  ({(100 * (result.psi_correlation / result.psi - 1)).toFixed(1)}%)
+                </span>
+              )}
+            </span>
+          </Row>
+          <Row label="1D through plate (R_m)" zh="板厚一維">
             {result.R_1d_C_per_W.toFixed(4)} °C/W
           </Row>
-          <Row label="Spreading" zh="擴散">
+          <Row label="Spreading (R_c)" zh="擴散">
             {result.R_spreading_C_per_W.toFixed(4)} °C/W
           </Row>
           <Row label="Total" zh="合計">
@@ -242,6 +259,14 @@ function SpreadingBreakdown({
               and this is plain 1D conduction. / 接觸面積已等於底座面積，無擴散可言。
             </p>
           )}
+          {result.epsilon_out_of_range && !result.saturated && (
+            <p className="mt-1.5 text-[10px] leading-relaxed text-warn-600">
+              ε is outside 0.05–0.833, the range Lee validated. The exact series still solves the
+              stated geometry, but this contact is smaller relative to the base than the published
+              comparisons covered. / ε 超出 Lee 驗證過的 0.05–0.833
+              區間，數值仍是該幾何的精確解，但已在文獻比對範圍之外。
+            </p>
+          )}
         </div>
       ) : (
         <p className="mt-2 text-[10px] leading-relaxed text-warn-600">
@@ -251,10 +276,11 @@ function SpreadingBreakdown({
       )}
 
       <p className="mt-2 text-[10px] leading-relaxed text-ink-400">
-        Lee, Song, Au &amp; Moran (1995), as printed in Qpedia Sept 2010 eq. (2)–(9); ~10% against
-        measurement for a heat-sink base. This result already includes the drop through the plate
-        thickness — do not add a separate L/kA edge across the same plate. /
-        此結果已含板厚一維熱阻，勿再串一段 L/kA。
+        Lee, Song, Au &amp; Moran (1995), eq. (19)–(21) — the exact series, not the p.205
+        correlation, because at this plate thickness the correlation runs 3–21% low. The total
+        already includes the drop through the plate thickness (Lee&rsquo;s R_m), so do not add a
+        separate L/kA edge across the same plate. /
+        採用精確級數而非封閉近似解；此結果已含板厚一維熱阻，勿再串一段 L/kA。
       </p>
     </section>
   );

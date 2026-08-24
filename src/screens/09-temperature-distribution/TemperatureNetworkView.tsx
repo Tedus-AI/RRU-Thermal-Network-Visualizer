@@ -38,11 +38,9 @@ export const NETWORK_FILTER_LABELS: Record<NetworkFilter, { label: string; zh: s
 };
 
 const STRUCTURAL = new Set([
-  'main_base',
   'small_base',
   'base_zone',
   'heat_sink_base',
-  'fin_root',
   'fin_surface',
   'housing',
   'heat_pipe_evaporator',

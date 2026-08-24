@@ -404,7 +404,7 @@ describe('Scope and filters (09 §7, §9)', () => {
   const net = network([
     node('N_PA', { component: 'CMP_PA', limit: 180, power: 52, zone: 'RF Left' }),
     node('N_FPGA', { component: 'CMP_FPGA', limit: 110, power: 35, zone: 'Digital' }),
-    node('N_BASE', { type: 'main_base', zone: 'Main' }),
+    node('N_BASE', { type: 'heat_sink_base', zone: 'Main' }),
     node('N_FIN', { type: 'fin_surface' }),
     node('AMB', { ambient: true }),
   ]);
