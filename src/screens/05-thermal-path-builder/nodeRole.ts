@@ -42,6 +42,12 @@ export type NodeRoleMode =
  * source that belongs to no component and must stay editable.
  */
 export const STRUCTURAL_NODE_TYPES: ReadonlySet<NodeType> = new Set<NodeType>([
+  // The board is a conduction layer, not a source. Distributed copper loss is
+  // real but it is not what this node means, and a board that genuinely needs a
+  // watt of its own belongs on `custom` where the number is visible as a choice.
+  // A board temperature limit, on the other hand, is an everyday requirement —
+  // which is why structure keeps an editable limit.
+  'pcb',
   'heat_sink_base',
   'fin_surface',
   'base_zone',

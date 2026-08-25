@@ -71,6 +71,17 @@ describe('node role mode', () => {
     expect(nodeRoleMode(fromTemplate('case', { limit_C: 110 }))).toBe('derived_source');
   });
 
+  /**
+   * The board is a conduction layer. A watt typed here is the same
+   * heat-from-nowhere as a watt on the heat-sink base, so it is locked too —
+   * and a board temperature limit, which is an everyday requirement, stays.
+   */
+  it('treats the board as structure, not as a source', () => {
+    expect(nodeRoleMode(node('pcb'))).toBe('structure');
+    expect(allowsSourcePower(node('pcb'))).toBe(false);
+    expect(hasStrayStructuralPower(node('pcb', { power_W: 2 }))).toBe(true);
+  });
+
   it('leaves a hand-drawn node fully editable', () => {
     expect(nodeRoleMode(node('custom', { origin: { kind: 'manual' } }))).toBe('manual');
     expect(allowsSourcePower(node('custom', { origin: { kind: 'manual' } }))).toBe(true);
