@@ -549,7 +549,20 @@ export function ThermalPathBuilderView() {
         qtyModel: pref.qtyModel,
         groupCount: pref.groupCount,
       });
-      if (subgraph) store.addSubgraph(subgraph);
+      if (!subgraph) continue;
+      // `addSubgraph` is an upsert keyed by node id, so re-generating a
+      // component whose template now emits DIFFERENT ids left the old chain
+      // standing beside the new one: an FPGA moved from Board to Top Surface
+      // came back with both an EPAD/via branch and a lid branch off the same
+      // junction, and the solver saw two parallel paths where the engineer had
+      // described one. Anything already modelled is therefore replaced, exactly
+      // as Apply Template does — `generated_only`, so a hand-edited object is
+      // still never silently discarded.
+      if (modeledIds.has(component.id)) {
+        store.replaceComponentSubgraph(component.id, subgraph, 'generated_only');
+      } else {
+        store.addSubgraph(subgraph);
+      }
     }
 
     // Generate used to stop here and tell the engineer to go and wire every

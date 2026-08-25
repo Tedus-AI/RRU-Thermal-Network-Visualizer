@@ -132,6 +132,7 @@ function mountEdge(
   role: string,
   from: string,
   to: string,
+  componentRef: string | undefined,
   spec: {
     type: ThermalEdge['type'];
     method: ThermalEdge['method'];
@@ -153,7 +154,10 @@ function mountEdge(
     resolution: computed.resolution,
     resolution_note: computed.missing.length > 0 ? spec.missingNote : computed.note,
     enabled: true,
-    origin: { kind: 'template' },
+    // The component id matters: `replaceComponentSubgraph` sweeps by it, and
+    // the mount's nodes carry it. An edge without it would outlive the nodes it
+    // joins and dangle after a rebuild.
+    origin: { kind: 'template', component_id: componentRef },
     metadata: { [MOUNT_OWNER_KEY]: portNodeId, [MOUNT_ROLE_KEY]: role },
   };
 }
@@ -219,7 +223,7 @@ export function buildMountChain(input: {
     // Straight down through the metal. For a boss `height_mm` is how far it
     // stands proud of the base; for a local plate it is the plate thickness.
     edges.push(
-      mountEdge(portNodeId, 'BLOCK', cursor, block.id, {
+      mountEdge(portNodeId, 'BLOCK', cursor, block.id, componentRef, {
         type: 'conduction',
         method: 'conduction_LkA',
         parameters: {
@@ -246,7 +250,7 @@ export function buildMountChain(input: {
     nodes.push(condenser);
 
     edges.push(
-      mountEdge(portNodeId, 'HEAT_PIPE', cursor, condenser.id, {
+      mountEdge(portNodeId, 'HEAT_PIPE', cursor, condenser.id, componentRef, {
         type: 'heat_pipe',
         method: 'direct_rth',
         parameters:
@@ -260,7 +264,7 @@ export function buildMountChain(input: {
     // The condenser's own joint to the base: a clamped contact, not a source
     // patch spreading into a plate, so the Lee model does not apply here.
     edges.push(
-      mountEdge(portNodeId, 'CONDENSER_JOINT', cursor, targetNodeId, {
+      mountEdge(portNodeId, 'CONDENSER_JOINT', cursor, targetNodeId, componentRef, {
         type: 'contact',
         method: 'contact_hc',
         parameters: {

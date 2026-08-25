@@ -689,4 +689,61 @@ describe('mounts between a component and the shared base', () => {
       Object.values(network().edges).filter((edge) => edge.id.startsWith('EDGE_PORT_MOUNT_')),
     ).toEqual([]);
   });
+
+  /**
+   * "Generate from Preferences" rebuilds through `replaceComponentSubgraph`,
+   * which sweeps by `origin.component_id`. A mount edge that lacked one would
+   * survive its own nodes and dangle, pointing at ids no longer in the graph.
+   */
+  it('takes the whole mount away when the component subgraph is replaced', () => {
+    const { network } = connected({
+      type: 'Pedestal',
+      contact_L_mm: 25,
+      contact_W_mm: 25,
+      height_mm: 8,
+    });
+    const rebuilt = buildComponentSubgraph(pa(), {
+      materials: materials(),
+      templateId: 'BOTTOM_COOL_COIN',
+      qtyModel: 'AGGREGATE',
+    })!;
+    useNetworkStore.getState().replaceComponentSubgraph('CMP_PA', rebuilt, 'generated_only');
+
+    expect(
+      Object.values(network().nodes).filter((node) => node.id.startsWith('NODE_MOUNT_')),
+    ).toEqual([]);
+    expect(
+      Object.values(network().edges).filter((edge) => edge.id.startsWith('EDGE_PORT_MOUNT_')),
+    ).toEqual([]);
+  });
+
+  /**
+   * The duplicate-path bug. Generate used to upsert every subgraph, so a
+   * component whose template now emits DIFFERENT node ids came back with the
+   * old chain standing beside the new one — two parallel paths off one
+   * junction, which the solver believes. Replacing is what makes a heat-path
+   * change in Screen 04 land as a change rather than an addition.
+   */
+  it('leaves nothing of the old template when the heat path changed', () => {
+    connected({ type: 'Direct' });
+    const before = Object.keys(useNetworkStore.getState().network!.nodes).filter((id) =>
+      id.includes('CMP_PA'),
+    );
+    expect(before.some((id) => /COIN/i.test(id))).toBe(true);
+
+    const moved = pa();
+    moved.thermal_spec.heat_path.type = 'TopSurface';
+    const next = buildComponentSubgraph(moved, {
+      materials: materials(),
+      templateId: 'TOP_COOL_LID',
+      qtyModel: 'AGGREGATE',
+    })!;
+    useNetworkStore.getState().replaceComponentSubgraph('CMP_PA', next, 'generated_only');
+
+    const after = Object.keys(useNetworkStore.getState().network!.nodes).filter((id) =>
+      id.includes('CMP_PA'),
+    );
+    expect(after.some((id) => /COIN/i.test(id))).toBe(false);
+    expect(after.sort()).toEqual(next.nodes.map((node) => node.id).sort());
+  });
 });
