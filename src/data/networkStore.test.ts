@@ -86,6 +86,73 @@ beforeEach(() => {
 });
 
 describe('component subgraph rebuild (05 §40, AC-05-11)', () => {
+  /**
+   * "Modified" protects an object the new template STILL EMITS. An edit is an
+   * edit OF something, and when the new template has no such node there is
+   * nothing left for it to be an edit of — keeping those is how a Power Module
+   * ended up with its old 20 W source node standing beside its new one, both
+   * counted, after nothing more than one visit to the inspector.
+   */
+  it('drops a modified object the new template no longer emits, and says so', () => {
+    const component = pa();
+    const first = buildComponentSubgraph(component, {
+      materials: defaultMaterials(),
+      templateId: 'BOTTOM_COOL_COIN',
+      qtyModel: 'AGGREGATE',
+    })!;
+    useNetworkStore.getState().addSubgraph(first);
+
+    // The coin node exists only in the Coin template. Touch it in the inspector.
+    const coin = first.nodes.find((node) => /COIN/i.test(node.id))!;
+    useNetworkStore.getState().upsertNode({ ...coin, origin: { ...coin.origin!, modified: true } });
+
+    const rebuilt = buildComponentSubgraph(component, {
+      materials: defaultMaterials(),
+      templateId: 'BOTTOM_COOL_VIA',
+      qtyModel: 'AGGREGATE',
+    })!;
+    useNetworkStore.getState().replaceComponentSubgraph('CMP_PA', rebuilt, 'generated_only');
+
+    const network = useNetworkStore.getState().network!;
+    expect(network.nodes[coin.id]).toBeUndefined();
+    // And nothing is left pointing at it.
+    expect(
+      Object.values(network.edges).some((edge) => edge.from === coin.id || edge.to === coin.id),
+    ).toBe(false);
+    // Every surviving node belongs to the new template.
+    expect(Object.keys(network.nodes).sort()).toEqual(rebuilt.nodes.map((n) => n.id).sort());
+  });
+
+  /** A node written before origins carried a component id is still swept. */
+  it('recognises an older object by its component_ref alone', () => {
+    const component = pa();
+    const first = buildComponentSubgraph(component, {
+      materials: defaultMaterials(),
+      templateId: 'BOTTOM_COOL_COIN',
+      qtyModel: 'AGGREGATE',
+    })!;
+    useNetworkStore.getState().addSubgraph(first);
+
+    const legacy = first.nodes[1];
+    useNetworkStore.getState().upsertNode({
+      ...legacy,
+      id: 'NODE_CMP_PA_LEGACY_SURFACE',
+      name: 'PA Surface / Baseplate',
+      component_ref: 'CMP_PA',
+      // A template that no longer exists, and an origin with no component id.
+      origin: { kind: 'template', template_id: 'MODULE_SURFACE_TIM' },
+    });
+
+    const rebuilt = buildComponentSubgraph(component, {
+      materials: defaultMaterials(),
+      templateId: 'BOTTOM_COOL_VIA',
+      qtyModel: 'AGGREGATE',
+    })!;
+    useNetworkStore.getState().replaceComponentSubgraph('CMP_PA', rebuilt, 'generated_only');
+
+    expect(useNetworkStore.getState().network!.nodes.NODE_CMP_PA_LEGACY_SURFACE).toBeUndefined();
+  });
+
   it('preserves manual objects when only the generated ones are replaced', () => {
     const component = pa();
     const first = buildComponentSubgraph(component, {
@@ -95,29 +162,58 @@ describe('component subgraph rebuild (05 §40, AC-05-11)', () => {
     })!;
     useNetworkStore.getState().addSubgraph(first);
 
-    // The engineer adds a hand-made edge and edits a generated one.
-    const hand = manualEdge('EDGE_MANUAL_1', first.nodes[0].id, first.nodes[1].id);
-    useNetworkStore.getState().upsertEdge(hand);
-    const generated = first.edges[1];
-    useNetworkStore.getState().upsertEdge({
-      ...generated,
-      origin: { ...generated.origin!, modified: true },
-    });
+    // A hand-made edge between two nodes BOTH templates have. The engineer's
+    // own work survives a rebuild; only its endpoints going away can take it.
+    const junction = first.nodes.find((node) => /JUNCTION/i.test(node.id))!;
+    const tim = first.nodes.find((node) => /TIM/i.test(node.id))!;
+    useNetworkStore.getState().upsertEdge(manualEdge('EDGE_MANUAL_1', junction.id, tim.id));
 
     const rebuilt = buildComponentSubgraph(component, {
       materials: defaultMaterials(),
       templateId: 'BOTTOM_COOL_VIA',
       qtyModel: 'AGGREGATE',
     })!;
-    const { preservedManual } = useNetworkStore
+    const { preservedManual, droppedStale } = useNetworkStore
       .getState()
       .replaceComponentSubgraph('CMP_PA', rebuilt, 'generated_only');
 
-    expect(preservedManual).toBeGreaterThanOrEqual(2);
+    expect(preservedManual).toBeGreaterThanOrEqual(1);
+    expect(droppedStale).toBe(0);
     const network = useNetworkStore.getState().network!;
     expect(network.edges.EDGE_MANUAL_1).toBeDefined();
-    expect(network.edges[generated.id]).toBeDefined();
     expect(network.templates.CMP_PA.template_id).toBe('BOTTOM_COOL_VIA');
+  });
+
+  /**
+   * The other side of it: an edge the engineer drew themselves, onto a node the
+   * new template removes, cannot stay — it would point at an id nothing
+   * resolves. It goes, and the count says so rather than the graph quietly
+   * losing something someone drew.
+   */
+  it('drops a hand-made edge whose endpoint the rebuild removed, and counts it', () => {
+    const component = pa();
+    const first = buildComponentSubgraph(component, {
+      materials: defaultMaterials(),
+      templateId: 'BOTTOM_COOL_COIN',
+      qtyModel: 'AGGREGATE',
+    })!;
+    useNetworkStore.getState().addSubgraph(first);
+
+    const coin = first.nodes.find((node) => /COIN/i.test(node.id))!;
+    const junction = first.nodes.find((node) => /JUNCTION/i.test(node.id))!;
+    useNetworkStore.getState().upsertEdge(manualEdge('EDGE_MANUAL_1', junction.id, coin.id));
+
+    const rebuilt = buildComponentSubgraph(component, {
+      materials: defaultMaterials(),
+      templateId: 'BOTTOM_COOL_VIA',
+      qtyModel: 'AGGREGATE',
+    })!;
+    const { droppedStale } = useNetworkStore
+      .getState()
+      .replaceComponentSubgraph('CMP_PA', rebuilt, 'generated_only');
+
+    expect(droppedStale).toBe(1);
+    expect(useNetworkStore.getState().network!.edges.EDGE_MANUAL_1).toBeUndefined();
   });
 
   it('replaces everything when the engineer explicitly asks for it', () => {
