@@ -103,10 +103,24 @@ export function ComponentPalette({
           const pref = prefs[component.id] ?? defaultPrefFor(component);
           const readiness = readinessTone(component);
           const selected = component.id === selectedId;
-          const templateLabel =
-            ARCHITECTURE_TEMPLATE_LABELS[
-              component.architecture_prep.template_preference
-            ] ?? pref.templateId;
+          /*
+             What Generate will actually build — `pref.templateId` — not
+             Screen 04's stored preference.
+
+             Those two agree right up until they do not: the preference is a
+             starting point, the engineer can change the template in the panel
+             next door, and an older record can carry a preference that no
+             longer matches its heat path at all. The row was reading the
+             preference, so a Power Module set to Metal Face in Screen 04 could
+             sit here labelled "Bottom Cool + Copper Coin" while the graph was
+             built from something else again. A label that disagrees with the
+             graph is worse than no label.
+          */
+          const labelFor = (id: string) =>
+            (ARCHITECTURE_TEMPLATE_LABELS as Record<string, string>)[id] ?? id;
+          const templateLabel = labelFor(pref.templateId);
+          const preference = component.architecture_prep.template_preference;
+          const overridden = preference !== 'UNASSIGNED' && preference !== pref.templateId;
 
           const shown = !hiddenIds.has(component.id);
 
@@ -182,8 +196,16 @@ export function ComponentPalette({
                 </span>
 
                 <span className="mt-0.5 block truncate text-[10px] text-ink-400">
-                  <span title="Architecture template preference / 架構模板偏好">
+                  <span
+                    title={
+                      overridden
+                        ? `Template this will build / 實際會建立的模板：${templateLabel}\nScreen 04 preference / Screen 04 偏好：${labelFor(preference)}`
+                        : 'Template this will build / 實際會建立的模板'
+                    }
+                    className={overridden ? 'font-semibold text-warn-600' : undefined}
+                  >
                     {templateLabel}
+                    {overridden && <span aria-hidden> ⚠</span>}
                   </span>
                   <span aria-hidden> · </span>
                   <span title="Qty representation / 數量表示方式">{pref.qtyModel}</span>
