@@ -58,11 +58,12 @@ export type CompletenessMap = Record<CompletenessItem, boolean>;
 
 export function completenessOf(component: Component): CompletenessMap {
   const spec = component.thermal_spec;
-  const moduleSurface = spec.heat_path.type === 'ModuleSurface';
   const metalBase = spec.heat_path.type === 'DirectMetal';
   const metalBaseModel = metalBaseParameters(spec);
-  const surfaceReferenced =
-    moduleSurface || (metalBase && metalBaseModel.source_model === 'SurfaceBodyBased');
+  // ModuleSurface used to be a second way of saying this. It folded into
+  // DirectMetal, where "the dissipation is referenced to a surface rather than
+  // to a junction behind an Rjc" is what SurfaceBodyBased means.
+  const surfaceReferenced = metalBase && metalBaseModel.source_model === 'SurfaceBodyBased';
   return {
     Identity: Boolean(component.name.trim()) && component.qty > 0,
     Power: component.power_W.value != null,
@@ -101,11 +102,12 @@ export function completenessScore(map: CompletenessMap): { done: number; total: 
 export function validateComponent(component: Component): ComponentIssue[] {
   const issues: ComponentIssue[] = [];
   const spec = component.thermal_spec;
-  const moduleSurface = spec.heat_path.type === 'ModuleSurface';
   const metalBase = spec.heat_path.type === 'DirectMetal';
   const metalBaseModel = metalBaseParameters(spec);
-  const surfaceReferenced =
-    moduleSurface || (metalBase && metalBaseModel.source_model === 'SurfaceBodyBased');
+  // ModuleSurface used to be a second way of saying this. It folded into
+  // DirectMetal, where "the dissipation is referenced to a surface rather than
+  // to a junction behind an Rjc" is what SurfaceBodyBased means.
+  const surfaceReferenced = metalBase && metalBaseModel.source_model === 'SurfaceBodyBased';
 
   if (!component.name.trim()) {
     issues.push({

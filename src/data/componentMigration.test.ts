@@ -215,9 +215,14 @@ describe('heat path migration', () => {
   });
 
   it('keeps the canonical manufacturer-surface path', () => {
-    expect(migrate({ heat_path: { type: 'ModuleSurface' } }).heat_path.type).toBe(
-      'ModuleSurface',
-    );
+    // ModuleSurface folded into DirectMetal, and the migration must carry the
+    // two settings that keep the chain identical.
+    const migrated = migrate({ heat_path: { type: 'ModuleSurface' } }).heat_path;
+    expect(migrated.type).toBe('DirectMetal');
+    expect(migrated.parameters).toMatchObject({
+      source_model: 'SurfaceBodyBased',
+      contact_geometry: 'FullBase',
+    });
   });
 
   it('treats Custom as undecided and infers from the category', () => {

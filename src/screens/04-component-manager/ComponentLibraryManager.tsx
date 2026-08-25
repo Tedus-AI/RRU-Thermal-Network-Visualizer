@@ -20,7 +20,11 @@ import { LIBRARY_FILENAME } from '@/data/componentLibraryFile';
 import { useComponentLibraryStore, type LibraryEntry } from '@/data/componentLibraryStore';
 import { useFolderStore } from '@/data/folderStore';
 import { triggerDownload, textBlob } from '@/export/download';
-import { COMPONENT_CATEGORIES, type ComponentCategory } from '@/domain/component';
+import {
+  COMPONENT_CATEGORIES,
+  metalBaseSourceModel,
+  type ComponentCategory,
+} from '@/domain/component';
 
 function savedAgo(iso: string | undefined): string {
   if (!iso) return '—';
@@ -104,7 +108,8 @@ function EntryRow({
             {entry.default_power_W == null ? '— W' : `${entry.default_power_W} W`} ·{' '}
             {spec.heat_path.type} ·{' '}
             {spec.limit_C?.value == null ? '— °C' : `${spec.limit_C.value} °C`} ·{' '}
-            {spec.heat_path.type === 'ModuleSurface'
+            {spec.heat_path.type === 'DirectMetal' &&
+            metalBaseSourceModel(spec) === 'SurfaceBodyBased'
               ? 'Rjc N/A'
               : spec.r_jc_C_per_W?.value == null
                 ? 'Rjc —'

@@ -34,21 +34,64 @@ export type ComponentCategory = (typeof COMPONENT_CATEGORIES)[number];
  * The paths that remain are the ones the physics actually distinguishes, and
  * each selects a different resistance chain (see TEMPLATE_FOR_HEAT_PATH).
  */
-export const HEAT_PATH_TYPES = [
-  'Coin',
-  'Board',
-  'TopSurface',
-  'ModuleSurface',
-  'DirectMetal',
-] as const;
+export const HEAT_PATH_TYPES = ['Coin', 'Board', 'TopSurface', 'DirectMetal'] as const;
 export type HeatPathType = (typeof HEAT_PATH_TYPES)[number];
+
+/**
+ * Heat paths that were offered and turned out to be the same path.
+ *
+ * `ModuleSurface` and `DirectMetal` built an identical chain. Once
+ * `DIRECT_METAL` grew its `SurfaceBodyBased` source model — which deletes the
+ * junction and puts the dissipation on the metal face itself — the two produced
+ * the same two nodes, the same two edges and, because both had `spread: 'none'`,
+ * the same areas. `MODULE_SURFACE_TIM` was a second copy of one topology.
+ *
+ * Nothing is lost by folding it in. The one thing `ModuleSurface` enforced was
+ * that the contact area follows the package outline, and that is exactly
+ * `contact_geometry: 'FullBase'`, which `DirectMetal` already had alongside
+ * `PerimeterFrame` and a custom area. A migrated component keeps its old
+ * behaviour by being given `SurfaceBodyBased` + `FullBase`, and gains the
+ * perimeter-frame and exposed-surface options it never had.
+ *
+ * The key stays `DirectMetal` rather than being renamed: "heat leaves directly
+ * through metal" describes a vendor baseplate as accurately as a flange, so the
+ * name has not gone stale — only the label needed to widen.
+ */
+export const LEGACY_HEAT_PATHS: Record<string, HeatPathType> = {
+  ModuleSurface: 'DirectMetal',
+};
+
+/**
+ * Named for the migration, not for parsing: `normalizeHeatPath` already exists
+ * in the importer and turns free text like "Module Baseplate" into a path.
+ * This one only maps a stored enum value that has since been retired.
+ */
+export function migrateHeatPathType(value: unknown): HeatPathType | null {
+  if (typeof value !== 'string') return null;
+  if ((HEAT_PATH_TYPES as readonly string[]).includes(value)) return value as HeatPathType;
+  return LEGACY_HEAT_PATHS[value] ?? null;
+}
+
+/**
+ * What a migrated `ModuleSurface` component needs so its chain is unchanged:
+ * the source on the face rather than behind an Rjc, and the contact area
+ * following the package outline.
+ */
+export const MODULE_SURFACE_EQUIVALENT_PARAMETERS = {
+  source_model: 'SurfaceBodyBased',
+  contact_geometry: 'FullBase',
+  exposed_surface_enabled: false,
+  exposed_area_mode: 'DerivedPackage',
+} as const;
 
 export const HEAT_PATH_LABELS: Record<HeatPathType, { en: string; zh: string }> = {
   Coin: { en: 'Copper Coin (down)', zh: '銅塊焊接（往下）' },
   Board: { en: 'Board Vias (down)', zh: '板級導熱孔（往下）' },
   TopSurface: { en: 'Top Surface (up)', zh: '元件表面（往上）' },
-  ModuleSurface: { en: 'Module Surface / Baseplate', zh: '模組散熱面／底板' },
-  DirectMetal: { en: 'Metal Base + Interface', zh: '金屬底面＋介面層' },
+  DirectMetal: {
+    en: 'Metal Face — baseplate, flange or module surface',
+    zh: '金屬散熱面（底板・法蘭・模組面）',
+  },
 };
 
 /** How a Metal Base + Interface component introduces heat into the network. */
@@ -102,8 +145,7 @@ export const SOURCE_FACE_LABELS: Record<HeatPathType, { en: string; zh: string }
   Coin: { en: 'Coin joint face', zh: '銅塊接合面' },
   Board: { en: 'E-PAD', zh: 'E-PAD 散熱墊' },
   TopSurface: { en: 'Case face', zh: 'Case 上表面' },
-  ModuleSurface: { en: 'Specified surface', zh: '原廠指定散熱面' },
-  DirectMetal: { en: 'Metal-base contact', zh: '金屬底面接觸區' },
+  DirectMetal: { en: 'Metal face contact', zh: '金屬面接觸區' },
 };
 
 /**
@@ -123,15 +165,13 @@ export const SOURCE_FACE_LABELS: Record<HeatPathType, { en: string; zh: string }
  *                `(L + t) x (W + t)`, the tool's own approximation.
  *   TopSurface   Heat leaves the case top into the TIM. The case top IS the
  *                package outline, and nothing spreads on the way.
- *   ModuleSurface
- *                A module vendor specifies the allowable temperature at a
- *                named surface/baseplate. In this product model that interface
- *                is the complete module face, so it follows the package outline
- *                and couples to the product heatsink through a TIM; there is no
- *                junction-to-case resistance in this model.
- *   DirectMetal  A metal base, flange or housing land meets the product
- *                structure through a thin interface. The effective contact
- *                can be the full base, a perimeter frame, or a custom area.
+ *   DirectMetal  A metal base, flange, housing land or vendor-specified
+ *                module face meets the product structure through a thin
+ *                interface. The effective contact can be the full base (which
+ *                is the package outline, and what a module vendor means by its
+ *                specified surface), a perimeter frame, or a custom area.
+ *                `source_model` decides whether an Rjc stands in front of it:
+ *                a flanged transistor has one, a filter body does not.
  */
 export interface GeometryRule {
   /** `package` means read-only, following the package outline. */
@@ -146,9 +186,9 @@ export const GEOMETRY_RULES: Record<HeatPathType, GeometryRule> = {
   Coin: { source: 'package', spread: 'project_coin', thickness: 'project_coin' },
   Board: { source: 'stated', spread: 'board_spread', thickness: 'board' },
   TopSurface: { source: 'package', spread: 'none', thickness: 'none' },
-  // For this product model the complete module face is the specified thermal
-  // interface, so its size follows the package outline and cannot diverge.
-  ModuleSurface: { source: 'package', spread: 'none', thickness: 'none' },
+  // The contact is whatever the mechanical design bolts down: the whole base, a
+  // perimeter land, a custom area, or — for a vendor-specified module face —
+  // the package outline via `FullBase`. `contact_geometry` decides which.
   DirectMetal: { source: 'stated', spread: 'none', thickness: 'none' },
 };
 
@@ -250,7 +290,6 @@ export const ARCHITECTURE_TEMPLATES = [
   'BOTTOM_COOL_COIN',
   'BOTTOM_COOL_VIA',
   'TOP_COOL_LID',
-  'MODULE_SURFACE_TIM',
   'BARE_DIE',
   'SMALL_BASE_HEAT_PIPE',
   'DIRECT_METAL',
@@ -263,10 +302,9 @@ export const ARCHITECTURE_TEMPLATE_LABELS: Record<ArchitectureTemplate, string> 
   BOTTOM_COOL_COIN: 'Bottom Cool + Copper Coin',
   BOTTOM_COOL_VIA: 'Bottom Cool + Thermal Via',
   TOP_COOL_LID: 'Top Cool + Lid',
-  MODULE_SURFACE_TIM: 'Module Surface + TIM',
   BARE_DIE: 'Bare Die',
   SMALL_BASE_HEAT_PIPE: 'Small Base + Heat Pipe',
-  DIRECT_METAL: 'Metal Base + Interface',
+  DIRECT_METAL: 'Metal Face + Interface',
   CUSTOM: 'Custom',
 };
 
@@ -282,7 +320,6 @@ export const TEMPLATE_FOR_HEAT_PATH: Record<HeatPathType, ArchitectureTemplate> 
   Coin: 'BOTTOM_COOL_COIN',
   Board: 'BOTTOM_COOL_VIA',
   TopSurface: 'TOP_COOL_LID',
-  ModuleSurface: 'MODULE_SURFACE_TIM',
   DirectMetal: 'DIRECT_METAL',
 };
 

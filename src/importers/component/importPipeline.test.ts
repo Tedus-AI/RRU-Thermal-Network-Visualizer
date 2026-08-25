@@ -185,8 +185,10 @@ describe('enum normalization', () => {
     expect(normalizeHeatPath('Thermal Vias')).toBe('Board');
     expect(normalizeHeatPath('Direct Metal')).toBe('DirectMetal');
     expect(normalizeHeatPath('Metal Base + Interface')).toBe('DirectMetal');
-    expect(normalizeHeatPath('Module Baseplate')).toBe('ModuleSurface');
-    expect(normalizeHeatPath('Integrated HSK')).toBe('ModuleSurface');
+    // A vendor baseplate and a bolted flange are the same chain — see
+    // LEGACY_HEAT_PATHS. The alias table folds both onto DirectMetal.
+    expect(normalizeHeatPath('Module Baseplate')).toBe('DirectMetal');
+    expect(normalizeHeatPath('Integrated HSK')).toBe('DirectMetal');
     // `None` is top-surface cooling in the Volume Tool, not an absent path.
     expect(normalizeHeatPath('None')).toBe('TopSurface');
   });

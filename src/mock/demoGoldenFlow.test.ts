@@ -99,15 +99,18 @@ describe('FR1 RRU Golden Demo', () => {
         source_L_mm: null,
         source_W_mm: null,
       },
-      heat_path: { type: 'ModuleSurface' },
+      heat_path: { type: 'DirectMetal' },
       tim: { blt_mm: { value: 1 } },
     });
-    expect(powerModule.architecture_prep.template_preference).toBe('MODULE_SURFACE_TIM');
+    expect(powerModule.architecture_prep.template_preference).toBe('DIRECT_METAL');
 
     const moduleNodes = Object.values(flow.network.nodes).filter(
       (node) => node.component_ref === powerModule.id,
     );
-    expect(moduleNodes.map((node) => node.type)).toEqual(['case', 'tim_interface']);
+    // `housing` is DIRECT_METAL's node for the component's own metal body, and
+    // a vendor baseplate is exactly that. It was `case` while ModuleSurface had
+    // its own template.
+    expect(moduleNodes.map((node) => node.type)).toEqual(['housing', 'tim_interface']);
     expect(moduleNodes.some((node) => node.type === 'junction')).toBe(false);
     const moduleSurface = moduleNodes.find((node) => node.power_W > 0)!;
     expect(moduleSurface).toMatchObject({ power_W: 20, limit_C: 115, limit_type: 'Ts' });
