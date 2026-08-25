@@ -54,12 +54,31 @@ describe('node role mode', () => {
   });
 
   /**
-   * Structure outranks origin on purpose: DIRECT_METAL gives a component a
-   * `housing` node, and that must not offer a source power either.
+   * Structure outranks origin on purpose: DIRECT_METAL gives every component
+   * that uses it a `housing` node, and in its JunctionBased mode that node is
+   * passive — the junction is the source — so it must not offer a power.
    */
   it('keeps structure ahead of where the node came from', () => {
     expect(nodeRoleMode(fromTemplate('housing'))).toBe('structure');
     expect(nodeRoleMode(node('heat_sink_base', { origin: { kind: 'manual' } }))).toBe('structure');
+  });
+
+  /**
+   * ...but a real source outranks the structural TYPE. DIRECT_METAL's
+   * SurfaceBodyBased mode deletes the junction and moves the dissipation onto
+   * that same `housing` node, which is how a filter or a circulator is
+   * modelled. Ordering the structural check first classified the demo's 6 W RF
+   * Filter as structure: its power was shown read-only and flagged as heat from
+   * nowhere, when it is the component's real Screen 04 dissipation.
+   */
+  it('lets a component source outrank a structural node type', () => {
+    const filterBody = fromTemplate('housing', { power_W: 6, limit_C: 120, limit_type: 'Tc' });
+    expect(nodeRoleMode(filterBody)).toBe('derived_source');
+    expect(hasStrayStructuralPower(filterBody)).toBe(false);
+    // The same holds for a module baseplate, which was already right.
+    expect(nodeRoleMode(fromTemplate('case', { power_W: 20, limit_C: 115 }))).toBe(
+      'derived_source',
+    );
   });
 
   it('separates a component heat source from a component passive node', () => {

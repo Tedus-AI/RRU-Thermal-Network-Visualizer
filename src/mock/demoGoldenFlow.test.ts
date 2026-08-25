@@ -35,12 +35,9 @@ import { sourced } from '@/domain/sourcedValue';
 import { activeRth } from '@/thermal/rth';
 import { evaluateAllArtifacts } from '@/export/exportValidator';
 
-import {
-  DEMO_PROJECT_ID,
-  DEMO_SCENARIO_ID,
-  DEMO_SOURCE_REVISION,
-} from './demoProject';
+import { DEMO_PROJECT_ID, DEMO_SCENARIO_ID, DEMO_SOURCE_REVISION } from './demoProject';
 import { buildDemoGoldenFlow } from './demoGoldenFlow';
+import { hasStrayStructuralPower, nodeRoleMode } from '@/screens/05-thermal-path-builder/nodeRole';
 import { seedDemoProject } from './seed';
 
 class MemoryStorage implements Storage {
@@ -298,5 +295,31 @@ describe('FR1 RRU Golden Demo', () => {
     expect(artifacts.bottleneck_csv.status).toBe('BLOCKED');
     expect(artifacts.pdf_report.status).toBe('BLOCKED');
     expect(artifacts.network_json.status).toBe('READY');
+  });
+});
+
+describe('node roles across the demo network', () => {
+  /**
+   * Every watt in the network has to be attributable. A node carrying power
+   * that the panel calls structure is a node whose dissipation the solver
+   * injects while the UI says nothing dissipates there — which is exactly what
+   * happened to the RF Filter when the structural check ran before the source
+   * check.
+   */
+  it('never calls a component heat source structural', async () => {
+    const flow = await buildDemoGoldenFlow();
+    const powered = Object.values(flow.network.nodes).filter((node) => node.power_W > 0);
+    expect(powered.length).toBe(11);
+
+    for (const node of powered) {
+      expect(nodeRoleMode(node), node.name).toBe('derived_source');
+      expect(hasStrayStructuralPower(node), node.name).toBe(false);
+    }
+
+    // The one that regressed: DIRECT_METAL SurfaceBodyBased puts the
+    // dissipation on a `housing` node, a structural type.
+    const filter = powered.find((node) => node.name.includes('RF Filter'))!;
+    expect(filter.type).toBe('housing');
+    expect(filter.power_W).toBe(6);
   });
 });

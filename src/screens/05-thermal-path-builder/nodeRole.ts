@@ -74,16 +74,28 @@ function carriesSourceData(node: ThermalNode): boolean {
 }
 
 /**
- * Boundary and structure are decided first, and deliberately outrank origin: a
- * template that puts a `housing` node on a component (DIRECT_METAL does) still
- * must not offer a source power on it.
+ * Order matters, and the middle two were the wrong way round to begin with.
+ *
+ * A boundary is decided first: it is the end of the model whatever its type.
+ *
+ * Then a template node carrying the component's own power or limit, BEFORE the
+ * structural check. DIRECT_METAL puts a `housing` node on every component that
+ * uses it, and in its SurfaceBodyBased mode that node is the heat source — the
+ * template deletes the junction and moves the dissipation onto the metal base,
+ * which is how a filter or a circulator is modelled. Testing the type first
+ * classified the demo's 6 W RF Filter as structure: its power was shown
+ * read-only and flagged as heat from nowhere, when it is the component's real,
+ * Screen 04-owned dissipation.
+ *
+ * Structure only afterwards, and it still outranks a plain template node: the
+ * same `housing` node in JunctionBased mode is passive, and a zone added by
+ * hand is stamped `manual` yet is structure all the same.
  */
 export function nodeRoleMode(node: ThermalNode): NodeRoleMode {
   if (isBoundaryRoleNode(node)) return 'boundary';
+  if (derivedFromComponent(node) && carriesSourceData(node)) return 'derived_source';
   if (STRUCTURAL_NODE_TYPES.has(node.type)) return 'structure';
-  if (derivedFromComponent(node)) {
-    return carriesSourceData(node) ? 'derived_source' : 'derived_passive';
-  }
+  if (derivedFromComponent(node)) return 'derived_passive';
   return 'manual';
 }
 
