@@ -639,15 +639,44 @@ describe('mounts between a component and the shared base', () => {
     const boss = Object.values(network().nodes).find((node) => node.type === 'pedestal')!;
     expect(boss.component_ref).toBe('CMP_PA');
 
+    // A 625 mm² boss under a 400 mm² part: the boss step is itself a spreading
+    // problem, source 400 into plate 625 over the 8 mm height.
     const bossEdge = Object.values(network().edges).find(
       (edge) => edge.from === portNodeId && edge.to === boss.id,
     )!;
-    expect(bossEdge.parameters).toMatchObject({ length_mm: 8, area_mm2: 625 });
+    expect(bossEdge.method).toBe('spreading_disc');
+    expect(bossEdge.parameters).toMatchObject({
+      thickness_mm: 8,
+      plate_area_mm2: 625,
+      source_area_mm2: 400,
+    });
 
     const spreading = spreadingEdge(network())!;
     expect(spreading.from).toBe(boss.id);
     expect(spreading.to).toBe(hskId);
+    // Still the boss footprint downstream: heat left the boss over its whole
+    // plate, so that is what the base sees.
     expect(spreading.parameters?.source_area_mm2).toBe(625);
+  });
+
+  /**
+   * The other half of the same rule. A block no wider than the part has no
+   * fan-out to model — the block IS the constriction — so it stays a column and
+   * the number does not move for anyone who sized a boss to the footprint.
+   */
+  it('keeps a boss no bigger than the part as a plain column', () => {
+    const { portNodeId, network } = connected({
+      type: 'Pedestal',
+      contact_L_mm: 20,
+      contact_W_mm: 10,
+      height_mm: 8,
+    });
+    const boss = Object.values(network().nodes).find((node) => node.type === 'pedestal')!;
+    const bossEdge = Object.values(network().edges).find(
+      (edge) => edge.from === portNodeId && edge.to === boss.id,
+    )!;
+    expect(bossEdge.method).toBe('conduction_LkA');
+    expect(bossEdge.parameters).toMatchObject({ length_mm: 8, area_mm2: 200 });
   });
 
   it('lets a heat pipe reach the base on its own, with no spreading edge', () => {
