@@ -539,10 +539,18 @@ export function ThermalPathBuilderView() {
       return;
     }
 
-    const { preservedManual } = useNetworkStore
+    const { preservedManual, droppedStale } = useNetworkStore
       .getState()
       .replaceComponentSubgraph(componentId, subgraph, mode);
     const { connected } = connectSuggestedPorts();
+    // A dropped hand-made object is a warning, not a success: the new template
+    // left it with nowhere to attach, and the engineer drew it.
+    if (droppedStale > 0) {
+      toast.warning(
+        `Rebuilt "${component.name}" — ${droppedStale} hand-made object(s) removed, their nodes are not in the new template. / 已重建，${droppedStale} 個手繪物件因新模板已無對應節點而移除。`,
+      );
+      return;
+    }
     toast.success(
       preservedManual > 0
         ? `Rebuilt "${component.name}", ${preservedManual} manual object(s) preserved / 已保留手動物件`
@@ -572,6 +580,7 @@ export function ThermalPathBuilderView() {
   const handleGenerate = () => {
     const structure = buildSharedStructure(structurePreset);
     const store = useNetworkStore.getState();
+    let dropped = 0;
 
     store.addSubgraph({
       nodes: structure.nodes,
@@ -597,7 +606,11 @@ export function ThermalPathBuilderView() {
       // as Apply Template does — `generated_only`, so a hand-edited object is
       // still never silently discarded.
       if (modeledIds.has(component.id)) {
-        store.replaceComponentSubgraph(component.id, subgraph, 'generated_only');
+        dropped += store.replaceComponentSubgraph(
+          component.id,
+          subgraph,
+          'generated_only',
+        ).droppedStale;
       } else {
         store.addSubgraph(subgraph);
       }
@@ -615,6 +628,12 @@ export function ThermalPathBuilderView() {
 
     setShowGenerate(false);
     setStep('connections');
+    if (dropped > 0) {
+      toast.warning(
+        `Network generated — ${dropped} hand-made object(s) removed, their nodes are not in the current templates. / 已產生網路，${dropped} 個手繪物件因目前模板已無對應節點而移除。`,
+      );
+      return;
+    }
     toast.success(
       remaining > 0
         ? `Network generated — ${connected} port(s) connected, ${remaining} still need a target. / 已產生網路，已連接 ${connected} 個埠，尚有 ${remaining} 個待指定。`

@@ -108,7 +108,15 @@ interface NetworkStoreState {
     componentId: string,
     next: { nodes: ThermalNode[]; edges: ThermalEdge[]; binding: ComponentTemplateBinding },
     mode: 'generated_only' | 'entire',
-  ) => { preservedManual: number };
+  ) => {
+    preservedManual: number;
+    /**
+     * Hand-made objects removed because the new template left them with
+     * nowhere to attach. Reported rather than swallowed — it is the
+     * engineer's own work going away.
+     */
+    droppedStale: number;
+  };
 
   connectPort: (
     nodeId: string,
@@ -472,15 +480,51 @@ export const useNetworkStore = create<NetworkStoreState>((set, get) => ({
 
   replaceComponentSubgraph: (componentId, next, mode) => {
     let preservedManual = 0;
+    let droppedStale = 0;
 
     get().mutate((network) => {
-      const belongs = (origin?: { component_id?: string }) => origin?.component_id === componentId;
+      /*
+       * Whose object is this?
+       *
+       * `origin.component_id` is the answer for anything this version built.
+       * `component_ref` is the fallback, and it matters: a node written by an
+       * older version, or by a template that has since been removed, can carry
+       * the reference without the origin — and a rebuild that cannot recognise
+       * it leaves it in the graph forever.
+       */
+      const ownsNode = (node: ThermalNode) =>
+        (node.origin?.component_id ?? node.component_ref) === componentId;
+      const ownsEdge = (edge: ThermalEdge) => edge.origin?.component_id === componentId;
+
+      const nextNodeIds = new Set(next.nodes.map((node) => node.id));
+      const nextEdgeIds = new Set(next.edges.map((edge) => edge.id));
+
+      /*
+       * 05 §40 — a hand-modified object is never silently discarded. But
+       * "modified" only protects an object the new template STILL EMITS: an
+       * edit is an edit OF something, and when the new template has no such
+       * node there is nothing left for it to be an edit of.
+       *
+       * Keeping those was the duplicate-path bug's second half. A Power Module
+       * moved off the old Module Surface template came back with the new chain
+       * AND its predecessor's 20 W source node still standing, because that
+       * node had been touched once in the inspector. Two heat sources for one
+       * part, both counted, and no way out except rebuilding the whole subgraph
+       * by hand.
+       *
+       * A node the engineer ADDED themselves (`kind: 'manual'`) is a different
+       * thing entirely and always survives — nobody's own work is deleted by a
+       * regenerate.
+       */
+      const survives = (origin: { kind?: string; modified?: boolean } | undefined, id: string) => {
+        if (mode !== 'generated_only') return false;
+        if (origin?.kind === 'manual') return true;
+        return origin?.modified === true && (nextNodeIds.has(id) || nextEdgeIds.has(id));
+      };
 
       for (const [id, node] of Object.entries(network.nodes)) {
-        if (!belongs(node.origin)) continue;
-        // 05 §40 — a hand-modified object is never silently discarded.
-        const isManual = node.origin?.kind === 'manual' || node.origin?.modified;
-        if (mode === 'generated_only' && isManual) {
+        if (!ownsNode(node)) continue;
+        if (survives(node.origin, id)) {
           preservedManual++;
           continue;
         }
@@ -488,9 +532,8 @@ export const useNetworkStore = create<NetworkStoreState>((set, get) => ({
       }
 
       for (const [id, edge] of Object.entries(network.edges)) {
-        if (!belongs(edge.origin)) continue;
-        const isManual = edge.origin?.kind === 'manual' || edge.origin?.modified;
-        if (mode === 'generated_only' && isManual) {
+        if (!ownsEdge(edge)) continue;
+        if (survives(edge.origin, id)) {
           preservedManual++;
           continue;
         }
@@ -499,10 +542,25 @@ export const useNetworkStore = create<NetworkStoreState>((set, get) => ({
 
       for (const node of next.nodes) network.nodes[node.id] = node;
       for (const edge of next.edges) network.edges[edge.id] = edge;
+
+      // An edge whose endpoint has just gone would otherwise hang in the graph
+      // pointing at an id nothing resolves. This catches the ones the ownership
+      // test above cannot see — a manual edge the engineer drew from a template
+      // node that this rebuild removed. It is counted, not swallowed: the
+      // caller says so, because it is the engineer's own work going away.
+      for (const [id, edge] of Object.entries(network.edges)) {
+        if (network.nodes[edge.from] && network.nodes[edge.to]) continue;
+        if (edge.origin?.kind === 'manual' || edge.origin?.modified) {
+          droppedStale++;
+          preservedManual = Math.max(0, preservedManual - 1);
+        }
+        delete network.edges[id];
+      }
+
       network.templates[componentId] = next.binding;
     });
 
-    return { preservedManual };
+    return { preservedManual, droppedStale };
   },
 
   connectPort: (nodeId, portKind, targetNodeId, materials) =>
