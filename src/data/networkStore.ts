@@ -29,7 +29,7 @@ import type {
   PortKind,
 } from '@/thermal/types';
 import { validateGraph, type GraphValidationResult } from '@/thermal/graph/graphValidation';
-import { hskBaseConnectionPatch } from '@/thermal/graph/hskBaseConnection';
+import { hskBaseConnectionPatch, terminalArea } from '@/thermal/graph/hskBaseConnection';
 import { mountSpec, type Component } from '@/domain/component';
 import {
   MOUNT_SPEC_KEY,
@@ -245,6 +245,9 @@ function materialisePortConnection(
         componentRef: node.component_ref,
         mount: mountOf(node),
         materials,
+        // Read AFTER the sweep above, so it is the component's own TIM edge and
+        // never a leftover block edge from the mount being replaced.
+        sourceAreaMm2: terminalArea(network, nodeId).area_mm2,
       })
     : null;
   for (const mountNode of chain?.nodes ?? []) network.nodes[mountNode.id] = mountNode;

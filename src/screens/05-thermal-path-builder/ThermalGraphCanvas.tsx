@@ -161,6 +161,8 @@ export const ThermalGraphCanvas = forwardRef<
     showPorts: boolean;
     showLabels: boolean;
     layoutMode: string;
+    /** Components switched off in the palette. A view filter, never the model. */
+    hiddenComponentIds: ReadonlySet<string>;
     onSelect: (selection: GraphSelection) => void;
     onNodeMoved: (nodeId: string, position: { x: number; y: number }) => void;
     onConnect: (sourceId: string, targetId: string) => void;
@@ -182,6 +184,7 @@ export const ThermalGraphCanvas = forwardRef<
     showPorts,
     showLabels,
     layoutMode,
+    hiddenComponentIds,
     onSelect,
     onNodeMoved,
     onConnect,
@@ -230,8 +233,8 @@ export const ThermalGraphCanvas = forwardRef<
   };
 
   const elements = useMemo(
-    () => buildElements(network, { showPorts, showLabels, layoutMode }),
-    [network, showPorts, showLabels, layoutMode],
+    () => buildElements(network, { showPorts, showLabels, layoutMode, hiddenComponentIds }),
+    [network, showPorts, showLabels, layoutMode, hiddenComponentIds],
   );
 
   useEffect(() => {
@@ -476,7 +479,16 @@ export const ThermalGraphCanvas = forwardRef<
   useImperativeHandle(
     ref,
     (): CanvasHandle => ({
-      fit: () => cyRef.current?.fit(undefined, 40),
+      // `resize` first: a caller fitting right after the container changed size
+      // — the fullscreen toggle — would otherwise fit to the old dimensions,
+      // because Cytoscape caches them until it is told to re-measure.
+      fit: () => {
+        const cy = cyRef.current;
+        if (!cy) return;
+        cy.resize();
+        cy.fit(undefined, 40);
+        handlers.current.onZoomChange(cy.zoom());
+      },
       zoomBy: (delta) => {
         const cy = cyRef.current;
         if (!cy) return;

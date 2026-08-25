@@ -191,8 +191,14 @@ export function buildMountChain(input: {
   componentRef: string | undefined;
   mount: MountSpec;
   materials: MaterialDefaults;
+  /**
+   * The face heat arrives on — the component's TIM exit area, read off the last
+   * edge into the port node. Only the block step uses it, and only to decide
+   * whether the block is wide enough to be a spreading problem.
+   */
+  sourceAreaMm2?: number | null;
 }): MountChain {
-  const { portNodeId, targetNodeId, componentRef, mount, materials } = input;
+  const { portNodeId, targetNodeId, componentRef, mount, materials, sourceAreaMm2 } = input;
   const type: MountType = mount.type;
 
   if (type === 'Direct') {
@@ -220,17 +226,49 @@ export function buildMountChain(input: {
     );
     nodes.push(block);
 
-    // Straight down through the metal. For a boss `height_mm` is how far it
-    // stands proud of the base; for a local plate it is the plate thickness.
+    /*
+     * A block wider than the part it carries is a SPREADING problem, not a
+     * column.
+     *
+     * This step used to be L/(k·A) with A the block's own footprint over the
+     * whole height. When the block is bigger than the part — which is the
+     * normal case, and the reason for machining a boss at all — that charges
+     * nothing for the constriction at the top: heat enters over the component's
+     * exit face and has to fan out inside the metal before it uses the full
+     * width. A 30x30 FPGA on a 40x40x3 boss in 155 W/m·K came out at 0.0121
+     * C/W that way against 0.0215 C/W for the real spreading problem, and the
+     * error grows with the ratio, so it is not an offset that cancels out of a
+     * comparison — it flatters exactly the parts someone bothered to raise.
+     *
+     * Lee's disc solution is already in the tool for the base plate, and the
+     * geometry here is the same one a size smaller: a patch on the face of a
+     * finite plate, `thickness` = the boss height. It contains the 1-D drop
+     * through the height, so nothing else goes in series with it.
+     *
+     * A block no bigger than the part has no fan-out to model and stays L/kA —
+     * there the block IS the constriction. An unstated component exit area
+     * falls back the same way rather than guessing one.
+     */
+    const spreads = sourceAreaMm2 != null && area != null && area > sourceAreaMm2;
     edges.push(
       mountEdge(portNodeId, 'BLOCK', cursor, block.id, componentRef, {
-        type: 'conduction',
-        method: 'conduction_LkA',
-        parameters: {
-          ...(mount.height_mm != null ? { length_mm: mount.height_mm } : {}),
-          ...(k != null ? { k_W_mK: k } : {}),
-          ...(area != null ? { area_mm2: area } : {}),
-        },
+        type: spreads ? 'spreading' : 'conduction',
+        method: spreads ? 'spreading_disc' : 'conduction_LkA',
+        parameters: spreads
+          ? {
+              ...(mount.height_mm != null ? { thickness_mm: mount.height_mm } : {}),
+              ...(k != null ? { k_W_mK: k } : {}),
+              plate_area_mm2: area!,
+              source_area_mm2: sourceAreaMm2!,
+              // Peak under the source, matching the base edge: the junction
+              // chain upstream hangs off the hottest point of the patch.
+              psi_variant: 'max',
+            }
+          : {
+              ...(mount.height_mm != null ? { length_mm: mount.height_mm } : {}),
+              ...(k != null ? { k_W_mK: k } : {}),
+              ...(area != null ? { area_mm2: area } : {}),
+            },
         missingNote: isBoss
           ? 'Boss height and footprint come from Screen 04; the metal k from Screen 01.'
           : 'Small base thickness and footprint come from Screen 04; the metal k from Screen 01.',

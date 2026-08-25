@@ -65,25 +65,60 @@ export function busAxis(layoutMode: string): 'vertical' | 'horizontal' | null {
   return null;
 }
 
-function hskBusGroups(network: ThermalNetwork, layoutMode: string): HskBusGroup[] {
+/**
+ * Which nodes belong to a component the engineer has switched off in the
+ * palette.
+ *
+ * This is a VIEW filter and nothing more — the network, the solver input and
+ * every KPI are untouched. It exists because a fully wired RRU draws fifty
+ * nodes converging on one bus, and reading one part's chain means being able to
+ * put the other nine away for a moment.
+ *
+ * Both `component_ref` and `origin.component_id` are checked: template nodes
+ * carry the first, and anything generated on a component's behalf carries the
+ * second. Shared structure has neither, so the base and the fins never vanish.
+ */
+export function hiddenNodeIds(
+  network: ThermalNetwork,
+  hiddenComponentIds: ReadonlySet<string> | undefined,
+): ReadonlySet<string> {
+  if (!hiddenComponentIds || hiddenComponentIds.size === 0) return new Set<string>();
+  const hidden = new Set<string>();
+  for (const node of Object.values(network.nodes)) {
+    const ref = node.component_ref ?? node.origin?.component_id;
+    if (ref != null && hiddenComponentIds.has(ref)) hidden.add(node.id);
+  }
+  return hidden;
+}
+
+function hskBusGroups(
+  network: ThermalNetwork,
+  layoutMode: string,
+  hidden: ReadonlySet<string>,
+): HskBusGroup[] {
   if (busAxis(layoutMode) == null) return [];
 
   const grouped = new Map<string, Array<Omit<HskBusBranch, 'junctionId'>>>();
   for (const edge of Object.values(network.edges)) {
     if (!edge.id.startsWith('EDGE_PORT_')) continue;
+    if (hidden.has(edge.from) || hidden.has(edge.to)) continue;
     const from = network.nodes[edge.from];
     const to = network.nodes[edge.to];
     if (!from || !to) continue;
 
     const fromIsHsk = from.type === 'heat_sink_base';
     const toIsHsk = to.type === 'heat_sink_base';
-    const terminalId = fromIsHsk && to.ports?.length
-      ? to.id
-      : toIsHsk && from.ports?.length
-        ? from.id
-        : null;
-    const sharedId = fromIsHsk ? from.id : toIsHsk ? to.id : null;
-    if (!terminalId || !sharedId) continue;
+    // Exactly one end is the shared base; the other is whatever delivers to it.
+    //
+    // That used to be narrowed further to "a node with ports", which meant a
+    // component's HEAT_OUT and nothing else. Once a mount could stand between
+    // the two, the node arriving at the base became a boss root or a heat-pipe
+    // condenser — neither of which has ports — so those edges fell out of the
+    // bus and drew as long diagonals across the whole graph to the base, which
+    // is the crossing mess the bus exists to remove.
+    if (fromIsHsk === toIsHsk) continue;
+    const terminalId = fromIsHsk ? to.id : from.id;
+    const sharedId = fromIsHsk ? from.id : to.id;
 
     const list = grouped.get(sharedId) ?? [];
     list.push({ edgeId: edge.id, terminalId, sharedId });
@@ -184,16 +219,24 @@ function storedBusGeometry(
 
 export function buildElements(
   network: ThermalNetwork,
-  options: { showPorts: boolean; showLabels: boolean; layoutMode: string },
+  options: {
+    showPorts: boolean;
+    showLabels: boolean;
+    layoutMode: string;
+    /** Components switched off in the palette. A view filter only. */
+    hiddenComponentIds?: ReadonlySet<string>;
+  },
 ): ElementDefinition[] {
   const elements: ElementDefinition[] = [];
   const axis = busAxis(options.layoutMode);
-  const busGroups = hskBusGroups(network, options.layoutMode);
+  const hidden = hiddenNodeIds(network, options.hiddenComponentIds);
+  const busGroups = hskBusGroups(network, options.layoutMode, hidden);
   const routedBranches = new Map(
     busGroups.flatMap((group) => group.branches.map((branch) => [branch.edgeId, branch] as const)),
   );
 
   for (const node of Object.values(network.nodes)) {
+    if (hidden.has(node.id)) continue;
     const group = nodeGroup(node);
     const colors = GROUP_COLORS[group];
     const unconnected = (node.ports ?? []).filter((port) => !port.connected_to);
@@ -319,6 +362,7 @@ export function buildElements(
 
   for (const edge of Object.values(network.edges)) {
     if (!network.nodes[edge.from] || !network.nodes[edge.to]) continue;
+    if (hidden.has(edge.from) || hidden.has(edge.to)) continue;
     const R = activeRth(edge.rth);
     const short = EDGE_SHORT[edge.type] ?? edge.type;
     const label = options.showLabels

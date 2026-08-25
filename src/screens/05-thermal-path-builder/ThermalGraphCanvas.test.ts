@@ -214,3 +214,101 @@ describe('Screen 05 HSK Base bus projection', () => {
     expect(String(reversed.classes)).toBe('routed-port-edge');
   });
 });
+
+/**
+ * The bus used to require the non-base end to have PORTS, which meant a
+ * component's HEAT_OUT and nothing else. Once a mount could stand between the
+ * two, the node delivering to the base became a boss root or a heat-pipe
+ * condenser — neither of which has ports — so those branches fell out of the
+ * bus and drew as long diagonals across the whole graph, which is exactly the
+ * crossing mess the bus exists to remove.
+ */
+describe('bus branches that arrive from a mount', () => {
+  const withMounts = () => {
+    const network = fanInNetwork(4);
+    for (const index of [1, 2]) {
+      const bossId = `NODE_MOUNT_TIM_${index}_PEDESTAL`;
+      const position = { x: 300, y: 50 + (index - 1) * 100 };
+      // A mount node has no ports; its owner's HEAT_OUT does.
+      network.nodes[bossId] = thermalNode(bossId, 'pedestal', position);
+      network.layout.positions[bossId] = position;
+      const edgeId = `EDGE_PORT_TIM_${index}_HEAT_OUT_HSK_BASE`;
+      network.edges[edgeId] = { ...network.edges[edgeId], from: bossId };
+    }
+    return network;
+  };
+
+  it('routes a boss root onto the bus like any other terminal', () => {
+    const elements = buildElements(withMounts(), {
+      showPorts: true,
+      showLabels: true,
+      layoutMode: 'LeftRight',
+    });
+    expect(
+      elements.filter((element) => String(element.classes).includes('hsk-bus-branch-junction')),
+    ).toHaveLength(4);
+
+    const fromBoss = elements.find(
+      (element) => element.data.id === 'EDGE_PORT_TIM_1_HEAT_OUT_HSK_BASE',
+    )!;
+    expect(String(fromBoss.classes)).toBe('routed-port-edge');
+    expect(fromBoss.data.source).toBe('NODE_MOUNT_TIM_1_PEDESTAL');
+    expect(fromBoss.data.target).not.toBe('NODE_HSK_BASE');
+  });
+});
+
+/**
+ * Hiding a component is a way of reading a crowded graph, not a change to it.
+ * The network object must come back untouched, and the shared structure must
+ * never disappear with a component.
+ */
+describe('per-component visibility filter', () => {
+  const owned = () => {
+    const network = fanInNetwork(4);
+    network.nodes.NODE_TIM_1.component_ref = 'CMP_A';
+    network.nodes.NODE_TIM_2.component_ref = 'CMP_B';
+    // Generated on a component's behalf but without a component_ref of its own.
+    network.nodes.NODE_TIM_3.origin = { kind: 'template', component_id: 'CMP_A' };
+    return network;
+  };
+
+  it('drops the nodes of a hidden component and every edge touching them', () => {
+    const network = owned();
+    const elements = buildElements(network, {
+      showPorts: true,
+      showLabels: true,
+      layoutMode: 'LeftRight',
+      hiddenComponentIds: new Set(['CMP_A']),
+    });
+    const ids = elements.map((element) => element.data.id);
+
+    expect(ids).not.toContain('NODE_TIM_1');
+    expect(ids).not.toContain('NODE_TIM_3');
+    expect(ids).not.toContain('EDGE_PORT_TIM_1_HEAT_OUT_HSK_BASE');
+    expect(ids).toContain('NODE_TIM_2');
+    // The base is nobody's component and always stays.
+    expect(ids).toContain('NODE_HSK_BASE');
+    // And the store is untouched.
+    expect(Object.keys(network.nodes)).toHaveLength(5);
+  });
+
+  it('changes nothing when the hidden set is empty', () => {
+    const options = { showPorts: true, showLabels: true, layoutMode: 'LeftRight' } as const;
+    const plain = buildElements(owned(), options).map((element) => element.data.id);
+    const empty = buildElements(owned(), {
+      ...options,
+      hiddenComponentIds: new Set<string>(),
+    }).map((element) => element.data.id);
+    expect(empty).toEqual(plain);
+  });
+
+  it('drops the bus once too few branches are left to need one', () => {
+    const elements = buildElements(owned(), {
+      showPorts: true,
+      showLabels: true,
+      layoutMode: 'LeftRight',
+      hiddenComponentIds: new Set(['CMP_A', 'CMP_B']),
+    });
+    expect(elements.some((element) => String(element.classes).includes('hsk-bus'))).toBe(false);
+  });
+});

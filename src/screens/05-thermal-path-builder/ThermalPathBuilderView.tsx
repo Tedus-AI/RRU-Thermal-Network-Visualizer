@@ -9,7 +9,7 @@
  * `networkStore` is the single source of truth; Cytoscape is only a view (05 §46).
  */
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -269,6 +269,22 @@ export function ThermalPathBuilderView() {
   const [showLabels, setShowLabels] = useState(true);
   const [paletteCollapsed, setPaletteCollapsed] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
+  /**
+   * Components switched off in the palette. Deliberately component state and
+   * not persisted: it is a way of reading a crowded graph, not a property of
+   * the project, and a filter that survived a reload would eventually be
+   * mistaken for a missing component.
+   */
+  const [hiddenComponentIds, setHiddenComponentIds] = useState<ReadonlySet<string>>(
+    () => new Set<string>(),
+  );
+  const toggleComponentVisible = useCallback((componentId: string) => {
+    setHiddenComponentIds((current) => {
+      const next = new Set(current);
+      if (!next.delete(componentId)) next.add(componentId);
+      return next;
+    });
+  }, []);
   // Seeded from the project's own answer (01 §2), so Screen 04's zone list and
   // the structure this screen builds start from the same decision. It stays
   // local state because trying a different shape here should not silently
@@ -304,6 +320,28 @@ export function ThermalPathBuilderView() {
     };
     window.addEventListener('keydown', leaveFullscreen);
     return () => window.removeEventListener('keydown', leaveFullscreen);
+  }, [fullscreen]);
+
+  /**
+   * Entering or leaving fullscreen changes the drawing area by a large factor,
+   * and the canvas only ever auto-fits once — after that the pan and zoom are
+   * the engineer's, and resizing the window must not throw them away. A
+   * fullscreen toggle is the one resize that is not incidental: it is a request
+   * for more room, so the graph is refitted to the room it just got. Without
+   * this, both directions needed a second click on Fit to be usable.
+   *
+   * Two frames: the first lets React commit the new class, the second lets the
+   * browser lay it out, so `fit` measures the container it will actually be.
+   */
+  useEffect(() => {
+    let inner = 0;
+    const outer = requestAnimationFrame(() => {
+      inner = requestAnimationFrame(() => canvasRef.current?.fit());
+    });
+    return () => {
+      cancelAnimationFrame(outer);
+      cancelAnimationFrame(inner);
+    };
   }, [fullscreen]);
 
   useEffect(() => {
@@ -1019,6 +1057,9 @@ export function ThermalPathBuilderView() {
                 prefs={prefs}
                 modeledIds={modeledIds}
                 selectedId={selectedComponentId}
+                hiddenIds={hiddenComponentIds}
+                onToggleVisible={toggleComponentVisible}
+                onShowAll={() => setHiddenComponentIds(new Set())}
                 onSelect={(componentId) => {
                   setSelectedComponentId(componentId);
                   setOpenPanel((panels) => ({ ...panels, templates: true }));
@@ -1163,6 +1204,7 @@ export function ThermalPathBuilderView() {
                   showPorts={showPorts}
                   showLabels={showLabels}
                   layoutMode={layoutMode}
+                  hiddenComponentIds={hiddenComponentIds}
                   onSelect={setSelection}
                   onNodeMoved={(nodeId, position) =>
                     useNetworkStore.getState().setNodePosition(nodeId, position)

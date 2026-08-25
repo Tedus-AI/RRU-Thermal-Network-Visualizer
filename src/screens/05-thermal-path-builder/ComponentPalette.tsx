@@ -56,14 +56,21 @@ export function ComponentPalette({
   prefs,
   modeledIds,
   selectedId,
+  hiddenIds,
   onSelect,
+  onToggleVisible,
+  onShowAll,
 }: {
   components: Component[];
   prefs: Record<string, BuilderPref>;
   /** Components that already have a subgraph in the network. */
   modeledIds: Set<string>;
   selectedId: string | null;
+  /** Components switched off in the graph. A view filter, never the model. */
+  hiddenIds: ReadonlySet<string>;
   onSelect: (componentId: string) => void;
+  onToggleVisible: (componentId: string) => void;
+  onShowAll: () => void;
 }) {
   const [query, setQuery] = useState('');
 
@@ -101,15 +108,51 @@ export function ComponentPalette({
               component.architecture_prep.template_preference
             ] ?? pref.templateId;
 
+          const shown = !hiddenIds.has(component.id);
+
           return (
-            <li key={component.id} className="border-b border-line last:border-b-0">
+            <li
+              key={component.id}
+              className={`flex items-start border-b border-line last:border-b-0 ${
+                selected ? 'bg-accent-100/70' : 'hover:bg-surface-muted'
+              }`}
+            >
+              {/*
+                The dot is a sibling of the row button, not a child: a button
+                inside a button is invalid, and the browser would have made
+                clicking the dot select the component as well.
+              */}
+              <button
+                type="button"
+                onClick={() => onToggleVisible(component.id)}
+                aria-pressed={shown}
+                title={
+                  shown
+                    ? `Hide ${component.name} in the graph / 在熱網路中隱藏`
+                    : `Show ${component.name} in the graph / 在熱網路中顯示`
+                }
+                aria-label={
+                  shown
+                    ? `Hide ${component.name} in the graph`
+                    : `Show ${component.name} in the graph`
+                }
+                className="mt-2.5 ml-2 flex size-4 shrink-0 items-center justify-center rounded-full"
+              >
+                <span
+                  className={`size-2.5 rounded-full border transition-colors ${
+                    shown
+                      ? 'border-accent-500 bg-accent-500'
+                      : 'border-line-strong bg-transparent hover:border-ink-400'
+                  }`}
+                />
+              </button>
               <button
                 type="button"
                 onClick={() => onSelect(component.id)}
                 aria-current={selected}
-                className={`w-full px-2.5 py-2 text-left transition-colors ${
-                  selected ? 'bg-accent-100/70' : 'hover:bg-surface-muted'
-                } ${component.enabled ? '' : 'opacity-50'}`}
+                className={`min-w-0 flex-1 px-2 py-2 text-left transition-colors ${
+                  component.enabled ? '' : 'opacity-50'
+                } ${shown ? '' : 'opacity-45'}`}
               >
                 <span className="flex items-baseline gap-1.5">
                   <span className="min-w-0 flex-1 truncate text-[12px] font-bold text-ink-900">
@@ -160,6 +203,25 @@ export function ComponentPalette({
           </li>
         )}
       </ul>
+
+      {hiddenIds.size > 0 && (
+        <div className="mt-2 flex items-center justify-between gap-2 rounded-md border border-line bg-surface-muted px-2 py-1.5">
+          <span className="text-[10px] leading-tight text-ink-500">
+            <Bi
+              en={`${hiddenIds.size} hidden in the graph — the model is unchanged.`}
+              zh={`${hiddenIds.size} 個元件在圖上隱藏，模型未變動。`}
+              inline
+            />
+          </span>
+          <button
+            type="button"
+            onClick={onShowAll}
+            className="shrink-0 rounded border border-line-strong px-1.5 py-0.5 text-[10px] font-semibold text-ink-700 hover:border-ink-400"
+          >
+            Show all / 全部顯示
+          </button>
+        </div>
+      )}
 
       <p className="mt-2 text-[10px] leading-relaxed text-ink-400">
         <BilingualTooltip zh={TOOLTIPS_ZH.totalPower} align="left">

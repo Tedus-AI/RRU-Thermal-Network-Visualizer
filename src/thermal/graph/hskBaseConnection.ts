@@ -63,18 +63,32 @@ function finitePositive(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value) && value > 0;
 }
 
+/**
+ * The area heat leaves an edge through.
+ *
+ * For a plain conduction or contact edge that is `area_mm2`, the column it ran
+ * down. For a spreading edge it is `plate_area_mm2` — heat entered over the
+ * source patch and left over the whole plate, so the plate is what the NEXT
+ * step sees. A boss whose own step is a spreading problem therefore still hands
+ * the base its full footprint.
+ */
+function exitArea(edge: { parameters?: Record<string, unknown> | null }): number | null {
+  const area = edge.parameters?.area_mm2;
+  if (finitePositive(area)) return area;
+  const plate = edge.parameters?.plate_area_mm2;
+  return finitePositive(plate) ? plate : null;
+}
+
 /** The interface edge immediately before TIM HEAT_OUT owns its exit area. */
-function terminalArea(
+export function terminalArea(
   network: ThermalNetwork,
   sourceNodeId: string,
 ): { area_mm2: number | null; edge_id: string | null } {
   const incoming = Object.values(network.edges).find(
-    (edge) => edge.enabled && edge.to === sourceNodeId && finitePositive(edge.parameters?.area_mm2),
+    (edge) => edge.enabled && edge.to === sourceNodeId && exitArea(edge) != null,
   );
   return {
-    area_mm2: finitePositive(incoming?.parameters?.area_mm2)
-      ? (incoming!.parameters!.area_mm2 as number)
-      : null,
+    area_mm2: incoming ? exitArea(incoming) : null,
     edge_id: incoming?.id ?? null,
   };
 }
