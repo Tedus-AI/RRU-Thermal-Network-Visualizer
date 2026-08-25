@@ -38,7 +38,7 @@ function withoutTimestamps<T>(value: T): T {
 describe('shipped defaults', () => {
   it('ships a value for every material constant, marked Assumed', () => {
     const materials = defaultMaterials();
-    expect(materials.tim.length).toBe(7);
+    expect(materials.tim.length).toBe(6);
     for (const material of materials.tim) {
       expect(material.id).toBeTruthy();
       expect(material.name).toBeTruthy();
@@ -86,9 +86,12 @@ describe('shipped defaults', () => {
 
   it('counts what is still on a shipped value', () => {
     const materials = defaultMaterials();
-    // 7 TIM materials x 2 properties, 7 process constants, plus HSK-base k.
-    expect(assumedCount(materials)).toBe(22);
-    expect(assumedCount({ ...materials, copper_k_W_mK: sourced(400, 'Manual') })).toBe(21);
+    // 6 TIM materials x 2 properties, 7 process constants, plus HSK-base k.
+    // It was 7 materials until the duplicate `Solder` row was removed: Screen
+    // 01 already holds the same two numbers as the standalone solder pair the
+    // copper-coin chain actually reads.
+    expect(assumedCount(materials)).toBe(20);
+    expect(assumedCount({ ...materials, copper_k_W_mK: sourced(400, 'Manual') })).toBe(19);
   });
 });
 

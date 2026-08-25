@@ -238,6 +238,75 @@ describe('architecture template preference', () => {
   });
 });
 
+/**
+ * `BARE_DIE` and `SMALL_BASE_HEAT_PIPE` were a heat path and a MOUNT wearing one
+ * name. Migrating the template alone would throw the mount away, which is the
+ * whole thing those two templates were carrying.
+ */
+describe('templates that dissolved into the mount axis', () => {
+  const migrate = (templateId: string, spec: Record<string, unknown> = {}) =>
+    migrateComponent(
+      {
+        id: 'C',
+        name: 'C',
+        category: 'Digital',
+        architecture_prep: { template_preference: templateId },
+        thermal_spec: spec,
+      },
+      0,
+    )!;
+
+  it('turns Bare Die into the component\u2019s own heat path plus a boss', () => {
+    const migrated = migrate('BARE_DIE', { heat_path: { type: 'TopSurface' } });
+    expect(migrated.architecture_prep.template_preference).toBe('TOP_COOL_LID');
+    expect(migrated.thermal_spec.mount?.type).toBe('Pedestal');
+  });
+
+  it('turns Small Base + Heat Pipe into the heat path plus that mount', () => {
+    const migrated = migrate('SMALL_BASE_HEAT_PIPE', { heat_path: { type: 'Coin' } });
+    // The component's own heat path decides the template, not a fixed mapping.
+    expect(migrated.architecture_prep.template_preference).toBe('BOTTOM_COOL_COIN');
+    expect(migrated.thermal_spec.mount?.type).toBe('SmallBaseHeatPipe');
+  });
+
+  /** A mount chosen after the split is the engineer speaking more recently. */
+  it('does not overwrite a mount the component already has', () => {
+    const migrated = migrate('BARE_DIE', {
+      heat_path: { type: 'TopSurface' },
+      mount: { type: 'VaporChamber', contact_L_mm: 200 },
+    });
+    expect(migrated.thermal_spec.mount?.type).toBe('VaporChamber');
+  });
+});
+
+/**
+ * The library's `Solder` row was a second editable copy of Screen 01's
+ * standalone solder pair, and only the standalone pair was ever read by the
+ * copper-coin chain — so the two could drift and the row was the one that did
+ * not count. The row is gone; the reference cannot stand.
+ */
+describe('the removed Solder material', () => {
+  it('clears a component that pointed at it, and remembers what it said', () => {
+    const migrated = migrateComponent(
+      { id: 'C', name: 'C', thermal_spec: { tim: { tim_id: 'TIM_SOLDER', blt_mm: 0.3 } } },
+      0,
+    )!;
+    expect(migrated.thermal_spec.tim.tim_id).toBeNull();
+    expect(migrated.metadata?._removed_tim_id).toBe('TIM_SOLDER');
+    // The bond line the engineer stated is theirs and stays.
+    expect(migrated.thermal_spec.tim.blt_mm?.value).toBe(0.3);
+  });
+
+  it('leaves every other material alone', () => {
+    const migrated = migrateComponent(
+      { id: 'C', name: 'C', thermal_spec: { tim: { tim_id: BUILTIN_TIM_IDS.putty } } },
+      0,
+    )!;
+    expect(migrated.thermal_spec.tim.tim_id).toBe(BUILTIN_TIM_IDS.putty);
+    expect(migrated.metadata?._removed_tim_id).toBeUndefined();
+  });
+});
+
 describe('migration robustness', () => {
   it('is a no-op on records already in the current shape', () => {
     const current = migrateComponent(PRE_04_RECORD, 0)!;
