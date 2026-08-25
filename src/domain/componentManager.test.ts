@@ -29,6 +29,13 @@ import {
   spreadingAreaMm2,
   totalPowerW,
   type Component,
+  ARCHITECTURE_TEMPLATES,
+  HEAT_PATH_LABELS,
+  HEAT_PATH_TYPES,
+  LEGACY_HEAT_PATHS,
+  MODULE_SURFACE_EQUIVALENT_PARAMETERS,
+  migrateHeatPathType,
+  emptyGeometry,
 } from './component';
 import { sourced, unknownValue, withValue } from './sourcedValue';
 import { setResult, type ResultValue } from '@/thermal/resultValue';
@@ -160,9 +167,12 @@ describe('component readiness', () => {
         source_L_mm: null,
         source_W_mm: null,
       },
-      heat_path: { type: 'ModuleSurface', parameters: {} },
+      heat_path: {
+        type: 'DirectMetal',
+        parameters: { source_model: 'SurfaceBodyBased', contact_geometry: 'FullBase' },
+      },
     };
-    module.architecture_prep.template_preference = 'MODULE_SURFACE_TIM';
+    module.architecture_prep.template_preference = 'DIRECT_METAL';
 
     expect(completenessOf(module).Rjc).toBe(true);
     expect(validateComponent(module).some((issue) => issue.field === 'r_jc_C_per_W')).toBe(false);
@@ -183,7 +193,10 @@ describe('component readiness', () => {
         source_L_mm: null,
         source_W_mm: null,
       },
-      heat_path: { type: 'ModuleSurface', parameters: {} },
+      heat_path: {
+        type: 'DirectMetal',
+        parameters: { source_model: 'SurfaceBodyBased', contact_geometry: 'FullBase' },
+      },
     };
 
     const issues = validateComponent(module);
@@ -694,12 +707,15 @@ describe('legacy compatibility (04 §30)', () => {
       limit_type: 'Ts',
       limit_reference_note: 'Center',
       r_jc_C_per_W: null,
-      heat_path: { type: 'ModuleSurface', parameters: {} },
+      heat_path: {
+        type: 'DirectMetal',
+        parameters: { source_model: 'SurfaceBodyBased', contact_geometry: 'FullBase' },
+      },
     };
 
     const row = canonicalComponentToLegacy(module);
     expect(row.Board_Type).toBe('None');
-    expect(row._tnv_heat_path).toBe('ModuleSurface');
+    expect(row._tnv_heat_path).toBe('DirectMetal');
 
     const restored = legacyComponentToCanonical(row, {
       id: 'CMP_POWER_MODULE',
@@ -708,7 +724,9 @@ describe('legacy compatibility (04 §30)', () => {
       resolveTimId: () => BUILTIN_TIM_IDS.grease,
     });
     expect(restored.thermal_spec).toMatchObject({
-      heat_path: { type: 'ModuleSurface' },
+      // The legacy row cannot carry a metal-face path, so the round trip lands
+      // on the merged one via the importer's alias table.
+      heat_path: { type: 'DirectMetal' },
       limit_type: 'Ts',
       limit_type_confirmed: true,
       limit_reference_note: 'Center',
@@ -799,7 +817,6 @@ describe('heatPathPatch', () => {
       ['Coin', 'BOTTOM_COOL_COIN'],
       ['Board', 'BOTTOM_COOL_VIA'],
       ['TopSurface', 'TOP_COOL_LID'],
-      ['ModuleSurface', 'MODULE_SURFACE_TIM'],
       ['DirectMetal', 'DIRECT_METAL'],
     ] as const) {
       expect(heatPathPatch(readyPA(), path).architecture_prep.template_preference).toBe(template);
@@ -863,7 +880,6 @@ describe('GEOMETRY_RULES', () => {
   it('asks for a source face only where the package cannot answer', () => {
     expect(GEOMETRY_RULES.Coin.source).toBe('package');
     expect(GEOMETRY_RULES.TopSurface.source).toBe('package');
-    expect(GEOMETRY_RULES.ModuleSurface.source).toBe('package');
     // An E-PAD and a bolt-down flange are both smaller than the outline, and
     // nothing but the datasheet or the drawing knows by how much.
     expect(GEOMETRY_RULES.Board.source).toBe('stated');
@@ -875,7 +891,6 @@ describe('GEOMETRY_RULES', () => {
     expect(GEOMETRY_RULES.Board.thickness).toBe('board');
     // Nothing conducts through a spreader on these two, so no thickness applies.
     expect(GEOMETRY_RULES.TopSurface.thickness).toBe('none');
-    expect(GEOMETRY_RULES.ModuleSurface.thickness).toBe('none');
     expect(GEOMETRY_RULES.DirectMetal.thickness).toBe('none');
   });
 
@@ -885,7 +900,6 @@ describe('GEOMETRY_RULES', () => {
 
   it('leaves a non-spreading path on the face heat entered', () => {
     expect(spreadFaceMm(geometry, 'TopSurface')).toEqual({ L: 18, W: 12 });
-    expect(spreadFaceMm(geometry, 'ModuleSurface')).toEqual({ L: 18, W: 12 });
     expect(spreadFaceMm(geometry, 'DirectMetal')).toEqual({ L: 6, W: 6 });
   });
 
@@ -904,7 +918,98 @@ describe('GEOMETRY_RULES', () => {
     expect(sourceAreaMm2(geometry, 'Board')).toBe(36);
     expect(spreadAreaMm2(geometry, 'Board')).toBeCloseTo(7.6 * 7.6, 6);
     expect(spreadAreaMm2(geometry, 'TopSurface')).toBe(216);
-    expect(spreadAreaMm2(geometry, 'ModuleSurface')).toBe(216);
     expect(spreadAreaMm2(geometry, 'DirectMetal')).toBe(36);
+  });
+
+  /**
+   * What ModuleSurface used to guarantee, now expressed through the option that
+   * replaced it. Its whole contribution was "the contact IS the package
+   * outline", and `contact_geometry: 'FullBase'` says exactly that — so a
+   * migrated component still reads 18 x 12, not the 6 x 6 stated source face.
+   */
+  it('reads a full-base metal contact off the package outline', () => {
+    const fullBase = sourceAreaMm2(geometry, 'DirectMetal', {
+      source_model: 'SurfaceBodyBased',
+      contact_geometry: 'FullBase',
+    });
+    expect(fullBase).toBe(216);
+    // A perimeter land is smaller than the outline, which is the case
+    // ModuleSurface could never express.
+    const frame = sourceAreaMm2(geometry, 'DirectMetal', {
+      source_model: 'SurfaceBodyBased',
+      contact_geometry: 'PerimeterFrame',
+      perimeter_land_width_mm: 2,
+    });
+    expect(frame).toBeLessThan(216);
+  });
+});
+
+describe('the merged metal-face heat path', () => {
+  const moduleGeometry = {
+    ...emptyGeometry(),
+    package_L_mm: 58,
+    package_W_mm: 26,
+    source_L_mm: null,
+    source_W_mm: null,
+  };
+
+  /**
+   * The merge is only safe if a migrated ModuleSurface component computes the
+   * same number it always did. Its area came from the package outline; under
+   * DirectMetal that is `contact_geometry: 'FullBase'`, and the migration
+   * supplies it.
+   */
+  it('gives a migrated module the area it had before', () => {
+    expect(
+      sourceAreaMm2(moduleGeometry, 'DirectMetal', MODULE_SURFACE_EQUIVALENT_PARAMETERS),
+    ).toBe(58 * 26);
+  });
+
+  it('maps the retired path and refuses to invent one', () => {
+    expect(migrateHeatPathType('ModuleSurface')).toBe('DirectMetal');
+    expect(LEGACY_HEAT_PATHS.ModuleSurface).toBe('DirectMetal');
+    for (const path of HEAT_PATH_TYPES) expect(migrateHeatPathType(path)).toBe(path);
+    expect(migrateHeatPathType('SomethingElse')).toBeNull();
+    expect(migrateHeatPathType(undefined)).toBeNull();
+  });
+
+  it('no longer offers ModuleSurface anywhere a person can reach', () => {
+    expect(HEAT_PATH_TYPES as readonly string[]).not.toContain('ModuleSurface');
+    expect(ARCHITECTURE_TEMPLATES as readonly string[]).not.toContain('MODULE_SURFACE_TIM');
+    // Every surviving path still names a template and a label.
+    for (const path of HEAT_PATH_TYPES) {
+      expect(TEMPLATE_FOR_HEAT_PATH[path]).toBeDefined();
+      expect(HEAT_PATH_LABELS[path].zh.length).toBeGreaterThan(3);
+    }
+  });
+
+  /**
+   * Rjc is the thing the two paths disagreed about, and after the merge it is
+   * `source_model` that decides — which is more accurate than the old test,
+   * because a flanged transistor on a metal face DOES have one.
+   */
+  it('drops Rjc only for a surface-referenced source', () => {
+    const surface = readyPA();
+    surface.thermal_spec = {
+      ...surface.thermal_spec,
+      r_jc_C_per_W: null,
+      limit_type: 'Ts',
+      limit_reference_note: 'Center',
+      geometry: moduleGeometry,
+      heat_path: { type: 'DirectMetal', parameters: MODULE_SURFACE_EQUIVALENT_PARAMETERS },
+    };
+    expect(completenessOf(surface).Rjc).toBe(true);
+
+    const junctionBased = readyPA();
+    junctionBased.thermal_spec = {
+      ...junctionBased.thermal_spec,
+      r_jc_C_per_W: null,
+      geometry: moduleGeometry,
+      heat_path: {
+        type: 'DirectMetal',
+        parameters: { source_model: 'JunctionBased', contact_geometry: 'FullBase' },
+      },
+    };
+    expect(completenessOf(junctionBased).Rjc).toBe(false);
   });
 });

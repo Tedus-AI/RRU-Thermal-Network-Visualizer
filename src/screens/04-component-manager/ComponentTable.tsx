@@ -15,6 +15,7 @@ import {
   LIMIT_TYPES,
   componentTotalPowerW,
   heatPathPatch,
+  metalBaseSourceModel,
   type HeatPathType,
   type Component,
   type ComponentCategory,
@@ -138,7 +139,11 @@ export function ComponentTable({
             const meta = STATUS_META[status];
             const Icon = meta.icon;
             const spec = component.thermal_spec;
-            const moduleSurface = spec.heat_path.type === 'ModuleSurface';
+            // Rjc has no meaning when the dissipation is referenced to the
+            // metal face itself rather than to a junction behind it.
+            const surfaceReferenced =
+              spec.heat_path.type === 'DirectMetal' &&
+              metalBaseSourceModel(spec) === 'SurfaceBodyBased';
             const selected = component.id === selectedId;
 
             return (
@@ -314,11 +319,11 @@ export function ComponentTable({
                     aria-label={`Rjc for ${component.name}`}
                     onClick={(event) => event.stopPropagation()}
                     className={`${CELL} w-16 text-right`}
-                    value={moduleSurface ? '' : (spec.r_jc_C_per_W?.value ?? '')}
+                    value={surfaceReferenced ? '' : (spec.r_jc_C_per_W?.value ?? '')}
                     placeholder="N/A"
-                    disabled={readOnly || moduleSurface}
+                    disabled={readOnly || surfaceReferenced}
                     title={
-                      moduleSurface
+                      surfaceReferenced
                         ? 'Rjc does not apply to the Module Surface / Baseplate model.'
                         : undefined
                     }

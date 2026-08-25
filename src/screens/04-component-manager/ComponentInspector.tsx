@@ -334,7 +334,6 @@ export function ComponentInspector({
   }
 
   const heatPath = spec.heat_path.type;
-  const moduleSurface = heatPath === 'ModuleSurface';
   const metalBase = heatPath === 'DirectMetal';
   const metalBaseModel = metalBaseParameters(spec);
   const envelopeLabels = metalBase
@@ -348,8 +347,11 @@ export function ComponentInspector({
         W: { en: 'Package W', zh: '封裝寬' },
         H: { en: 'Package H', zh: '封裝高' },
       };
-  const surfaceReferenced =
-    moduleSurface || (metalBase && metalBaseModel.source_model === 'SurfaceBodyBased');
+  // Rjc applies unless the dissipation is referenced to the surface itself.
+  // This used to be `moduleSurface || ...`; ModuleSurface folded into
+  // DirectMetal, and SurfaceBodyBased is the accurate test — a JunctionBased
+  // metal face (a flanged transistor) does have an Rjc.
+  const surfaceReferenced = metalBase && metalBaseModel.source_model === 'SurfaceBodyBased';
   const rule = GEOMETRY_RULES[heatPath];
   const resolvedTim = resolveTim(spec.tim, materials);
   const projectCoin = {
@@ -1419,7 +1421,7 @@ export function ComponentInspector({
                       ['Rjc / 接面熱阻', spec.r_jc_C_per_W, 'r_jc_C_per_W'],
                     ] as const
                   )
-                    .filter(([, , field]) => !(moduleSurface && field === 'r_jc_C_per_W'))
+                    .filter(([, , field]) => !(surfaceReferenced && field === 'r_jc_C_per_W'))
                     .map(([label, sv, field]) => (
                     <div key={field} className="flex items-center justify-between gap-3">
                       <span className="text-[12px] text-ink-500">{label}</span>
@@ -1581,7 +1583,7 @@ export function ComponentInspector({
                 <CircleDashed size={14} className="shrink-0 text-ink-400" aria-hidden />
               )}
               <span className={completeness[item] ? 'text-ink-700' : 'text-ink-400'}>
-                {item === 'Rjc' && moduleSurface ? 'Rjc (N/A)' : item}
+                {item === 'Rjc' && surfaceReferenced ? 'Rjc (N/A)' : item}
                 <span className="ml-1 text-ink-400">/ {COMPLETENESS_ITEMS_ZH[item]}</span>
               </span>
             </li>

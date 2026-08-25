@@ -11,6 +11,7 @@ import {
   missingRequirements,
   previewGeneration,
   suggestedZoneFor,
+  templateForComponent,
 } from './networkBuilder';
 import { STRUCTURE_PRESETS, buildSharedStructure, createSpreadingEdge } from './sharedStructure';
 import { validateGraph, networkKpis } from './graphValidation';
@@ -96,7 +97,6 @@ describe('architecture templates', () => {
         'BOTTOM_COOL_COIN',
         'BOTTOM_COOL_VIA',
         'TOP_COOL_LID',
-        'MODULE_SURFACE_TIM',
         'BARE_DIE',
         'SMALL_BASE_HEAT_PIPE',
         'DIRECT_METAL',
@@ -150,13 +150,19 @@ describe('architecture templates', () => {
           source_L_mm: null,
           source_W_mm: null,
         },
-        heat_path: { type: 'ModuleSurface', parameters: {} },
+        heat_path: {
+          type: 'DirectMetal',
+          parameters: { source_model: 'SurfaceBodyBased', contact_geometry: 'FullBase' },
+        },
         tim: { ...emptyTim(BUILTIN_TIM_IDS.grease), blt_mm: sourced(1, 'Datasheet') },
       },
     });
-    const template = getTemplate('MODULE_SURFACE_TIM')!;
+    const template = templateForComponent(module, 'DIRECT_METAL')!;
     expect(missingRequirements(module, template, defaultMaterials())).toEqual([]);
-    expect(template.requiredComponentFields.some((field) => field.label === 'Rjc')).toBe(false);
+    // A surface-referenced part has no Rjc to ask for.
+    expect(
+      template.requiredComponentFields.some((field: { label: string }) => field.label === 'Rjc'),
+    ).toBe(false);
   });
 });
 
@@ -939,18 +945,23 @@ describe('end-to-end resolution per heat path', () => {
           source_L_mm: null,
           source_W_mm: null,
         },
-        heat_path: { type: 'ModuleSurface', parameters: {} },
+        heat_path: {
+          type: 'DirectMetal',
+          parameters: { source_model: 'SurfaceBodyBased', contact_geometry: 'FullBase' },
+        },
         heat_path_confirmed: true,
         tim: { ...emptyTim(BUILTIN_TIM_IDS.grease), blt_mm: sourced(1, 'Datasheet') },
       },
     });
     const graph = buildComponentSubgraph(subject, {
       materials: materials(),
-      templateId: 'MODULE_SURFACE_TIM',
+      templateId: 'DIRECT_METAL',
       qtyModel: 'AGGREGATE',
     })!;
 
-    expect(graph.nodes.map((node) => node.type)).toEqual(['case', 'tim_interface']);
+    // `housing` is DIRECT_METAL's node for the component's own metal body —
+    // a vendor baseplate as much as a flange.
+    expect(graph.nodes.map((node) => node.type)).toEqual(['housing', 'tim_interface']);
     expect(graph.nodes.some((node) => node.type === 'junction')).toBe(false);
     expect(graph.edges.map((edge) => edge.type)).toEqual(['tim']);
     expect(graph.edges.some((edge) => edge.type === 'package_rjc')).toBe(false);

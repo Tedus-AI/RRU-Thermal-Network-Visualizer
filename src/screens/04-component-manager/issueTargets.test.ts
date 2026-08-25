@@ -67,7 +67,10 @@ describe('every issue leads somewhere', () => {
 
   it('targets the manufacturer surface reference-location warning', () => {
     const module = component({ power_W: { value: 20, source: 'Datasheet' } });
-    module.thermal_spec.heat_path = { type: 'ModuleSurface', parameters: {} };
+    module.thermal_spec.heat_path = {
+      type: 'DirectMetal',
+      parameters: { source_model: 'SurfaceBodyBased', contact_geometry: 'FullBase' },
+    };
     module.thermal_spec.limit_type = 'Ts';
     module.thermal_spec.limit_type_confirmed = true;
     const issue = validateComponent(module).find(

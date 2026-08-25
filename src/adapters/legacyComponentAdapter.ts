@@ -187,9 +187,9 @@ const LEGACY_BOARD_TYPE: Record<HeatPathType, string> = {
   Coin: 'Copper Coin',
   Board: 'Thermal Via',
   TopSurface: 'None',
-  // The legacy format cannot express a manufacturer-defined surface limit.
-  // `None` at least preserves the upward physical route on export.
-  ModuleSurface: 'None',
+  // The legacy format has no word for a metal face — a flange, a vendor
+  // baseplate or a module surface all export as `None`, which at least
+  // preserves the physical route out of the package.
   DirectMetal: 'None',
 };
 

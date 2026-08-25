@@ -16,6 +16,10 @@ import {
   emptyGeometry,
   inferHeatPath,
   inferLimitType,
+  migrateHeatPathType,
+  HEAT_PATH_TYPES,
+  LEGACY_HEAT_PATHS,
+  MODULE_SURFACE_EQUIVALENT_PARAMETERS,
   normalizeModuleReferenceLocation,
   normalizeZoneKey,
   type Component,
@@ -31,13 +35,7 @@ import type { DataSource } from '@/thermal/types';
 
 type Raw = Record<string, unknown>;
 
-const HEAT_PATH_TYPES_SET = new Set<HeatPathType>([
-  'Coin',
-  'Board',
-  'TopSurface',
-  'ModuleSurface',
-  'DirectMetal',
-]);
+const HEAT_PATH_TYPES_SET = new Set<HeatPathType>(HEAT_PATH_TYPES);
 const LIMIT_TYPES_SET = new Set<LimitType>(['Tj', 'Tc', 'Tb', 'Ts']);
 
 const isObject = (value: unknown): value is Raw =>
@@ -144,14 +142,24 @@ function migrateHeatPath(
   const known = HEAT_PATH_TYPES_SET.has(storedType as HeatPathType)
     ? (storedType as HeatPathType)
     : storedType
-      ? HEAT_PATH_FOR_BOARD_TYPE[storedType]
+      ? (migrateHeatPathType(storedType) ?? HEAT_PATH_FOR_BOARD_TYPE[storedType])
       : undefined;
 
   const confirmed =
     typeof spec.heat_path_confirmed === 'boolean' ? spec.heat_path_confirmed : known != null;
 
+  // A ModuleSurface component becomes DirectMetal, and needs the two settings
+  // that make DirectMetal behave the way ModuleSurface always did: the source
+  // on the face rather than behind an Rjc, and the contact area following the
+  // package outline. Its own stored parameters still win — it had none of
+  // these keys, but a hand-edited file might.
+  const migrated =
+    storedType != null && LEGACY_HEAT_PATHS[storedType] != null
+      ? { ...MODULE_SURFACE_EQUIVALENT_PARAMETERS, ...parameters }
+      : parameters;
+
   return {
-    heat_path: { type: known ?? inferHeatPath(category), parameters },
+    heat_path: { type: known ?? inferHeatPath(category), parameters: migrated },
     heat_path_confirmed: confirmed && known != null,
   };
 }

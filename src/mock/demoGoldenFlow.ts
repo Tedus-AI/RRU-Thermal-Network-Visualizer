@@ -250,10 +250,10 @@ export function demoNetwork(
       const resistance =
         edge.type === 'package_rjc' && componentRjc != null
           ? componentRjc
-          : ['ModuleSurface', 'DirectMetal'].includes(component.thermal_spec.heat_path.type) &&
-              templateRth != null
-            // Keep the template's interface calculation for both the module
-            // surface and the Metal Base + Interface Golden Demo rows.
+          : component.thermal_spec.heat_path.type === 'DirectMetal' && templateRth != null
+            // Keep the template's own interface calculation for every metal-face
+            // row — the vendor baseplate and the RF flange both land here now
+            // that ModuleSurface has folded into DirectMetal.
             ? templateRth
           : localResistance(edge);
       edges.push({

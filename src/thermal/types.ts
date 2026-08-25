@@ -205,8 +205,8 @@ export const NODE_TYPE_HINTS: Record<NodeType, { en: string; zh: string }> = {
     zh: '多個元件共同匯入的結構區域，不屬於任何單一元件。',
   },
   housing: {
-    en: 'Chassis or enclosure wall.',
-    zh: '機殼或外殼壁。',
+    en: "A component's own metal body — a module baseplate, an RF flange — or a chassis wall.",
+    zh: '元件自己的金屬本體（模組底板、RF 法蘭）或機殼壁。',
   },
   heat_pipe_evaporator: {
     en: 'Hot end of a heat pipe, where the working fluid boils.',

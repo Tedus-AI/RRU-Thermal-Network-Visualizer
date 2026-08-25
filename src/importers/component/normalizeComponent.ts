@@ -188,15 +188,15 @@ const HEAT_PATH_ALIASES: Record<string, HeatPathType> = {
   top: 'TopSurface',
   'top cool': 'TopSurface',
 
-  // Vendor-rated module surface/baseplate, followed by an installed TIM.
-  'module surface': 'ModuleSurface',
-  modulesurface: 'ModuleSurface',
-  baseplate: 'ModuleSurface',
-  'module baseplate': 'ModuleSurface',
-  'integrated hsk': 'ModuleSurface',
-  'surface limit': 'ModuleSurface',
-
-  // Bolted to metal, no board path at all.
+  // Every way of saying "heat leaves through a metal face of the part". A
+  // vendor-rated module baseplate and a bolted flange are the same chain; what
+  // separates them is `source_model` and `contact_geometry`, not the path.
+  'module surface': 'DirectMetal',
+  modulesurface: 'DirectMetal',
+  baseplate: 'DirectMetal',
+  'module baseplate': 'DirectMetal',
+  'integrated hsk': 'DirectMetal',
+  'surface limit': 'DirectMetal',
   'direct metal': 'DirectMetal',
   directmetal: 'DirectMetal',
   'metal base + interface': 'DirectMetal',

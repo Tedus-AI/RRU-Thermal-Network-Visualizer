@@ -155,6 +155,19 @@ interface Seed {
   zone: BaseZone;
 }
 
+/**
+ * A full-base metal contact IS the package outline, so the seed states no
+ * separate source face. Everything else has a face smaller than its package.
+ */
+function fullBaseContact(seed: {
+  heat_path: HeatPathType;
+  heat_path_parameters?: Record<string, unknown>;
+}): boolean {
+  return (
+    seed.heat_path === 'DirectMetal' && seed.heat_path_parameters?.contact_geometry === 'FullBase'
+  );
+}
+
 function demoSourced<T>(value: T, source: ThermalDataSource, reference: string): SourcedValue<T> {
   return {
     ...sourced(value, source, { confidence: 'high', reference }),
@@ -187,13 +200,11 @@ function buildReadyComponents(seeds: Seed[]): Component[] {
         package_type: seed.package_type,
         geometry: {
           ...spec.geometry,
-          package_L_mm:
-            seed.heat_path === 'ModuleSurface' ? seed.contact[0] : seed.contact[0] + 2,
-          package_W_mm:
-            seed.heat_path === 'ModuleSurface' ? seed.contact[1] : seed.contact[1] + 2,
+          package_L_mm: fullBaseContact(seed) ? seed.contact[0] : seed.contact[0] + 2,
+          package_W_mm: fullBaseContact(seed) ? seed.contact[1] : seed.contact[1] + 2,
           package_H_mm: 2,
-          source_L_mm: seed.heat_path === 'ModuleSurface' ? null : seed.contact[0],
-          source_W_mm: seed.heat_path === 'ModuleSurface' ? null : seed.contact[1],
+          source_L_mm: fullBaseContact(seed) ? null : seed.contact[0],
+          source_W_mm: fullBaseContact(seed) ? null : seed.contact[1],
           board_thickness_mm: 1.6,
         },
         heat_path: { type: seed.heat_path, parameters: seed.heat_path_parameters ?? {} },
@@ -311,11 +322,20 @@ export function demoComponents(): Component[] {
       limit_type: 'Ts',
       limit_reference_note: 'Center',
       package_type: 'Module',
-      heat_path: 'ModuleSurface',
+      // Was the separate ModuleSurface path. A vendor-rated baseplate is a
+      // metal face whose contact is the whole package outline and whose
+      // dissipation is referenced to that surface, not to a junction.
+      heat_path: 'DirectMetal',
+      heat_path_parameters: {
+        source_model: 'SurfaceBodyBased',
+        contact_geometry: 'FullBase',
+        exposed_surface_enabled: false,
+        exposed_area_mode: 'DerivedPackage',
+      },
       tim: BUILTIN_TIM_IDS.grease,
       contact: [58, 26],
       tim_blt_mm: 1,
-      template: 'MODULE_SURFACE_TIM',
+      template: 'DIRECT_METAL',
       zone: 'HSK_BASE',
     },
   ]);
