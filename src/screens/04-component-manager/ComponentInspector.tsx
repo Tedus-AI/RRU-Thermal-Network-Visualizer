@@ -66,6 +66,7 @@ import {
   mountSpec,
   mountAttachmentIsFixed,
   mountHasBlock,
+  mountHasHeatPipe,
   mountHasVendorResistance,
   type MountSpec,
   type MountAttachment,
@@ -399,6 +400,39 @@ export function ComponentInspector({
   // the same boss or heat pipe can sit under a coin, a via or a metal face.
   const mount = mountSpec(spec);
   const mountBlock = mountHasBlock(mount.type);
+  /*
+     What this pair of numbers actually is, which differs by mount.
+
+     For a block it is the block's own footprint. For a heat pipe it is the
+     CONDENSER's footprint where it meets the base — how much of the pipe is
+     flattened or saddled in — and that has nothing to do with how big the part
+     is: a 30x30 FPGA can feed a 6 mm pipe whose condenser section is 8 x 60.
+     The field was labelled "Joint L/W" for both, which invited exactly that
+     confusion.
+
+     Either way it is the area the base spreads from, which is why it is the
+     one number in the mount that always matters.
+  */
+  const mountFootprint =
+    mount.type === 'VaporChamber'
+      ? {
+          label: 'Chamber',
+          zh: '均熱板',
+          tooltip:
+            '均熱板貼在底座上的外形尺寸。這是底座擴散的起算面積 —— 均熱板的價值就在這裡，跟元件多大無關。',
+        }
+      : mountHasHeatPipe(mount.type)
+        ? {
+            label: 'Condenser',
+            zh: '冷凝端接合面',
+            tooltip:
+              '熱管冷凝端壓平／嵌入底座的那段接觸尺寸，不是元件的大小。例如 30×30 的 FPGA 可以配一根冷凝段 8×60 的熱管。這是底座擴散的起算面積。',
+          }
+        : {
+            label: 'Mount',
+            zh: '接合面',
+            tooltip: '凸台／小基座貼在底座上的外形尺寸。這是底座擴散的起算面積。',
+          };
   const patchMount = (patch: Partial<MountSpec>) =>
     patchSpec({ mount: { ...mount, ...patch } }, ['mount']);
   const rule = GEOMETRY_RULES[heatPath];
@@ -711,10 +745,11 @@ export function ComponentInspector({
                     <div className="grid grid-cols-2 gap-3 rounded-md border border-line bg-surface-muted p-2.5">
                       <div className="flex flex-col gap-1.5">
                         <FieldLabel
-                          label={mountBlock ? 'Mount L' : 'Joint L'}
-                          zh={mountBlock ? '接合面長' : '接合面長'}
+                          label={`${mountFootprint.label} L`}
+                          zh={`${mountFootprint.zh}長`}
                           unit="mm"
                           htmlFor="ins-mount-l"
+                          tooltip={mountFootprint.tooltip}
                         />
                         <NumberInput
                           id="ins-mount-l"
@@ -727,10 +762,11 @@ export function ComponentInspector({
                       </div>
                       <div className="flex flex-col gap-1.5">
                         <FieldLabel
-                          label={mountBlock ? 'Mount W' : 'Joint W'}
-                          zh="接合面寬"
+                          label={`${mountFootprint.label} W`}
+                          zh={`${mountFootprint.zh}寬`}
                           unit="mm"
                           htmlFor="ins-mount-w"
+                          tooltip={mountFootprint.tooltip}
                         />
                         <NumberInput
                           id="ins-mount-w"

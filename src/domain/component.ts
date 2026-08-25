@@ -353,20 +353,79 @@ export const ARCHITECTURE_TEMPLATES = [
   'BOTTOM_COOL_COIN',
   'BOTTOM_COOL_VIA',
   'TOP_COOL_LID',
-  'BARE_DIE',
-  'SMALL_BASE_HEAT_PIPE',
   'DIRECT_METAL',
   'CUSTOM',
 ] as const;
 export type ArchitectureTemplate = (typeof ARCHITECTURE_TEMPLATES)[number];
+
+/**
+ * Template ids that were offered once and are no longer in the registry.
+ *
+ * A stored preference is a plain string, and nothing used to check it against
+ * the registry. `MODULE_SURFACE_TIM` folded into `DIRECT_METAL`, and a
+ * component still asking for it hit `getTemplate` → undefined →
+ * `buildComponentSubgraph` → null → Generate's `continue`. The part was
+ * silently SKIPPED on every regenerate: no error, no warning, no rebuild — and
+ * so whatever its old subgraph contained stayed exactly as it was, forever.
+ *
+ * That is what kept the Power Module's duplicate source alive through three
+ * separate attempts to sweep it: the sweep was never reached.
+ */
+export const LEGACY_ARCHITECTURE_TEMPLATES: Record<string, ArchitectureTemplate> = {
+  MODULE_SURFACE_TIM: 'DIRECT_METAL',
+  MODULE_SURFACE: 'DIRECT_METAL',
+  // Dissolved into the mount axis — see DISSOLVED_TEMPLATE_MOUNTS. These two
+  // fall back to Top Surface only when the component's own heat path cannot be
+  // read; the migrator prefers the heat path, which is the better answer.
+  BARE_DIE: 'TOP_COOL_LID',
+  SMALL_BASE_HEAT_PIPE: 'TOP_COOL_LID',
+};
+
+/**
+ * Templates that were really a heat path and a MOUNT wearing one name.
+ *
+ * `BARE_DIE` was Top Surface with a boss under it — a bare die's distinguishing
+ * feature is that the base has to reach up to a very small source, not that it
+ * lacks an Rjc, because it has one. `SMALL_BASE_HEAT_PIPE` was a package chain
+ * with a local plate and a pipe hung off the end. Both are now a heat path plus
+ * a mount, which is why the mount axis was worth having: two fewer templates,
+ * and each of them buildable from Screen 04 rather than wired by hand.
+ *
+ * A component that named one keeps the mount it implied — unless it already has
+ * a mount of its own, in which case the engineer's later choice wins.
+ *
+ * KNOWN LOSS, STATED PLAINLY: the old `SMALL_BASE_HEAT_PIPE` also modelled the
+ * small base feeding a direct base path AND a pipe in PARALLEL, through two
+ * ports. The mount is a series chain and cannot express that. Every edge of
+ * that parallel branch shipped UNRESOLVED with no parameter links, so it was a
+ * sketch to be wired by hand rather than a working model — and the same shape
+ * is still reachable by drawing one extra edge from the Small Base node, which
+ * survives a rebuild now that manual objects are preserved.
+ */
+export const DISSOLVED_TEMPLATE_MOUNTS: Record<string, MountType> = {
+  BARE_DIE: 'Pedestal',
+  SMALL_BASE_HEAT_PIPE: 'SmallBaseHeatPipe',
+};
+
+/**
+ * Maps a stored preference onto a template that exists, or `UNASSIGNED`.
+ *
+ * Never guesses at a template for an id it does not recognise: `UNASSIGNED`
+ * means "nobody has decided", which is the truth, and Screen 05 then asks.
+ */
+export function normalizeArchitectureTemplate(raw: unknown): ArchitectureTemplate {
+  if (typeof raw !== 'string') return 'UNASSIGNED';
+  if ((ARCHITECTURE_TEMPLATES as readonly string[]).includes(raw)) {
+    return raw as ArchitectureTemplate;
+  }
+  return LEGACY_ARCHITECTURE_TEMPLATES[raw] ?? 'UNASSIGNED';
+}
 
 export const ARCHITECTURE_TEMPLATE_LABELS: Record<ArchitectureTemplate, string> = {
   UNASSIGNED: 'Unassigned',
   BOTTOM_COOL_COIN: 'Bottom Cool + Copper Coin',
   BOTTOM_COOL_VIA: 'Bottom Cool + Thermal Via',
   TOP_COOL_LID: 'Top Cool + Lid',
-  BARE_DIE: 'Bare Die',
-  SMALL_BASE_HEAT_PIPE: 'Small Base + Heat Pipe',
   DIRECT_METAL: 'Metal Face + Interface',
   CUSTOM: 'Custom',
 };

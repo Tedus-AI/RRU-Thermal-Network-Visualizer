@@ -19,7 +19,10 @@ import {
   inferLimitType,
   migrateHeatPathType,
   mountAttachmentIsFixed,
+  normalizeArchitectureTemplate,
+  DISSOLVED_TEMPLATE_MOUNTS,
   HEAT_PATH_TYPES,
+  TEMPLATE_FOR_HEAT_PATH,
   LEGACY_HEAT_PATHS,
   MODULE_SURFACE_EQUIVALENT_PARAMETERS,
   normalizeModuleReferenceLocation,
@@ -37,7 +40,7 @@ import {
   MOUNT_TYPES,
 } from '@/domain/component';
 import { sourced, unknownValue, type SourcedValue } from '@/domain/sourcedValue';
-import { BUILTIN_TIM_IDS } from '@/domain/materials';
+import { BUILTIN_TIM_IDS, LEGACY_SOLDER_TIM_ID } from '@/domain/materials';
 import type { DataSource } from '@/thermal/types';
 
 type Raw = Record<string, unknown>;
@@ -208,8 +211,27 @@ const LEGACY_TIM_ID: Record<string, string> = {
   Putty: BUILTIN_TIM_IDS.putty,
   PCM: BUILTIN_TIM_IDS.pcm,
   'Gap Filler': BUILTIN_TIM_IDS.gapFiller,
-  Solder: BUILTIN_TIM_IDS.solder,
+  // `Solder` is deliberately absent. The library row it pointed at is gone —
+  // Screen 01's standalone solder pair is the one copy now — so old text that
+  // says "Solder" resolves to nothing and Screen 04 asks for a material rather
+  // than pointing the component at an id the library does not have.
 };
+
+/**
+ * A component whose interface material was the removed `Solder` row.
+ *
+ * The row is gone, so the reference cannot stand: `resolveTim` would report the
+ * material missing anyway. The id is kept in `metadata` rather than dropped, so
+ * the engineer can see what it used to say — and Screen 01 takes new rows, so
+ * a part that really is soldered down gets its own.
+ */
+function withoutRemovedSolder(tim: Component['thermal_spec']['tim']): {
+  tim: Component['thermal_spec']['tim'];
+  removed: boolean;
+} {
+  if (tim.tim_id !== LEGACY_SOLDER_TIM_ID) return { tim, removed: false };
+  return { tim: { ...tim, tim_id: null }, removed: true };
+}
 
 function migrateTim(timRaw: Raw | null, specRaw: Raw): Component['thermal_spec']['tim'] {
   // Already in the current shape.
@@ -250,9 +272,17 @@ const MOUNT_TYPES_SET = new Set<MountType>(MOUNT_TYPES);
  * Dimensions stay `null` when absent. A boss whose height nobody has stated
  * must draw as an unresolved edge, not as a zero-height boss (00 Rule 6).
  */
-function migrateMount(spec: Raw): MountSpec {
+function migrateMount(spec: Raw, dissolved: MountType | undefined): MountSpec {
   const raw = isObject(spec.mount) ? spec.mount : {};
-  const type = MOUNT_TYPES_SET.has(raw.type as MountType) ? (raw.type as MountType) : 'Direct';
+  const stored = MOUNT_TYPES_SET.has(raw.type as MountType) ? (raw.type as MountType) : 'Direct';
+  /*
+   * A component that named `BARE_DIE` or `SMALL_BASE_HEAT_PIPE` was describing
+   * a heat path AND a mount under one name. It keeps the mount that name
+   * implied — unless it already has one of its own, because a choice made in
+   * Screen 04 after the split is the engineer speaking more recently than the
+   * template they picked before it.
+   */
+  const type = stored === 'Direct' && dissolved != null ? dissolved : stored;
   const base = emptyMount(type);
   return {
     ...base,
@@ -299,6 +329,17 @@ export function migrateComponent(raw: unknown, index: number): Component | null 
         }
       : migratedLimit;
   const heat = migrateHeatPath(specRaw, category);
+  const migratedTim = withoutRemovedSolder(migrateTim(timRaw, specRaw));
+  /*
+   * A dissolved template is not mapped to a fixed replacement: the component's
+   * own heat path already says which chain it wants, and that is a better
+   * answer than anything this table could guess. The template only contributes
+   * the mount it used to imply.
+   */
+  const dissolved = DISSOLVED_TEMPLATE_MOUNTS[String(architecture.template_preference)];
+  const templatePreference = dissolved
+    ? TEMPLATE_FOR_HEAT_PATH[heat.heat_path.type]
+    : normalizeArchitectureTemplate(architecture.template_preference);
 
   return {
     id: typeof raw.id === 'string' && raw.id ? raw.id : `CMP_MIGRATED_${index + 1}`,
@@ -317,10 +358,10 @@ export function migrateComponent(raw: unknown, index: number): Component | null 
       package_type: (specRaw.package_type as PackageType) ?? null,
       geometry: migrateGeometry(specRaw),
       ...heat,
-      mount: migrateMount(specRaw),
+      mount: migrateMount(specRaw, dissolved),
       // Built field by field rather than spread, so a dropped field (such as the
       // never-solved `compression_pct`) cannot ride back in from stored data.
-      tim: migrateTim(timRaw, specRaw),
+      tim: migratedTim.tim,
     },
 
     architecture_prep: {
@@ -329,6 +370,10 @@ export function migrateComponent(raw: unknown, index: number): Component | null 
       // Zones became keys when the vocabulary started coming from the project's
       // base structure; anything stored as a display name is mapped across.
       preferred_base_zone: normalizeZoneKey(architecture.preferred_base_zone),
+      // A preference naming a template the registry no longer has makes the
+      // component UNBUILDABLE, and Generate skips it in silence. Anything not
+      // in the registry is mapped onto its replacement or back to UNASSIGNED.
+      template_preference: templatePreference,
     },
     provenance: {
       source_type: 'Manual',
@@ -343,7 +388,14 @@ export function migrateComponent(raw: unknown, index: number): Component | null 
       : emptyExternalMappings(),
 
     notes: typeof raw.notes === 'string' ? raw.notes : undefined,
-    metadata: withLegacyTimK(isObject(raw.metadata) ? raw.metadata : undefined, timRaw),
+    metadata: withLegacyTimK(
+      migratedTim.removed
+        ? { ...(isObject(raw.metadata) ? raw.metadata : {}), _removed_tim_id: LEGACY_SOLDER_TIM_ID }
+        : isObject(raw.metadata)
+          ? raw.metadata
+          : undefined,
+      timRaw,
+    ),
   };
 }
 

@@ -230,7 +230,7 @@ describe('component subgraph rebuild (05 §40, AC-05-11)', () => {
 
     const rebuilt = buildComponentSubgraph(component, {
       materials: defaultMaterials(),
-      templateId: 'BARE_DIE',
+      templateId: 'TOP_COOL_LID',
       qtyModel: 'AGGREGATE',
     })!;
     useNetworkStore.getState().replaceComponentSubgraph('CMP_PA', rebuilt, 'entire');
@@ -546,7 +546,7 @@ describe('undo / redo (05 §41, AC-05-27)', () => {
   it('does not record a node move as a solver-invalidating change (05 §48)', () => {
     const subgraph = buildComponentSubgraph(pa(), {
       materials: defaultMaterials(),
-      templateId: 'BARE_DIE',
+      templateId: 'TOP_COOL_LID',
       qtyModel: 'AGGREGATE',
     })!;
     useNetworkStore.getState().addSubgraph(subgraph);
@@ -636,7 +636,7 @@ describe('network status (05 §37)', () => {
   it('ignores a disabled node when looking for orphan heat sources (05 §51)', () => {
     const subgraph = buildComponentSubgraph(pa(), {
       materials: defaultMaterials(),
-      templateId: 'BARE_DIE',
+      templateId: 'TOP_COOL_LID',
       qtyModel: 'AGGREGATE',
     })!;
     useNetworkStore.getState().addSubgraph(subgraph);

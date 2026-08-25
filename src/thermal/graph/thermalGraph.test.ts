@@ -93,18 +93,19 @@ function toNetwork(nodes: ThermalNode[], edges: ThermalEdge[]): ThermalNetwork {
 // --- Templates -------------------------------------------------------------
 
 describe('architecture templates', () => {
-  it('provides the six built-in templates plus Custom (05 §8)', () => {
-    const ids = TEMPLATE_LIST.map((template) => template.id);
-    expect(ids).toEqual(
-      expect.arrayContaining([
-        'BOTTOM_COOL_COIN',
-        'BOTTOM_COOL_VIA',
-        'TOP_COOL_LID',
-        'BARE_DIE',
-        'SMALL_BASE_HEAT_PIPE',
-        'DIRECT_METAL',
-      ]),
-    );
+  /**
+   * Four paths plus Custom. `MODULE_SURFACE_TIM` folded into `DIRECT_METAL`
+   * because they built the same chain; `BARE_DIE` and `SMALL_BASE_HEAT_PIPE`
+   * dissolved into a heat path plus a mount, which is what they always were.
+   */
+  it('provides one template per heat path, plus Custom (05 §8)', () => {
+    expect(TEMPLATE_LIST.map((template) => template.id)).toEqual([
+      'BOTTOM_COOL_COIN',
+      'BOTTOM_COOL_VIA',
+      'TOP_COOL_LID',
+      'DIRECT_METAL',
+      'CUSTOM',
+    ]);
   });
 
   it('never hard-codes a Main Base or any shared node (05 §10, §61)', () => {
@@ -385,14 +386,25 @@ describe('template ports (05 §10, §16)', () => {
     expect(ports[0].connected_to).toBeNull();
   });
 
-  it('Small Base + Heat Pipe exposes two parallel outputs (05 §11, AC-05-18)', () => {
-    const graph = buildComponentSubgraph(component(), {
-      materials: defaultMaterials(),
-      templateId: 'SMALL_BASE_HEAT_PIPE',
-      qtyModel: 'AGGREGATE',
-    })!;
-    const kinds = graph.nodes.flatMap((node) => (node.ports ?? []).map((port) => port.kind));
-    expect(kinds).toEqual(expect.arrayContaining(['DIRECT_BASE_OUT', 'HEAT_PIPE_OUT']));
+  /**
+   * `SMALL_BASE_HEAT_PIPE` used to be the one template with two ports: the
+   * small base fed a direct base path AND a pipe, in parallel. It has dissolved
+   * into a heat path plus a `SmallBaseHeatPipe` mount, which is a SERIES chain,
+   * so every template now has exactly one way out and the mount decides what
+   * happens after it.
+   *
+   * The parallel shape is a deliberate, stated loss. Every edge of that branch
+   * shipped UNRESOLVED with no parameter links — a sketch to be wired by hand,
+   * not a working model — and the same shape is still reachable by drawing one
+   * extra edge off the Small Base node, which now survives a rebuild.
+   */
+  it('gives every template exactly one way out (05 §10)', () => {
+    for (const template of TEMPLATE_LIST) {
+      expect(
+        template.ports.map((port) => port.kind),
+        template.id,
+      ).toEqual(['HEAT_OUT']);
+    }
   });
 
   it('previews generation before anything is committed (05 §49, AC-05-02)', () => {
@@ -1315,8 +1327,12 @@ describe('node types', () => {
       for (const node of chain.nodes) produced.add(node.type);
     }
     // The rest are hand-build options with real distinct meanings: a bare PCB
-    // node and the catch-all.
-    const handBuildOnly = ['pcb', 'custom'];
+    // node, the two ends of a heat pipe drawn by hand rather than mounted, a
+    // bare die called what it is, and the catch-all. `die` and
+    // `heat_pipe_evaporator` lost their producing templates when Bare Die and
+    // Small Base + Heat Pipe dissolved; the node types stay, because both name
+    // a real thing somebody may still want to draw.
+    const handBuildOnly = ['pcb', 'die', 'heat_pipe_evaporator', 'custom'];
     for (const type of NODE_TYPES) {
       expect(produced.has(type) || handBuildOnly.includes(type)).toBe(true);
     }

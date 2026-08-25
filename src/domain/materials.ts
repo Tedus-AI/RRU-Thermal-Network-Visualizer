@@ -56,7 +56,6 @@ export const BUILTIN_TIM_IDS = {
   putty: 'TIM_PUTTY',
   pcm: 'TIM_PCM',
   gapFiller: 'TIM_GAP_FILLER',
-  solder: 'TIM_SOLDER',
 } as const;
 
 /** Supported bulk materials for the shared heat-sink base. */
@@ -159,7 +158,6 @@ export function defaultMaterials(): MaterialDefaults {
         k_W_mK: assumed(3.0),
         blt_mm: assumed(1.0),
       },
-      { id: BUILTIN_TIM_IDS.solder, name: 'Solder', k_W_mK: assumed(58), blt_mm: assumed(0.3) },
     ],
     copper_k_W_mK: assumed(380),
     via_effective_k_W_mK: assumed(30),
@@ -366,6 +364,21 @@ export function findTimMaterial(
  * simply bolted together. It resolves through `contact_conductance_W_m2K`
  * instead of a k and a thickness, so it cannot live in the TIM list.
  */
+/**
+ * The library used to ship a `Solder` row as well, k 58 / BLT 0.3 — the same
+ * two numbers Screen 01 already holds as `solder_k_W_mK` and
+ * `solder_thickness_mm` for the copper-coin preform. Two editable copies of one
+ * material, and only the standalone pair was ever read by the Coin template, so
+ * the library row could drift from the number that actually got used.
+ *
+ * The standalone pair stays, since it is what the Coin chain reads and it is
+ * accompanied by `solder_voiding`, which is a process number and not a material
+ * property at all. The library row is gone. A part that really is soldered to a
+ * metal face still gets one — the library takes new rows ("Add material"), and
+ * that row is then the only place its numbers live.
+ */
+export const LEGACY_SOLDER_TIM_ID = 'TIM_SOLDER';
+
 export const DIRECT_CONTACT_TIM_ID = 'TIM_DIRECT_CONTACT';
 /** A characterized whole-joint Rth, rather than a k / BLT material model. */
 export const MEASURED_INTERFACE_TIM_ID = 'TIM_MEASURED_INTERFACE_RTH';

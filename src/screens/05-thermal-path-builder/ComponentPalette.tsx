@@ -17,7 +17,12 @@ import { Badge } from '@/ui/primitives';
 import { Bi, BilingualTooltip } from '@/ui/FieldLabel';
 import { TOOLTIPS_ZH } from './tooltips';
 
-import { ARCHITECTURE_TEMPLATE_LABELS, powerWOf, type Component } from '@/domain/component';
+import {
+  ARCHITECTURE_TEMPLATE_LABELS,
+  normalizeArchitectureTemplate,
+  powerWOf,
+  type Component,
+} from '@/domain/component';
 import { statusOf } from '@/domain/componentReadiness';
 import type { QtyModel } from '@/thermal/graph/networkBuilder';
 
@@ -27,9 +32,16 @@ export interface BuilderPref {
   groupCount: number;
 }
 
-/** Screen 04's preference is the default; the engineer confirms it here. */
+/**
+ * Screen 04's preference is the default; the engineer confirms it here.
+ *
+ * Normalised on the way through, because a preference naming a template the
+ * registry no longer has produces no subgraph at all — and Generate used to
+ * skip such a component without a word, leaving whatever its old subgraph
+ * contained in place forever.
+ */
 export function defaultPrefFor(component: Component): BuilderPref {
-  const preference = component.architecture_prep.template_preference;
+  const preference = normalizeArchitectureTemplate(component.architecture_prep.template_preference);
   const qty = component.architecture_prep.qty_model_preference;
   return {
     templateId: preference === 'UNASSIGNED' ? 'CUSTOM' : preference,

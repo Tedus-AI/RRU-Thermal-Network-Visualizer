@@ -581,6 +581,7 @@ export function ThermalPathBuilderView() {
     const structure = buildSharedStructure(structurePreset);
     const store = useNetworkStore.getState();
     let dropped = 0;
+    const skipped: string[] = [];
 
     store.addSubgraph({
       nodes: structure.nodes,
@@ -596,7 +597,13 @@ export function ThermalPathBuilderView() {
         qtyModel: pref.qtyModel,
         groupCount: pref.groupCount,
       });
-      if (!subgraph) continue;
+      // Never silent. A component whose template the registry does not have
+      // produces no subgraph, and skipping it without a word is how a stale
+      // subgraph survived every regenerate for as long as anyone tried.
+      if (!subgraph) {
+        skipped.push(`${component.name} (${pref.templateId})`);
+        continue;
+      }
       // `addSubgraph` is an upsert keyed by node id, so re-generating a
       // component whose template now emits DIFFERENT ids left the old chain
       // standing beside the new one: an FPGA moved from Board to Top Surface
@@ -628,6 +635,12 @@ export function ThermalPathBuilderView() {
 
     setShowGenerate(false);
     setStep('connections');
+    if (skipped.length > 0) {
+      toast.error(
+        `Not built — no such template: ${skipped.join(', ')}. Pick an architecture for these in the Templates panel. / 找不到模板，未建立：${skipped.join('、')}。請在架構模板面板重新選擇。`,
+      );
+      return;
+    }
     if (dropped > 0) {
       toast.warning(
         `Network generated — ${dropped} hand-made object(s) removed, their nodes are not in the current templates. / 已產生網路，${dropped} 個手繪物件因目前模板已無對應節點而移除。`,
