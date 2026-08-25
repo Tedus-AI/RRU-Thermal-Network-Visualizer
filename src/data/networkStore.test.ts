@@ -775,22 +775,35 @@ describe('mounts between a component and the shared base', () => {
     expect(bossEdge.parameters).toMatchObject({ length_mm: 8, area_mm2: 200 });
   });
 
-  it('lets a heat pipe reach the base on its own, with no spreading edge', () => {
+  /**
+   * A heat pipe used to stop at a clamped contact and skip the base spreading
+   * entirely, on the reasoning that a pipe does not spread into a plate the way
+   * a bolted block does. That was wrong: heat arriving at a condenser footprint
+   * still has to travel sideways through the base to reach the fins, and a
+   * condenser footprint is small, so it was the largest thing the two heat-pipe
+   * mounts were missing. They now finish like everything else.
+   */
+  it('lands a heat pipe on a seat and spreads from there like every other mount', () => {
     const { hskId, network } = connected({
       type: 'HeatPipeOnly',
       contact_L_mm: 12,
       contact_W_mm: 12,
       heat_pipe_R_C_per_W: 0.4,
     });
-    expect(spreadingEdge(network())).toBeUndefined();
-
     const condenser = Object.values(network().nodes).find(
       (node) => node.type === 'heat_pipe_condenser',
     )!;
+    const seat = Object.values(network().nodes).find((node) => node.type === 'base_zone')!;
     const joint = Object.values(network().edges).find(
-      (edge) => edge.from === condenser.id && edge.to === hskId,
+      (edge) => edge.from === condenser.id && edge.to === seat.id,
     );
     expect(joint).toBeDefined();
+
+    const spreading = spreadingEdge(network())!;
+    expect(spreading.from).toBe(seat.id);
+    expect(spreading.to).toBe(hskId);
+    // From the condenser footprint, which is what the joint edge carries.
+    expect(spreading.parameters?.source_area_mm2).toBe(144);
   });
 
   /** A mount is disposable: disconnecting must not strand its nodes. */
@@ -804,7 +817,7 @@ describe('mounts between a component and the shared base', () => {
     });
     expect(
       Object.values(network().nodes).filter((node) => node.id.startsWith('NODE_MOUNT_')),
-    ).toHaveLength(2);
+    ).toHaveLength(3);
 
     useNetworkStore.getState().disconnectPort(portNodeId, 'HEAT_OUT');
     expect(

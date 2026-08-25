@@ -228,6 +228,45 @@ export function validateGraph(network: ThermalNetwork): GraphValidationResult {
     }
   }
 
+  /*
+   * A heat source left behind by a template the component no longer uses.
+   *
+   * `buildSolveInput` sums `power_W` over EVERY node, so such a node injects
+   * the component's dissipation a second time — and the part then solves
+   * COOLER than it is, because the extra source sits on a parallel branch.
+   * Silent, too: the graph looks busy rather than wrong, every KPI stays green,
+   * and the only symptom is a number that flatters.
+   *
+   * The rebuild has been taught twice not to leave one, and each time the next
+   * cause was one nobody had thought of — a legacy template id, a missing
+   * attribution, an edit flag. So this stops enumerating causes and states the
+   * invariant instead: whatever put it there, a source node stamped with a
+   * template the component is not bound to any more is wrong, and it is named.
+   *
+   * Note what this deliberately does NOT flag: several source nodes for one
+   * component, which is what INDIVIDUAL quantity modelling means and is
+   * completely correct. Those all carry the SAME template id.
+   */
+  for (const [componentId, binding] of Object.entries(network.templates ?? {})) {
+    const stale = nodes.filter(
+      (node) =>
+        !node.disabled &&
+        node.power_W > 0 &&
+        (node.component_ref ?? node.origin?.component_id) === componentId &&
+        node.origin?.template_id != null &&
+        node.origin.template_id !== binding.template_id,
+    );
+    for (const node of stale) {
+      issues.push({
+        severity: 'error',
+        code: 'STALE_COMPONENT_HEAT_SOURCE',
+        nodeId: node.id,
+        message: `"${node.name}" was built by template ${node.origin?.template_id}, but ${componentId} now uses ${binding.template_id}. Its power is being injected twice — delete this node, or rebuild the component's subgraph.`,
+        messageZh: `「${node.name}」是由 ${node.origin?.template_id} 模板產生的，但 ${componentId} 目前使用 ${binding.template_id}，功耗被重複注入。請刪除此節點或重建該元件子圖。`,
+      });
+    }
+  }
+
   const errors = issues.filter((issue) => issue.severity === 'error').length;
   const warnings = issues.filter((issue) => issue.severity === 'warning').length;
   const info = issues.filter((issue) => issue.severity === 'info').length;

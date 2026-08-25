@@ -19,12 +19,15 @@ import { edgeId, instanceKeys, instanceMultiplier, nodeId } from './idFactory';
 import { getTemplate, TEMPLATE_LIST } from '../templates/templateRegistry';
 import { computeRth, conductionRth, spreadingRth, timRth } from '../resistance/calculators';
 import { emptyNetwork } from '@/data/networkStore';
+import { buildMountChain } from './componentMount';
 import { activeRth } from '../rth';
 import type { ThermalEdge, ThermalNetwork, ThermalNode } from '../types';
 import { LEGACY_NODE_TYPES, NODE_TYPES, NODE_TYPE_HINTS, normalizeNodeType } from '../types';
 import {
+  MOUNT_TYPES,
   emptyArchitecturePrep,
   emptyExternalMappings,
+  emptyMount,
   emptyThermalSpec,
   type Component,
 } from '@/domain/component';
@@ -681,6 +684,74 @@ describe('graph validation (05 §33, §34, §35)', () => {
     enabled: true,
   });
 
+  /**
+   * A source node left behind by a template the component no longer uses gets
+   * its power injected a SECOND time by `buildSolveInput`, on a parallel
+   * branch, so the part solves cooler than it is. Nothing else in the screen
+   * says a word about it: the KPIs stay green and the graph just looks busy.
+   */
+  describe('a heat source from a template the component has left', () => {
+    const owned = (id: string, power: number, templateId: string): ThermalNode => ({
+      ...source(id, power),
+      component_ref: 'CMP_PWR',
+      origin: { kind: 'template', template_id: templateId, component_id: 'CMP_PWR' },
+    });
+    const bound = (nodes: ThermalNode[], edges: ThermalEdge[], templateId: string) => {
+      const network = toNetwork(nodes, edges);
+      network.templates.CMP_PWR = {
+        component_id: 'CMP_PWR',
+        template_id: templateId,
+        template_version: '1.0',
+      } as never;
+      return network;
+    };
+
+    it('is an error, and names the template that built it', () => {
+      const network = bound(
+        [owned('NEW', 20, 'DIRECT_METAL'), owned('GHOST', 20, 'MODULE_SURFACE_TIM')],
+        [],
+        'DIRECT_METAL',
+      );
+      const stale = validateGraph(network).issues.filter(
+        (issue) => issue.code === 'STALE_COMPONENT_HEAT_SOURCE',
+      );
+      expect(stale).toHaveLength(1);
+      expect(stale[0].nodeId).toBe('GHOST');
+      expect(stale[0].message).toContain('MODULE_SURFACE_TIM');
+      expect(validateGraph(network).canContinue).toBe(false);
+    });
+
+    /**
+     * INDIVIDUAL quantity modelling is FOUR source nodes for one component and
+     * is completely correct. They all carry the same template id, which is what
+     * separates them from a leftover.
+     */
+    it('says nothing about several instances of the same template', () => {
+      const network = bound(
+        [1, 2, 3, 4].map((n) => owned(`PA_${n}`, 45, 'BOTTOM_COOL_COIN')),
+        [],
+        'BOTTOM_COOL_COIN',
+      );
+      expect(
+        validateGraph(network).issues.some((issue) => issue.code === 'STALE_COMPONENT_HEAT_SOURCE'),
+      ).toBe(false);
+    });
+
+    it('says nothing about a node the engineer switched off', () => {
+      const network = bound(
+        [
+          owned('NEW', 20, 'DIRECT_METAL'),
+          { ...owned('GHOST', 20, 'MODULE_SURFACE_TIM'), disabled: true },
+        ],
+        [],
+        'DIRECT_METAL',
+      );
+      expect(
+        validateGraph(network).issues.some((issue) => issue.code === 'STALE_COMPONENT_HEAT_SOURCE'),
+      ).toBe(false);
+    });
+  });
+
   it('flags a heat source with no path at all (AC-05-36)', () => {
     const result = validateGraph(toNetwork([source('J', 10)], []));
     expect(result.issues.some((issue) => issue.code === 'ORPHAN_HEAT_SOURCE')).toBe(true);
@@ -1231,9 +1302,21 @@ describe('node types', () => {
     for (const preset of STRUCTURE_PRESETS) {
       for (const node of buildSharedStructure(preset).nodes) produced.add(node.type);
     }
+    // The mount axis is the third producer: a boss, a local plate, a heat
+    // pipe's cold end, a vapour chamber and the seat they land on all come from
+    // there rather than from any template.
+    for (const type of MOUNT_TYPES) {
+      const chain = buildMountChain({
+        portNodeId: 'NODE_X',
+        componentRef: 'CMP_X',
+        mount: { ...emptyMount(type), attachment: 'Bolted' },
+        materials: defaultMaterials(),
+      });
+      for (const node of chain.nodes) produced.add(node.type);
+    }
     // The rest are hand-build options with real distinct meanings: a bare PCB
-    // node, a heat pipe's cold end, a manually drawn zone, and the catch-all.
-    const handBuildOnly = ['pcb', 'heat_pipe_condenser', 'base_zone', 'custom'];
+    // node and the catch-all.
+    const handBuildOnly = ['pcb', 'custom'];
     for (const type of NODE_TYPES) {
       expect(produced.has(type) || handBuildOnly.includes(type)).toBe(true);
     }

@@ -101,6 +101,7 @@ export const NODE_TYPES = [
   'housing',
   'heat_pipe_evaporator',
   'heat_pipe_condenser',
+  'vapor_chamber',
   'heat_sink_base',
   'fin_surface',
   'ambient',
@@ -215,6 +216,10 @@ export const NODE_TYPE_HINTS: Record<NodeType, { en: string; zh: string }> = {
   heat_pipe_condenser: {
     en: 'Cold end of a heat pipe, where the vapour condenses.',
     zh: '熱管冷凝端（冷端），蒸氣在此凝結。',
+  },
+  vapor_chamber: {
+    en: 'A flat two-phase plate that spreads heat sideways before it reaches the base. Its resistance is a vendor number, not a geometry — and its worth is the footprint it hands the base, so one no bigger than the part only adds resistance.',
+    zh: '扁平兩相均熱板，在熱進入底座前先橫向攤開。其熱阻是廠商數據而非幾何推導；價值在於交給底座的面積，若沒有比元件大就只是徒增熱阻。',
   },
   heat_sink_base: {
     en: 'The main heat sink base, which is also the fin root. Where the shared structure begins.',

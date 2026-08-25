@@ -18,6 +18,7 @@ import {
   inferHeatPath,
   inferLimitType,
   migrateHeatPathType,
+  mountAttachmentIsFixed,
   HEAT_PATH_TYPES,
   LEGACY_HEAT_PATHS,
   MODULE_SURFACE_EQUIVALENT_PARAMETERS,
@@ -28,9 +29,11 @@ import {
   type ComponentGeometry,
   type HeatPathType,
   type LimitType,
+  type MountAttachment,
   type MountSpec,
   type MountType,
   type PackageType,
+  MOUNT_ATTACHMENTS,
   MOUNT_TYPES,
 } from '@/domain/component';
 import { sourced, unknownValue, type SourcedValue } from '@/domain/sourcedValue';
@@ -250,12 +253,25 @@ const MOUNT_TYPES_SET = new Set<MountType>(MOUNT_TYPES);
 function migrateMount(spec: Raw): MountSpec {
   const raw = isObject(spec.mount) ? spec.mount : {};
   const type = MOUNT_TYPES_SET.has(raw.type as MountType) ? (raw.type as MountType) : 'Direct';
+  const base = emptyMount(type);
   return {
-    ...emptyMount(type),
+    ...base,
     contact_L_mm: num(raw.contact_L_mm),
     contact_W_mm: num(raw.contact_W_mm),
     height_mm: num(raw.height_mm),
     heat_pipe_R_C_per_W: num(raw.heat_pipe_R_C_per_W),
+    // Written after the mount axis shipped. A record from before says nothing
+    // about them, and `emptyMount` already holds what that silence meant: a
+    // boss milled out of the base, in the base's own metal, with no joint.
+    // A vapour chamber is never milled out of the heat sink, so `emptyMount`
+    // has the last word for it whatever an older or hand-edited record says.
+    attachment:
+      mountAttachmentIsFixed(type) || !MOUNT_ATTACHMENTS.includes(raw.attachment as MountAttachment)
+        ? base.attachment
+        : (raw.attachment as MountAttachment),
+    block_k_W_mK: num(raw.block_k_W_mK),
+    joint_tim_id: typeof raw.joint_tim_id === 'string' ? raw.joint_tim_id : null,
+    joint_blt_mm: num(raw.joint_blt_mm),
   };
 }
 

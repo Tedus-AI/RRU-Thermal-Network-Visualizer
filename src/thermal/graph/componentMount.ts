@@ -24,21 +24,35 @@
  *
  * WHAT EACH MOUNT BUILDS
  * ----------------------
- *   Direct             HEAT_OUT ─spreading→ base
- *   Pedestal           HEAT_OUT ─L/kA up the boss→ Boss Root ─spreading→ base
- *   SmallBaseHeatPipe  HEAT_OUT ─L/kA through the plate→ Small Base
- *                      ─heat pipe→ Condenser ─contact→ base
- *   HeatPipeOnly       HEAT_OUT ─heat pipe→ Condenser ─contact→ base
+ *   Direct                HEAT_OUT ─spreading→ base
+ *   Pedestal, integral    HEAT_OUT ─block→ Boss Root ─spreading→ base
+ *   Pedestal, bolted      HEAT_OUT ─block→ Boss Root ─joint→ Seat ─spreading→ base
+ *   SmallBaseHeatPipe     HEAT_OUT ─block→ Small Base ─pipe→ Condenser
+ *                         ─joint→ Seat ─spreading→ base
+ *   HeatPipeOnly          HEAT_OUT ─pipe→ Condenser ─joint→ Seat ─spreading→ base
+ *   VaporChamber          HEAT_OUT ─vendor R→ Chamber ─joint→ Seat ─spreading→ base
  *
- * The final step into the base is added by the caller for the first two, and it
- * is the Lee spreading edge (`hskBaseConnection`). The area it spreads from is
- * then the MOUNT's footprint rather than the component's, which falls out for
- * free: `terminalArea()` reads the last edge into the node the spreading edge
- * starts at, and for a boss that is the boss conduction edge.
+ * The last step is added by the caller and is the Lee spreading edge
+ * (`hskBaseConnection`). The area it spreads from is the MOUNT's footprint
+ * rather than the component's, which falls out for free: `terminalArea()` reads
+ * the last edge into the node the spreading edge starts at, and that edge
+ * carries the mount footprint whether it is the block or the joint.
  *
- * A heat pipe does not spread into the base the way a bolted block does — it
- * delivers to a condenser whose joint is a clamped contact. So the two
- * heat-pipe mounts finish themselves and never reach the spreading model.
+ * THE SEAT, AND WHY IT IS A NODE
+ * -----------------------------
+ * Anything bolted on has a real interface underneath it, and that interface is
+ * IN SERIES with the base spreading. Hang both between the block and the base
+ * and the graph reads them as parallel, which is a different circuit and a
+ * wrong answer. So the joint lands on a seat node and the spreading starts
+ * there. An integral boss has no interface — it is the same piece of metal — so
+ * it gets neither, and its number is unchanged.
+ *
+ * The heat-pipe mounts used to stop at a clamped contact with no spreading at
+ * all, on the reasoning that a pipe does not spread into a plate the way a
+ * bolted block does. That reasoning was wrong: heat arriving at a condenser
+ * footprint still has to travel sideways through the base to reach the fins,
+ * and a condenser footprint is small, so that step was the largest thing those
+ * two mounts were missing.
  *
  * NOTHING HERE INVENTS A NUMBER
  * -----------------------------
@@ -48,7 +62,14 @@
  * complete, the numbers arrive when someone states them (05 §61).
  */
 
-import { emptyMount, mountHasHeatPipe, type MountSpec, type MountType } from '@/domain/component';
+import {
+  emptyMount,
+  mountHasHeatPipe,
+  mountHasSeat,
+  mountHasVendorResistance,
+  type MountSpec,
+  type MountType,
+} from '@/domain/component';
 import type { MaterialDefaults } from '@/domain/materials';
 import { computeRth } from '../resistance/calculators';
 import { createRth } from '../rth';
@@ -85,12 +106,6 @@ export interface MountChain {
    * this is the port node itself; otherwise it is the last node the mount built.
    */
   entryNodeId: string;
-  /**
-   * False when the chain already reaches the base on its own, which is the case
-   * for both heat-pipe mounts: their last edge is the condenser joint, and a
-   * spreading edge on top of it would be a second path into the same plate.
-   */
-  needsBaseEdge: boolean;
 }
 
 const mountNodeId = (portNodeId: string, role: string) =>
@@ -187,7 +202,6 @@ function footprintMm2(mount: MountSpec): number | null {
  */
 export function buildMountChain(input: {
   portNodeId: string;
-  targetNodeId: string;
   componentRef: string | undefined;
   mount: MountSpec;
   materials: MaterialDefaults;
@@ -198,20 +212,21 @@ export function buildMountChain(input: {
    */
   sourceAreaMm2?: number | null;
 }): MountChain {
-  const { portNodeId, targetNodeId, componentRef, mount, materials, sourceAreaMm2 } = input;
+  const { portNodeId, componentRef, mount, materials, sourceAreaMm2 } = input;
   const type: MountType = mount.type;
 
   if (type === 'Direct') {
-    return { nodes: [], edges: [], entryNodeId: portNodeId, needsBaseEdge: true };
+    return { nodes: [], edges: [], entryNodeId: portNodeId };
   }
 
   const nodes: ThermalNode[] = [];
   const edges: ThermalEdge[] = [];
   const area = footprintMm2(mount);
-  // A boss and a local plate are machined from the heat sink, so they are the
-  // heat sink's metal. Asking for a second conductivity per component would
-  // invite two answers for one piece of aluminium.
-  const k = materials.hsk_base_k_W_mK.value;
+  // An integral boss is the heat sink's own metal, so that is the default and
+  // asking for a second conductivity would invite two answers for one piece of
+  // aluminium. A bolted block can be something else entirely — a copper boss on
+  // an aluminium base — so a stated k wins when there is one.
+  const k = mount.block_k_W_mK ?? materials.hsk_base_k_W_mK.value;
 
   let cursor = portNodeId;
 
@@ -277,46 +292,117 @@ export function buildMountChain(input: {
     cursor = block.id;
   }
 
-  if (mountHasHeatPipe(type)) {
-    const condenser = mountNode(
+  if (mountHasVendorResistance(type)) {
+    const isPipe = mountHasHeatPipe(type);
+    const device = mountNode(
       portNodeId,
-      'HP_CONDENSER',
-      'Heat Pipe Condenser',
-      'heat_pipe_condenser',
+      isPipe ? 'HP_CONDENSER' : 'VAPOR_CHAMBER',
+      isPipe ? 'Heat Pipe Condenser' : 'Vapour Chamber',
+      isPipe ? 'heat_pipe_condenser' : 'vapor_chamber',
       componentRef,
     );
-    nodes.push(condenser);
+    nodes.push(device);
 
     edges.push(
-      mountEdge(portNodeId, 'HEAT_PIPE', cursor, condenser.id, componentRef, {
-        type: 'heat_pipe',
-        method: 'direct_rth',
-        parameters:
-          mount.heat_pipe_R_C_per_W != null ? { R_C_per_W: mount.heat_pipe_R_C_per_W } : {},
-        missingNote:
-          'Heat pipe resistance is a vendor number and cannot be derived from geometry. State it in Screen 04.',
-      }),
-    );
-    cursor = condenser.id;
-
-    // The condenser's own joint to the base: a clamped contact, not a source
-    // patch spreading into a plate, so the Lee model does not apply here.
-    edges.push(
-      mountEdge(portNodeId, 'CONDENSER_JOINT', cursor, targetNodeId, componentRef, {
-        type: 'contact',
-        method: 'contact_hc',
-        parameters: {
-          ...(materials.contact_conductance_W_m2K.value != null
-            ? { h_c_W_m2K: materials.contact_conductance_W_m2K.value }
-            : {}),
-          ...(area != null ? { area_mm2: area } : {}),
+      mountEdge(
+        portNodeId,
+        isPipe ? 'HEAT_PIPE' : 'VAPOR_CHAMBER',
+        cursor,
+        device.id,
+        componentRef,
+        {
+          type: 'heat_pipe',
+          method: 'direct_rth',
+          parameters:
+            mount.heat_pipe_R_C_per_W != null ? { R_C_per_W: mount.heat_pipe_R_C_per_W } : {},
+          missingNote: isPipe
+            ? 'Heat pipe resistance is a vendor number and cannot be derived from geometry. State it in Screen 04.'
+            : 'Vapour chamber resistance is a vendor number, quoted at a stated power and source size. It cannot be derived from geometry — state it in Screen 04.',
         },
-        missingNote: 'Condenser joint area is missing — state the mount L and W in Screen 04.',
-      }),
+      ),
     );
-
-    return { nodes, edges, entryNodeId: cursor, needsBaseEdge: false };
+    cursor = device.id;
   }
 
-  return { nodes, edges, entryNodeId: cursor, needsBaseEdge: true };
+  /*
+   * THE SEAT
+   *
+   * Every mount that is not `Direct` finishes the same way: an interface where
+   * it meets the base, then a seat node, and the caller's Lee spreading edge
+   * out of that seat.
+   *
+   * The seat is a node and not just an edge because the joint and the base
+   * spreading are IN SERIES. Hang both between the block and the base and the
+   * graph reads them as parallel, which is a different circuit and a wrong
+   * answer.
+   *
+   * The heat-pipe mounts used to stop at a clamped contact with no spreading at
+   * all, on the reasoning that a pipe does not spread into a plate the way a
+   * bolted block does. That reasoning was wrong: heat arriving at a condenser
+   * footprint still has to travel sideways through the base to reach the fins,
+   * and a condenser footprint is small, so that step is not negligible — it was
+   * the largest thing those two mounts were missing. They now spread like
+   * everything else, which makes them more resistive and more honest.
+   *
+   * An integral boss has no interface underneath — it is the same piece of
+   * metal — so it gets no joint edge and no seat, and its number is unchanged.
+   */
+  const bolted = mount.attachment === 'Bolted';
+  if (mountHasSeat(type) && (bolted || mountHasVendorResistance(type))) {
+    const seat = mountNode(portNodeId, 'BASE_SEAT', 'Base Seat', 'base_zone', componentRef);
+    nodes.push(seat);
+    edges.push(
+      mountEdge(
+        portNodeId,
+        'BASE_JOINT',
+        cursor,
+        seat.id,
+        componentRef,
+        jointSpec(mount, area, materials),
+      ),
+    );
+    cursor = seat.id;
+  }
+
+  return { nodes, edges, entryNodeId: cursor };
+}
+
+/**
+ * The interface under a bolted block or a two-phase device.
+ *
+ * A stated TIM is a material model, `BLT / (k · A)`. No TIM means dry
+ * metal-to-metal, which is Screen 01's contact conductance over the same area.
+ * Either way the area is the mount footprint, so it is also what the base then
+ * spreads from — `terminalArea` reads this edge.
+ */
+function jointSpec(
+  mount: MountSpec,
+  area: number | null,
+  materials: MaterialDefaults,
+): Parameters<typeof mountEdge>[5] {
+  if (mount.joint_tim_id != null) {
+    const material = materials.tim.find((entry) => entry.id === mount.joint_tim_id);
+    return {
+      type: 'tim',
+      method: 'tim_thickness_k',
+      parameters: {
+        ...(mount.joint_blt_mm != null ? { thickness_mm: mount.joint_blt_mm } : {}),
+        ...(material?.k_W_mK.value != null ? { k_W_mK: material.k_W_mK.value } : {}),
+        ...(area != null ? { area_mm2: area } : {}),
+      },
+      missingNote:
+        'The joint under the mount needs its bond line and footprint from Screen 04, and the material k from Screen 01.',
+    };
+  }
+  return {
+    type: 'contact',
+    method: 'contact_hc',
+    parameters: {
+      ...(materials.contact_conductance_W_m2K.value != null
+        ? { h_c_W_m2K: materials.contact_conductance_W_m2K.value }
+        : {}),
+      ...(area != null ? { area_mm2: area } : {}),
+    },
+    missingNote: 'The dry joint under the mount needs its footprint — state the mount L and W.',
+  };
 }

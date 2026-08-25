@@ -249,7 +249,6 @@ function materialisePortConnection(
   const chain = materials
     ? buildMountChain({
         portNodeId: nodeId,
-        targetNodeId,
         componentRef: node.component_ref,
         mount: mountOf(node),
         materials,
@@ -261,10 +260,9 @@ function materialisePortConnection(
   for (const mountNode of chain?.nodes ?? []) network.nodes[mountNode.id] = mountNode;
   for (const mountEdge of chain?.edges ?? []) network.edges[mountEdge.id] = mountEdge;
 
-  // A heat-pipe mount already reached the structure through its condenser
-  // joint, so adding this would be a second path into the same plate.
-  if (chain?.needsBaseEdge === false) return;
-
+  // Every mount now ends on a seat in the base and the spreading edge starts
+  // there, so this is always added — including for the heat-pipe mounts, which
+  // used to finish at a clamped contact and skip the base spreading entirely.
   const edge = portConnectionEdge(
     network,
     nodeId,
