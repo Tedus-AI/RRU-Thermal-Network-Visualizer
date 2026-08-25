@@ -23,6 +23,7 @@ import { TOOLTIPS_ZH } from './tooltips';
 import { activeRth } from '@/thermal/rth';
 import { NODE_TYPES, type NodeType, type ThermalNetwork, type ThermalNode } from '@/thermal/types';
 import { LIMIT_TYPES } from '@/domain/component';
+import { hasStrayStructuralPower, nodeRoleMode } from './nodeRole';
 
 const TABS = [
   { id: 'overview', label: 'Overview', zh: '總覽' },
@@ -53,26 +54,6 @@ function attachedZone(network: ThermalNetwork, node: ThermalNode): string | null
     }
   }
   return null;
-}
-
-/**
- * A node built from a template carries the component's numbers, copied at build
- * time (`networkBuilder` sets power, limit and limit type from Screen 04). Two
- * consequences the panel has to respect:
- *
- *   - On a heat source they are Screen 04's answer, so editing them here forks
- *     the truth into a second place Screen 04 does not know about — and the
- *     next template rebuild silently overwrites whatever was typed.
- *   - On everything else (case, TIM, coin …) they are 0 and null, because a TIM
- *     interface has no junction limit. Rendering empty inputs there reads as
- *     missing input when the fields are simply not applicable.
- */
-function derivedFromComponent(node: ThermalNode): boolean {
-  return node.origin?.kind === 'template' && Boolean(node.component_ref);
-}
-
-function carriesSourceData(node: ThermalNode): boolean {
-  return node.power_W > 0 || node.limit_C != null || node.limit_type != null;
 }
 
 function Row({ label, zh, children }: { label: string; zh?: string; children: React.ReactNode }) {
@@ -114,6 +95,7 @@ export function NodeInspector({
   onDeleteNode: () => void;
 }) {
   const [tab, setTab] = useState<Tab>('overview');
+  const mode = nodeRoleMode(node);
 
   const edges = Object.values(network.edges).filter(
     (edge) => edge.from === node.id || edge.to === node.id,
@@ -240,52 +222,128 @@ export function NodeInspector({
 
         {tab === 'role' && (
           <div>
-            {derivedFromComponent(node) ? (
-              carriesSourceData(node) ? (
-                <div className="mb-3">
-                  <p className="mb-2 rounded-md border border-line bg-surface-muted p-2.5 text-[10px] leading-relaxed text-ink-500">
-                    These come from the component in Screen 04 and are read-only here — editing
-                    them would put a second answer where Screen 04 cannot see it, and the next
-                    template rebuild would overwrite it.
+            {mode === 'boundary' ? (
+              /*
+                A boundary is where the model stops. Its temperature comes from
+                the Screen 06 scenario and it dissipates nothing, so there is no
+                role to author — showing empty Power and Limit boxes here only
+                invited someone to fill them.
+              */
+              <p className="mb-3 rounded-md border border-line bg-surface-muted p-2.5 text-[11px] leading-relaxed text-ink-500">
+                This is a boundary node. Its temperature is set by the scenario in Screen 06, and
+                nothing dissipates here, so it has neither a source power nor a limit of its own.
+                <span className="mt-0.5 block">
+                  此為邊界節點。溫度由 Screen 06 的情境設定，本身不發熱，
+                  因此沒有節點功耗，也沒有自己的溫度上限。
+                </span>
+              </p>
+            ) : mode === 'structure' ? (
+              <div className="mb-3">
+                <Row label="Source Power" zh="節點功耗">
+                  <span className={node.power_W > 0 ? 'text-danger-600' : 'text-ink-500'}>
+                    {node.power_W.toFixed(2)} W
+                  </span>
+                </Row>
+                {hasStrayStructuralPower(node) ? (
+                  <p className="mt-2 rounded-md border border-danger-500/40 bg-danger-100 p-2.5 text-[10px] leading-relaxed text-danger-600">
+                    This structural node carries power. The solver injects the power of every node,
+                    so this is heat entering the network from no component — it raises every
+                    temperature downstream and inflates the total the energy balance is checked
+                    against. Move it to the component that actually dissipates it. The value is
+                    shown rather than silently zeroed because it is your stored data.
                     <span className="mt-0.5 block">
-                      以下數值來自 Screen 04 的元件資料，此處唯讀。在這裡改會產生 Screen 04
-                      不知道的第二份數值，且下次重建模板時會被覆蓋。請至 Screen 04 修改。
+                      此結構節點帶有功耗。求解器會注入每個節點的功耗，
+                      等於有一份不屬於任何元件的熱進入網路，會抬高下游所有溫度並灌水能量守恆的總量。
+                      請把它移到真正發熱的元件上。此處顯示而非自動歸零，是因為那是你已儲存的資料。
                     </span>
                   </p>
-                  <Row label="Source Power" zh="節點功耗">
-                    {node.power_W.toFixed(2)} W
-                  </Row>
-                  <Row label="Limit Type" zh="溫度上限類型">
-                    {node.limit_type ?? <span className="text-ink-400">—</span>}
-                  </Row>
-                  <Row label="Thermal Limit" zh="溫度上限">
-                    {node.limit_C == null ? (
-                      <span className="text-ink-400">—</span>
-                    ) : (
-                      `${node.limit_C} °C`
-                    )}
-                  </Row>
-                  <p className="mt-2 text-[10px] leading-relaxed text-ink-400">
-                    Source aggregation only. This is never the heat flow of any edge leaving the
-                    node. / 僅為熱源聚合，不代表任何連線的 Heat Flow Q。
+                ) : (
+                  <p className="mt-2 rounded-md border border-line bg-surface-muted p-2.5 text-[10px] leading-relaxed text-ink-500">
+                    Structure dissipates nothing, so this is fixed at 0 W. Heat is injected at the
+                    component that produces it, and reaches here through the connections.
+                    <span className="mt-0.5 block">
+                      結構本身不發熱，因此固定為 0 W。熱由產生它的元件注入，經由連線傳到這裡。
+                    </span>
+                  </p>
+                )}
+
+                <div className="mt-3">
+                  <FieldLabel label="Limit Type" zh="溫度上限類型" htmlFor="node-limit-type" />
+                  <Select
+                    id="node-limit-type"
+                    className="mt-1 mb-2 h-8 !text-[12px]"
+                    value={node.limit_type ?? 'Ts'}
+                    disabled={readOnly}
+                    options={LIMIT_TYPES}
+                    onChange={(event) =>
+                      onPatch({ limit_type: event.target.value as ThermalNode['limit_type'] })
+                    }
+                  />
+                  <FieldLabel label="Thermal Limit" zh="溫度上限" unit="°C" htmlFor="node-limit" />
+                  <NumberInput
+                    id="node-limit"
+                    className="mt-1 h-8 !text-[12px]"
+                    placeholder="Optional / 選填"
+                    value={node.limit_C ?? ''}
+                    disabled={readOnly}
+                    onChange={(event) =>
+                      onPatch({
+                        limit_C: event.target.value === '' ? null : Number(event.target.value),
+                      })
+                    }
+                  />
+                  <p className="mt-1 text-[10px] leading-relaxed text-ink-400">
+                    Optional. Structure has no datasheet limit, but a surface can still have a
+                    design one — touch temperature, or a plastic part bolted against it. Leave it
+                    empty and this node simply reports no margin. / 選填。結構沒有規格書上限，
+                    但表面仍可能有設計上限（觸摸溫度、貼合的塑膠件）。留空則此節點不計餘裕。
                   </p>
                 </div>
-              ) : (
-                /*
-                  Not a gap to fill. A case, TIM or coin node dissipates nothing
-                  and has no junction limit of its own, so the fields are hidden
-                  rather than shown empty — blank inputs here were being read as
-                  missing input.
-                */
-                <p className="mb-3 rounded-md border border-line bg-surface-muted p-2.5 text-[11px] leading-relaxed text-ink-500">
-                  This node carries no source data: it dissipates nothing and has no thermal limit
-                  of its own. Its resistance lives on the connections, not here.
+              </div>
+            ) : mode === 'derived_source' ? (
+              <div className="mb-3">
+                <p className="mb-2 rounded-md border border-line bg-surface-muted p-2.5 text-[10px] leading-relaxed text-ink-500">
+                  These come from the component in Screen 04 and are read-only here — editing them
+                  would put a second answer where Screen 04 cannot see it, and the next template
+                  rebuild would overwrite it.
                   <span className="mt-0.5 block">
-                    此節點不帶熱源資料 —— 它本身不發熱，也沒有自己的溫度上限。
-                    它的熱阻在「連線」分頁上，不在這裡。
+                    以下數值來自 Screen 04 的元件資料，此處唯讀。在這裡改會產生 Screen 04
+                    不知道的第二份數值，且下次重建模板時會被覆蓋。請至 Screen 04 修改。
                   </span>
                 </p>
-              )
+                <Row label="Source Power" zh="節點功耗">
+                  {node.power_W.toFixed(2)} W
+                </Row>
+                <Row label="Limit Type" zh="溫度上限類型">
+                  {node.limit_type ?? <span className="text-ink-400">—</span>}
+                </Row>
+                <Row label="Thermal Limit" zh="溫度上限">
+                  {node.limit_C == null ? (
+                    <span className="text-ink-400">—</span>
+                  ) : (
+                    `${node.limit_C} °C`
+                  )}
+                </Row>
+                <p className="mt-2 text-[10px] leading-relaxed text-ink-400">
+                  Source aggregation only. This is never the heat flow of any edge leaving the node.
+                  / 僅為熱源聚合，不代表任何連線的 Heat Flow Q。
+                </p>
+              </div>
+            ) : mode === 'derived_passive' ? (
+              /*
+                Not a gap to fill. A case, TIM or coin node dissipates nothing
+                and has no junction limit of its own, so the fields are hidden
+                rather than shown empty — blank inputs here were being read as
+                missing input.
+              */
+              <p className="mb-3 rounded-md border border-line bg-surface-muted p-2.5 text-[11px] leading-relaxed text-ink-500">
+                This node carries no source data: it dissipates nothing and has no thermal limit of
+                its own. Its resistance lives on the connections, not here.
+                <span className="mt-0.5 block">
+                  此節點不帶熱源資料 —— 它本身不發熱，也沒有自己的溫度上限。
+                  它的熱阻在「連線」分頁上，不在這裡。
+                </span>
+              </p>
             ) : (
               <>
                 <FieldLabel
@@ -303,8 +361,8 @@ export function NodeInspector({
                   onChange={(event) => onPatch({ power_W: Number(event.target.value) || 0 })}
                 />
                 <p className="mb-3 text-[10px] leading-relaxed text-ink-400">
-                  Source aggregation only. This is never the heat flow of any edge leaving the
-                  node. / 僅為熱源聚合，不代表任何連線的 Heat Flow Q。
+                  Source aggregation only. This is never the heat flow of any edge leaving the node.
+                  / 僅為熱源聚合，不代表任何連線的 Heat Flow Q。
                 </p>
 
                 <FieldLabel label="Limit Type" zh="溫度上限類型" htmlFor="node-limit-type" />
