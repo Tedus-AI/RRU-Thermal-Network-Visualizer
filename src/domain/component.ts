@@ -269,20 +269,83 @@ export function inferLimitType(category: ComponentCategory, name = ''): LimitTyp
   return /(^|[^a-z0-9])ddr/i.test(name) ? 'Tc' : 'Tj';
 }
 
+/**
+ * Package vocabulary, scoped to what an FR1 base station actually puts on a
+ * thermal path.
+ *
+ * `SOT` and `QFP` were dropped: an RRU does carry SOT-223 regulators and the
+ * odd LQFP on a control board, but they are sub-watt parts nobody models here,
+ * and every extra row makes the list slower to read for the parts that matter.
+ * They are still RECOGNISED — a project that stored one keeps it and the select
+ * shows it as an off-list value, so no stored answer is rewritten (see
+ * `LEGACY_PACKAGE_TYPES`).
+ */
 export const PACKAGE_TYPES = [
   'QFN',
   'BGA',
-  'LGA',
   'Lidded BGA',
+  'LGA',
   'Bare Die',
+  'RF Power Flanged Package',
   'Module',
   'Shielded Module',
-  'SOT',
-  'QFP',
   'Custom',
   'Unknown',
 ] as const;
 export type PackageType = (typeof PACKAGE_TYPES)[number];
+
+/** Which base-station part wears each package — shown on hover in the select. */
+export const PACKAGE_TYPE_HINTS: Record<PackageType, { en: string; zh: string }> = {
+  QFN: {
+    en: 'Leadless plastic with an exposed pad underneath (QFN/DFN). Drivers, LNAs, DC-DC controllers, small transceivers. Heat leaves downward through the pad.',
+    zh: '底部有外露焊墊的無引腳塑封（QFN/DFN）。驅動級、LNA、DC-DC 控制器、小型收發器。熱從底部焊墊往下走。',
+  },
+  BGA: {
+    en: 'Plastic or flip-chip BGA with no lid. Transceivers, DDR, mid-size SoCs. Heat splits between the balls and the bare top.',
+    zh: '無上蓋的塑封或覆晶 BGA。收發器、DDR、中型 SoC。熱在錫球與裸露上表面之間分流。',
+  },
+  'Lidded BGA': {
+    en: 'BGA with an integrated heat spreader. Large FPGAs, ASICs, baseband SoCs — the lid is the surface a heat sink presses on.',
+    zh: '帶整合散熱蓋（IHS）的 BGA。大型 FPGA、ASIC、基頻 SoC —— 散熱器壓的就是這片蓋。',
+  },
+  LGA: {
+    en: 'Land grid array, no balls. Power-stage and DC-DC modules, some SoCs. Heat leaves through the land pattern.',
+    zh: '無錫球的接點陣列。功率級與 DC-DC 模組、部分 SoC。熱由底部接點導出。',
+  },
+  'Bare Die': {
+    en: 'Unpackaged die, flip-chip or die-attached. GaN cells and some RF parts. Very small source area, so the mount usually needs a boss.',
+    zh: '未封裝的裸晶，覆晶或直接黏晶。GaN 元胞與部分 RF 元件。熱源面積很小，安裝端通常需要凸台。',
+  },
+  'RF Power Flanged Package': {
+    en: 'Bolted metal-flange RF power transistor — LDMOS or GaN, air-cavity ceramic or overmoulded. Final PA stages. The flange IS the thermal path; the datasheet Rth is junction-to-flange.',
+    zh: '螺鎖金屬法蘭的 RF 功率電晶體 —— LDMOS 或 GaN，氣密陶瓷或塑封。末級 PA。法蘭本身就是散熱路徑，規格書的熱阻是 junction-to-flange。',
+  },
+  Module: {
+    en: 'A multi-part assembly in one body: power module, optical module, SoM. Its own baseplate or case is the surface you model to.',
+    zh: '多元件組成的單一模組：電源模組、光模組、SoM。要建模的是它自己的底板或外殼面。',
+  },
+  'Shielded Module': {
+    en: 'A module under an RF can. The shield is not a heat path — heat still leaves through the board or the baseplate.',
+    zh: '加了 RF 屏蔽罩的模組。屏蔽罩不是散熱路徑 —— 熱仍走板子或底板。',
+  },
+  Custom: {
+    en: 'Something the list does not cover. Say what it is in Notes so the model can be reviewed.',
+    zh: '清單沒有涵蓋的封裝。請在備註寫明實際型式，方便後續檢核。',
+  },
+  Unknown: {
+    en: 'Not yet decided. Counts as incomplete — the readiness check asks for it.',
+    zh: '尚未決定。視為未完成 —— 完整度檢查會要求填寫。',
+  },
+};
+
+/**
+ * Package values that are no longer offered but may sit in stored projects.
+ *
+ * Kept as text rather than remapped: `SOT` is not a `QFN` and `QFP` is not a
+ * `BGA`, so rewriting one into the other would put an answer in the engineer's
+ * mouth. Screen 04 shows the stored value as an off-list row instead.
+ */
+export const LEGACY_PACKAGE_TYPES = ['SOT', 'QFP'] as const;
 
 /** 04 §19 — modelling preference only; Screen 05 turns it into topology. */
 export const ARCHITECTURE_TEMPLATES = [

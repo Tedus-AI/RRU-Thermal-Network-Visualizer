@@ -121,13 +121,20 @@ const PACKAGE_ALIASES: Record<string, PackageType> = {
   'shielded module': 'Shielded Module',
   shielded: 'Shielded Module',
   'can shield': 'Shielded Module',
-  sot: 'SOT',
-  'sot-223': 'SOT',
-  sot223: 'SOT',
-  to: 'SOT',
-  qfp: 'QFP',
-  lqfp: 'QFP',
-  tqfp: 'QFP',
+  // The bolted-flange RF power transistor. Vendors spell it many ways and none
+  // of them is "flanged package", so every common one is listed.
+  'rf power flanged package': 'RF Power Flanged Package',
+  flange: 'RF Power Flanged Package',
+  flanged: 'RF Power Flanged Package',
+  'flanged package': 'RF Power Flanged Package',
+  'bolt-down': 'RF Power Flanged Package',
+  'air cavity': 'RF Power Flanged Package',
+  'air-cavity': 'RF Power Flanged Package',
+  ldmos: 'RF Power Flanged Package',
+  'gan hemt': 'RF Power Flanged Package',
+  // SOT and QFP no longer appear in Screen 04's list, and mapping them onto a
+  // package they are not would be worse than flagging them: a row that says
+  // "LQFP" now imports as unrecognised and the staging review asks about it.
 };
 
 export function normalizePackageType(raw: unknown): PackageType | null {
@@ -268,5 +275,3 @@ export function normalizeTimName(raw: unknown): string | null {
   if (NO_TIM.has(text.toLowerCase())) return null;
   return TIM_ALIASES[text.toLowerCase()] ?? text;
 }
-
-

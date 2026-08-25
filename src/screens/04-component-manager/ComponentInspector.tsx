@@ -34,6 +34,7 @@ import {
   MODULE_REFERENCE_LOCATIONS,
   MODULE_REFERENCE_LOCATION_LABELS,
   PACKAGE_TYPES,
+  PACKAGE_TYPE_HINTS,
   QTY_MODELS,
   QTY_MODEL_LABELS,
   GEOMETRY_RULES,
@@ -368,6 +369,27 @@ export function ComponentInspector({
   // DirectMetal, and SurfaceBodyBased is the accurate test — a JunctionBased
   // metal face (a flanged transistor) does have an Rjc.
   const surfaceReferenced = metalBase && metalBaseModel.source_model === 'SurfaceBodyBased';
+
+  // SOT and QFP are no longer offered, but a project that stored one keeps it:
+  // it is appended as an off-list row so the select shows the truth instead of
+  // silently snapping to another package.
+  const PACKAGE_TYPE_SET: ReadonlySet<string> = new Set<string>(PACKAGE_TYPES);
+  const packageOptions = [
+    ...PACKAGE_TYPES.map((type) => ({
+      value: type,
+      label: type,
+      hint: `${PACKAGE_TYPE_HINTS[type].en}\n${PACKAGE_TYPE_HINTS[type].zh}`,
+    })),
+    ...(spec.package_type != null && !PACKAGE_TYPE_SET.has(spec.package_type)
+      ? [
+          {
+            value: spec.package_type,
+            label: `${spec.package_type} — no longer listed / 已不在清單`,
+            hint: 'Stored by an earlier version. Pick the closest current package when you next review this part.\n由舊版存下的封裝型式。下次檢核這顆零件時，請改選目前清單中最接近的型式。',
+          },
+        ]
+      : []),
+  ];
 
   // How this part reaches the shared structure. Orthogonal to the heat path:
   // the same boss or heat pipe can sit under a coin, a via or a metal face.
@@ -892,7 +914,7 @@ export function ComponentInspector({
                   />
                   <Select
                     id="ins-package"
-                    options={PACKAGE_TYPES}
+                    items={packageOptions}
                     value={spec.package_type ?? 'Unknown'}
                     disabled={readOnly}
                     onChange={(event) =>
