@@ -360,6 +360,38 @@ export const ARCHITECTURE_TEMPLATES = [
 ] as const;
 export type ArchitectureTemplate = (typeof ARCHITECTURE_TEMPLATES)[number];
 
+/**
+ * Template ids that were offered once and are no longer in the registry.
+ *
+ * A stored preference is a plain string, and nothing used to check it against
+ * the registry. `MODULE_SURFACE_TIM` folded into `DIRECT_METAL`, and a
+ * component still asking for it hit `getTemplate` → undefined →
+ * `buildComponentSubgraph` → null → Generate's `continue`. The part was
+ * silently SKIPPED on every regenerate: no error, no warning, no rebuild — and
+ * so whatever its old subgraph contained stayed exactly as it was, forever.
+ *
+ * That is what kept the Power Module's duplicate source alive through three
+ * separate attempts to sweep it: the sweep was never reached.
+ */
+export const LEGACY_ARCHITECTURE_TEMPLATES: Record<string, ArchitectureTemplate> = {
+  MODULE_SURFACE_TIM: 'DIRECT_METAL',
+  MODULE_SURFACE: 'DIRECT_METAL',
+};
+
+/**
+ * Maps a stored preference onto a template that exists, or `UNASSIGNED`.
+ *
+ * Never guesses at a template for an id it does not recognise: `UNASSIGNED`
+ * means "nobody has decided", which is the truth, and Screen 05 then asks.
+ */
+export function normalizeArchitectureTemplate(raw: unknown): ArchitectureTemplate {
+  if (typeof raw !== 'string') return 'UNASSIGNED';
+  if ((ARCHITECTURE_TEMPLATES as readonly string[]).includes(raw)) {
+    return raw as ArchitectureTemplate;
+  }
+  return LEGACY_ARCHITECTURE_TEMPLATES[raw] ?? 'UNASSIGNED';
+}
+
 export const ARCHITECTURE_TEMPLATE_LABELS: Record<ArchitectureTemplate, string> = {
   UNASSIGNED: 'Unassigned',
   BOTTOM_COOL_COIN: 'Bottom Cool + Copper Coin',

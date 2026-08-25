@@ -208,6 +208,36 @@ describe('the mount axis', () => {
   });
 });
 
+/**
+ * A preference naming a template the registry no longer has makes a component
+ * UNBUILDABLE: `getTemplate` returns nothing, `buildComponentSubgraph` returns
+ * null, and Generate used to skip the component without a word — so whatever
+ * its old subgraph contained stayed in place forever. That is what kept a
+ * duplicate heat source alive through three separate attempts to sweep it.
+ */
+describe('architecture template preference', () => {
+  const prefOf = (raw: unknown) =>
+    migrateComponent({ id: 'C', name: 'C', architecture_prep: { template_preference: raw } }, 0)!
+      .architecture_prep.template_preference;
+
+  it('maps a removed template onto the one that replaced it', () => {
+    expect(prefOf('MODULE_SURFACE_TIM')).toBe('DIRECT_METAL');
+  });
+
+  it('leaves a template the registry still has alone', () => {
+    for (const id of ['BOTTOM_COOL_COIN', 'TOP_COOL_LID', 'DIRECT_METAL', 'CUSTOM']) {
+      expect(prefOf(id)).toBe(id);
+    }
+  });
+
+  /** Never a guess: UNASSIGNED means nobody has decided, and Screen 05 asks. */
+  it('falls back to UNASSIGNED for anything it does not recognise', () => {
+    expect(prefOf('SOMETHING_INVENTED')).toBe('UNASSIGNED');
+    expect(prefOf(42)).toBe('UNASSIGNED');
+    expect(prefOf(undefined)).toBe('UNASSIGNED');
+  });
+});
+
 describe('migration robustness', () => {
   it('is a no-op on records already in the current shape', () => {
     const current = migrateComponent(PRE_04_RECORD, 0)!;

@@ -19,6 +19,7 @@ import {
   inferLimitType,
   migrateHeatPathType,
   mountAttachmentIsFixed,
+  normalizeArchitectureTemplate,
   HEAT_PATH_TYPES,
   LEGACY_HEAT_PATHS,
   MODULE_SURFACE_EQUIVALENT_PARAMETERS,
@@ -329,6 +330,10 @@ export function migrateComponent(raw: unknown, index: number): Component | null 
       // Zones became keys when the vocabulary started coming from the project's
       // base structure; anything stored as a display name is mapped across.
       preferred_base_zone: normalizeZoneKey(architecture.preferred_base_zone),
+      // A preference naming a template the registry no longer has makes the
+      // component UNBUILDABLE, and Generate skips it in silence. Anything not
+      // in the registry is mapped onto its replacement or back to UNASSIGNED.
+      template_preference: normalizeArchitectureTemplate(architecture.template_preference),
     },
     provenance: {
       source_type: 'Manual',
