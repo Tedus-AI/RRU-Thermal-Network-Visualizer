@@ -14,6 +14,7 @@ import {
   emptyArchitecturePrep,
   emptyExternalMappings,
   emptyGeometry,
+  emptyMount,
   inferHeatPath,
   inferLimitType,
   migrateHeatPathType,
@@ -27,7 +28,10 @@ import {
   type ComponentGeometry,
   type HeatPathType,
   type LimitType,
+  type MountSpec,
+  type MountType,
   type PackageType,
+  MOUNT_TYPES,
 } from '@/domain/component';
 import { sourced, unknownValue, type SourcedValue } from '@/domain/sourcedValue';
 import { BUILTIN_TIM_IDS } from '@/domain/materials';
@@ -230,6 +234,31 @@ function legacyTimK(timRaw: Raw | null): number | null {
   return toSourced(timRaw.k_W_mK)?.value ?? null;
 }
 
+const MOUNT_TYPES_SET = new Set<MountType>(MOUNT_TYPES);
+
+/**
+ * How the part reaches the shared structure (04 §33).
+ *
+ * Every record written before the mount axis existed has no `mount` key, and
+ * every one of them was built flat on the base — so `Direct` is the honest
+ * reading of their silence, not a guess. An unrecognised type falls back the
+ * same way rather than throwing the record away.
+ *
+ * Dimensions stay `null` when absent. A boss whose height nobody has stated
+ * must draw as an unresolved edge, not as a zero-height boss (00 Rule 6).
+ */
+function migrateMount(spec: Raw): MountSpec {
+  const raw = isObject(spec.mount) ? spec.mount : {};
+  const type = MOUNT_TYPES_SET.has(raw.type as MountType) ? (raw.type as MountType) : 'Direct';
+  return {
+    ...emptyMount(type),
+    contact_L_mm: num(raw.contact_L_mm),
+    contact_W_mm: num(raw.contact_W_mm),
+    height_mm: num(raw.height_mm),
+    heat_pipe_R_C_per_W: num(raw.heat_pipe_R_C_per_W),
+  };
+}
+
 export function migrateComponent(raw: unknown, index: number): Component | null {
   if (!isObject(raw)) return null;
 
@@ -267,12 +296,12 @@ export function migrateComponent(raw: unknown, index: number): Component | null 
     thermal_spec: {
       ...limit,
       limit_C: toSourced(specRaw.limit_C),
-      limit_reference_note:
-        normalizeModuleReferenceLocation(specRaw.limit_reference_note) ?? '',
+      limit_reference_note: normalizeModuleReferenceLocation(specRaw.limit_reference_note) ?? '',
       r_jc_C_per_W: toSourced(specRaw.r_jc_C_per_W),
       package_type: (specRaw.package_type as PackageType) ?? null,
       geometry: migrateGeometry(specRaw),
       ...heat,
+      mount: migrateMount(specRaw),
       // Built field by field rather than spread, so a dropped field (such as the
       // never-solved `compression_pct`) cannot ride back in from stored data.
       tim: migrateTim(timRaw, specRaw),

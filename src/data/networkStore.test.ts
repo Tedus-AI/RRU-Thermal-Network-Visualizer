@@ -12,13 +12,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useNetworkStore } from './networkStore';
 import { useSolverStore } from './solverStore';
 import { loadNetwork, saveNetwork } from './persistence';
-import { createComponent } from '@/domain/component';
+import { createComponent, emptyMount, type MountSpec, type MountType } from '@/domain/component';
 import { sourced } from '@/domain/sourcedValue';
 import { buildComponentSubgraph } from '@/thermal/graph/networkBuilder';
 import { refreshHskBaseConnectionEdges } from '@/thermal/graph/hskBaseConnection';
 import { buildSharedStructure } from '@/thermal/graph/sharedStructure';
 import { createRth, setRthFromSource } from '@/thermal/rth';
-import type { ThermalEdge } from '@/thermal/types';
+import type { ThermalEdge, ThermalNetwork } from '@/thermal/types';
 
 class MemoryStorage implements Storage {
   private data = new Map<string, string>();
@@ -561,5 +561,132 @@ describe('network status (05 §37)', () => {
       .map((issue) => issue.code);
     expect(codes).not.toContain('ORPHAN_HEAT_SOURCE');
     expect(codes).not.toContain('UNCONNECTED_PORT');
+  });
+});
+
+describe('mounts between a component and the shared base', () => {
+  const materials = () => ({
+    ...defaultMaterials(),
+    coin_L_mm: sourced(20, 'Manual'),
+    coin_W_mm: sourced(10, 'Manual'),
+    hsk_base_thickness_mm: sourced(6, 'Manual'),
+    hsk_base_L_mm: sourced(300, 'Manual'),
+    hsk_base_W_mm: sourced(220, 'Manual'),
+  });
+
+  function connected(mount: Partial<MountSpec> & { type: MountType }) {
+    const mats = materials();
+    const component = pa();
+    component.thermal_spec.heat_path.type = 'Coin';
+    component.thermal_spec.geometry.package_L_mm = 20;
+    component.thermal_spec.geometry.package_W_mm = 10;
+    component.thermal_spec.geometry.source_L_mm = 20;
+    component.thermal_spec.geometry.source_W_mm = 10;
+    component.thermal_spec.tim.tim_id = 'TIM_GREASE';
+    component.thermal_spec.mount = { ...emptyMount(mount.type), ...mount };
+
+    const structure = buildSharedStructure('SINGLE_MAIN_BASE');
+    const subgraph = buildComponentSubgraph(component, {
+      materials: mats,
+      templateId: 'BOTTOM_COOL_COIN',
+      qtyModel: 'AGGREGATE',
+    })!;
+    useNetworkStore.getState().addSubgraph({
+      nodes: structure.nodes,
+      edges: structure.edges,
+      zones: structure.zones,
+    });
+    useNetworkStore.getState().addSubgraph(subgraph);
+
+    const portNode = subgraph.nodes.find((node) => node.ports?.length)!;
+    const hskId = structure.zones[0].id;
+    useNetworkStore.getState().connectPort(portNode.id, 'HEAT_OUT', hskId, mats);
+    return { portNodeId: portNode.id, hskId, network: () => useNetworkStore.getState().network! };
+  }
+
+  const spreadingEdge = (network: ThermalNetwork) =>
+    Object.values(network.edges).find(
+      (edge) => edge.metadata?.connection_role === 'hsk_base_conduction',
+    );
+
+  it('leaves a direct mount exactly as it was before mounts existed', () => {
+    const { portNodeId, hskId, network } = connected({ type: 'Direct' });
+    const mountNodes = Object.values(network().nodes).filter((node) =>
+      node.id.startsWith('NODE_MOUNT_'),
+    );
+    expect(mountNodes).toEqual([]);
+
+    const spreading = spreadingEdge(network())!;
+    expect(spreading.from).toBe(portNodeId);
+    expect(spreading.to).toBe(hskId);
+    // The component's own TIM exit area: AGGREGATE is two 20 x 10 devices.
+    expect(spreading.parameters?.source_area_mm2).toBe(400);
+  });
+
+  /**
+   * The claim the whole design rests on. With a boss in the way, the heat does
+   * not spread from the component's footprint into the base — it spreads from
+   * the BOSS's. Nothing computes that explicitly: the spreading edge starts at
+   * the boss node, and `terminalArea` reads the last edge arriving there.
+   */
+  it('makes the base spread from the boss footprint, not the component', () => {
+    const { portNodeId, hskId, network } = connected({
+      type: 'Pedestal',
+      contact_L_mm: 25,
+      contact_W_mm: 25,
+      height_mm: 8,
+    });
+    const boss = Object.values(network().nodes).find((node) => node.type === 'pedestal')!;
+    expect(boss.component_ref).toBe('CMP_PA');
+
+    const bossEdge = Object.values(network().edges).find(
+      (edge) => edge.from === portNodeId && edge.to === boss.id,
+    )!;
+    expect(bossEdge.parameters).toMatchObject({ length_mm: 8, area_mm2: 625 });
+
+    const spreading = spreadingEdge(network())!;
+    expect(spreading.from).toBe(boss.id);
+    expect(spreading.to).toBe(hskId);
+    expect(spreading.parameters?.source_area_mm2).toBe(625);
+  });
+
+  it('lets a heat pipe reach the base on its own, with no spreading edge', () => {
+    const { hskId, network } = connected({
+      type: 'HeatPipeOnly',
+      contact_L_mm: 12,
+      contact_W_mm: 12,
+      heat_pipe_R_C_per_W: 0.4,
+    });
+    expect(spreadingEdge(network())).toBeUndefined();
+
+    const condenser = Object.values(network().nodes).find(
+      (node) => node.type === 'heat_pipe_condenser',
+    )!;
+    const joint = Object.values(network().edges).find(
+      (edge) => edge.from === condenser.id && edge.to === hskId,
+    );
+    expect(joint).toBeDefined();
+  });
+
+  /** A mount is disposable: disconnecting must not strand its nodes. */
+  it('takes the whole mount away when the port is disconnected', () => {
+    const { portNodeId, network } = connected({
+      type: 'SmallBaseHeatPipe',
+      contact_L_mm: 30,
+      contact_W_mm: 20,
+      height_mm: 4,
+      heat_pipe_R_C_per_W: 0.25,
+    });
+    expect(
+      Object.values(network().nodes).filter((node) => node.id.startsWith('NODE_MOUNT_')),
+    ).toHaveLength(2);
+
+    useNetworkStore.getState().disconnectPort(portNodeId, 'HEAT_OUT');
+    expect(
+      Object.values(network().nodes).filter((node) => node.id.startsWith('NODE_MOUNT_')),
+    ).toEqual([]);
+    expect(
+      Object.values(network().edges).filter((edge) => edge.id.startsWith('EDGE_PORT_MOUNT_')),
+    ).toEqual([]);
   });
 });

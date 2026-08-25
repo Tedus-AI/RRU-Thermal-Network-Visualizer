@@ -17,6 +17,7 @@ import {
 } from '@/domain/materials';
 import {
   metalBaseExposedAreaMm2,
+  mountSpec,
   metalBaseExposedSurfaceEnabled,
   metalBaseSourceModel,
   powerWOf,
@@ -35,6 +36,7 @@ import {
 } from '../resistance/calculators';
 import { getTemplate } from '../templates/templateRegistry';
 import type { ThermalTemplate } from '../templates/types';
+import { MOUNT_SPEC_KEY } from './componentMount';
 import { edgeId, instanceKeys, instanceMultiplier, nodeId, structureNodeId } from './idFactory';
 import type {
   ComponentTemplateBinding,
@@ -477,7 +479,14 @@ export function buildComponentSubgraph(
 
     for (const [id, ports] of portsByNode) {
       const node = nodes.find((candidate) => candidate.id === id);
-      if (node) node.ports = ports;
+      if (!node) continue;
+      node.ports = ports;
+      // The mount travels on the port node rather than through connectPort's
+      // signature. It is component data, and this is the one place component
+      // data is read into the graph; stamping it here also means a mount
+      // changed in Screen 04 reaches Screen 05 by the same rebuild that carries
+      // a changed power or limit.
+      node.metadata = { ...node.metadata, [MOUNT_SPEC_KEY]: mountSpec(component.thermal_spec) };
     }
   });
 

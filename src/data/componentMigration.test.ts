@@ -108,6 +108,61 @@ describe('pre-04 component migration', () => {
   });
 });
 
+describe('the mount axis', () => {
+  /**
+   * `thermal_spec` is rebuilt field by field, so a field the migrator does not
+   * name is silently dropped on every read. That is deliberate for fields that
+   * were removed — and it is exactly how a newly added one disappears: the
+   * mount chosen in Screen 04 survived in memory and vanished the moment
+   * Screen 05 reloaded the components.
+   */
+  it('carries a stored mount through a load', () => {
+    const stored = migrateComponent(
+      {
+        id: 'CMP_M',
+        name: 'M',
+        thermal_spec: {
+          mount: { type: 'Pedestal', contact_L_mm: 25, contact_W_mm: 25, height_mm: 8 },
+        },
+      },
+      0,
+    )!;
+    expect(stored.thermal_spec.mount).toEqual({
+      type: 'Pedestal',
+      contact_L_mm: 25,
+      contact_W_mm: 25,
+      height_mm: 8,
+      heat_pipe_R_C_per_W: null,
+    });
+    // And again, because every save writes back what the last load produced.
+    expect(migrateComponent(stored, 0)!.thermal_spec.mount).toEqual(stored.thermal_spec.mount);
+  });
+
+  /** Silence means the part sits flat on the base — that is what everyone built. */
+  it('reads a record written before mounts existed as Direct', () => {
+    expect(migrateComponent(PRE_04_RECORD, 0)!.thermal_spec.mount).toEqual({
+      type: 'Direct',
+      contact_L_mm: null,
+      contact_W_mm: null,
+      height_mm: null,
+      heat_pipe_R_C_per_W: null,
+    });
+  });
+
+  it('falls back to Direct for a type it does not know, and never invents a dimension', () => {
+    const odd = migrateComponent(
+      {
+        id: 'CMP_O',
+        name: 'O',
+        thermal_spec: { mount: { type: 'Teleportation', height_mm: 'x' } },
+      },
+      0,
+    )!;
+    expect(odd.thermal_spec.mount?.type).toBe('Direct');
+    expect(odd.thermal_spec.mount?.height_mm).toBeNull();
+  });
+});
+
 describe('migration robustness', () => {
   it('is a no-op on records already in the current shape', () => {
     const current = migrateComponent(PRE_04_RECORD, 0)!;

@@ -528,6 +528,108 @@ export interface ThermalSpec {
    */
   heat_path_confirmed: boolean;
   tim: TimSpec;
+  /**
+   * How this part is attached to the shared structure. Optional in the type so
+   * a project written before mounts existed still loads; `mountSpec` supplies
+   * `Direct`, which is what every one of those projects modelled.
+   */
+  mount?: MountSpec;
+}
+
+/**
+ * How the component is ATTACHED to the shared structure — the third thing a
+ * thermal path needs, after "where does heat leave the part" and "is there an
+ * Rjc in the way".
+ *
+ * It is deliberately not part of the heat path. A pedestal, a small base with a
+ * heat pipe, or a bare heat pipe all sit BETWEEN the component's HEAT_OUT and
+ * the heat-sink base; none of them is inside the component. Folding them into
+ * the path list would have multiplied four paths by four mounts into sixteen
+ * templates for what is really four plus four.
+ *
+ * It also explains why `pedestal` and `small_base` looked like duplicates in
+ * the node-type picker: they are both mounts, and they were only distinguished
+ * by which template happened to emit them.
+ */
+export const MOUNT_TYPES = ['Direct', 'Pedestal', 'SmallBaseHeatPipe', 'HeatPipeOnly'] as const;
+export type MountType = (typeof MOUNT_TYPES)[number];
+
+export const MOUNT_TYPE_LABELS: Record<MountType, { en: string; zh: string }> = {
+  Direct: { en: 'Direct to base', zh: '直接貼合底座' },
+  Pedestal: { en: 'Raised boss (pedestal)', zh: '凸台' },
+  SmallBaseHeatPipe: { en: 'Small base + heat pipe', zh: '小基座＋熱管' },
+  HeatPipeOnly: { en: 'Heat pipe only', zh: '純熱管' },
+};
+
+export const MOUNT_TYPE_HINTS: Record<MountType, { en: string; zh: string }> = {
+  Direct: {
+    en: 'The part meets the heat-sink base itself. Heat spreads straight out into the base.',
+    zh: '元件直接接觸散熱器底座，熱由此擴散進底座。',
+  },
+  Pedestal: {
+    en: 'The base is machined with a boss that stands up to reach this part. Its height is an extra conduction length before the heat spreads.',
+    zh: '底座上長出凸台去搆到這顆元件。凸台高度是熱擴散前多出的一段導熱長度。',
+  },
+  SmallBaseHeatPipe: {
+    en: 'The part sits on its own local plate, which a heat pipe carries to the main base.',
+    zh: '元件坐在自己的局部基座上，再由熱管把熱帶到主底座。',
+  },
+  HeatPipeOnly: {
+    en: 'A heat pipe is attached straight to the part and carries the heat to the main base.',
+    zh: '熱管直接貼在元件上，把熱帶到主底座。',
+  },
+};
+
+/**
+ * The geometry a mount needs. Everything is optional and an unknown stays null:
+ * a missing boss height leaves that edge UNRESOLVED naming the field, exactly
+ * as a missing base thickness does (05 §61). The conductivity is NOT here — a
+ * boss and a local plate are machined from the same metal as the heat sink, so
+ * they read the project's `hsk_base_k_W_mK`.
+ */
+export interface MountSpec {
+  type: MountType;
+  /** Boss / local plate footprint, mm. */
+  contact_L_mm: number | null;
+  contact_W_mm: number | null;
+  /** How far the boss stands up, mm. This is the conduction length. */
+  height_mm: number | null;
+  /** Vendor heat-pipe resistance, °C/W. Not derivable from geometry. */
+  heat_pipe_R_C_per_W: number | null;
+}
+
+export function emptyMount(type: MountType = 'Direct'): MountSpec {
+  return {
+    type,
+    contact_L_mm: null,
+    contact_W_mm: null,
+    height_mm: null,
+    heat_pipe_R_C_per_W: null,
+  };
+}
+
+/** Tolerates a spec written before the field existed. */
+export function mountSpec(spec: ThermalSpec): MountSpec {
+  const stored = spec.mount;
+  if (!stored || !MOUNT_TYPES.includes(stored.type)) return emptyMount();
+  return { ...emptyMount(stored.type), ...stored, type: stored.type };
+}
+
+/** Mount footprint, mm² — the area heat enters the base through. */
+export function mountContactAreaMm2(spec: ThermalSpec): number | null {
+  const mount = mountSpec(spec);
+  const { contact_L_mm: L, contact_W_mm: W } = mount;
+  if (L == null || W == null || L <= 0 || W <= 0) return null;
+  return L * W;
+}
+
+/** Which mounts put a solid block between the part and the base. */
+export function mountHasBlock(type: MountType): boolean {
+  return type === 'Pedestal' || type === 'SmallBaseHeatPipe';
+}
+
+export function mountHasHeatPipe(type: MountType): boolean {
+  return type === 'SmallBaseHeatPipe' || type === 'HeatPipeOnly';
 }
 
 export interface ArchitecturePrep {
@@ -620,6 +722,7 @@ export function emptyThermalSpec(
     heat_path: emptyHeatPath(heatPath),
     heat_path_confirmed: false,
     tim: emptyTim(),
+    mount: emptyMount(),
   };
 }
 
@@ -668,10 +771,7 @@ export function powerWOf(component: Component): number {
   return valueOf(component.power_W) ?? 0;
 }
 
-function finiteParameter(
-  parameters: HeatPathSpec['parameters'],
-  key: string,
-): number | null {
+function finiteParameter(parameters: HeatPathSpec['parameters'], key: string): number | null {
   const value = parameters[key];
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
@@ -701,8 +801,7 @@ export function metalBaseParameters(spec: ThermalSpec): MetalBaseParameters {
         ? 'CustomArea'
         : 'FullBase',
     perimeter_land_width_mm: finiteParameter(parameters, 'perimeter_land_width_mm'),
-    custom_contact_area_mm2:
-      finiteParameter(parameters, 'custom_contact_area_mm2') ?? legacyArea,
+    custom_contact_area_mm2: finiteParameter(parameters, 'custom_contact_area_mm2') ?? legacyArea,
     exposed_surface_enabled: parameters.exposed_surface_enabled === true,
     exposed_area_mode: METAL_BASE_EXPOSED_AREA_MODES.includes(
       storedAreaMode as MetalBaseExposedAreaMode,
@@ -893,12 +992,7 @@ export function spreadingAreaMm2(
   heatPathParameters: HeatPathSpec['parameters'] = {},
 ): number | null {
   const source = sourceAreaMm2(geometry, heatPath, heatPathParameters);
-  const spread = spreadAreaMm2(
-    geometry,
-    heatPath,
-    projectCoinAreaMm2,
-    heatPathParameters,
-  );
+  const spread = spreadAreaMm2(geometry, heatPath, projectCoinAreaMm2, heatPathParameters);
   if (source == null || source <= 0) return null;
   if (spread == null || spread <= 0) return null;
   return Math.sqrt(source * spread);
