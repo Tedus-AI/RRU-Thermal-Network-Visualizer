@@ -300,11 +300,21 @@ export function Select({
 }: React.SelectHTMLAttributes<HTMLSelectElement> & {
   /** Options whose stored value and visible label are the same. */
   options?: readonly string[];
-  /** Options whose stored value differs from the label, e.g. an enum key. */
-  items?: ReadonlyArray<{ value: string; label: string }>;
+  /**
+   * Options whose stored value differs from the label, e.g. an enum key.
+   *
+   * `hint` becomes the option's `title`, which the browser shows on hover while
+   * the list is open. It is for a vocabulary a reader cannot be expected to
+   * know from the name alone — twenty node types, several of which look alike.
+   * A hint is never the only place its content lives: the caller is expected to
+   * show the selected entry's hint in the panel too, since a native option
+   * tooltip is not reachable by keyboard.
+   */
+  items?: ReadonlyArray<{ value: string; label: string; hint?: string }>;
   invalid?: boolean;
 }) {
-  const entries = items ?? (options ?? []).map((option) => ({ value: option, label: option }));
+  const entries: ReadonlyArray<{ value: string; label: string; hint?: string }> =
+    items ?? (options ?? []).map((option) => ({ value: option, label: option }));
 
   return (
     <select
@@ -313,7 +323,7 @@ export function Select({
       className={`${CONTROL_BASE} h-9 appearance-none bg-[url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 12 12"><path d="M2 4.5L6 8.5L10 4.5" stroke="%235c6981" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>')] bg-[right_0.75rem_center] bg-no-repeat pr-8 ${invalid ? 'border-danger-500' : 'border-line-strong'} ${className}`}
     >
       {entries.map((entry) => (
-        <option key={entry.value} value={entry.value}>
+        <option key={entry.value} value={entry.value} title={entry.hint}>
           {entry.label}
         </option>
       ))}

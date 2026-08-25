@@ -20,7 +20,7 @@ import { computeRth, conductionRth, spreadingRth, timRth } from '../resistance/c
 import { emptyNetwork } from '@/data/networkStore';
 import { activeRth } from '../rth';
 import type { ThermalEdge, ThermalNetwork, ThermalNode } from '../types';
-import { LEGACY_NODE_TYPES, NODE_TYPES, normalizeNodeType } from '../types';
+import { LEGACY_NODE_TYPES, NODE_TYPES, NODE_TYPE_HINTS, normalizeNodeType } from '../types';
 import {
   emptyArchitecturePrep,
   emptyExternalMappings,
@@ -1225,6 +1225,30 @@ describe('node types', () => {
     const handBuildOnly = ['pcb', 'heat_pipe_condenser', 'base_zone', 'custom'];
     for (const type of NODE_TYPES) {
       expect(produced.has(type) || handBuildOnly.includes(type)).toBe(true);
+    }
+  });
+});
+
+describe('node type hints', () => {
+  /**
+   * The hint is what a picker offers instead of making someone guess from a
+   * name, so a type without one is a type nobody can choose confidently.
+   */
+  it('explains every type the picker offers, in both languages', () => {
+    for (const type of NODE_TYPES) {
+      const hint = NODE_TYPE_HINTS[type];
+      expect(hint, type).toBeDefined();
+      // Chinese is dense — 'A reflowed solder joint' is seven characters — so
+      // the bar is only high enough to catch an empty or placeholder entry.
+      expect(hint.en.length, type).toBeGreaterThan(20);
+      expect(hint.zh.length, type).toBeGreaterThan(5);
+      expect(hint.en.toLowerCase(), type).not.toBe(type.replace(/_/g, ' '));
+    }
+  });
+
+  it('carries no hint for a type that no longer exists', () => {
+    for (const gone of Object.keys(LEGACY_NODE_TYPES)) {
+      expect(NODE_TYPE_HINTS[gone as never]).toBeUndefined();
     }
   });
 });

@@ -140,6 +140,100 @@ export const LEGACY_NODE_TYPES: Record<string, NodeType> = {
   heat_source: 'junction',
 };
 
+/**
+ * What each node type is FOR, in the words a picker needs.
+ *
+ * The list is twenty entries long and several of them look alike at a glance —
+ * pedestal and small base, base zone and heat sink base, die and junction. The
+ * distinction is real in every case but it is not guessable from the name, so
+ * it is written down once here and shown on the option itself.
+ *
+ * Each line says what the thing IS and, where a neighbouring type is the likely
+ * confusion, how to tell them apart.
+ */
+export const NODE_TYPE_HINTS: Record<NodeType, { en: string; zh: string }> = {
+  junction: {
+    en: 'Silicon junction inside a package. The heat source for any part that has a case or a lid.',
+    zh: '封裝內部的矽接面。有外殼或上蓋的元件，熱源就是它。',
+  },
+  die: {
+    en: 'Bare silicon, no package. Use this instead of Junction when the TIM touches the die face itself.',
+    zh: '裸矽晶，沒有封裝。TIM 直接貼在晶粒表面時用它，取代 Junction。',
+  },
+  case: {
+    en: 'Package outer body — the far end of Rjc.',
+    zh: '封裝外殼本體，Rjc 的另一端。',
+  },
+  lid: {
+    en: 'Integrated heat spreader on top of a package. Top-cooled parts only.',
+    zh: '封裝上方的整合式散熱蓋，僅用於上方散熱的元件。',
+  },
+  epad: {
+    en: 'Exposed thermal pad on the underside of a package, soldered to the board.',
+    zh: '封裝底面外露的散熱墊，焊接在板子上。',
+  },
+  pcb: {
+    en: 'The board itself, as a conduction layer. Not needed when the via field is already modelled as an edge.',
+    zh: '板子本身當作導熱層。導熱孔已用「連線」模型化時就不需要它。',
+  },
+  thermal_via: {
+    en: 'The via field under a pad, taken as one node.',
+    zh: '銲墊下方的導熱孔陣列，視為單一節點。',
+  },
+  copper_coin: {
+    en: 'Solid copper slug pressed through the board.',
+    zh: '壓入板中的實心銅塊。',
+  },
+  tim_interface: {
+    en: 'The far face of a thermal interface material.',
+    zh: '熱介面材料的另一面。',
+  },
+  solder_interface: {
+    en: 'A reflowed solder joint.',
+    zh: '迴銲後的焊點。',
+  },
+  pedestal: {
+    en: 'A boss standing up from the heat sink to reach a part it would otherwise not touch. Its HEIGHT is a conduction length.',
+    zh: '散熱器上為了搆到元件而長出的凸台。它的「高度」就是導熱長度。',
+  },
+  small_base: {
+    en: 'A local base plate one part sits on, usually feeding a heat pipe. Belongs to the component, unlike Base Zone.',
+    zh: '單一元件所在的局部基座，通常再接熱管。與 Base Zone 不同，它屬於該元件。',
+  },
+  base_zone: {
+    en: 'A shared area of structure that several components feed into. Belongs to no single component.',
+    zh: '多個元件共同匯入的結構區域，不屬於任何單一元件。',
+  },
+  housing: {
+    en: 'Chassis or enclosure wall.',
+    zh: '機殼或外殼壁。',
+  },
+  heat_pipe_evaporator: {
+    en: 'Hot end of a heat pipe, where the working fluid boils.',
+    zh: '熱管蒸發端（熱端），工作流體在此汽化。',
+  },
+  heat_pipe_condenser: {
+    en: 'Cold end of a heat pipe, where the vapour condenses.',
+    zh: '熱管冷凝端（冷端），蒸氣在此凝結。',
+  },
+  heat_sink_base: {
+    en: 'The main heat sink base, which is also the fin root. Where the shared structure begins.',
+    zh: '散熱器主底座，同時是鰭片根部。共用結構由此開始。',
+  },
+  fin_surface: {
+    en: 'The fin area that meets the air.',
+    zh: '與空氣接觸的鰭片表面。',
+  },
+  ambient: {
+    en: 'The air the model ends at. Its temperature comes from the Screen 06 scenario.',
+    zh: '模型終點的空氣。溫度來自 Screen 06 的情境設定。',
+  },
+  custom: {
+    en: 'Anything this list does not name — a busbar, a cable, a chassis loss. The only type that both looks structural and still accepts a source power.',
+    zh: '清單未涵蓋的東西：匯流排、線材、機構損耗。也是唯一「看起來像結構、卻仍可輸入功耗」的類型。',
+  },
+};
+
 export function normalizeNodeType(value: unknown): NodeType {
   if (typeof value !== 'string') return 'custom';
   if ((NODE_TYPES as readonly string[]).includes(value)) return value as NodeType;

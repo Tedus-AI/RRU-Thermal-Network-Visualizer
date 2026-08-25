@@ -21,7 +21,13 @@ import { BilingualTooltip, FieldLabel } from '@/ui/FieldLabel';
 import { TOOLTIPS_ZH } from './tooltips';
 
 import { activeRth } from '@/thermal/rth';
-import { NODE_TYPES, type NodeType, type ThermalNetwork, type ThermalNode } from '@/thermal/types';
+import {
+  NODE_TYPES,
+  NODE_TYPE_HINTS,
+  type NodeType,
+  type ThermalNetwork,
+  type ThermalNode,
+} from '@/thermal/types';
 import { LIMIT_TYPES } from '@/domain/component';
 import { hasStrayStructuralPower, nodeRoleMode } from './nodeRole';
 
@@ -145,14 +151,30 @@ export function NodeInspector({
             />
 
             <FieldLabel label="Node Type" zh="節點類型" htmlFor="node-type" />
+            {/*
+              Twenty entries, several of which look alike from the name alone —
+              pedestal and small base, base zone and heat sink base, die and
+              junction. Each option carries its hint as a `title`, which the
+              browser shows on hover while the list is open, and the selected
+              one is repeated below because a native option tooltip cannot be
+              reached from the keyboard.
+            */}
             <Select
               id="node-type"
-              className="mt-1 mb-2 h-8 !text-[12px]"
+              className="mt-1 h-8 !text-[12px]"
               value={node.type}
               disabled={readOnly}
-              options={NODE_TYPES}
+              items={NODE_TYPES.map((type) => ({
+                value: type,
+                label: type,
+                hint: `${NODE_TYPE_HINTS[type].en}\n${NODE_TYPE_HINTS[type].zh}`,
+              }))}
               onChange={(event) => onPatch({ type: event.target.value as NodeType })}
             />
+            <p className="mt-1 mb-2 text-[10px] leading-relaxed text-ink-400">
+              {NODE_TYPE_HINTS[node.type].en}
+              <span className="mt-0.5 block">{NODE_TYPE_HINTS[node.type].zh}</span>
+            </p>
 
             <Row label="Component" zh="元件">
               {component ?? <span className="text-ink-400">—</span>}
@@ -269,10 +291,15 @@ export function NodeInspector({
 
                 <div className="mt-3">
                   <FieldLabel label="Limit Type" zh="溫度上限類型" htmlFor="node-limit-type" />
+                  {/*
+                    Tb, not Ts: Ts is the manufacturer's designated surface
+                    temperature, which is a datasheet concept a plate does not
+                    have. A structural limit is a baseplate limit.
+                  */}
                   <Select
                     id="node-limit-type"
                     className="mt-1 mb-2 h-8 !text-[12px]"
-                    value={node.limit_type ?? 'Ts'}
+                    value={node.limit_type ?? 'Tb'}
                     disabled={readOnly}
                     options={LIMIT_TYPES}
                     onChange={(event) =>
