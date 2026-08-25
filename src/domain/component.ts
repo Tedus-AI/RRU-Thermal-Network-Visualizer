@@ -614,7 +614,13 @@ export interface ThermalSpec {
  * the node-type picker: they are both mounts, and they were only distinguished
  * by which template happened to emit them.
  */
-export const MOUNT_TYPES = ['Direct', 'Pedestal', 'SmallBaseHeatPipe', 'HeatPipeOnly'] as const;
+export const MOUNT_TYPES = [
+  'Direct',
+  'Pedestal',
+  'SmallBaseHeatPipe',
+  'HeatPipeOnly',
+  'VaporChamber',
+] as const;
 export type MountType = (typeof MOUNT_TYPES)[number];
 
 export const MOUNT_TYPE_LABELS: Record<MountType, { en: string; zh: string }> = {
@@ -622,7 +628,44 @@ export const MOUNT_TYPE_LABELS: Record<MountType, { en: string; zh: string }> = 
   Pedestal: { en: 'Raised boss (pedestal)', zh: '凸台' },
   SmallBaseHeatPipe: { en: 'Small base + heat pipe', zh: '小基座＋熱管' },
   HeatPipeOnly: { en: 'Heat pipe only', zh: '純熱管' },
+  VaporChamber: { en: 'Vapour chamber', zh: '均熱板' },
 };
+
+/**
+ * Whether the block is part of the heat sink or a separate piece bolted to it.
+ *
+ * `Integral` is what the mount axis assumed from the start: a boss milled out
+ * of the base, so it is the base's metal and there is no joint. A bolted block
+ * breaks BOTH of those — it can be copper where the base is aluminium, and it
+ * has a real interface underneath it that somebody has to specify.
+ *
+ * `Integral` is the default, so no project written before this moves a number.
+ */
+export const MOUNT_ATTACHMENTS = ['Integral', 'Bolted'] as const;
+export type MountAttachment = (typeof MOUNT_ATTACHMENTS)[number];
+
+export const MOUNT_ATTACHMENT_LABELS: Record<
+  MountAttachment,
+  { en: string; zh: string; description: string; descriptionZh: string }
+> = {
+  Integral: {
+    en: 'Machined from the base',
+    zh: '與底座同一本體',
+    description: 'One piece of metal. No interface underneath, and it is the base material.',
+    descriptionZh: '同一塊金屬，底下沒有接合面，材質即底座材質。',
+  },
+  Bolted: {
+    en: 'Separate part, bolted on',
+    zh: '獨立零件、後鎖',
+    description: 'Its own material, and a real interface where it meets the base.',
+    descriptionZh: '有自己的材質，與底座之間存在真實的接合面。',
+  },
+};
+
+/** A vapour chamber is never milled out of the heat sink. */
+export function mountAttachmentIsFixed(type: MountType): boolean {
+  return type === 'VaporChamber';
+}
 
 export const MOUNT_TYPE_HINTS: Record<MountType, { en: string; zh: string }> = {
   Direct: {
@@ -641,6 +684,10 @@ export const MOUNT_TYPE_HINTS: Record<MountType, { en: string; zh: string }> = {
     en: 'A heat pipe is attached straight to the part and carries the heat to the main base.',
     zh: '熱管直接貼在元件上，把熱帶到主底座。',
   },
+  VaporChamber: {
+    en: 'A flat two-phase plate spreads the heat before it reaches the base. Its worth is the footprint it presents to the base, not its own conductivity — a chamber no bigger than the part buys nothing and only adds resistance.',
+    zh: '扁平兩相均熱板，在熱進入底座前先把它攤開。它的價值在於呈現給底座的面積，不是它自己的導熱率 —— 均熱板若沒有比元件大，不但沒有好處，還純粹增加熱阻。',
+  },
 };
 
 /**
@@ -652,13 +699,36 @@ export const MOUNT_TYPE_HINTS: Record<MountType, { en: string; zh: string }> = {
  */
 export interface MountSpec {
   type: MountType;
-  /** Boss / local plate footprint, mm. */
+  /** Boss / local plate / vapour-chamber footprint, mm. */
   contact_L_mm: number | null;
   contact_W_mm: number | null;
   /** How far the boss stands up, mm. This is the conduction length. */
   height_mm: number | null;
-  /** Vendor heat-pipe resistance, °C/W. Not derivable from geometry. */
+  /**
+   * Vendor resistance of the two-phase device, °C/W — a heat pipe or a vapour
+   * chamber. One field because it is one quantity: a number the supplier
+   * measured, which no geometry in this tool can derive. It is quoted at a
+   * stated power and source size, so it belongs with its conditions; the edge
+   * carries those in its reference.
+   */
   heat_pipe_R_C_per_W: number | null;
+  /** Milled out of the base, or a separate piece bolted to it. */
+  attachment: MountAttachment;
+  /**
+   * The block's own conductivity, W/m·K. Null inherits the heat sink's, which
+   * is the right answer for anything integral and a common one for a bolted
+   * aluminium boss. A copper boss is why it can be overridden.
+   *
+   * Not offered for a vapour chamber: its resistance is the vendor number, and
+   * asking for a k would invite an "effective k" nobody measured.
+   */
+  block_k_W_mK: number | null;
+  /**
+   * The interface under a bolted block. `null` means dry metal-to-metal, which
+   * resolves from Screen 01's contact conductance.
+   */
+  joint_tim_id: string | null;
+  joint_blt_mm: number | null;
 }
 
 export function emptyMount(type: MountType = 'Direct'): MountSpec {
@@ -668,6 +738,10 @@ export function emptyMount(type: MountType = 'Direct'): MountSpec {
     contact_W_mm: null,
     height_mm: null,
     heat_pipe_R_C_per_W: null,
+    attachment: mountAttachmentIsFixed(type) ? 'Bolted' : 'Integral',
+    block_k_W_mK: null,
+    joint_tim_id: null,
+    joint_blt_mm: null,
   };
 }
 
@@ -675,7 +749,9 @@ export function emptyMount(type: MountType = 'Direct'): MountSpec {
 export function mountSpec(spec: ThermalSpec): MountSpec {
   const stored = spec.mount;
   if (!stored || !MOUNT_TYPES.includes(stored.type)) return emptyMount();
-  return { ...emptyMount(stored.type), ...stored, type: stored.type };
+  const merged = { ...emptyMount(stored.type), ...stored, type: stored.type };
+  // A vapour chamber is a separate part whatever an older record says.
+  return mountAttachmentIsFixed(merged.type) ? { ...merged, attachment: 'Bolted' } : merged;
 }
 
 /** Mount footprint, mm² — the area heat enters the base through. */
@@ -686,13 +762,29 @@ export function mountContactAreaMm2(spec: ThermalSpec): number | null {
   return L * W;
 }
 
-/** Which mounts put a solid block between the part and the base. */
+/** Which mounts put a solid conducting block between the part and the base. */
 export function mountHasBlock(type: MountType): boolean {
   return type === 'Pedestal' || type === 'SmallBaseHeatPipe';
 }
 
 export function mountHasHeatPipe(type: MountType): boolean {
   return type === 'SmallBaseHeatPipe' || type === 'HeatPipeOnly';
+}
+
+/**
+ * Mounts whose main step is a vendor resistance rather than a geometry.
+ *
+ * A heat pipe and a vapour chamber are the same kind of answer: a number the
+ * supplier measured. Neither can be derived here, and neither should be faked
+ * with an "effective k".
+ */
+export function mountHasVendorResistance(type: MountType): boolean {
+  return mountHasHeatPipe(type) || type === 'VaporChamber';
+}
+
+/** Everything except a bare Direct mount ends on a seat in the base. */
+export function mountHasSeat(type: MountType): boolean {
+  return type !== 'Direct';
 }
 
 export interface ArchitecturePrep {

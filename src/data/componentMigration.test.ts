@@ -127,12 +127,16 @@ describe('the mount axis', () => {
       },
       0,
     )!;
-    expect(stored.thermal_spec.mount).toEqual({
+    expect(stored.thermal_spec.mount).toMatchObject({
       type: 'Pedestal',
       contact_L_mm: 25,
       contact_W_mm: 25,
       height_mm: 8,
       heat_pipe_R_C_per_W: null,
+      // Fields the stored record predates, filled with what it silently meant.
+      attachment: 'Integral',
+      block_k_W_mK: null,
+      joint_tim_id: null,
     });
     // And again, because every save writes back what the last load produced.
     expect(migrateComponent(stored, 0)!.thermal_spec.mount).toEqual(stored.thermal_spec.mount);
@@ -140,13 +144,54 @@ describe('the mount axis', () => {
 
   /** Silence means the part sits flat on the base — that is what everyone built. */
   it('reads a record written before mounts existed as Direct', () => {
-    expect(migrateComponent(PRE_04_RECORD, 0)!.thermal_spec.mount).toEqual({
+    expect(migrateComponent(PRE_04_RECORD, 0)!.thermal_spec.mount).toMatchObject({
       type: 'Direct',
       contact_L_mm: null,
       contact_W_mm: null,
       height_mm: null,
       heat_pipe_R_C_per_W: null,
+      attachment: 'Integral',
     });
+  });
+
+  /** The same trap one layer down: a field added later must survive a reload. */
+  it('carries a bolted copper boss and its joint through a load', () => {
+    const stored = migrateComponent(
+      {
+        id: 'CMP_B',
+        name: 'B',
+        thermal_spec: {
+          mount: {
+            type: 'Pedestal',
+            attachment: 'Bolted',
+            block_k_W_mK: 385,
+            joint_tim_id: 'TIM_PUTTY',
+            joint_blt_mm: 0.2,
+          },
+        },
+      },
+      0,
+    )!;
+    expect(stored.thermal_spec.mount).toMatchObject({
+      attachment: 'Bolted',
+      block_k_W_mK: 385,
+      joint_tim_id: 'TIM_PUTTY',
+      joint_blt_mm: 0.2,
+    });
+    expect(migrateComponent(stored, 0)!.thermal_spec.mount).toEqual(stored.thermal_spec.mount);
+  });
+
+  /** A vapour chamber is never milled out of the heat sink. */
+  it('forces a vapour chamber to be a separate part', () => {
+    const stored = migrateComponent(
+      {
+        id: 'CMP_V',
+        name: 'V',
+        thermal_spec: { mount: { type: 'VaporChamber', attachment: 'Integral' } },
+      },
+      0,
+    )!;
+    expect(stored.thermal_spec.mount?.attachment).toBe('Bolted');
   });
 
   it('falls back to Direct for a type it does not know, and never invents a dimension', () => {

@@ -19,12 +19,15 @@ import { edgeId, instanceKeys, instanceMultiplier, nodeId } from './idFactory';
 import { getTemplate, TEMPLATE_LIST } from '../templates/templateRegistry';
 import { computeRth, conductionRth, spreadingRth, timRth } from '../resistance/calculators';
 import { emptyNetwork } from '@/data/networkStore';
+import { buildMountChain } from './componentMount';
 import { activeRth } from '../rth';
 import type { ThermalEdge, ThermalNetwork, ThermalNode } from '../types';
 import { LEGACY_NODE_TYPES, NODE_TYPES, NODE_TYPE_HINTS, normalizeNodeType } from '../types';
 import {
+  MOUNT_TYPES,
   emptyArchitecturePrep,
   emptyExternalMappings,
+  emptyMount,
   emptyThermalSpec,
   type Component,
 } from '@/domain/component';
@@ -1299,9 +1302,21 @@ describe('node types', () => {
     for (const preset of STRUCTURE_PRESETS) {
       for (const node of buildSharedStructure(preset).nodes) produced.add(node.type);
     }
+    // The mount axis is the third producer: a boss, a local plate, a heat
+    // pipe's cold end, a vapour chamber and the seat they land on all come from
+    // there rather than from any template.
+    for (const type of MOUNT_TYPES) {
+      const chain = buildMountChain({
+        portNodeId: 'NODE_X',
+        componentRef: 'CMP_X',
+        mount: { ...emptyMount(type), attachment: 'Bolted' },
+        materials: defaultMaterials(),
+      });
+      for (const node of chain.nodes) produced.add(node.type);
+    }
     // The rest are hand-build options with real distinct meanings: a bare PCB
-    // node, a heat pipe's cold end, a manually drawn zone, and the catch-all.
-    const handBuildOnly = ['pcb', 'heat_pipe_condenser', 'base_zone', 'custom'];
+    // node and the catch-all.
+    const handBuildOnly = ['pcb', 'custom'];
     for (const type of NODE_TYPES) {
       expect(produced.has(type) || handBuildOnly.includes(type)).toBe(true);
     }

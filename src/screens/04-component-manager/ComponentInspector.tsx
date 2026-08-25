@@ -58,13 +58,17 @@ import {
   type ModuleReferenceLocation,
   type PackageType,
   type QtyModel,
+  MOUNT_ATTACHMENTS,
+  MOUNT_ATTACHMENT_LABELS,
   MOUNT_TYPES,
   MOUNT_TYPE_LABELS,
   MOUNT_TYPE_HINTS,
   mountSpec,
+  mountAttachmentIsFixed,
   mountHasBlock,
-  mountHasHeatPipe,
+  mountHasVendorResistance,
   type MountSpec,
+  type MountAttachment,
   type MountType,
 } from '@/domain/component';
 import { withValue, type SourcedValue } from '@/domain/sourcedValue';
@@ -762,14 +766,20 @@ export function ComponentInspector({
                         </div>
                       )}
 
-                      {mountHasHeatPipe(mount.type) && (
+                      {mountHasVendorResistance(mount.type) && (
                         <div className="flex flex-col gap-1.5">
                           <FieldLabel
-                            label="Heat pipe Rth"
-                            zh="熱管熱阻"
+                            label={
+                              mount.type === 'VaporChamber' ? 'Vapour chamber Rth' : 'Heat pipe Rth'
+                            }
+                            zh={mount.type === 'VaporChamber' ? '均熱板熱阻' : '熱管熱阻'}
                             unit="°C/W"
                             htmlFor="ins-mount-hp"
-                            tooltip="熱管熱阻是原廠數值，無法由幾何推導，未填則該段維持未解析。"
+                            tooltip={
+                              mount.type === 'VaporChamber'
+                                ? '均熱板熱阻是原廠在特定功率與熱源尺寸下量測的數值，不是常數，也無法由幾何推導。未填則該段維持未解析。'
+                                : '熱管熱阻是原廠數值，無法由幾何推導，未填則該段維持未解析。'
+                            }
                           />
                           <NumberInput
                             id="ins-mount-hp"
@@ -782,11 +792,125 @@ export function ComponentInspector({
                         </div>
                       )}
 
+                      {/*
+                        Machined or bolted. A vapour chamber is never milled out
+                        of the heat sink, so it is not asked — it is fixed.
+                      */}
+                      {!mountAttachmentIsFixed(mount.type) && (
+                        <div className="col-span-2 flex flex-col gap-1.5">
+                          <FieldLabel
+                            label="Attachment"
+                            zh="結合方式"
+                            htmlFor="ins-mount-attach"
+                            tooltip="銑出＝與底座同一塊金屬，底下沒有接合面。後鎖＝獨立零件，有自己的材質與真實接合面。"
+                          />
+                          <Select
+                            id="ins-mount-attach"
+                            items={MOUNT_ATTACHMENTS.map((value) => ({
+                              value,
+                              label: `${MOUNT_ATTACHMENT_LABELS[value].en} / ${MOUNT_ATTACHMENT_LABELS[value].zh}`,
+                              hint: `${MOUNT_ATTACHMENT_LABELS[value].description}\n${MOUNT_ATTACHMENT_LABELS[value].descriptionZh}`,
+                            }))}
+                            value={mount.attachment}
+                            disabled={readOnly}
+                            onChange={(event) =>
+                              patchMount({ attachment: event.target.value as MountAttachment })
+                            }
+                          />
+                        </div>
+                      )}
+
+                      {/* A bolted block can be another metal — a copper boss on
+                          an aluminium base. Blank inherits the heat sink's. */}
+                      {mountBlock && mount.attachment === 'Bolted' && (
+                        <div className="flex flex-col gap-1.5">
+                          <FieldLabel
+                            label="Block k"
+                            zh="塊體導熱係數"
+                            unit="W/m·K"
+                            htmlFor="ins-mount-k"
+                            tooltip="留空＝沿用 Screen 01 的底座材質。銅凸台請填 385 左右。"
+                          />
+                          <NumberInput
+                            id="ins-mount-k"
+                            value={mount.block_k_W_mK ?? ''}
+                            placeholder={String(materials.hsk_base_k_W_mK.value ?? '')}
+                            disabled={readOnly}
+                            onChange={(event) =>
+                              patchMount({ block_k_W_mK: numberOrNull(event.target.value) })
+                            }
+                          />
+                        </div>
+                      )}
+
+                      {mount.attachment === 'Bolted' && (
+                        <>
+                          <div className="flex flex-col gap-1.5">
+                            <FieldLabel
+                              label="Joint interface"
+                              zh="接合面材料"
+                              htmlFor="ins-mount-joint-tim"
+                              tooltip="鎖上去的介面。選「乾接觸」則改用 Screen 01 的接觸導熱係數。"
+                            />
+                            <Select
+                              id="ins-mount-joint-tim"
+                              items={[
+                                { value: '', label: 'Dry contact / 乾接觸' },
+                                ...materials.tim.map((entry) => ({
+                                  value: entry.id,
+                                  label: `${entry.name}${
+                                    entry.k_W_mK.value != null
+                                      ? ` — k ${entry.k_W_mK.value} W/m·K`
+                                      : ''
+                                  }`,
+                                })),
+                              ]}
+                              value={mount.joint_tim_id ?? ''}
+                              disabled={readOnly}
+                              onChange={(event) =>
+                                patchMount({ joint_tim_id: event.target.value || null })
+                              }
+                            />
+                          </div>
+                          {mount.joint_tim_id != null && (
+                            <div className="flex flex-col gap-1.5">
+                              <FieldLabel
+                                label="Joint BLT"
+                                zh="接合面壓合厚度"
+                                unit="mm"
+                                htmlFor="ins-mount-joint-blt"
+                                tooltip="接合面壓合後的實際厚度。"
+                              />
+                              <NumberInput
+                                id="ins-mount-joint-blt"
+                                value={mount.joint_blt_mm ?? ''}
+                                disabled={readOnly}
+                                onChange={(event) =>
+                                  patchMount({ joint_blt_mm: numberOrNull(event.target.value) })
+                                }
+                              />
+                            </div>
+                          )}
+                        </>
+                      )}
+
                       <p className="col-span-2 text-[10px] leading-relaxed text-ink-400">
-                        The metal is the heat sink&rsquo;s, so its k comes from Screen 01. Anything
-                        left empty leaves that step of the chain UNRESOLVED — Screen 05 still draws
-                        it. / 金屬與散熱器同材，k 取自 Screen 01。留空該段維持未解析，Screen 05
-                        仍會畫出來。
+                        {mount.type === 'VaporChamber' ? (
+                          <>
+                            Its worth is the footprint it hands the base, not its own conductivity —
+                            a chamber no bigger than the part only adds resistance. Anything left
+                            empty leaves that step UNRESOLVED; Screen 05 still draws it. /
+                            均熱板的價值在於交給底座的面積，不是它本身的導熱率 ——
+                            若沒有比元件大就只是徒增熱阻。留空該段維持未解析，Screen 05 仍會畫出來。
+                          </>
+                        ) : (
+                          <>
+                            A machined block is the heat sink&rsquo;s own metal, so its k comes from
+                            Screen 01. Anything left empty leaves that step of the chain UNRESOLVED —
+                            Screen 05 still draws it. / 銑出的塊體與散熱器同材，k 取自 Screen
+                            01。留空該段維持未解析，Screen 05 仍會畫出來。
+                          </>
+                        )}
                       </p>
                     </div>
                   )}
