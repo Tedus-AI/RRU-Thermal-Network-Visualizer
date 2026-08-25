@@ -30,6 +30,13 @@ import type {
 } from '@/thermal/types';
 import { validateGraph, type GraphValidationResult } from '@/thermal/graph/graphValidation';
 import { hskBaseConnectionPatch } from '@/thermal/graph/hskBaseConnection';
+import { mountSpec, type Component } from '@/domain/component';
+import {
+  MOUNT_SPEC_KEY,
+  buildMountChain,
+  isOwnedByMount,
+  mountOf,
+} from '@/thermal/graph/componentMount';
 import { reconcilePortConnections } from '@/thermal/graph/portConnectionReconciliation';
 import type { MaterialDefaults } from '@/domain/materials';
 
@@ -88,11 +95,14 @@ interface NetworkStoreState {
     zones?: BaseZone[];
   }) => void;
   /** Replaces generated shared structure without deleting component subgraphs. */
-  replaceSharedStructure: (input: {
-    nodes: ThermalNode[];
-    edges: ThermalEdge[];
-    zones: BaseZone[];
-  }, materials?: MaterialDefaults) => void;
+  replaceSharedStructure: (
+    input: {
+      nodes: ThermalNode[];
+      edges: ThermalEdge[];
+      zones: BaseZone[];
+    },
+    materials?: MaterialDefaults,
+  ) => void;
   /** Replaces a component's generated objects, preserving manual edits (05 §40). */
   replaceComponentSubgraph: (
     componentId: string,
@@ -107,6 +117,17 @@ interface NetworkStoreState {
     materials?: MaterialDefaults,
   ) => void;
   disconnectPort: (nodeId: string, portKind: PortKind) => void;
+  /**
+   * Re-reads every connected port's mount from its component and rebuilds the
+   * chain. Returns how many ports changed.
+   *
+   * The mount rides on the port node, stamped when the subgraph was built — so
+   * without this, choosing a boss in Screen 04 would set the review flag and
+   * then appear to do nothing until the engineer happened to regenerate that
+   * component. Screen 01's material edits already refresh the base edge the
+   * same way; this is the same idea for a change that adds and removes nodes.
+   */
+  refreshMounts: (components: Component[], materials: MaterialDefaults) => number;
 
   undo: () => void;
   redo: () => void;
@@ -134,21 +155,29 @@ function snapshot(network: ThermalNetwork): Snapshot {
   });
 }
 
-/** Creates the stored edge for a component port connection. */
+/**
+ * Creates the stored edge for a component port connection.
+ *
+ * `fromNodeId` is the port node for a Direct mount and the mount's exit node
+ * otherwise — a boss root, say. That is what makes the spreading edge read the
+ * MOUNT's footprint instead of the component's: `terminalArea()` looks at the
+ * last edge arriving at this node, which for a boss is the boss conduction.
+ */
 function portConnectionEdge(
   network: ThermalNetwork,
   nodeId: string,
+  fromNodeId: string,
   portKind: PortKind,
   targetNodeId: string,
   materials?: MaterialDefaults,
 ): ThermalEdge {
   const edgeKey = `EDGE_PORT_${nodeId.replace(/^NODE_/, '')}_${portKind}_${targetNodeId.replace(/^NODE_/, '')}`;
   const linkedBaseModel = materials
-    ? hskBaseConnectionPatch(network, nodeId, targetNodeId, materials)
+    ? hskBaseConnectionPatch(network, fromNodeId, targetNodeId, materials)
     : null;
   const edge: ThermalEdge = {
     id: edgeKey,
-    from: nodeId,
+    from: fromNodeId,
     to: targetNodeId,
     type: 'contact',
     method: 'direct_rth',
@@ -174,6 +203,75 @@ function portConnectionEdge(
     port_kind: portKind,
   };
   return edge;
+}
+
+/**
+ * Removes everything a previous mount on this port left behind.
+ *
+ * A mount owns nodes as well as edges, and changing the mount type changes
+ * which nodes exist — so sweeping edges alone would strand a boss with nothing
+ * attached to it.
+ */
+/**
+ * Everything a port connection means in the graph: the mount chain, then the
+ * edge into the structure.
+ *
+ * Both callers need all of it. The rebuild path used to re-create only the
+ * final edge, which would have silently dropped a boss or a heat pipe every
+ * time a component's subgraph was regenerated.
+ */
+function materialisePortConnection(
+  network: ThermalNetwork,
+  nodeId: string,
+  portKind: PortKind,
+  targetNodeId: string,
+  materials?: MaterialDefaults,
+): void {
+  const node = network.nodes[nodeId];
+  if (!node) return;
+
+  // A mount from a previous connection cannot survive a new one: its geometry
+  // belonged to the old target.
+  clearMount(network, nodeId);
+
+  // How the part is attached — a boss, a local plate and a heat pipe, or
+  // nothing at all — becomes real nodes and edges between the port and the
+  // structure. `Direct` adds nothing, which is what every project built before
+  // mounts existed had.
+  const chain = materials
+    ? buildMountChain({
+        portNodeId: nodeId,
+        targetNodeId,
+        componentRef: node.component_ref,
+        mount: mountOf(node),
+        materials,
+      })
+    : null;
+  for (const mountNode of chain?.nodes ?? []) network.nodes[mountNode.id] = mountNode;
+  for (const mountEdge of chain?.edges ?? []) network.edges[mountEdge.id] = mountEdge;
+
+  // A heat-pipe mount already reached the structure through its condenser
+  // joint, so adding this would be a second path into the same plate.
+  if (chain?.needsBaseEdge === false) return;
+
+  const edge = portConnectionEdge(
+    network,
+    nodeId,
+    chain?.entryNodeId ?? nodeId,
+    portKind,
+    targetNodeId,
+    materials,
+  );
+  network.edges[edge.id] = edge;
+}
+
+function clearMount(network: ThermalNetwork, portNodeId: string): void {
+  for (const [id, edge] of Object.entries(network.edges)) {
+    if (isOwnedByMount(edge, portNodeId)) delete network.edges[id];
+  }
+  for (const [id, node] of Object.entries(network.nodes)) {
+    if (isOwnedByMount(node, portNodeId)) delete network.nodes[id];
+  }
 }
 
 function statusFor(network: ThermalNetwork, validation: GraphValidationResult): NetworkStatus {
@@ -296,10 +394,9 @@ export const useNetworkStore = create<NetworkStoreState>((set, get) => ({
 
   // Moving a node is layout, not physics: no solver invalidation.
   setNodePosition: (nodeId, position) =>
-    get().mutate(
-      (network) => void (network.layout.positions[nodeId] = position),
-      { skipInvalidate: true },
-    ),
+    get().mutate((network) => void (network.layout.positions[nodeId] = position), {
+      skipInvalidate: true,
+    }),
 
   addSubgraph: ({ nodes, edges, binding, zones }) =>
     get().mutate((network) => {
@@ -360,14 +457,13 @@ export const useNetworkStore = create<NetworkStoreState>((set, get) => ({
       for (const edge of edges) network.edges[edge.id] = edge;
       for (const zone of zones) network.zones[zone.id] = zone;
       for (const connection of retainedConnections) {
-        const edge = portConnectionEdge(
+        materialisePortConnection(
           network,
           connection.nodeId,
           connection.portKind,
           connection.targetNodeId,
           materials,
         );
-        network.edges[edge.id] = edge;
       }
     }),
 
@@ -423,23 +519,79 @@ export const useNetworkStore = create<NetworkStoreState>((set, get) => ({
         port.kind === portKind ? { ...port, connected_to: targetNodeId } : port,
       );
 
-      // The port becomes a real edge. Single-HSK connections are resolved from
-      // Screen 01; other structures retain an explicit unresolved interface.
-      const edge = portConnectionEdge(network, nodeId, portKind, targetNodeId, materials);
-      network.edges[edge.id] = edge;
+      // The port becomes real topology: the mount chain, then the edge into
+      // the structure. Single-HSK connections are resolved from Screen 01;
+      // other structures retain an explicit unresolved interface.
+      materialisePortConnection(network, nodeId, portKind, targetNodeId, materials);
     }),
+
+  refreshMounts: (components, materials) => {
+    const network = get().network;
+    if (!network) return 0;
+    const byId = new Map(components.map((component) => [component.id, component]));
+
+    const plan: Array<{ nodeId: string; portKind: PortKind; targetNodeId: string }> = [];
+    for (const node of Object.values(network.nodes)) {
+      if (!node.component_ref) continue;
+      const component = byId.get(node.component_ref);
+      if (!component) continue;
+      const wanted = mountSpec(component.thermal_spec);
+      // Only touch a port whose stamp is out of date; rebuilding every mount on
+      // every visit would churn the graph and its undo history for nothing.
+      if (JSON.stringify(mountOf(node)) === JSON.stringify(wanted)) continue;
+      for (const port of node.ports ?? []) {
+        if (port.connected_to) {
+          plan.push({ nodeId: node.id, portKind: port.kind, targetNodeId: port.connected_to });
+        }
+      }
+      if ((node.ports ?? []).every((port) => !port.connected_to)) {
+        // Not connected yet, but the stamp still has to be current so the next
+        // connection builds the right chain.
+        plan.push({ nodeId: node.id, portKind: 'HEAT_OUT', targetNodeId: '' });
+      }
+    }
+    if (plan.length === 0) return 0;
+
+    get().mutate(
+      (draft) => {
+        for (const step of plan) {
+          const node = draft.nodes[step.nodeId];
+          if (!node?.component_ref) continue;
+          const component = byId.get(node.component_ref);
+          if (!component) continue;
+          node.metadata = {
+            ...node.metadata,
+            [MOUNT_SPEC_KEY]: mountSpec(component.thermal_spec),
+          };
+          if (step.targetNodeId) {
+            materialisePortConnection(
+              draft,
+              step.nodeId,
+              step.portKind,
+              step.targetNodeId,
+              materials,
+            );
+          }
+        }
+      },
+      { skipHistory: true },
+    );
+    return plan.filter((step) => step.targetNodeId).length;
+  },
 
   disconnectPort: (nodeId, portKind) =>
     get().mutate((network) => {
       const node = network.nodes[nodeId];
       if (!node?.ports) return;
+      clearMount(network, nodeId);
       const port = node.ports.find((candidate) => candidate.kind === portKind);
       if (port?.connected_to) {
         for (const [edgeId, edge] of Object.entries(network.edges)) {
           const connectsTarget =
             (edge.from === nodeId && edge.to === port.connected_to) ||
             (edge.to === nodeId && edge.from === port.connected_to);
-          const matchesKind = edge.metadata?.port_kind == null || edge.metadata.port_kind === portKind;
+          const matchesKind =
+            edge.metadata?.port_kind == null || edge.metadata.port_kind === portKind;
           if (edge.id.startsWith('EDGE_PORT_') && connectsTarget && matchesKind) {
             delete network.edges[edgeId];
           }
@@ -506,9 +658,7 @@ export const useNetworkStore = create<NetworkStoreState>((set, get) => ({
   },
 
   setStatus: (status) =>
-    set((state) =>
-      state.network ? { network: { ...state.network, status } } : state,
-    ),
+    set((state) => (state.network ? { network: { ...state.network, status } } : state)),
 
   updateSolverSettings: (patch) => {
     const network = get().network;

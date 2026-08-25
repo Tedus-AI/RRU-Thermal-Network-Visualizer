@@ -57,6 +57,14 @@ import {
   type ModuleReferenceLocation,
   type PackageType,
   type QtyModel,
+  MOUNT_TYPES,
+  MOUNT_TYPE_LABELS,
+  MOUNT_TYPE_HINTS,
+  mountSpec,
+  mountHasBlock,
+  mountHasHeatPipe,
+  type MountSpec,
+  type MountType,
 } from '@/domain/component';
 import { withValue, type SourcedValue } from '@/domain/sourcedValue';
 import {
@@ -252,6 +260,14 @@ function useFocusField(focus: FocusRequest | null | undefined, tab: Tab) {
   }, [focus, tab]);
 }
 
+/** An empty box is "not stated", which is null — never 0 (04 §11). */
+function numberOrNull(raw: string): number | null {
+  const trimmed = raw.trim();
+  if (trimmed === '') return null;
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 export function ComponentInspector({
   component,
   readOnly,
@@ -352,6 +368,13 @@ export function ComponentInspector({
   // DirectMetal, and SurfaceBodyBased is the accurate test — a JunctionBased
   // metal face (a flanged transistor) does have an Rjc.
   const surfaceReferenced = metalBase && metalBaseModel.source_model === 'SurfaceBodyBased';
+
+  // How this part reaches the shared structure. Orthogonal to the heat path:
+  // the same boss or heat pipe can sit under a coin, a via or a metal face.
+  const mount = mountSpec(spec);
+  const mountBlock = mountHasBlock(mount.type);
+  const patchMount = (patch: Partial<MountSpec>) =>
+    patchSpec({ mount: { ...mount, ...patch } }, ['mount']);
   const rule = GEOMETRY_RULES[heatPath];
   const resolvedTim = resolveTim(spec.tim, materials);
   const projectCoin = {
@@ -622,6 +645,127 @@ export function ComponentInspector({
                         value={materials.via_efficiency.value}
                         from=""
                       />
+                    </div>
+                  )}
+                </div>
+              </fieldset>
+
+              {/*
+                The mount sits between HEAT_OUT and the shared base, so it is a
+                separate question from the heat path and asked separately. The
+                same four options apply whichever path is selected — that is
+                what keeps four paths x four mounts from becoming sixteen
+                templates.
+              */}
+              <fieldset className="rounded-md border border-line p-3">
+                <legend className="px-1 text-[12px] font-semibold text-ink-700">
+                  Mount to Structure / 與結構的接合方式
+                </legend>
+                <div className="flex flex-col gap-2">
+                  <Select
+                    id="ins-mount-type"
+                    aria-label="Mount type"
+                    items={MOUNT_TYPES.map((type) => ({
+                      value: type,
+                      label: `${MOUNT_TYPE_LABELS[type].en} / ${MOUNT_TYPE_LABELS[type].zh}`,
+                      hint: `${MOUNT_TYPE_HINTS[type].en}\n${MOUNT_TYPE_HINTS[type].zh}`,
+                    }))}
+                    value={mount.type}
+                    disabled={readOnly}
+                    onChange={(event) =>
+                      patchMount({ type: event.target.value as MountType })
+                    }
+                  />
+                  <p className="text-[11px] leading-relaxed text-ink-400">
+                    {MOUNT_TYPE_HINTS[mount.type].en}
+                    <span className="mt-0.5 block">{MOUNT_TYPE_HINTS[mount.type].zh}</span>
+                  </p>
+
+                  {mount.type !== 'Direct' && (
+                    <div className="grid grid-cols-2 gap-3 rounded-md border border-line bg-surface-muted p-2.5">
+                      <div className="flex flex-col gap-1.5">
+                        <FieldLabel
+                          label={mountBlock ? 'Mount L' : 'Joint L'}
+                          zh={mountBlock ? '接合面長' : '接合面長'}
+                          unit="mm"
+                          htmlFor="ins-mount-l"
+                        />
+                        <NumberInput
+                          id="ins-mount-l"
+                          value={mount.contact_L_mm ?? ''}
+                          disabled={readOnly}
+                          onChange={(event) =>
+                            patchMount({ contact_L_mm: numberOrNull(event.target.value) })
+                          }
+                        />
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <FieldLabel
+                          label={mountBlock ? 'Mount W' : 'Joint W'}
+                          zh="接合面寬"
+                          unit="mm"
+                          htmlFor="ins-mount-w"
+                        />
+                        <NumberInput
+                          id="ins-mount-w"
+                          value={mount.contact_W_mm ?? ''}
+                          disabled={readOnly}
+                          onChange={(event) =>
+                            patchMount({ contact_W_mm: numberOrNull(event.target.value) })
+                          }
+                        />
+                      </div>
+
+                      {mountBlock && (
+                        <div className="flex flex-col gap-1.5">
+                          <FieldLabel
+                            label={mount.type === 'Pedestal' ? 'Boss height' : 'Plate thickness'}
+                            zh={mount.type === 'Pedestal' ? '凸台高度' : '基座厚度'}
+                            unit="mm"
+                            htmlFor="ins-mount-h"
+                            tooltip={
+                              mount.type === 'Pedestal'
+                                ? '凸台從底座長出來的高度，就是這段的導熱長度。'
+                                : '局部基座的厚度，熱往下穿過它的距離。'
+                            }
+                          />
+                          <NumberInput
+                            id="ins-mount-h"
+                            value={mount.height_mm ?? ''}
+                            disabled={readOnly}
+                            onChange={(event) =>
+                              patchMount({ height_mm: numberOrNull(event.target.value) })
+                            }
+                          />
+                        </div>
+                      )}
+
+                      {mountHasHeatPipe(mount.type) && (
+                        <div className="flex flex-col gap-1.5">
+                          <FieldLabel
+                            label="Heat pipe Rth"
+                            zh="熱管熱阻"
+                            unit="°C/W"
+                            htmlFor="ins-mount-hp"
+                            tooltip="熱管熱阻是原廠數值，無法由幾何推導，未填則該段維持未解析。"
+                          />
+                          <NumberInput
+                            id="ins-mount-hp"
+                            value={mount.heat_pipe_R_C_per_W ?? ''}
+                            disabled={readOnly}
+                            onChange={(event) =>
+                              patchMount({ heat_pipe_R_C_per_W: numberOrNull(event.target.value) })
+                            }
+                          />
+                        </div>
+                      )}
+
+                      <p className="col-span-2 text-[10px] leading-relaxed text-ink-400">
+                        The metal is the heat sink&rsquo;s, so its k comes from Screen 01. Anything
+                        left empty leaves that step of the chain UNRESOLVED — Screen 05 still draws
+                        it. / 金屬與散熱器同材，k 取自 Screen 01。留空該段維持未解析，Screen 05
+                        仍會畫出來。
+                      </p>
                     </div>
                   )}
                 </div>

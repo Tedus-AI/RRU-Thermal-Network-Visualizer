@@ -350,6 +350,19 @@ export function ThermalPathBuilderView() {
     materials.hsk_base_W_mm?.value,
   ]);
 
+  // The same idea for the mount, which is chosen in Screen 04 and lives on the
+  // port node. Without this, picking a boss over there would raise the review
+  // flag and then appear to do nothing here until the engineer happened to
+  // regenerate that component — a new feature that looks broken on first use.
+  // `refreshMounts` only touches ports whose stamp is stale, so a visit with
+  // nothing changed costs one comparison per node and writes nothing.
+  useEffect(() => {
+    if (!draft || draft.project_id !== projectId) return;
+    const current = useNetworkStore.getState().network;
+    if (!current || current.project_id !== projectId) return;
+    useNetworkStore.getState().refreshMounts(components, materials);
+  }, [projectId, draft?.project_id, components, materials]);
+
   // One section at a time, matching the step. Three open panels in a 300 px
   // column is what made this side of the screen feel cramped; the engineer can
   // still open any of them by hand afterwards.
@@ -1498,9 +1511,7 @@ export function ThermalPathBuilderView() {
                   setConfirmEntireRebuild(false);
                 }}
               >
-                {confirmEntireRebuild
-                  ? 'Confirm delete / 確定刪除'
-                  : 'Entire Subgraph / 全部取代'}
+                {confirmEntireRebuild ? 'Confirm delete / 確定刪除' : 'Entire Subgraph / 全部取代'}
               </Button>
               <Button
                 variant="primary"
@@ -1538,7 +1549,8 @@ export function ThermalPathBuilderView() {
                 Deletes <strong>every</strong> node and edge belonging to this component, including
                 the ones you added or edited by hand, then rebuilds from the template.
                 <span className="block">
-                  刪除此元件的<strong>所有</strong>節點與連線（含手動新增與修改過的），再依模板重建。
+                  刪除此元件的<strong>所有</strong>
+                  節點與連線（含手動新增與修改過的），再依模板重建。
                 </span>
               </dd>
               {manualObjectsFor(rebuildFor) > 0 ? (

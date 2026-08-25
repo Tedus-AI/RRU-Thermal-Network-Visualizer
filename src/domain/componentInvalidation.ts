@@ -39,6 +39,13 @@ export function effectOfChange(field: string, isMapped: boolean): InvalidationEf
   ) {
     return effect(true, true, 'component_architecture_changed');
   }
+  // The mount adds and removes real nodes — a boss, a condenser — between the
+  // component and the shared structure. That is topology, not a number to
+  // re-solve, so it always forces a network review even when only one of its
+  // dimensions moved.
+  if (field === 'mount' || field.startsWith('mount.')) {
+    return effect(true, true, 'component_architecture_changed');
+  }
   if (field.startsWith('heat_path.parameters.')) {
     // Contact/exposed-area parameters are embedded in generated edges and node
     // boundary metadata. Re-apply is explicit so a hand-edited subgraph is never
