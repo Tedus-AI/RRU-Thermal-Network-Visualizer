@@ -32,11 +32,35 @@ const EDGE_SHORT: Record<string, string> = {
 const HSK_BUS_MIN_BRANCHES = 4;
 const HSK_BUS_PREFIX = 'VIEW_HSK_BUS_';
 
+/**
+ * How far apart two branches leaving the SAME terminal are fanned on the bus.
+ *
+ * A parallel mount puts two edges between one node pair — an embedded heat pipe
+ * is exactly that, the pipe and the aluminium around it — and each is routed to
+ * a junction placed level with its own terminal. Level with the same terminal
+ * meant the same point: two coincident junctions, two straight lines drawn on
+ * top of each other, and two labels in the same place. The second route was
+ * invisible, which read as the tool having failed to build it.
+ *
+ * Wide enough that the two Rth labels clear each other and not just the two
+ * lines: they are 9px type riding 9px off their own edge, so a fan that only
+ * separates the connectors leaves the numbers overprinted. Still well short of
+ * the gap between neighbouring terminals, so a fan never reaches the branch
+ * above or below it.
+ */
+const HSK_BUS_BRANCH_FAN_PX = 28;
+
 interface HskBusBranch {
   edgeId: string;
   terminalId: string;
   sharedId: string;
   junctionId: string;
+  /**
+   * Offset along the bus from the terminal's own level, so siblings from one
+   * terminal land on distinct points. Zero for a terminal with a single branch,
+   * which is every mount that is not a parallel one.
+   */
+  crossOffset: number;
 }
 
 interface HskBusGroup {
@@ -98,7 +122,7 @@ function hskBusGroups(
 ): HskBusGroup[] {
   if (busAxis(layoutMode) == null) return [];
 
-  const grouped = new Map<string, Array<Omit<HskBusBranch, 'junctionId'>>>();
+  const grouped = new Map<string, Array<Omit<HskBusBranch, 'junctionId' | 'crossOffset'>>>();
   for (const edge of Object.values(network.edges)) {
     if (!edge.id.startsWith('EDGE_PORT_')) continue;
     if (hidden.has(edge.from) || hidden.has(edge.to)) continue;
@@ -129,14 +153,31 @@ function hskBusGroups(
     .filter(([, branches]) => branches.length >= HSK_BUS_MIN_BRANCHES)
     .map(([sharedId, branches]) => {
       const id = `${HSK_BUS_PREFIX}${sharedId}`;
+      // Siblings first, so a terminal with two routes can be fanned apart.
+      // Ordering by edge id keeps the fan stable across re-renders; it must not
+      // depend on iteration order, or the two lines would swap places whenever
+      // an unrelated edge was added.
+      const siblings = new Map<string, string[]>();
+      for (const branch of branches) {
+        const list = siblings.get(branch.terminalId) ?? [];
+        list.push(branch.edgeId);
+        siblings.set(branch.terminalId, list);
+      }
+      for (const list of siblings.values()) list.sort();
+
       return {
         id,
         sharedId,
         outletId: `${id}_OUTLET`,
-        branches: branches.map((branch) => ({
-          ...branch,
-          junctionId: `${id}_JUNCTION_${branch.edgeId}`,
-        })),
+        branches: branches.map((branch) => {
+          const list = siblings.get(branch.terminalId) ?? [branch.edgeId];
+          const index = list.indexOf(branch.edgeId);
+          return {
+            ...branch,
+            junctionId: `${id}_JUNCTION_${branch.edgeId}`,
+            crossOffset: (index - (list.length - 1) / 2) * HSK_BUS_BRANCH_FAN_PX,
+          };
+        }),
       };
     });
 }
@@ -304,6 +345,7 @@ export function buildElements(
           busId: group.id,
           sourceId: branch.terminalId,
           edgeId: branch.edgeId,
+          crossOffset: branch.crossOffset,
           w: 6,
           h: 6,
           fill: HSK_BUS_COLOR,
@@ -318,8 +360,8 @@ export function buildElements(
         position:
           geometry.along != null && sourcePosition
             ? axis === 'vertical'
-              ? { x: geometry.along, y: sourcePosition.y }
-              : { x: sourcePosition.x, y: geometry.along }
+              ? { x: geometry.along, y: sourcePosition.y + branch.crossOffset }
+              : { x: sourcePosition.x + branch.crossOffset, y: geometry.along }
             : undefined,
         selectable: false,
         grabbable: false,

@@ -39,6 +39,35 @@ export interface CanvasHandle {
 /** Anything smaller than this is a click that slipped, not a chosen region. */
 const MIN_MARQUEE_PX = 12;
 
+/**
+ * Zoom per wheel notch, as a multiplier. 1.03 is 3% a notch.
+ *
+ * This is the one number to change if the wheel feels too slow or too abrupt;
+ * a browser's own zoom steps are nearer 1.10.
+ */
+const WHEEL_ZOOM_STEP = 1.03;
+
+/**
+ * One wheel notch, in notches, whatever the device reports.
+ *
+ * `deltaMode` is pixels on most mice, lines on some, pages on a few, and a
+ * trackpad sends a stream of small pixel deltas rather than one notch — so the
+ * delta is normalised to pixels first and a notch defined as 100 of them. A
+ * trackpad flick then zooms smoothly instead of in jumps, and a mouse notch is
+ * exactly one step.
+ */
+function wheelNotches(event: WheelEvent): number {
+  const perLine = 16;
+  const perPage = 400;
+  const pixels =
+    event.deltaMode === 1
+      ? event.deltaY * perLine
+      : event.deltaMode === 2
+        ? event.deltaY * perPage
+        : event.deltaY;
+  return pixels / 100;
+}
+
 function layoutOptions(mode: string) {
   switch (mode) {
     case 'TopBottom':
@@ -129,10 +158,14 @@ function positionViewBuses(cy: Core) {
     bus.position(geometry.position);
     outlet.position(geometry.outletPosition);
     sourceEntries.forEach(({ junction, source }) => {
+      // The fan the element builder computed has to survive this pass, or two
+      // branches from one terminal snap back on top of each other the moment a
+      // layout runs.
+      const offset = (junction.data('crossOffset') as number | undefined) ?? 0;
       junction.position(
         vertical
-          ? { x: geometry.along!, y: source.position('y') }
-          : { x: source.position('x'), y: geometry.along! },
+          ? { x: geometry.along!, y: source.position('y') + offset }
+          : { x: source.position('x') + offset, y: geometry.along! },
       );
     });
   });
@@ -245,7 +278,9 @@ export const ThermalGraphCanvas = forwardRef<
       style: cytoscapeStylesheet(),
       minZoom: 0.2,
       maxZoom: 2.5,
-      wheelSensitivity: 0.2,
+      // Cytoscape's own wheel zoom is off; the handler below replaces it. See
+      // the `wheel` effect for why.
+      userZoomingEnabled: false,
     });
     cyRef.current = cy;
 
@@ -316,6 +351,36 @@ export const ThermalGraphCanvas = forwardRef<
     const container = containerRef.current;
     container.addEventListener('contextmenu', suppressNativeMenu);
 
+    /*
+     * WHEEL ZOOM, IN EVERY TOOL.
+     *
+     * Cytoscape's own wheel handler is gated on `userPanningEnabled()` as well
+     * as on zooming — zooming about the cursor moves the pan, so it treats the
+     * two as one permission. Select and Zoom Region both turn user panning off,
+     * so in those tools the wheel did nothing at all and the only way to zoom
+     * was to switch to Pan first. The comment in the tool effect claiming the
+     * wheel worked in both was simply wrong.
+     *
+     * `cy.zoom({ level, renderedPosition })` has no such gate: it checks
+     * `zoomingEnabled` and `panningEnabled`, neither of which any tool touches.
+     * So the handler is ours, it anchors on the pointer, and it is the same in
+     * all six tools.
+     */
+    const onWheel = (event: WheelEvent) => {
+      // Without this the page behind the canvas scrolls as well.
+      event.preventDefault();
+      const notches = wheelNotches(event);
+      if (notches === 0) return;
+      const bounds = container.getBoundingClientRect();
+      cy.zoom({
+        // Wheel down is a positive delta and means zoom out.
+        level: cy.zoom() * WHEEL_ZOOM_STEP ** -notches,
+        // The point under the cursor stays under the cursor.
+        renderedPosition: { x: event.clientX - bounds.left, y: event.clientY - bounds.top },
+      });
+    };
+    container.addEventListener('wheel', onWheel, { passive: false });
+
     // The container is often still 0×0 on the first paint; without this the
     // graph renders outside the visible viewport and the canvas looks empty.
     const observer = new ResizeObserver((entries) => {
@@ -334,6 +399,7 @@ export const ThermalGraphCanvas = forwardRef<
     return () => {
       observer.disconnect();
       container.removeEventListener('contextmenu', suppressNativeMenu);
+      container.removeEventListener('wheel', onWheel);
       cy.destroy();
       cyRef.current = null;
     };
@@ -419,8 +485,11 @@ export const ThermalGraphCanvas = forwardRef<
      *
      * They are now the two halves of that, the way a drawing tool usually
      * splits them. Dragging the background selects a region in Select and moves
-     * the view in Pan; nodes are grabbable only in Select. Wheel zoom and the
-     * zoom buttons work in both, so nothing becomes unreachable.
+     * the view in Pan; nodes are grabbable only in Select.
+     *
+     * Turning user panning off also killed Cytoscape's wheel zoom, which is
+     * gated on it — so the wheel is handled by hand in the init effect and is
+     * unaffected by anything set here.
      */
     const panning = tool !== 'select' && tool !== 'zoom-box';
     cy.userPanningEnabled(panning);

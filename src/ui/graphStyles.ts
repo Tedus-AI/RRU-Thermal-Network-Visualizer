@@ -184,16 +184,97 @@ export function edgeColor(edge: ThermalEdge): string {
 }
 
 /**
+ * Text metrics the node box and the stylesheet BOTH depend on.
+ *
+ * `NODE_TEXT_MAX_W` has to match `text-max-width`, and `NODE_FONT` has to match
+ * `font-weight`, `font-size` and `font-family`, all set on the node rule below.
+ * The box is sized by measuring the label in that exact font and wrapping it at
+ * that exact column, so anything that drifts apart here shows up as text
+ * hanging out of a border.
+ */
+const NODE_FONT_SIZE = 10;
+const NODE_FONT_FAMILY = 'system-ui, sans-serif';
+const NODE_FONT = `600 ${NODE_FONT_SIZE}px ${NODE_FONT_FAMILY}`;
+const NODE_LINE_H = 14;
+const NODE_TEXT_MAX_W = 140;
+const NODE_PADDING = 18;
+/** Fallback average glyph width, for environments with no canvas to measure in. */
+const NODE_CHAR_W = 5.6;
+
+/**
+ * A 2D context kept only to measure text in the node font.
+ *
+ * `undefined` means "not tried yet", `null` means "there is none" — a test
+ * runner outside a browser, or a canvas implementation that hands back no
+ * context. Either way the character estimate takes over, which is rough but
+ * never throws.
+ */
+let measurer: CanvasRenderingContext2D | null | undefined;
+
+function textWidth(text: string): number {
+  if (measurer === undefined) {
+    try {
+      const context = document.createElement('canvas').getContext('2d');
+      if (context) context.font = NODE_FONT;
+      measurer = context ?? null;
+    } catch {
+      measurer = null;
+    }
+  }
+  return measurer ? measurer.measureText(text).width : text.length * NODE_CHAR_W;
+}
+
+/**
+ * How many lines a label occupies once Cytoscape has wrapped it, and how wide
+ * the widest of them is.
+ *
+ * `text-wrap: wrap` breaks on spaces, so this is the same greedy fill: take
+ * words until the next one would not fit, then break. A single word wider than
+ * the column has nowhere to break and overhangs it, so it counts as one line at
+ * its full width — which is why the box is allowed to be wider than the column.
+ */
+function wrapLabel(line: string, maxWidth: number): { lines: number; width: number } {
+  if (textWidth(line) <= maxWidth) return { lines: 1, width: textWidth(line) };
+
+  let lines = 1;
+  let current = '';
+  let widest = 0;
+  for (const word of line.split(' ')) {
+    const candidate = current === '' ? word : `${current} ${word}`;
+    if (current !== '' && textWidth(candidate) > maxWidth) {
+      widest = Math.max(widest, textWidth(current));
+      lines += 1;
+      current = word;
+      continue;
+    }
+    current = candidate;
+  }
+  return { lines, width: Math.max(widest, textWidth(current)) };
+}
+
+/**
  * Deterministic node box, so nothing depends on asynchronous text measurement.
  * Cytoscape's `width: label` is measured late; a node measured as 0x0 is cached
  * as "takes up no space" and then never painted.
+ *
+ * The height used to count only the EXPLICIT lines — the `\n`s the caller put
+ * in. Cytoscape then wrapped anything wider than `text-max-width` onto further
+ * lines the box knew nothing about, and the text ran out of the top and bottom
+ * of the border. A part carrying its manufacturer code in its name — "Power
+ * Module(H48SA50030NRDH)" — did it on the very first line.
+ *
+ * The width was guessed from a character COUNT, which is the same class of
+ * error: "WWWW" and "iiii" are not the same width in any proportional font, so
+ * the box was too narrow for one and too wide for the other. Both are now
+ * measured in the font the canvas actually paints in.
  */
 export function labelBox(label: string): { w: number; h: number } {
-  const lines = label.split('\n');
-  const longest = lines.reduce((max, line) => Math.max(max, line.length), 0);
+  const wrapped = label.split('\n').map((line) => wrapLabel(line, NODE_TEXT_MAX_W));
+  const rendered = wrapped.reduce((total, line) => total + line.lines, 0);
+  const widest = wrapped.reduce((max, line) => Math.max(max, line.width), 0);
   return {
-    w: Math.min(180, Math.max(64, Math.round(longest * 5.6) + 18)),
-    h: lines.length * 14 + 12,
+    w: Math.max(64, Math.round(widest) + NODE_PADDING),
+    h: rendered * NODE_LINE_H + 12,
   };
 }
 
@@ -216,9 +297,13 @@ export function cytoscapeStylesheet(): StylesheetCSS[] {
         'text-wrap': 'wrap',
         'text-valign': 'center',
         'text-halign': 'center',
-        'font-size': 10,
+        // These three and `text-max-width` are what `labelBox` measures
+        // against. Changing one here without changing it there puts the text
+        // back outside the border.
+        'font-size': NODE_FONT_SIZE,
         'font-weight': 600,
-        'text-max-width': '140px',
+        'font-family': NODE_FONT_FAMILY,
+        'text-max-width': `${NODE_TEXT_MAX_W}px`,
       },
     },
     {
