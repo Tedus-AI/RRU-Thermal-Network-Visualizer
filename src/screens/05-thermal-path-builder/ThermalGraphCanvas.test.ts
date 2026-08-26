@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { createRevision } from '@/domain/revision';
 import { createRth } from '@/thermal/rth';
 import type { ThermalEdge, ThermalNetwork, ThermalNode } from '@/thermal/types';
-import { buildElements } from './thermalGraphElements';
+import { buildElements, parallelRth } from './thermalGraphElements';
 
 function thermalNode(
   id: string,
@@ -374,5 +374,148 @@ describe('parallel branches from one terminal', () => {
     network.edges[later] = portEdge(later, 'NODE_TIM_9');
     const second = junctions(network).map((element) => element.data.id);
     expect(second.filter((id) => first.includes(id))).toEqual(first);
+  });
+});
+
+/**
+ * Two numbers side by side do not tell a reader what the pair is worth, and the
+ * arithmetic is the one people get wrong: 0.130 beside 0.050 is 0.036 — smaller
+ * than either — not 0.180 and not 0.090. So the combination is written on the
+ * bar where the branches rejoin, and each branch says which route it is.
+ */
+describe('the parallel pair, annotated', () => {
+  function withPipeAndSpreading(pipeR: number | null = 0.13, spreadR: number | null = 0.05) {
+    const network = fanInNetwork(4);
+    const spread = 'EDGE_PORT_TIM_1_HEAT_OUT_HSK_BASE';
+    network.edges[spread] = {
+      ...portEdge(spread, 'NODE_TIM_1'),
+      type: 'spreading',
+      rth: createRth(spreadR, 'Analytical', 'medium'),
+      resolution: spreadR == null ? 'unresolved' : 'resolved',
+    };
+    const pipe = 'EDGE_PORT_MOUNT_TIM_1_HEAT_PIPE';
+    network.edges[pipe] = {
+      ...portEdge(pipe, 'NODE_TIM_1'),
+      type: 'heat_pipe',
+      rth: createRth(pipeR, 'Analytical', 'medium'),
+      resolution: pipeR == null ? 'unresolved' : 'resolved',
+    };
+    return network;
+  }
+
+  const build = (network: ThermalNetwork, showLabels = true) =>
+    buildElements(network, { showPorts: true, showLabels, layoutMode: 'Auto' });
+
+  const note = (network: ThermalNetwork, showLabels = true) =>
+    build(network, showLabels).find((element) =>
+      String(element.classes).includes('hsk-bus-parallel-note'),
+    );
+
+  it('writes the parallel combination, not the sum', () => {
+    // 1 / (1/0.130 + 1/0.050) = 0.0361
+    expect(note(withPipeAndSpreading())?.data.label).toBe('∥ 0.036 °C/W');
+  });
+
+  it('places the note on the bar at the terminal own level, between the branches', () => {
+    const elements = build(withPipeAndSpreading());
+    const found = elements.find((e) => String(e.classes).includes('hsk-bus-parallel-note'))!;
+    const branches = elements.filter(
+      (e) =>
+        String(e.classes).includes('hsk-bus-branch-junction') &&
+        e.data.sourceId === 'NODE_TIM_1',
+    );
+    expect(branches).toHaveLength(2);
+    expect(found.position?.y).toBe(50);
+    expect(found.position?.x).toBe(branches[0].position?.x);
+    const ys = branches.map((b) => b.position?.y ?? 0).sort((a, b) => a - b);
+    expect(ys[0]).toBeLessThan(found.position!.y);
+    expect(ys[1]).toBeGreaterThan(found.position!.y);
+  });
+
+  it('marks both branches so the stylesheet can wrap and stack their labels', () => {
+    const classes = build(withPipeAndSpreading())
+      .filter((e) => String(e.classes).includes('routed-port-edge'))
+      .filter((e) => /TIM_1/.test(String(e.data.id)))
+      .map((e) => String(e.classes));
+    expect(classes.every((c) => c.includes('parallel-branch'))).toBe(true);
+    // A lone branch is not marked — it has a one-line label that fits.
+    expect(
+      build(fanInNetwork(4))
+        .filter((e) => String(e.classes).includes('routed-port-edge'))
+        .every((e) => !String(e.classes).includes('parallel-branch')),
+    ).toBe(true);
+  });
+
+  it('names each branch, so the pipe is tellable from the metal', () => {
+    const labels = build(withPipeAndSpreading())
+      .filter((e) => String(e.classes).includes('routed-port-edge'))
+      .filter((e) => /TIM_1/.test(String(e.data.id)))
+      .map((e) => e.data.label);
+    // The name goes ABOVE the number: on one line it is wider than the branch.
+    expect(labels).toContain('Heat Pipe\n0.130 °C/W');
+    expect(labels).toContain('Spreading\n0.050 °C/W');
+  });
+
+  it('leaves a lone branch unnamed — there is nothing to tell it apart from', () => {
+    const labels = build(fanInNetwork(4))
+      .filter((e) => String(e.classes).includes('routed-port-edge'))
+      .map((e) => e.data.label);
+    expect(labels).toContain('0.050 °C/W');
+    expect(labels.every((label) => !/Cond/.test(String(label)))).toBe(true);
+  });
+
+  it('refuses a total when one branch is unresolved', () => {
+    // A total from the branches that happen to have numbers would be LOWER than
+    // the truth, and would read as if the missing branch carried nothing.
+    expect(note(withPipeAndSpreading(null, 0.05))?.data.label).toBe('∥ —');
+  });
+
+  it('adds no note where there is no parallel pair', () => {
+    expect(note(fanInNetwork(4))).toBeUndefined();
+  });
+
+  it('says nothing at all when labels are switched off', () => {
+    expect(note(withPipeAndSpreading(), false)?.data.label).toBe('');
+  });
+
+  it('is view-only: not selectable, not grabbable', () => {
+    const found = note(withPipeAndSpreading())!;
+    expect(found.selectable).toBe(false);
+    expect(found.grabbable).toBe(false);
+    expect(String(found.classes)).toContain('view-only');
+  });
+});
+
+describe('parallelRth', () => {
+  const twoEdges = (a: number | null, b: number | null, enabled = true): ThermalNetwork => {
+    const network = fanInNetwork(1);
+    network.edges.A = { ...portEdge('A', 'NODE_TIM_1'), rth: createRth(a, 'Analytical', 'high') };
+    network.edges.B = {
+      ...portEdge('B', 'NODE_TIM_1'),
+      rth: createRth(b, 'Analytical', 'high'),
+      enabled,
+    };
+    return network;
+  };
+
+  it('adds conductances, which is why a pipe helps at all', () => {
+    expect(parallelRth(twoEdges(0.13, 0.05), ['A', 'B'])!).toBeCloseTo(0.036111, 6);
+  });
+
+  it('is smaller than either branch', () => {
+    const combined = parallelRth(twoEdges(0.13, 0.05), ['A', 'B'])!;
+    expect(combined).toBeLessThan(0.05);
+  });
+
+  it('is null when a branch has no number', () => {
+    expect(parallelRth(twoEdges(0.13, null), ['A', 'B'])).toBeNull();
+  });
+
+  it('is null when a branch is switched off — it is not carrying heat', () => {
+    expect(parallelRth(twoEdges(0.13, 0.05, false), ['A', 'B'])).toBeNull();
+  });
+
+  it('is null for an edge that is not there', () => {
+    expect(parallelRth(twoEdges(0.13, 0.05), ['A', 'MISSING'])).toBeNull();
   });
 });

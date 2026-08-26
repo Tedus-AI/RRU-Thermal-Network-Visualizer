@@ -39,6 +39,7 @@ import {
   QTY_MODEL_LABELS,
   GEOMETRY_RULES,
   SOURCE_FACE_LABELS,
+  cavityFilterBodyPrefill,
   componentTotalPowerW,
   heatPathPatch,
   metalBaseExposedAreaMm2,
@@ -321,6 +322,35 @@ export function ComponentInspector({
   const patchGeometry = (patch: Partial<ComponentGeometry>) =>
     patchSpec({ geometry: { ...spec.geometry, ...patch } }, ['geometry']);
 
+  /*
+     A spec change that can turn this part into a body-based cavity filter, with
+     the heat sink's own outline filled into the blank body L and W.
+
+     A machined filter bolts down across most of the base, so those two numbers
+     start out as Screen 01's and get trimmed from there. Retyping them is how
+     the two come to disagree. It only ever fills a BLANK — a stated size is the
+     engineer speaking, and is never overwritten.
+  */
+  const patchSpecPrefillingCavityFilter = (
+    patch: Partial<Component['thermal_spec']>,
+    fields: string[],
+  ) => {
+    const next = { ...spec, ...patch };
+    const prefill = cavityFilterBodyPrefill(next, {
+      L_mm: materials.hsk_base_L_mm?.value,
+      W_mm: materials.hsk_base_W_mm?.value,
+    });
+    if (!prefill) {
+      patchSpec(patch, fields);
+      return;
+    }
+    onPatch(
+      component.id,
+      { thermal_spec: { ...next, geometry: { ...next.geometry, ...prefill } } },
+      [...fields, 'geometry'],
+    );
+  };
+
   const patchHeatPathParameters = (
     patch: Record<string, number | string | boolean | null>,
     fields: string[],
@@ -426,7 +456,7 @@ export function ComponentInspector({
             label: 'Pipe under source',
             zh: '熱源下方熱管',
             tooltip:
-              '熱管在熱源正下方那一段的壓平尺寸：長 = 穿越熱源的長度，寬 = 所有管子壓平寬度的總和（兩根 8 mm 就填 16）。這塊面積是銅，會從熱源接觸面裡扣掉，剩下的才是走鋁底座擴散的那條並聯支路。',
+              '熱管在熱源正下方那一段的壓平尺寸：長 = 穿越熱源的長度，寬 = 單一根管子壓平後的寬度（根數另外填）。長 × 寬 × 根數就是銅，會從熱源接觸面裡扣掉，剩下的才是走鋁底座擴散的那條並聯支路。',
           }
         : {
             label: 'Mount',
@@ -666,8 +696,16 @@ export function ComponentInspector({
                                   checked={active}
                                   disabled={readOnly}
                                   onChange={() =>
-                                    patchHeatPathParameters(
-                                      { source_model: model },
+                                    patchSpecPrefillingCavityFilter(
+                                      {
+                                        heat_path: {
+                                          ...spec.heat_path,
+                                          parameters: {
+                                            ...spec.heat_path.parameters,
+                                            source_model: model,
+                                          },
+                                        },
+                                      },
                                       ['heat_path.parameters.source_model'],
                                     )
                                   }
@@ -762,8 +800,16 @@ export function ComponentInspector({
                       </div>
                       <div className="flex flex-col gap-1.5">
                         <FieldLabel
-                          label={`${mountFootprint.label} W`}
-                          zh={`${mountFootprint.zh}寬`}
+                          label={
+                            mount.type === 'EmbeddedHeatPipe'
+                              ? 'Pipe W (one pipe)'
+                              : `${mountFootprint.label} W`
+                          }
+                          zh={
+                            mount.type === 'EmbeddedHeatPipe'
+                              ? '單根熱管寬'
+                              : `${mountFootprint.zh}寬`
+                          }
                           unit="mm"
                           htmlFor="ins-mount-w"
                           tooltip={mountFootprint.tooltip}
@@ -777,6 +823,34 @@ export function ComponentInspector({
                           }
                         />
                       </div>
+
+                      {/*
+                        A groove takes one pipe, so two pipes is two grooves side
+                        by side. Storing the total width instead meant doing that
+                        multiplication by hand and keeping the answer rather than
+                        the design — and nobody reading it later could tell 13 mm
+                        apart from "two 6.5s".
+                      */}
+                      {mount.type === 'EmbeddedHeatPipe' && (
+                        <div className="flex flex-col gap-1.5">
+                          <FieldLabel
+                            label="Pipes under source"
+                            zh="熱源下方熱管根數"
+                            htmlFor="ins-mount-pipes"
+                            tooltip="熱源正下方有幾根熱管。銅的面積 = 長 × 單根寬 × 根數；留空視為 1 根。這只影響幾何，熱管熱阻那一欄仍然是全部熱管合計的原廠值。"
+                          />
+                          <NumberInput
+                            id="ins-mount-pipes"
+                            step="1"
+                            min="1"
+                            value={mount.heat_pipe_count ?? ''}
+                            disabled={readOnly}
+                            onChange={(event) =>
+                              patchMount({ heat_pipe_count: numberOrNull(event.target.value) })
+                            }
+                          />
+                        </div>
+                      )}
 
                       {mountBlock && (
                         <div className="flex flex-col gap-1.5">
@@ -806,15 +880,19 @@ export function ComponentInspector({
                         <div className="flex flex-col gap-1.5">
                           <FieldLabel
                             label={
-                              mount.type === 'VaporChamber' ? 'Vapour chamber Rth' : 'Heat pipe Rth'
+                              mount.type === 'VaporChamber'
+                                ? 'Vapour chamber Rth'
+                                : 'Heat pipe Rth (all pipes)'
                             }
-                            zh={mount.type === 'VaporChamber' ? '均熱板熱阻' : '熱管熱阻'}
+                            zh={
+                              mount.type === 'VaporChamber' ? '均熱板熱阻' : '熱管熱阻（全部合計）'
+                            }
                             unit="°C/W"
                             htmlFor="ins-mount-hp"
                             tooltip={
                               mount.type === 'VaporChamber'
                                 ? '均熱板熱阻是原廠在特定功率與熱源尺寸下量測的數值，不是常數，也無法由幾何推導。未填則該段維持未解析。'
-                                : '熱管熱阻是原廠數值，無法由幾何推導，未填則該段維持未解析。'
+                                : '熱管熱阻是原廠數值，無法由幾何推導，未填則該段維持未解析。這裡填的是所有熱管「合計」的熱阻，不是單根 —— 根數欄位不會拿來除它，因為那等於工具自己編一套原廠沒量過的並聯模型。'
                             }
                           />
                           <NumberInput
@@ -1080,9 +1158,10 @@ export function ComponentInspector({
                     value={spec.package_type ?? 'Unknown'}
                     disabled={readOnly}
                     onChange={(event) =>
-                      patchSpec({ package_type: event.target.value as PackageType }, [
-                        'package_type',
-                      ])
+                      patchSpecPrefillingCavityFilter(
+                        { package_type: event.target.value as PackageType },
+                        ['package_type'],
+                      )
                     }
                   />
                 </div>
@@ -1297,6 +1376,18 @@ export function ComponentInspector({
                   onChange={patchGeometry}
                 />
               </div>
+
+              {spec.package_type === 'Cavity Filter' && surfaceReferenced && (
+                <p className="mt-2 rounded-md border border-accent-500/20 bg-accent-100/40 p-2.5 text-[11px] leading-relaxed text-ink-500">
+                  A cavity filter bolts down across most of the heat sink, so a blank body L and W
+                  are filled from the HSK Base outline in Screen 01. They stay editable — a filter
+                  is usually a little smaller than the base.
+                  <span className="block">
+                    腔體濾波器幾乎橫跨整片散熱器，所以本體長寬若留空，會以 Screen 01
+                    的散熱器底座外框預填。這兩欄仍可修改 —— 濾波器通常比底座略小一些。
+                  </span>
+                </p>
+              )}
 
               {metalBase && (
                 <>

@@ -47,6 +47,12 @@
  * right there. With a realistic fin-side h the corrections are 0.761 → 0.183
  * and 0.380 → 0.071 C/W.
  *
+ * A groove takes one pipe, so the copper is `L x W x pipes`: the length running
+ * under the part, the width of ONE flattened pipe, and how many grooves there
+ * are. The vendor resistance is not divided by that count — it is quoted for
+ * the set, and dividing it would be this tool inventing a parallel model
+ * nobody measured.
+ *
  * `HeatPipeOnly` is gone. A bare pipe held against a part by nothing is not a
  * structure anyone ships: a pipe has to be fixed, and what fixes it is either
  * the base (embedded) or a block (local block).
@@ -83,8 +89,10 @@
 
 import {
   emptyMount,
+  mountFootprintMm2,
   mountHasSeat,
   mountHasVendorResistance,
+  mountPipeCount,
   type MountSpec,
   type MountType,
 } from '@/domain/component';
@@ -223,10 +231,7 @@ export function belongsToSomeMount(item: { metadata?: Record<string, unknown> })
   return typeof item.metadata?.[MOUNT_OWNER_KEY] === 'string';
 }
 
-function footprintMm2(mount: MountSpec): number | null {
-  const { contact_L_mm: L, contact_W_mm: W } = mount;
-  return L != null && W != null && L > 0 && W > 0 ? L * W : null;
-}
+const footprintMm2 = mountFootprintMm2;
 
 /**
  * Builds the chain for one port. `Direct` adds nothing and hands the port node
@@ -287,8 +292,14 @@ export function buildMountChain(input: {
         mountEdge(portNodeId, 'HEAT_PIPE', portNodeId, targetNodeId, componentRef, {
           type: 'heat_pipe',
           method: 'direct_rth',
-          parameters:
-            mount.heat_pipe_R_C_per_W != null ? { R_C_per_W: mount.heat_pipe_R_C_per_W } : {},
+          parameters: {
+            ...(mount.heat_pipe_R_C_per_W != null
+              ? { R_C_per_W: mount.heat_pipe_R_C_per_W }
+              : {}),
+            // Carried for the inspector to show, never for the resistance to be
+            // divided by: the vendor number already covers every pipe.
+            pipes: mountPipeCount(mount),
+          },
           missingNote:
             'Heat pipe resistance is a vendor number and cannot be derived from geometry. State it in Screen 04, for all the pipes under this part combined.',
         }),

@@ -289,6 +289,9 @@ function migrateMount(spec: Raw, dissolved: MountType | undefined): MountSpec {
     ...base,
     contact_L_mm: num(raw.contact_L_mm),
     contact_W_mm: num(raw.contact_W_mm),
+    // Absent means one pipe, so a width stored before the count existed keeps
+    // meaning exactly the copper it always meant.
+    heat_pipe_count: num(raw.heat_pipe_count),
     height_mm: num(raw.height_mm),
     heat_pipe_R_C_per_W: num(raw.heat_pipe_R_C_per_W),
     // Written after the mount axis shipped. A record from before says nothing

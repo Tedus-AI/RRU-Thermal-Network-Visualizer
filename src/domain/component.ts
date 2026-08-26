@@ -289,6 +289,7 @@ export const PACKAGE_TYPES = [
   'RF Power Flanged Package',
   'Module',
   'Shielded Module',
+  'Cavity Filter',
   'Custom',
   'Unknown',
 ] as const;
@@ -327,6 +328,10 @@ export const PACKAGE_TYPE_HINTS: Record<PackageType, { en: string; zh: string }>
   'Shielded Module': {
     en: 'A module under an RF can. The shield is not a heat path — heat still leaves through the board or the baseplate.',
     zh: '加了 RF 屏蔽罩的模組。屏蔽罩不是散熱路徑 —— 熱仍走板子或底板。',
+  },
+  'Cavity Filter': {
+    en: 'A machined metal cavity filter or duplexer. It has no junction — the loss is spread through the body — and its own base spans much of the heat sink, so it is a body-based Metal Face part rather than a package on a board.',
+    zh: '金屬腔體濾波器或雙工器。它沒有接面 —— 損耗分佈在整個本體 —— 而且底面幾乎橫跨整片散熱器，所以它是本體型的金屬面元件，不是板上的封裝。',
   },
   Custom: {
     en: 'Something the list does not cover. Say what it is in Notes so the model can be reviewed.',
@@ -791,9 +796,27 @@ export const MOUNT_TYPE_HINTS: Record<MountType, { en: string; zh: string }> = {
  */
 export interface MountSpec {
   type: MountType;
-  /** Boss / local plate / vapour-chamber footprint, mm. */
+  /**
+   * Boss / local plate / vapour-chamber footprint, mm.
+   *
+   * For an embedded pipe these are ONE PIPE: the length of pipe running under
+   * the part, and the width of a single flattened pipe. `heat_pipe_count`
+   * multiplies the width into the copper the part actually sits on. A machined
+   * groove takes one pipe, so a design with two pipes is two grooves side by
+   * side, and asking for the total width meant doing that multiplication by
+   * hand and storing the answer instead of the design.
+   */
   contact_L_mm: number | null;
   contact_W_mm: number | null;
+  /**
+   * How many pipes run under the part. Embedded pipes only — elsewhere the
+   * footprint is a block and the pipe count does not change it.
+   *
+   * Null means one, so nothing stored before this field existed moves: a saved
+   * `contact_W_mm` was the total width of a single-pipe design, or a total
+   * somebody had already worked out, and either way it still reads as it did.
+   */
+  heat_pipe_count: number | null;
   /** How far the boss stands up, mm. This is the conduction length. */
   height_mm: number | null;
   /**
@@ -802,6 +825,11 @@ export interface MountSpec {
    * measured, which no geometry in this tool can derive. It is quoted at a
    * stated power and source size, so it belongs with its conditions; the edge
    * carries those in its reference.
+   *
+   * It is the resistance of ALL the pipes together, not of one of them, and it
+   * stays that way now `heat_pipe_count` exists: the count is a geometry
+   * answer, and dividing a vendor number by it would be this tool inventing a
+   * parallel model the supplier never quoted.
    */
   heat_pipe_R_C_per_W: number | null;
   /** Milled out of the base, or a separate piece bolted to it. */
@@ -828,6 +856,7 @@ export function emptyMount(type: MountType = 'Direct'): MountSpec {
     type,
     contact_L_mm: null,
     contact_W_mm: null,
+    heat_pipe_count: null,
     height_mm: null,
     heat_pipe_R_C_per_W: null,
     attachment: mountAttachmentIsFixed(type) ? 'Bolted' : 'Integral',
@@ -847,12 +876,34 @@ export function mountSpec(spec: ThermalSpec): MountSpec {
   return mountAttachmentIsFixed(merged.type) ? { ...merged, attachment: 'Bolted' } : merged;
 }
 
-/** Mount footprint, mm² — the area heat enters the base through. */
-export function mountContactAreaMm2(spec: ThermalSpec): number | null {
-  const mount = mountSpec(spec);
+/**
+ * How many pipes run under the part. Only an embedded pipe has a count; every
+ * other mount presents one block, and anything missing or nonsensical is one.
+ */
+export function mountPipeCount(mount: MountSpec): number {
+  if (mount.type !== 'EmbeddedHeatPipe') return 1;
+  const count = mount.heat_pipe_count;
+  return typeof count === 'number' && Number.isFinite(count) && count >= 1
+    ? Math.floor(count)
+    : 1;
+}
+
+/**
+ * Mount footprint, mm² — the area heat enters the base through.
+ *
+ * For an embedded pipe this is the COPPER: one pipe's width times how many of
+ * them, times the length running under the part. It is not the whole contact
+ * face; the aluminium around the grooves is the other, parallel route, and it
+ * gets what is left.
+ */
+export function mountFootprintMm2(mount: MountSpec): number | null {
   const { contact_L_mm: L, contact_W_mm: W } = mount;
   if (L == null || W == null || L <= 0 || W <= 0) return null;
-  return L * W;
+  return L * W * mountPipeCount(mount);
+}
+
+export function mountContactAreaMm2(spec: ThermalSpec): number | null {
+  return mountFootprintMm2(mountSpec(spec));
 }
 
 /** Which mounts put a solid conducting block between the part and the base. */
@@ -1081,6 +1132,39 @@ export function metalBaseParameters(spec: ThermalSpec): MetalBaseParameters {
       : 'DerivedPackage',
     custom_exposed_area_mm2: finiteParameter(parameters, 'custom_exposed_area_mm2'),
   };
+}
+
+/**
+ * A body-based Metal Face cavity filter starts at the heat sink's own size.
+ *
+ * A machined filter body is not a package on a board: it bolts down across most
+ * of the heat sink, so its outer L and W start out as the base's, and whoever
+ * is modelling it trims from there. Retyping two numbers that Screen 01 already
+ * holds is how the two come to disagree.
+ *
+ * It is a PREFILL, not a derivation. The filter is usually a little smaller
+ * than the base and the engineer has to be able to say so, so the fields stay
+ * editable and anything already stated is left exactly as it is — this only
+ * ever fills a blank.
+ *
+ * Returns null when the combination does not apply or there is nothing to fill,
+ * so a caller can tell "did nothing" from "wrote something".
+ */
+export function cavityFilterBodyPrefill(
+  spec: ThermalSpec,
+  base: { L_mm: number | null | undefined; W_mm: number | null | undefined },
+): Partial<Pick<ComponentGeometry, 'package_L_mm' | 'package_W_mm'>> | null {
+  if (spec.heat_path.type !== 'DirectMetal') return null;
+  if (metalBaseParameters(spec).source_model !== 'SurfaceBodyBased') return null;
+  if (spec.package_type !== 'Cavity Filter') return null;
+
+  const usable = (value: unknown): value is number =>
+    typeof value === 'number' && Number.isFinite(value) && value > 0;
+
+  const patch: Partial<Pick<ComponentGeometry, 'package_L_mm' | 'package_W_mm'>> = {};
+  if (spec.geometry.package_L_mm == null && usable(base.L_mm)) patch.package_L_mm = base.L_mm;
+  if (spec.geometry.package_W_mm == null && usable(base.W_mm)) patch.package_W_mm = base.W_mm;
+  return Object.keys(patch).length > 0 ? patch : null;
 }
 
 export function metalBaseSourceModel(spec: ThermalSpec): MetalBaseSourceModel {
