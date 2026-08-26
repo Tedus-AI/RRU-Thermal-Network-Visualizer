@@ -34,6 +34,7 @@ import {
   type SolveInput,
 } from './buildSolveInput';
 import { runPreSolveChecks, type PreSolveReport } from './preSolveChecks';
+import { refineSpreadingWithBiot, type SpreadingBiotRefinement } from './spreadingBiot';
 import {
   SOLUTION_SCHEMA_VERSION,
   SOLVER_ENGINE,
@@ -64,6 +65,8 @@ export interface SolveScenarioOutcome {
   checks: PreSolveReport;
   input: SolveInput;
   signature: string;
+  /** Spreading edges re-solved at finite Bi for this scenario; see spreadingBiot.ts. */
+  spreading_refinements: SpreadingBiotRefinement[];
 }
 
 function emptySolution(
@@ -139,8 +142,46 @@ export function solveScenario(options: SolveScenarioOptions): SolveScenarioOutco
       checks,
       input,
       signature,
+      spreading_refinements: [],
     };
   }
+
+  // --- finite-Bi spreading -------------------------------------------------
+  // Screen 05 has to build every spreading edge at Bi → ∞ because h is scenario
+  // data. Here the scenario's boundary resistances are already on the clone, so
+  // the far-face h can be measured off the network itself and the edge re-solved
+  // against it. See `spreadingBiot.ts`; it refines nothing when the plate has no
+  // finite path to a boundary.
+  const spreadingRefinements = refineSpreadingWithBiot(
+    input.network,
+    input.scenario_id,
+    settings,
+  );
+  const spreadingByEdge = new Map(
+    spreadingRefinements.map((entry) => [entry.edge_id, entry]),
+  );
+  const spreadingIssues: SolverIssue[] = [];
+  if (spreadingRefinements.length > 0) {
+    const worst = spreadingRefinements.reduce((a, b) =>
+      b.R_after_C_per_W - b.R_before_C_per_W > a.R_after_C_per_W - a.R_before_C_per_W ? b : a,
+    );
+    spreadingIssues.push(
+      issue(
+        'info',
+        'spreading_biot_applied',
+        'boundary',
+        `${spreadingRefinements.length} spreading edge(s) re-solved at finite Bi from the scenario's own boundary — h_eff ${worst.h_eff_W_m2K.toFixed(1)} W/m²K, Bi ${worst.bi.toFixed(3)} on the largest change, which rose from ${worst.R_before_C_per_W.toFixed(3)} to ${worst.R_after_C_per_W.toFixed(3)} °C/W. Screen 05 shows the Bi → ∞ value, which is always the lower of the two.`,
+        `已依本情境的邊界條件，以有限 Bi 重新計算 ${spreadingRefinements.length} 條擴散邊；變化最大的一條 h_eff 為 ${worst.h_eff_W_m2K.toFixed(1)} W/m²K、Bi 為 ${worst.bi.toFixed(3)}，熱阻由 ${worst.R_before_C_per_W.toFixed(3)} 升至 ${worst.R_after_C_per_W.toFixed(3)} °C/W。畫面 05 顯示的是 Bi → ∞ 的值，恆為兩者中的較小者。`,
+      ),
+    );
+  }
+
+  // The note belongs in BOTH places. Screen 07 reads `checks` while a run is
+  // fresh and falls back to the solution's warnings once it is not, so a note
+  // filed only on the solution would be invisible for the whole time anyone is
+  // actually looking at the result.
+  const report: PreSolveReport =
+    spreadingIssues.length > 0 ? { ...checks, infos: [...checks.infos, ...spreadingIssues] } : checks;
 
   // Power scale and solar are already baked into the clone's node powers, so the
   // numeric core is handed a plain network and a scale of 1.
@@ -162,10 +203,11 @@ export function solveScenario(options: SolveScenarioOptions): SolveScenarioOutco
       { fix_in: '05' },
     );
     return {
-      solution: emptySolution(input, signature, [failure, ...checks.warnings], settings),
-      checks: { ...checks, can_solve: false, errors: [...checks.errors, failure] },
+      solution: emptySolution(input, signature, [failure, ...report.warnings], settings),
+      checks: { ...report, can_solve: false, errors: [...report.errors, failure] },
       input,
       signature,
+      spreading_refinements: spreadingRefinements,
     };
   }
 
@@ -194,6 +236,7 @@ export function solveScenario(options: SolveScenarioOptions): SolveScenarioOutco
   for (const [edgeId, edgeResult] of Object.entries(result.edges)) {
     const edge = input.network.edges[edgeId];
     if (!edge) continue;
+    const refined = spreadingByEdge.get(edgeId);
     edgeResults[edgeId] = {
       edge_id: edgeId,
       from: edgeResult.from,
@@ -204,7 +247,20 @@ export function solveScenario(options: SolveScenarioOptions): SolveScenarioOutco
       actual_direction: directionOf(edgeResult.heat_flow_W),
       active_rth_C_per_W: edgeResult.R_C_per_W,
       active_rth_source: edge.rth.active_source,
-      rth_origin: boundaryEdgeIds.has(edgeId) ? 'boundary_scenario' : 'edge',
+      rth_origin: boundaryEdgeIds.has(edgeId)
+        ? 'boundary_scenario'
+        : refined
+          ? 'spreading_biot'
+          : 'edge',
+      ...(refined
+        ? {
+            spreading_biot: {
+              h_eff_W_m2K: refined.h_eff_W_m2K,
+              bi: refined.bi,
+              R_bi_infinite_C_per_W: refined.R_before_C_per_W,
+            },
+          }
+        : {}),
     };
   }
 
@@ -251,7 +307,7 @@ export function solveScenario(options: SolveScenarioOptions): SolveScenarioOutco
     );
   }
 
-  const warnings = [...checks.warnings, ...checks.infos, ...postIssues];
+  const warnings = [...report.warnings, ...report.infos, ...postIssues];
   const failed = postIssues.some((entry) => entry.severity === 'error');
   const status: ThermalSolution['status'] = failed
     ? 'FAILED'
@@ -298,7 +354,13 @@ export function solveScenario(options: SolveScenarioOptions): SolveScenarioOutco
     },
   };
 
-  return { solution, checks, input, signature };
+  return {
+    solution,
+    checks: report,
+    input,
+    signature,
+    spreading_refinements: spreadingRefinements,
+  };
 }
 
 /**

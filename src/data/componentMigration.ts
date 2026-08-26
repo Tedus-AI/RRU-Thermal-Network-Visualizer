@@ -20,6 +20,7 @@ import {
   migrateHeatPathType,
   mountAttachmentIsFixed,
   normalizeArchitectureTemplate,
+  normalizeMountType,
   DISSOLVED_TEMPLATE_MOUNTS,
   HEAT_PATH_TYPES,
   TEMPLATE_FOR_HEAT_PATH,
@@ -37,7 +38,6 @@ import {
   type MountType,
   type PackageType,
   MOUNT_ATTACHMENTS,
-  MOUNT_TYPES,
 } from '@/domain/component';
 import { sourced, unknownValue, type SourcedValue } from '@/domain/sourcedValue';
 import { BUILTIN_TIM_IDS, LEGACY_SOLDER_TIM_ID } from '@/domain/materials';
@@ -259,8 +259,6 @@ function legacyTimK(timRaw: Raw | null): number | null {
   return toSourced(timRaw.k_W_mK)?.value ?? null;
 }
 
-const MOUNT_TYPES_SET = new Set<MountType>(MOUNT_TYPES);
-
 /**
  * How the part reaches the shared structure (04 §33).
  *
@@ -274,7 +272,10 @@ const MOUNT_TYPES_SET = new Set<MountType>(MOUNT_TYPES);
  */
 function migrateMount(spec: Raw, dissolved: MountType | undefined): MountSpec {
   const raw = isObject(spec.mount) ? spec.mount : {};
-  const stored = MOUNT_TYPES_SET.has(raw.type as MountType) ? (raw.type as MountType) : 'Direct';
+  // `HeatPipeOnly` became `EmbeddedHeatPipe` when its circuit was corrected
+  // from series to parallel — a bare pipe with nothing holding it is not a
+  // structure anyone builds.
+  const stored = normalizeMountType(raw.type) ?? 'Direct';
   /*
    * A component that named `BARE_DIE` or `SMALL_BASE_HEAT_PIPE` was describing
    * a heat path AND a mount under one name. It keeps the mount that name

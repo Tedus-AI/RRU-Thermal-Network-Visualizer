@@ -66,7 +66,7 @@ import {
   mountSpec,
   mountAttachmentIsFixed,
   mountHasBlock,
-  mountHasHeatPipe,
+  mountHasOwnBody,
   mountHasVendorResistance,
   type MountSpec,
   type MountAttachment,
@@ -421,12 +421,12 @@ export function ComponentInspector({
           tooltip:
             '均熱板貼在底座上的外形尺寸。這是底座擴散的起算面積 —— 均熱板的價值就在這裡，跟元件多大無關。',
         }
-      : mountHasHeatPipe(mount.type)
+      : mount.type === 'EmbeddedHeatPipe'
         ? {
-            label: 'Condenser',
-            zh: '冷凝端接合面',
+            label: 'Pipe under source',
+            zh: '熱源下方熱管',
             tooltip:
-              '熱管冷凝端壓平／嵌入底座的那段接觸尺寸，不是元件的大小。例如 30×30 的 FPGA 可以配一根冷凝段 8×60 的熱管。這是底座擴散的起算面積。',
+              '熱管在熱源正下方那一段的壓平尺寸：長 = 穿越熱源的長度，寬 = 所有管子壓平寬度的總和（兩根 8 mm 就填 16）。這塊面積是銅，會從熱源接觸面裡扣掉，剩下的才是走鋁底座擴散的那條並聯支路。',
           }
         : {
             label: 'Mount',
@@ -879,7 +879,9 @@ export function ComponentInspector({
                         </div>
                       )}
 
-                      {mount.attachment === 'Bolted' && (
+                      {/* An embedded pipe has no body, so there is nothing
+                          under it to join — the pipe is already in the base. */}
+                      {mountHasOwnBody(mount.type) && mount.attachment === 'Bolted' && (
                         <>
                           <div className="flex flex-col gap-1.5">
                             <FieldLabel

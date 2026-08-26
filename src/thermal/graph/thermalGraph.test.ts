@@ -1314,12 +1314,15 @@ describe('node types', () => {
     for (const preset of STRUCTURE_PRESETS) {
       for (const node of buildSharedStructure(preset).nodes) produced.add(node.type);
     }
-    // The mount axis is the third producer: a boss, a local plate, a heat
-    // pipe's cold end, a vapour chamber and the seat they land on all come from
-    // there rather than from any template.
+    // The mount axis is the third producer: a boss, a local plate, a vapour
+    // chamber and the seat they land on all come from there rather than from
+    // any template. A heat pipe no longer produces a condenser node at all —
+    // both pipe mounts are parallel bypasses now, one edge and no body — but
+    // the type stays, because a condenser is a real thing to draw by hand.
     for (const type of MOUNT_TYPES) {
       const chain = buildMountChain({
         portNodeId: 'NODE_X',
+        targetNodeId: 'NODE_HSK',
         componentRef: 'CMP_X',
         mount: { ...emptyMount(type), attachment: 'Bolted' },
         materials: defaultMaterials(),
@@ -1332,7 +1335,7 @@ describe('node types', () => {
     // `heat_pipe_evaporator` lost their producing templates when Bare Die and
     // Small Base + Heat Pipe dissolved; the node types stay, because both name
     // a real thing somebody may still want to draw.
-    const handBuildOnly = ['pcb', 'die', 'heat_pipe_evaporator', 'custom'];
+    const handBuildOnly = ['pcb', 'die', 'heat_pipe_evaporator', 'heat_pipe_condenser', 'custom'];
     for (const type of NODE_TYPES) {
       expect(produced.has(type) || handBuildOnly.includes(type)).toBe(true);
     }

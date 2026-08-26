@@ -677,16 +677,41 @@ export const MOUNT_TYPES = [
   'Direct',
   'Pedestal',
   'SmallBaseHeatPipe',
-  'HeatPipeOnly',
+  'EmbeddedHeatPipe',
   'VaporChamber',
 ] as const;
 export type MountType = (typeof MOUNT_TYPES)[number];
+
+/**
+ * `HeatPipeOnly` described hardware that does not get built.
+ *
+ * A heat pipe has to be HELD by something, and what holds it decides where the
+ * heat goes. In a base station there are two ways: the pipe is embedded in the
+ * heat-sink base, or the part sits on a small block with the pipe soldered
+ * underneath. A bare pipe pressed against a part, with nothing under it, is not
+ * a structure anyone ships — and modelling it as a series chain said the base
+ * was not there at all, which made a heat pipe look like a penalty.
+ *
+ * It is replaced rather than renamed: the circuit changed from series to
+ * parallel, so the numbers a stored `HeatPipeOnly` produced were not merely
+ * relabelled, they were wrong. The two dimension fields keep their slots and
+ * change meaning — see the hints.
+ */
+export const LEGACY_MOUNT_TYPES: Record<string, MountType> = {
+  HeatPipeOnly: 'EmbeddedHeatPipe',
+};
+
+export function normalizeMountType(raw: unknown): MountType | null {
+  if (typeof raw !== 'string') return null;
+  if ((MOUNT_TYPES as readonly string[]).includes(raw)) return raw as MountType;
+  return LEGACY_MOUNT_TYPES[raw] ?? null;
+}
 
 export const MOUNT_TYPE_LABELS: Record<MountType, { en: string; zh: string }> = {
   Direct: { en: 'Direct to base', zh: '直接貼合底座' },
   Pedestal: { en: 'Raised boss (pedestal)', zh: '凸台' },
   SmallBaseHeatPipe: { en: 'Small base + heat pipe', zh: '小基座＋熱管' },
-  HeatPipeOnly: { en: 'Heat pipe only', zh: '純熱管' },
+  EmbeddedHeatPipe: { en: 'Heat pipe embedded in the base', zh: '底座埋入熱管' },
   VaporChamber: { en: 'Vapour chamber', zh: '均熱板' },
 };
 
@@ -721,9 +746,17 @@ export const MOUNT_ATTACHMENT_LABELS: Record<
   },
 };
 
-/** A vapour chamber is never milled out of the heat sink. */
+/**
+ * Mounts whose attachment is not a choice.
+ *
+ * A vapour chamber is never milled out of the heat sink. A local block with a
+ * pipe soldered under it cannot be either — the pipe has to get in there. And
+ * an embedded pipe has no body of its own to attach at all, so the question
+ * does not arise; `emptyMount` still reports Bolted for it, which is harmless
+ * because nothing reads the attachment for a mount with no block.
+ */
 export function mountAttachmentIsFixed(type: MountType): boolean {
-  return type === 'VaporChamber';
+  return type !== 'Direct' && type !== 'Pedestal';
 }
 
 export const MOUNT_TYPE_HINTS: Record<MountType, { en: string; zh: string }> = {
@@ -736,12 +769,12 @@ export const MOUNT_TYPE_HINTS: Record<MountType, { en: string; zh: string }> = {
     zh: '底座上長出凸台去搆到這顆元件。凸台高度是熱擴散前多出的一段導熱長度。',
   },
   SmallBaseHeatPipe: {
-    en: 'The part sits on its own local plate, which a heat pipe carries to the main base.',
-    zh: '元件坐在自己的局部基座上，再由熱管把熱帶到主底座。',
+    en: 'The part sits on a local block with a heat pipe soldered under it. The block also sits on the main base, so heat leaving the block splits TWO ways, in parallel: down through the joint into the base, and along the pipe.',
+    zh: '元件坐在局部小基座上，基座底下焊了熱管。小基座同時也坐在主底座上，所以熱離開小基座後會分成並聯的兩路：往下穿過接合面進主底座，以及沿著熱管走。',
   },
-  HeatPipeOnly: {
-    en: 'A heat pipe is attached straight to the part and carries the heat to the main base.',
-    zh: '熱管直接貼在元件上，把熱帶到主底座。',
+  EmbeddedHeatPipe: {
+    en: 'Pipes lie in grooves in the base, machined flush, and the part sits on the face they share with the aluminium. Heat leaving the part therefore has TWO routes to the fins, in parallel: into the pipes, and straight into the base around them.',
+    zh: '熱管嵌在底座的溝槽裡並銑平，元件壓在銅與鋁共同構成的那個面上。熱因此有兩條並聯的路可以到鰭片：進熱管，以及直接進周圍的鋁底座。',
   },
   VaporChamber: {
     en: 'A flat two-phase plate spreads the heat before it reaches the base. Its worth is the footprint it presents to the base, not its own conductivity — a chamber no bigger than the part buys nothing and only adds resistance.',
@@ -807,8 +840,9 @@ export function emptyMount(type: MountType = 'Direct'): MountSpec {
 /** Tolerates a spec written before the field existed. */
 export function mountSpec(spec: ThermalSpec): MountSpec {
   const stored = spec.mount;
-  if (!stored || !MOUNT_TYPES.includes(stored.type)) return emptyMount();
-  const merged = { ...emptyMount(stored.type), ...stored, type: stored.type };
+  const type = stored ? normalizeMountType(stored.type) : null;
+  if (!stored || type == null) return emptyMount();
+  const merged = { ...emptyMount(type), ...stored, type };
   // A vapour chamber is a separate part whatever an older record says.
   return mountAttachmentIsFixed(merged.type) ? { ...merged, attachment: 'Bolted' } : merged;
 }
@@ -827,7 +861,19 @@ export function mountHasBlock(type: MountType): boolean {
 }
 
 export function mountHasHeatPipe(type: MountType): boolean {
-  return type === 'SmallBaseHeatPipe' || type === 'HeatPipeOnly';
+  return type === 'SmallBaseHeatPipe' || type === 'EmbeddedHeatPipe';
+}
+
+/**
+ * Mounts where the pipe is a SECOND route rather than the only one.
+ *
+ * Both are parallel circuits: the conduction path into the base still exists,
+ * and the pipe sits beside it. Modelling either as a series chain was the same
+ * mistake twice — it says the base is not under the part, and a heat pipe then
+ * reads as pure added resistance instead of the bypass it is.
+ */
+export function mountIsParallel(type: MountType): boolean {
+  return type === 'SmallBaseHeatPipe' || type === 'EmbeddedHeatPipe';
 }
 
 /**
@@ -841,9 +887,20 @@ export function mountHasVendorResistance(type: MountType): boolean {
   return mountHasHeatPipe(type) || type === 'VaporChamber';
 }
 
+/**
+ * Whether the mount puts anything between the part and the base at all.
+ *
+ * An embedded pipe does not: the part still meets the base face directly, and
+ * the pipe is a bypass off that same face. So it builds no seat and no joint —
+ * there is nothing to join, the pipe is already IN the base.
+ */
+export function mountHasOwnBody(type: MountType): boolean {
+  return type !== 'Direct' && type !== 'EmbeddedHeatPipe';
+}
+
 /** Everything except a bare Direct mount ends on a seat in the base. */
 export function mountHasSeat(type: MountType): boolean {
-  return type !== 'Direct';
+  return mountHasOwnBody(type);
 }
 
 export interface ArchitecturePrep {

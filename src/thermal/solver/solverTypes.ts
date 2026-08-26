@@ -64,8 +64,23 @@ export interface EdgeSolutionResult {
    * `boundary_scenario` marks a resistance supplied by the current scenario's
    * Screen 06 boundary set rather than by the edge itself (07 §12), so the UI
    * can say where the number came from instead of mislabelling it.
+   *
+   * `spreading_biot` marks a spreading edge re-solved here at the finite Bi its
+   * own downstream path implies. Screen 05 could only build it at Bi → ∞ — h is
+   * scenario data — so the edge's stored value and this one legitimately differ,
+   * and the UI has to be able to say which it is showing.
    */
-  rth_origin: 'edge' | 'boundary_scenario';
+  rth_origin: 'edge' | 'boundary_scenario' | 'spreading_biot';
+  /**
+   * Present only on a `spreading_biot` edge: what the far-face boundary turned
+   * out to be worth, and what the edge read before it was applied.
+   */
+  spreading_biot?: {
+    h_eff_W_m2K: number;
+    bi: number;
+    /** The Bi → ∞ value Screen 05 stored. Always the lower of the two. */
+    R_bi_infinite_C_per_W: number;
+  };
 }
 
 export type EnergyGrade = 'green' | 'warning' | 'error';
