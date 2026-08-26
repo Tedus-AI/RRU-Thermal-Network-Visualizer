@@ -494,7 +494,12 @@ export function buildElements(
     if (!network.nodes[edge.from] || !network.nodes[edge.to]) continue;
     if (hidden.has(edge.from) || hidden.has(edge.to)) continue;
     const R = activeRth(edge.rth);
-    const short = EDGE_SHORT[edge.type] ?? edge.type;
+    // A pipe branch carries every pipe at once, so it says how many. Without
+    // it the number reads as one pipe's and nobody can check the division.
+    const pipes = edge.parameters?.pipes;
+    const short =
+      (EDGE_SHORT[edge.type] ?? edge.type) +
+      (edge.type === 'heat_pipe' && typeof pipes === 'number' && pipes > 1 ? ` ×${pipes}` : '');
     const label = options.showLabels
       ? `${short} ${R != null ? `${R.toFixed(3)} °C/W` : '—'}`
       : '';

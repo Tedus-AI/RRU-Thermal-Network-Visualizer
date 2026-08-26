@@ -456,6 +456,26 @@ describe('the parallel pair, annotated', () => {
     expect(labels).toContain('Spreading\n0.050 °C/W');
   });
 
+  it('says how many pipes the branch stands for, so the division is checkable', () => {
+    const network = withPipeAndSpreading();
+    network.edges.EDGE_PORT_MOUNT_TIM_1_HEAT_PIPE.parameters = { R_C_per_W: 0.065, pipes: 2 };
+    const labels = build(network)
+      .filter((e) => String(e.classes).includes('routed-port-edge'))
+      .filter((e) => /TIM_1/.test(String(e.data.id)))
+      .map((e) => e.data.label);
+    expect(labels).toContain('Heat Pipe ×2\n0.130 °C/W');
+  });
+
+  it('says nothing about a count of one', () => {
+    const network = withPipeAndSpreading();
+    network.edges.EDGE_PORT_MOUNT_TIM_1_HEAT_PIPE.parameters = { R_C_per_W: 0.13, pipes: 1 };
+    const labels = build(network)
+      .filter((e) => String(e.classes).includes('routed-port-edge'))
+      .map((e) => String(e.data.label));
+    expect(labels.some((l) => l.startsWith('Heat Pipe\n'))).toBe(true);
+    expect(labels.every((l) => !/×/.test(l))).toBe(true);
+  });
+
   it('leaves a lone branch unnamed — there is nothing to tell it apart from', () => {
     const labels = build(fanInNetwork(4))
       .filter((e) => String(e.classes).includes('routed-port-edge'))

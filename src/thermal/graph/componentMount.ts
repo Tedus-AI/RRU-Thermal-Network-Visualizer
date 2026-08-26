@@ -47,11 +47,17 @@
  * right there. With a realistic fin-side h the corrections are 0.761 → 0.183
  * and 0.380 → 0.071 C/W.
  *
- * A groove takes one pipe, so the copper is `L x W x pipes`: the length running
- * under the part, the width of ONE flattened pipe, and how many grooves there
- * are. The vendor resistance is not divided by that count — it is quoted for
- * the set, and dividing it would be this tool inventing a parallel model
- * nobody measured.
+ * A groove takes one pipe, so BOTH halves of an embedded pipe are per pipe and
+ * multiplied by the count: the copper is `L x W x pipes`, and the branch
+ * resistance is `R_one_pipe / pipes`, because N identical pipes run between the
+ * same two points and their conductances add.
+ *
+ * The resistance was briefly "all the pipes combined" instead, on the
+ * reasoning that dividing a vendor number by a count invents a parallel model
+ * nobody measured. That was inconsistent with the argument that split the width
+ * in the first place — it left the multiplication to be done by hand on the
+ * field next door, and stored the answer rather than the design. A supplier
+ * quotes one pipe.
  *
  * `HeatPipeOnly` is gone. A bare pipe held against a part by nothing is not a
  * structure anyone ships: a pipe has to be fixed, and what fixes it is either
@@ -93,6 +99,7 @@ import {
   mountHasSeat,
   mountHasVendorResistance,
   mountPipeCount,
+  mountPipeRth,
   type MountSpec,
   type MountType,
 } from '@/domain/component';
@@ -286,6 +293,7 @@ export function buildMountChain(input: {
     const copper = footprintMm2(mount);
     const aluminium =
       sourceAreaMm2 != null && copper != null ? Math.max(0, sourceAreaMm2 - copper) : null;
+    const pipeRth = mountPipeRth(mount);
     return {
       nodes: [],
       edges: [
@@ -293,15 +301,18 @@ export function buildMountChain(input: {
           type: 'heat_pipe',
           method: 'direct_rth',
           parameters: {
+            // The branch is every pipe at once: N identical pipes between the
+            // same two points, so their conductances add and the edge carries
+            // R_one / N. Both halves ride along so the inspector can show the
+            // working rather than an unexplained number.
+            ...(pipeRth != null ? { R_C_per_W: pipeRth } : {}),
             ...(mount.heat_pipe_R_C_per_W != null
-              ? { R_C_per_W: mount.heat_pipe_R_C_per_W }
+              ? { R_per_pipe_C_per_W: mount.heat_pipe_R_C_per_W }
               : {}),
-            // Carried for the inspector to show, never for the resistance to be
-            // divided by: the vendor number already covers every pipe.
             pipes: mountPipeCount(mount),
           },
           missingNote:
-            'Heat pipe resistance is a vendor number and cannot be derived from geometry. State it in Screen 04, for all the pipes under this part combined.',
+            'Heat pipe resistance is a vendor number and cannot be derived from geometry. State it in Screen 04, for ONE pipe — the count beside it puts them in parallel.',
         }),
       ],
       entryNodeId: portNodeId,
