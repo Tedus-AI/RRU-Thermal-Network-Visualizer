@@ -160,7 +160,9 @@ export const SPREADING_UNDER_ESTIMATE_NOTE =
   'Assumption: Lee/Song/Au/Moran disc spreading, exact series, with Bi → ∞ (a ' +
   'perfectly cooled far face). Bi needs h, which is a Screen 06 boundary ' +
   'condition, and Bi → ∞ gives the smallest spreading the model can produce — so ' +
-  'this UNDER-estimates. The series itself is exact for the stated geometry; the ' +
+  'this UNDER-estimates. Screen 07 re-solves this edge at the finite Bi the ' +
+  "scenario's own boundary implies and reports both numbers; the value here is " +
+  'the floor. The series itself is exact for the stated geometry; the ' +
   'equal-area circular substitution for a rectangular base costs under ~10%.';
 
 /**

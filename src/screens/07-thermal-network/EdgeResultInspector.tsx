@@ -88,6 +88,9 @@ export function EdgeResultInspector({
   const badge = RTH_SOURCE_BADGE[edge.rth.active_source];
   const provenance = edge.rth.provenance[edge.rth.active_source];
   const boundaryDerived = result?.rth_origin === 'boundary_scenario';
+  // The finite-Bi spreading value is scenario data, so it lives on the solve
+  // result rather than on the stored edge (see thermal/solver/spreadingBiot.ts).
+  const biot = result?.spreading_biot ?? null;
   const override = edge.scenario_overrides?.[scenarioId];
 
   const T_from = live?.node_temperatures_C[edge.from] ?? null;
@@ -116,6 +119,7 @@ export function EdgeResultInspector({
           {toName}
         </button>
         {boundaryDerived && <Badge tone="accent">Boundary (06)</Badge>}
+        {biot && <Badge tone="accent">Finite Bi</Badge>}
       </div>
 
       <div className="flex shrink-0 flex-wrap gap-0.5 rounded-md border border-line-strong p-0.5">
@@ -238,6 +242,37 @@ export function EdgeResultInspector({
                 value={`${formatRth(override.R_C_per_W)} °C/W`}
                 tooltip="由 06 依此情境的邊界條件推導，僅作用於本次求解。"
               />
+            )}
+            {biot && (
+              <>
+                <Row
+                  label="Far-face h (eff)"
+                  zh="遠端等效對流係數"
+                  value={`${biot.h_eff_W_m2K.toFixed(1)} W/m²K`}
+                  tooltip="由本情境的鰭片與邊界熱阻反算，攤平到底板面積上；這就是 Bi 所需要的 h。"
+                />
+                <Row
+                  label="Biot number"
+                  zh="畢奧數"
+                  value={biot.bi.toFixed(3)}
+                  tooltip="Bi = h·b/k，b 為底板等效半徑（不是厚度）。Bi 越小，熱越需要橫向擴散，擴散熱阻越大。"
+                />
+                <Row
+                  label="Rth at Bi → ∞"
+                  zh="Bi → ∞ 熱阻"
+                  value={`${formatRth(biot.R_bi_infinite_C_per_W)} °C/W`}
+                  tooltip="畫面 05 顯示的值。Bi → ∞ 是本模型的下限，恆小於實際值。"
+                />
+                <p className="mt-2 text-[11px] leading-relaxed text-ink-400">
+                  Screen 05 has to build this edge at Bi → ∞ because h is scenario
+                  data, and that is the smallest spreading the model can produce.
+                  This solve measured the far-face h off the network itself and
+                  re-solved the series against it.
+                  <span className="block">
+                    05 因為沒有邊界條件，只能以 Bi → ∞ 建立此邊，那是本模型的最小值；本次求解已由網路本身反算遠端 h 並重新計算。
+                  </span>
+                </p>
+              </>
             )}
             <p className="mt-2 text-[11px] leading-relaxed text-ink-400">
               Q is computed from this edge's own resistance. A segment resistance
