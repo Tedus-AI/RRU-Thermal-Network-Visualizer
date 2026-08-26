@@ -27,10 +27,29 @@
  *   Direct                HEAT_OUT ─spreading→ base
  *   Pedestal, integral    HEAT_OUT ─block→ Boss Root ─spreading→ base
  *   Pedestal, bolted      HEAT_OUT ─block→ Boss Root ─joint→ Seat ─spreading→ base
- *   SmallBaseHeatPipe     HEAT_OUT ─block→ Small Base ─pipe→ Condenser
- *                         ─joint→ Seat ─spreading→ base
- *   HeatPipeOnly          HEAT_OUT ─pipe→ Condenser ─joint→ Seat ─spreading→ base
  *   VaporChamber          HEAT_OUT ─vendor R→ Chamber ─joint→ Seat ─spreading→ base
+ *
+ *   SmallBaseHeatPipe     HEAT_OUT ─block→ Small Base ┬─joint→ Seat ─spreading→ base
+ *                                                     └─pipe─────────────────→ base
+ *   EmbeddedHeatPipe      HEAT_OUT ┬─pipe──────────────────────────────────────→ base
+ *                                  └─spreading, aluminium only ────────────────→ base
+ *
+ * A HEAT PIPE IS A SECOND ROUTE, NOT THE ONLY ONE
+ * ----------------------------------------------
+ * The last two are PARALLEL, and they used to be series. That was the same
+ * mistake twice: a series chain says the base is not under the part at all, so
+ * a heat pipe reads as pure added resistance rather than the bypass it is.
+ *
+ * A local block SITS ON the base — that is what a local block is — so heat in
+ * it splits between the joint underneath and the pipe soldered under that.
+ * Embedded pipes lie in grooves machined flush with the face the part sits on,
+ * so the contact face is part copper and part aluminium and the split happens
+ * right there. With a realistic fin-side h the corrections are 0.761 → 0.183
+ * and 0.380 → 0.071 C/W.
+ *
+ * `HeatPipeOnly` is gone. A bare pipe held against a part by nothing is not a
+ * structure anyone ships: a pipe has to be fixed, and what fixes it is either
+ * the base (embedded) or a block (local block).
  *
  * The last step is added by the caller and is the Lee spreading edge
  * (`hskBaseConnection`). The area it spreads from is the MOUNT's footprint
@@ -64,7 +83,6 @@
 
 import {
   emptyMount,
-  mountHasHeatPipe,
   mountHasSeat,
   mountHasVendorResistance,
   type MountSpec,
@@ -103,9 +121,24 @@ export interface MountChain {
   edges: ThermalEdge[];
   /**
    * Where the caller's spreading edge into the base must start. For `Direct`
-   * this is the port node itself; otherwise it is the last node the mount built.
+   * and an embedded pipe this is the port node itself; otherwise it is the last
+   * node the mount built.
    */
   entryNodeId: string;
+  /**
+   * Area the caller's spreading edge must use, when the mount has taken part of
+   * the contact face for itself. Null means "read it off the graph as usual".
+   *
+   * Only an embedded pipe sets this: its pipes occupy some of the very face the
+   * part sits on, and the aluminium branch may only use what is left.
+   */
+  spreadingSourceAreaMm2: number | null;
+  /**
+   * False when the mount leaves no conduction route into the base at all —
+   * pipes covering the whole contact face. The caller then adds no spreading
+   * edge, because there is no aluminium for it to spread through.
+   */
+  needsBaseEdge: boolean;
 }
 
 const mountNodeId = (portNodeId: string, role: string) =>
@@ -202,6 +235,8 @@ function footprintMm2(mount: MountSpec): number | null {
  */
 export function buildMountChain(input: {
   portNodeId: string;
+  /** The shared structure this mount delivers to. A parallel branch needs it. */
+  targetNodeId: string;
   componentRef: string | undefined;
   mount: MountSpec;
   materials: MaterialDefaults;
@@ -212,11 +247,59 @@ export function buildMountChain(input: {
    */
   sourceAreaMm2?: number | null;
 }): MountChain {
-  const { portNodeId, componentRef, mount, materials, sourceAreaMm2 } = input;
+  const { portNodeId, targetNodeId, componentRef, mount, materials, sourceAreaMm2 } = input;
   const type: MountType = mount.type;
 
   if (type === 'Direct') {
-    return { nodes: [], edges: [], entryNodeId: portNodeId };
+    return {
+      nodes: [],
+      edges: [],
+      entryNodeId: portNodeId,
+      spreadingSourceAreaMm2: null,
+      needsBaseEdge: true,
+    };
+  }
+
+  /*
+   * AN EMBEDDED PIPE IS A BYPASS, NOT A CHAIN.
+   *
+   * The pipes lie in grooves in the base and are machined flush, so the part
+   * sits on a face that is part copper and part aluminium. Heat leaving the
+   * part therefore has TWO routes to the fins and they are IN PARALLEL: into
+   * the pipes, and straight into the aluminium around them.
+   *
+   * This was modelled as a series chain, which said the base was not under the
+   * part at all. With a realistic fin-side h that read 0.380 C/W where the
+   * parallel circuit gives 0.071 — not merely wrong but wrong in the direction
+   * that makes an embedded pipe look like a penalty for fitting one.
+   *
+   * So the mount builds no body and no joint: there is nothing to join, the
+   * pipe is already IN the base. It adds one edge straight to the structure,
+   * and tells the caller to spread through the aluminium that is left.
+   */
+  if (type === 'EmbeddedHeatPipe') {
+    const copper = footprintMm2(mount);
+    const aluminium =
+      sourceAreaMm2 != null && copper != null ? Math.max(0, sourceAreaMm2 - copper) : null;
+    return {
+      nodes: [],
+      edges: [
+        mountEdge(portNodeId, 'HEAT_PIPE', portNodeId, targetNodeId, componentRef, {
+          type: 'heat_pipe',
+          method: 'direct_rth',
+          parameters:
+            mount.heat_pipe_R_C_per_W != null ? { R_C_per_W: mount.heat_pipe_R_C_per_W } : {},
+          missingNote:
+            'Heat pipe resistance is a vendor number and cannot be derived from geometry. State it in Screen 04, for all the pipes under this part combined.',
+        }),
+      ],
+      entryNodeId: portNodeId,
+      spreadingSourceAreaMm2: aluminium,
+      // Pipes covering the whole contact face leave no aluminium branch. That
+      // is a real arrangement and also what a mistyped width looks like, so
+      // the graph simply has no second branch and the numbers say why.
+      needsBaseEdge: aluminium == null || aluminium > 0,
+    };
   }
 
   const nodes: ThermalNode[] = [];
@@ -292,36 +375,30 @@ export function buildMountChain(input: {
     cursor = block.id;
   }
 
-  if (mountHasVendorResistance(type)) {
-    const isPipe = mountHasHeatPipe(type);
-    const device = mountNode(
+  /*
+   * A vapour chamber IS the chain: the part sits on it, and it hands the base a
+   * footprint of its own. That stays in series.
+   */
+  if (type === 'VaporChamber') {
+    const chamber = mountNode(
       portNodeId,
-      isPipe ? 'HP_CONDENSER' : 'VAPOR_CHAMBER',
-      isPipe ? 'Heat Pipe Condenser' : 'Vapour Chamber',
-      isPipe ? 'heat_pipe_condenser' : 'vapor_chamber',
+      'VAPOR_CHAMBER',
+      'Vapour Chamber',
+      'vapor_chamber',
       componentRef,
     );
-    nodes.push(device);
-
+    nodes.push(chamber);
     edges.push(
-      mountEdge(
-        portNodeId,
-        isPipe ? 'HEAT_PIPE' : 'VAPOR_CHAMBER',
-        cursor,
-        device.id,
-        componentRef,
-        {
-          type: 'heat_pipe',
-          method: 'direct_rth',
-          parameters:
-            mount.heat_pipe_R_C_per_W != null ? { R_C_per_W: mount.heat_pipe_R_C_per_W } : {},
-          missingNote: isPipe
-            ? 'Heat pipe resistance is a vendor number and cannot be derived from geometry. State it in Screen 04.'
-            : 'Vapour chamber resistance is a vendor number, quoted at a stated power and source size. It cannot be derived from geometry — state it in Screen 04.',
-        },
-      ),
+      mountEdge(portNodeId, 'VAPOR_CHAMBER', cursor, chamber.id, componentRef, {
+        type: 'heat_pipe',
+        method: 'direct_rth',
+        parameters:
+          mount.heat_pipe_R_C_per_W != null ? { R_C_per_W: mount.heat_pipe_R_C_per_W } : {},
+        missingNote:
+          'Vapour chamber resistance is a vendor number, quoted at a stated power and source size. It cannot be derived from geometry — state it in Screen 04.',
+      }),
     );
-    cursor = device.id;
+    cursor = chamber.id;
   }
 
   /*
@@ -364,7 +441,36 @@ export function buildMountChain(input: {
     cursor = seat.id;
   }
 
-  return { nodes, edges, entryNodeId: cursor };
+  /*
+   * THE PIPE UNDER A LOCAL BLOCK IS ALSO A BYPASS.
+   *
+   * The block sits on the main base — that is what a local block IS — so heat
+   * arriving in it splits two ways: down through the joint into the base, and
+   * along the pipe soldered underneath. Both end at the same structure, so they
+   * are IN PARALLEL.
+   *
+   * Built as a series chain this came out at 0.761 C/W against 0.183 for the
+   * real circuit: 4.2x pessimistic, and again in the direction that makes a
+   * heat pipe read as pure added resistance. The branch leaves the BLOCK, not
+   * the seat, because the pipe is under the block and does not cross the joint.
+   */
+  if (type === 'SmallBaseHeatPipe') {
+    const block = nodes.find((node) => node.type === 'small_base');
+    if (block) {
+      edges.push(
+        mountEdge(portNodeId, 'HEAT_PIPE', block.id, targetNodeId, componentRef, {
+          type: 'heat_pipe',
+          method: 'direct_rth',
+          parameters:
+            mount.heat_pipe_R_C_per_W != null ? { R_C_per_W: mount.heat_pipe_R_C_per_W } : {},
+          missingNote:
+            'Heat pipe resistance is a vendor number and cannot be derived from geometry. State it in Screen 04.',
+        }),
+      );
+    }
+  }
+
+  return { nodes, edges, entryNodeId: cursor, spreadingSourceAreaMm2: null, needsBaseEdge: true };
 }
 
 /**

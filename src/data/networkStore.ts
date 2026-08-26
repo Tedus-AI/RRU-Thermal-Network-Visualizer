@@ -178,10 +178,11 @@ function portConnectionEdge(
   portKind: PortKind,
   targetNodeId: string,
   materials?: MaterialDefaults,
+  overrideAreaMm2?: number | null,
 ): ThermalEdge {
   const edgeKey = `EDGE_PORT_${nodeId.replace(/^NODE_/, '')}_${portKind}_${targetNodeId.replace(/^NODE_/, '')}`;
   const linkedBaseModel = materials
-    ? hskBaseConnectionPatch(network, fromNodeId, targetNodeId, materials)
+    ? hskBaseConnectionPatch(network, fromNodeId, targetNodeId, materials, overrideAreaMm2)
     : null;
   const edge: ThermalEdge = {
     id: edgeKey,
@@ -242,6 +243,25 @@ function materialisePortConnection(
   // belonged to the old target.
   clearMount(network, nodeId);
 
+  /*
+   * And neither can a port edge written under an older id scheme.
+   *
+   * The key has changed shape over time — it used to omit the target — so
+   * re-materialising wrote a NEW edge and left the old one in place: two
+   * spreading edges between the same pair of nodes, which the solver reads as
+   * a parallel path and which therefore makes the component look cooler than
+   * it is. Silent, too: nothing else looks at an edge nobody rebuilt.
+   *
+   * Sweeping by endpoints rather than by key catches every scheme there has
+   * ever been, and everything this call is about to write is written after.
+   */
+  for (const [id, edge] of Object.entries(network.edges)) {
+    if (!id.startsWith('EDGE_PORT_')) continue;
+    const touchesPort = edge.from === nodeId || edge.to === nodeId;
+    const touchesTarget = edge.from === targetNodeId || edge.to === targetNodeId;
+    if (touchesPort && touchesTarget) delete network.edges[id];
+  }
+
   // How the part is attached — a boss, a local plate and a heat pipe, or
   // nothing at all — becomes real nodes and edges between the port and the
   // structure. `Direct` adds nothing, which is what every project built before
@@ -249,6 +269,7 @@ function materialisePortConnection(
   const chain = materials
     ? buildMountChain({
         portNodeId: nodeId,
+        targetNodeId,
         componentRef: node.component_ref,
         mount: mountOf(node),
         materials,
@@ -260,9 +281,11 @@ function materialisePortConnection(
   for (const mountNode of chain?.nodes ?? []) network.nodes[mountNode.id] = mountNode;
   for (const mountEdge of chain?.edges ?? []) network.edges[mountEdge.id] = mountEdge;
 
-  // Every mount now ends on a seat in the base and the spreading edge starts
-  // there, so this is always added — including for the heat-pipe mounts, which
-  // used to finish at a clamped contact and skip the base spreading entirely.
+  // A mount can leave no conduction branch at all — pipes covering the whole
+  // contact face — and then there is nothing for a spreading edge to spread
+  // through. Every other mount gets one, from wherever the chain ended.
+  if (chain?.needsBaseEdge === false) return;
+
   const edge = portConnectionEdge(
     network,
     nodeId,
@@ -270,6 +293,7 @@ function materialisePortConnection(
     portKind,
     targetNodeId,
     materials,
+    chain?.spreadingSourceAreaMm2,
   );
   network.edges[edge.id] = edge;
 }

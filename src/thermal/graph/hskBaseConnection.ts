@@ -47,6 +47,18 @@ import type { ThermalEdge, ThermalNetwork } from '../types';
 
 export const HSK_BASE_CONNECTION_ROLE = 'hsk_base_conduction';
 
+/**
+ * A source area the mount dictates rather than the graph revealing.
+ *
+ * `terminalArea` reads the last edge into the node this edge starts from, which
+ * is right for every mount that hands the base a face of its own. An embedded
+ * heat pipe does not: it occupies part of the very face the part sits on, so
+ * the aluminium branch may only spread through what is left. That number cannot
+ * be recovered from the graph, so it rides on the edge — and `refresh` reads it
+ * back, or a Screen 01 edit would quietly restore the full footprint.
+ */
+export const SOURCE_AREA_OVERRIDE_KEY = 'source_area_override_mm2';
+
 const RTH_REFERENCE =
   'Screen 01 HSK Base envelope, thickness and k; component TIM exit area. ' +
   'Lee/Song/Au/Moran disc spreading.';
@@ -116,8 +128,12 @@ function baseConductionInputs(
   network: ThermalNetwork,
   sourceNodeId: string,
   materials: MaterialDefaults,
+  overrideAreaMm2?: number | null,
 ): BaseConductionInputs {
-  const area = terminalArea(network, sourceNodeId);
+  const read = terminalArea(network, sourceNodeId);
+  const area = finitePositive(overrideAreaMm2)
+    ? { area_mm2: overrideAreaMm2, edge_id: read.edge_id }
+    : read;
   const parameters: NonNullable<ThermalEdge['parameters']> = {};
   const thickness = materials.hsk_base_thickness_mm?.value;
   const k = materials.hsk_base_k_W_mK.value;
@@ -153,6 +169,7 @@ export function hskBaseConnectionPatch(
   sourceNodeId: string,
   targetNodeId: string,
   materials: MaterialDefaults,
+  overrideAreaMm2?: number | null,
 ): Partial<ThermalEdge> | null {
   const source = network.nodes[sourceNodeId];
   const target = network.nodes[targetNodeId];
@@ -166,7 +183,7 @@ export function hskBaseConnectionPatch(
     return null;
   }
 
-  const inputs = baseConductionInputs(network, sourceNodeId, materials);
+  const inputs = baseConductionInputs(network, sourceNodeId, materials, overrideAreaMm2);
   return {
     type: 'spreading',
     method: 'spreading_disc',
@@ -184,6 +201,7 @@ export function hskBaseConnectionPatch(
     metadata: {
       connection_role: HSK_BASE_CONNECTION_ROLE,
       area_source_edge_id: inputs.areaSourceEdgeId,
+      ...(finitePositive(overrideAreaMm2) ? { [SOURCE_AREA_OVERRIDE_KEY]: overrideAreaMm2 } : {}),
     },
     origin: { kind: 'shared_structure', component_id: source.component_ref },
   };
@@ -198,7 +216,13 @@ export function refreshHskBaseConnectionEdges(
 
   for (const [id, edge] of Object.entries(network.edges)) {
     if (edge.metadata?.connection_role !== HSK_BASE_CONNECTION_ROLE) continue;
-    const inputs = baseConductionInputs(network, edge.from, materials);
+    const override = edge.metadata?.[SOURCE_AREA_OVERRIDE_KEY];
+    const inputs = baseConductionInputs(
+      network,
+      edge.from,
+      materials,
+      typeof override === 'number' ? override : null,
+    );
     // Refresh the analytical slot without taking control away from a valid
     // manual, measurement or future FloTHERM selection.
     const keepActiveOverride =

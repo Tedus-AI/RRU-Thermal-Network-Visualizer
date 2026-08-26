@@ -776,34 +776,61 @@ describe('mounts between a component and the shared base', () => {
   });
 
   /**
-   * A heat pipe used to stop at a clamped contact and skip the base spreading
-   * entirely, on the reasoning that a pipe does not spread into a plate the way
-   * a bolted block does. That was wrong: heat arriving at a condenser footprint
-   * still has to travel sideways through the base to reach the fins, and a
-   * condenser footprint is small, so it was the largest thing the two heat-pipe
-   * mounts were missing. They now finish like everything else.
+   * The port edge key has changed shape over time — it used to omit the target
+   * — so re-materialising wrote a NEW edge and left the old one in place. Two
+   * spreading edges between the same pair of nodes is a parallel path to the
+   * solver, and it makes the component read cooler than it is.
    */
-  it('lands a heat pipe on a seat and spreads from there like every other mount', () => {
-    const { hskId, network } = connected({
-      type: 'HeatPipeOnly',
-      contact_L_mm: 12,
-      contact_W_mm: 12,
+  it('sweeps a port edge written under an older key scheme', () => {
+    const { portNodeId, hskId, network } = connected({ type: 'Direct' });
+    const current = spreadingEdge(network())!;
+
+    // Exactly what an older build wrote: same pair, same model, older key.
+    useNetworkStore.getState().upsertEdge({ ...current, id: 'EDGE_PORT_CMP_PA_TIM_HEAT_OUT' });
+    expect(
+      Object.values(network().edges).filter(
+        (edge) => edge.from === portNodeId && edge.to === hskId,
+      ),
+    ).toHaveLength(2);
+
+    useNetworkStore.getState().connectPort(portNodeId, 'HEAT_OUT', hskId, materials());
+    const between = Object.values(network().edges).filter(
+      (edge) => edge.from === portNodeId && edge.to === hskId,
+    );
+    expect(between).toHaveLength(1);
+    expect(between[0].id).toBe(current.id);
+  });
+
+  /**
+   * Pipes in grooves in the base, machined flush. The part sits on a face that
+   * is part copper and part aluminium, so the two routes to the fins are IN
+   * PARALLEL — and the aluminium branch may only spread through what the pipes
+   * do not occupy.
+   *
+   * This was a series chain, which said the base was not under the part at all
+   * and made an embedded pipe read as pure added resistance.
+   */
+  it('runs an embedded pipe in parallel with the aluminium around it', () => {
+    const { portNodeId, hskId, network } = connected({
+      type: 'EmbeddedHeatPipe',
+      contact_L_mm: 20,
+      contact_W_mm: 5,
       heat_pipe_R_C_per_W: 0.4,
     });
-    const condenser = Object.values(network().nodes).find(
-      (node) => node.type === 'heat_pipe_condenser',
-    )!;
-    const seat = Object.values(network().nodes).find((node) => node.type === 'base_zone')!;
-    const joint = Object.values(network().edges).find(
-      (edge) => edge.from === condenser.id && edge.to === seat.id,
-    );
-    expect(joint).toBeDefined();
+    // No body, no seat: the pipe is already in the base.
+    expect(
+      Object.values(network().nodes).filter((node) => node.id.startsWith('NODE_MOUNT_')),
+    ).toEqual([]);
 
+    const leavingPort = Object.values(network().edges).filter(
+      (edge) => edge.from === portNodeId && edge.to === hskId,
+    );
+    expect(leavingPort).toHaveLength(2);
+    expect(leavingPort.map((edge) => edge.type).sort()).toEqual(['heat_pipe', 'spreading']);
+
+    // The component's own exit face is 400 mm²; 100 of it is copper.
     const spreading = spreadingEdge(network())!;
-    expect(spreading.from).toBe(seat.id);
-    expect(spreading.to).toBe(hskId);
-    // From the condenser footprint, which is what the joint edge carries.
-    expect(spreading.parameters?.source_area_mm2).toBe(144);
+    expect(spreading.parameters?.source_area_mm2).toBe(300);
   });
 
   /** A mount is disposable: disconnecting must not strand its nodes. */
@@ -817,7 +844,7 @@ describe('mounts between a component and the shared base', () => {
     });
     expect(
       Object.values(network().nodes).filter((node) => node.id.startsWith('NODE_MOUNT_')),
-    ).toHaveLength(3);
+    ).toHaveLength(2);
 
     useNetworkStore.getState().disconnectPort(portNodeId, 'HEAT_OUT');
     expect(

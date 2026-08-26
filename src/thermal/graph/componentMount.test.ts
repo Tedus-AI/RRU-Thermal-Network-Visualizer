@@ -15,6 +15,7 @@ import {
 } from './componentMount';
 
 const PORT = 'NODE_CMP_PA_TIM';
+const BASE = 'NODE_HSK_BASE';
 
 const materials = () => ({
   ...defaultMaterials(),
@@ -27,15 +28,24 @@ const materials = () => ({
 const chainFor = (mount: Partial<MountSpec> & { type: MountType }, sourceAreaMm2?: number) =>
   buildMountChain({
     portNodeId: PORT,
+    targetNodeId: BASE,
     componentRef: 'CMP_PA',
     mount: { ...emptyMount(mount.type), ...mount },
     materials: materials(),
     sourceAreaMm2,
   });
 
-/** Every edge, in the order heat actually travels. */
+/**
+ * The CONDUCTION route, in the order heat travels.
+ *
+ * A parallel mount has two edges leaving one node, so this follows the one that
+ * does not jump straight to the structure — that is the bypass, and it is
+ * asserted on directly rather than walked.
+ */
 const walk = (chain: MountChain) => {
-  const byFrom = new Map<string, ThermalEdge>(chain.edges.map((edge) => [edge.from, edge]));
+  const byFrom = new Map<string, ThermalEdge>(
+    chain.edges.filter((edge) => edge.to !== BASE).map((edge) => [edge.from, edge]),
+  );
   const path: string[] = [];
   let cursor: string | undefined = PORT;
   for (let step = 0; cursor && byFrom.has(cursor) && step < 10; step += 1) {
@@ -153,36 +163,96 @@ describe('component mount chains', () => {
     });
   });
 
-  it('carries a small base into a heat pipe and onto a seat', () => {
-    const chain = chainFor({
-      type: 'SmallBaseHeatPipe',
-      contact_L_mm: 30,
-      contact_W_mm: 20,
-      height_mm: 4,
-      heat_pipe_R_C_per_W: 0.25,
+  /**
+   * A local block SITS ON the main base — that is what a local block is — so
+   * heat arriving in it splits two ways: down through the joint, and along the
+   * pipe soldered underneath. Built as a series chain this read 0.761 C/W
+   * against 0.183 for the real circuit: 4.2x pessimistic, and in the direction
+   * that makes a heat pipe look like pure added resistance.
+   */
+  describe('a local block with a heat pipe under it', () => {
+    const blockPipe = () =>
+      chainFor({
+        type: 'SmallBaseHeatPipe',
+        contact_L_mm: 30,
+        contact_W_mm: 20,
+        height_mm: 4,
+        heat_pipe_R_C_per_W: 0.25,
+      });
+
+    it('sends the pipe to the base IN PARALLEL with the joint under the block', () => {
+      const chain = blockPipe();
+      expect(chain.nodes.map((node) => node.type)).toEqual(['small_base', 'base_zone']);
+
+      const block = chain.nodes.find((node) => node.type === 'small_base')!;
+      const leavingBlock = chain.edges.filter((edge) => edge.from === block.id);
+      expect(leavingBlock).toHaveLength(2);
+      // One down through the joint onto the seat, one straight to the structure.
+      expect(leavingBlock.map((edge) => edge.type).sort()).toEqual(['contact', 'heat_pipe']);
+      expect(leavingBlock.find((edge) => edge.type === 'heat_pipe')!.to).toBe(BASE);
     });
-    expect(chain.nodes.map((node) => node.type)).toEqual([
-      'small_base',
-      'heat_pipe_condenser',
-      'base_zone',
-    ]);
-    expect(walk(chain).path).toEqual([
-      'conduction:BLOCK',
-      'heat_pipe:HEAT_PIPE',
-      'contact:BASE_JOINT',
-    ]);
+
+    /** The conduction route still ends on a seat, so the base still spreads. */
+    it('keeps the downward route ending where the spreading edge starts', () => {
+      const chain = blockPipe();
+      expect(walk(chain).path).toEqual(['conduction:BLOCK', 'contact:BASE_JOINT']);
+      expect(chain.needsBaseEdge).toBe(true);
+      expect(chain.entryNodeId).toBe(chain.nodes.find((node) => node.type === 'base_zone')!.id);
+    });
   });
 
-  it('takes a bare heat pipe straight off the part', () => {
-    const chain = chainFor({
-      type: 'HeatPipeOnly',
-      contact_L_mm: 12,
-      contact_W_mm: 12,
-      heat_pipe_R_C_per_W: 0.4,
+  /**
+   * Pipes lying in grooves in the base, machined flush. The part sits on a face
+   * that is part copper and part aluminium, so heat has TWO routes to the fins
+   * and they are in parallel. Modelled as a series chain this read 0.380 C/W
+   * where the parallel circuit gives 0.071 — wrong in the direction that makes
+   * an embedded pipe look like a penalty for fitting one.
+   */
+  describe('a heat pipe embedded in the base', () => {
+    const embedded = (extra: Partial<MountSpec> = {}, source?: number) =>
+      chainFor(
+        {
+          type: 'EmbeddedHeatPipe',
+          contact_L_mm: 40,
+          contact_W_mm: 16,
+          heat_pipe_R_C_per_W: 0.1,
+          ...extra,
+        },
+        source,
+      );
+
+    it('adds no body and no joint — the pipe is already in the base', () => {
+      const chain = embedded({}, 1600);
+      expect(chain.nodes).toEqual([]);
+      expect(chain.edges).toHaveLength(1);
+      expect(chain.entryNodeId).toBe(PORT);
     });
-    expect(chain.nodes.map((node) => node.type)).toEqual(['heat_pipe_condenser', 'base_zone']);
-    expect(walk(chain).path).toEqual(['heat_pipe:HEAT_PIPE', 'contact:BASE_JOINT']);
-    expect(activeRth(chain.edges[0].rth)).toBe(0.4);
+
+    it('runs one edge from the part straight to the structure', () => {
+      const pipe = embedded({}, 1600).edges[0];
+      expect(pipe.from).toBe(PORT);
+      expect(pipe.to).toBe(BASE);
+      expect(pipe.type).toBe('heat_pipe');
+      expect(activeRth(pipe.rth)).toBe(0.1);
+    });
+
+    /** The copper is not available to the aluminium branch. */
+    it('leaves the caller only the aluminium that the pipes do not occupy', () => {
+      expect(embedded({}, 1600).spreadingSourceAreaMm2).toBe(1600 - 640);
+      expect(embedded({}, 1600).needsBaseEdge).toBe(true);
+    });
+
+    it('has no aluminium branch when the pipes cover the whole face', () => {
+      const chain = embedded({ contact_L_mm: 40, contact_W_mm: 40 }, 1600);
+      expect(chain.spreadingSourceAreaMm2).toBe(0);
+      expect(chain.needsBaseEdge).toBe(false);
+    });
+
+    /** Nothing to subtract from means nothing to say; the caller reads the graph. */
+    it('does not invent an area when the component exit face is unstated', () => {
+      expect(embedded().spreadingSourceAreaMm2).toBeNull();
+      expect(embedded().needsBaseEdge).toBe(true);
+    });
   });
 
   /**
@@ -237,10 +307,17 @@ describe('component mount chains', () => {
    * that cannot resolve says which field is missing.
    */
   it('draws the topology even with nothing dimensioned, and never invents a value', () => {
-    for (const type of ['Pedestal', 'SmallBaseHeatPipe', 'HeatPipeOnly', 'VaporChamber'] as const) {
+    for (const type of [
+      'Pedestal',
+      'SmallBaseHeatPipe',
+      'EmbeddedHeatPipe',
+      'VaporChamber',
+    ] as const) {
       const chain = chainFor({ type });
-      expect(chain.nodes.length, type).toBeGreaterThan(0);
       expect(chain.edges.length, type).toBeGreaterThan(0);
+      // An embedded pipe deliberately builds no node: it is a bypass off the
+      // face the part already sits on, not a body between the two.
+      if (type !== 'EmbeddedHeatPipe') expect(chain.nodes.length, type).toBeGreaterThan(0);
 
       const unresolved = chain.edges.filter((edge) => edge.resolution === 'unresolved');
       expect(unresolved.length, type).toBeGreaterThan(0);
