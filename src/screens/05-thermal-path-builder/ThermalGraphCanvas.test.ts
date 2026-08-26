@@ -312,3 +312,67 @@ describe('per-component visibility filter', () => {
     expect(elements.some((element) => String(element.classes).includes('hsk-bus'))).toBe(false);
   });
 });
+
+/**
+ * A parallel mount puts TWO edges between one node pair. An embedded heat pipe
+ * is exactly that: the pipe, and the aluminium around it. Both were routed to a
+ * junction placed level with their shared terminal, which meant the same point
+ * — so the two lines were drawn on top of each other and the second route was
+ * invisible. It read as the tool having failed to build the pipe at all.
+ */
+describe('parallel branches from one terminal', () => {
+  function withParallelBranch(): ThermalNetwork {
+    const network = fanInNetwork(4);
+    const id = 'EDGE_PORT_MOUNT_TIM_1_HEAT_PIPE';
+    network.edges[id] = portEdge(id, 'NODE_TIM_1');
+    return network;
+  }
+
+  const junctions = (network: ThermalNetwork) =>
+    buildElements(network, {
+      showPorts: true,
+      showLabels: true,
+      layoutMode: 'Auto',
+    }).filter((element) => String(element.classes).includes('hsk-bus-branch-junction'));
+
+  it('gives both branches of one terminal their own junction position', () => {
+    const found = junctions(withParallelBranch()).filter(
+      (element) => element.data.sourceId === 'NODE_TIM_1',
+    );
+    expect(found).toHaveLength(2);
+    expect(found[0].position?.y).not.toBe(found[1].position?.y);
+    // Both still sit on the bar, so only the cross axis moves.
+    expect(found[0].position?.x).toBe(found[1].position?.x);
+  });
+
+  it('fans them symmetrically about the terminal, so the pair stays centred', () => {
+    const found = junctions(withParallelBranch()).filter(
+      (element) => element.data.sourceId === 'NODE_TIM_1',
+    );
+    const terminalY = 50;
+    const offsets = found.map((element) => (element.position?.y ?? 0) - terminalY);
+    expect(offsets.reduce((sum, value) => sum + value, 0)).toBe(0);
+    expect(offsets.every((offset) => offset !== 0)).toBe(true);
+  });
+
+  it('leaves a terminal with a single branch exactly where it was', () => {
+    const plain = junctions(fanInNetwork(4));
+    for (const element of plain) {
+      expect(element.data.crossOffset).toBe(0);
+    }
+    const first = plain.find((element) => element.data.sourceId === 'NODE_TIM_1');
+    expect(first?.position?.y).toBe(50);
+  });
+
+  it('orders the fan by edge id, so it does not shuffle between renders', () => {
+    const network = withParallelBranch();
+    const first = junctions(network).map((element) => element.data.id);
+    // Adding an unrelated branch must not re-order the pair.
+    const later = 'EDGE_PORT_TIM_9_HEAT_OUT_HSK_BASE';
+    network.nodes.NODE_TIM_9 = thermalNode('NODE_TIM_9', 'tim_interface', { x: 100, y: 900 }, true);
+    network.layout.positions.NODE_TIM_9 = { x: 100, y: 900 };
+    network.edges[later] = portEdge(later, 'NODE_TIM_9');
+    const second = junctions(network).map((element) => element.data.id);
+    expect(second.filter((id) => first.includes(id))).toEqual(first);
+  });
+});

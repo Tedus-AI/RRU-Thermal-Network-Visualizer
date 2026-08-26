@@ -7,6 +7,7 @@ import {
   LEGEND,
   UNCONNECTED_PORT_COLOR,
   cytoscapeStylesheet,
+  labelBox,
   nodeGroup,
   type NodeVisualGroup,
 } from './graphStyles';
@@ -117,5 +118,55 @@ describe('edge labels sit off the line, not on it', () => {
 
   it('still keeps the arrowhead, which is what the offset exists to protect', () => {
     expect(styleFor('edge')['target-arrow-shape']).toBe('triangle');
+  });
+});
+
+/**
+ * The box has to be sized for the label Cytoscape actually PAINTS, which is the
+ * label after wrapping — not the string as it was handed over. Counting only
+ * the explicit newlines is how "Power Module(H48SA50030NRDH)" came to hang out
+ * of the top and bottom of its own border.
+ *
+ * The exact glyph widths depend on whether a canvas is available to measure in,
+ * so nothing here asserts a pixel: each case states a relationship that has to
+ * hold in either mode.
+ */
+describe('labelBox', () => {
+  const lines = (label: string) => (labelBox(label).h - 12) / 14;
+
+  it('gives a short single-line label one line', () => {
+    expect(lines('FPGA Lid')).toBe(1);
+  });
+
+  it('counts the lines the caller asked for', () => {
+    expect(lines('FPGA Lid\n35.0 W')).toBe(2);
+  });
+
+  it('counts the lines Cytoscape adds by wrapping', () => {
+    // Far past the wrap column however the glyphs are measured.
+    expect(lines('Power Module(H48SA50030NRDH) Body Metal Base 29.0 W')).toBeGreaterThan(1);
+  });
+
+  it('adds the wrapped lines of every explicit line, not just the newlines', () => {
+    const label = 'Power Module(H48SA50030NRDH)\nBody / Metal Base with a long tail · 29.0 W';
+    expect(lines(label)).toBeGreaterThan(label.split('\n').length);
+  });
+
+  it('leaves a single unbreakable run on one line, and widens the box for it', () => {
+    // `text-overflow-wrap` is `whitespace`, so a word with no space in it is
+    // never broken: it overhangs the column, and the box has to follow it.
+    const run = 'A'.repeat(60);
+    expect(lines(run)).toBe(1);
+    expect(labelBox(run).w).toBeGreaterThan(labelBox('A'.repeat(10)).w);
+  });
+
+  it('keeps a floor so a one-character node is still a box', () => {
+    expect(labelBox('A').w).toBeGreaterThanOrEqual(64);
+  });
+
+  it('is wider for wide glyphs than for narrow ones when it can measure them', () => {
+    // In a browser this is a real difference; with no canvas both fall back to
+    // the same character count, so equality is the honest assertion there.
+    expect(labelBox('WWWWWWWW').w).toBeGreaterThanOrEqual(labelBox('iiiiiiii').w);
   });
 });
