@@ -36,6 +36,14 @@ import {
   MODULE_SURFACE_EQUIVALENT_PARAMETERS,
   migrateHeatPathType,
   emptyGeometry,
+  PACKAGE_TYPES,
+  PACKAGE_TYPE_HINTS,
+  cavityFilterBodyPrefill,
+  emptyMount,
+  mountFootprintMm2,
+  mountPipeCount,
+  type MountSpec,
+  type ThermalSpec,
 } from './component';
 import { sourced, unknownValue, withValue } from './sourcedValue';
 import { setResult, type ResultValue } from '@/thermal/resultValue';
@@ -1011,5 +1019,120 @@ describe('the merged metal-face heat path', () => {
       },
     };
     expect(completenessOf(junctionBased).Rjc).toBe(false);
+  });
+});
+
+/**
+ * A groove takes one pipe, so a two-pipe design is two grooves side by side.
+ * Storing the total width instead meant doing that multiplication by hand and
+ * keeping the answer rather than the design — 13 mm and "two 6.5s" are the same
+ * number and not the same part.
+ */
+describe('pipes under an embedded heat pipe', () => {
+  const embedded = (patch: Partial<MountSpec>): MountSpec => ({
+    ...emptyMount('EmbeddedHeatPipe'),
+    contact_L_mm: 35,
+    contact_W_mm: 6.5,
+    ...patch,
+  });
+
+  it('multiplies the copper by how many pipes there are', () => {
+    expect(mountFootprintMm2(embedded({ heat_pipe_count: 2 }))).toBeCloseTo(455, 9);
+  });
+
+  it('reads a missing count as one pipe, so nothing stored earlier moves', () => {
+    expect(mountFootprintMm2(embedded({ contact_W_mm: 13 }))).toBeCloseTo(455, 9);
+    expect(mountPipeCount(embedded({}))).toBe(1);
+  });
+
+  it('never takes a fraction of a pipe, or less than one', () => {
+    expect(mountPipeCount(embedded({ heat_pipe_count: 2.7 }))).toBe(2);
+    expect(mountPipeCount(embedded({ heat_pipe_count: 0 }))).toBe(1);
+    expect(mountPipeCount(embedded({ heat_pipe_count: -3 }))).toBe(1);
+    expect(mountPipeCount(embedded({ heat_pipe_count: Number.NaN }))).toBe(1);
+  });
+
+  it('is an embedded-pipe idea only: a block is one block however many pipes are under it', () => {
+    const block: MountSpec = {
+      ...emptyMount('SmallBaseHeatPipe'),
+      contact_L_mm: 30,
+      contact_W_mm: 20,
+      heat_pipe_count: 3,
+    };
+    expect(mountPipeCount(block)).toBe(1);
+    expect(mountFootprintMm2(block)).toBeCloseTo(600, 9);
+  });
+
+  it('still refuses to invent an area from a missing dimension', () => {
+    expect(mountFootprintMm2(embedded({ contact_W_mm: null, heat_pipe_count: 2 }))).toBeNull();
+  });
+});
+
+/**
+ * A machined cavity filter bolts down across most of the heat sink, so its body
+ * outline starts as the base's. Retyping two numbers Screen 01 already holds is
+ * how the two come to disagree.
+ */
+describe('cavity filter body prefill', () => {
+  const BASE = { L_mm: 300, W_mm: 220 };
+
+  function filter(patch: Partial<ThermalSpec> = {}): ThermalSpec {
+    return {
+      ...emptyThermalSpec(),
+      package_type: 'Cavity Filter',
+      heat_path: { type: 'DirectMetal', parameters: { source_model: 'SurfaceBodyBased' } },
+      ...patch,
+    };
+  }
+
+  it('fills the blank body outline from the HSK base', () => {
+    expect(cavityFilterBodyPrefill(filter(), BASE)).toEqual({
+      package_L_mm: 300,
+      package_W_mm: 220,
+    });
+  });
+
+  it('never overwrites a size somebody stated — a filter is usually smaller', () => {
+    const stated = filter({
+      geometry: { ...emptyThermalSpec().geometry, package_L_mm: 280, package_W_mm: 200 },
+    });
+    expect(cavityFilterBodyPrefill(stated, BASE)).toBeNull();
+  });
+
+  it('fills only the side that is blank', () => {
+    const half = filter({
+      geometry: { ...emptyThermalSpec().geometry, package_L_mm: 280 },
+    });
+    expect(cavityFilterBodyPrefill(half, BASE)).toEqual({ package_W_mm: 220 });
+  });
+
+  it('needs all three of the path, the source model and the package', () => {
+    expect(cavityFilterBodyPrefill(filter({ package_type: 'Module' }), BASE)).toBeNull();
+    expect(
+      cavityFilterBodyPrefill(
+        filter({ heat_path: { type: 'TopSurface', parameters: {} } }),
+        BASE,
+      ),
+    ).toBeNull();
+    expect(
+      cavityFilterBodyPrefill(
+        filter({
+          heat_path: { type: 'DirectMetal', parameters: { source_model: 'JunctionBased' } },
+        }),
+        BASE,
+      ),
+    ).toBeNull();
+  });
+
+  it('fills nothing when Screen 01 has no base size yet', () => {
+    expect(cavityFilterBodyPrefill(filter(), { L_mm: null, W_mm: undefined })).toBeNull();
+    expect(cavityFilterBodyPrefill(filter(), { L_mm: 0, W_mm: 220 })).toEqual({
+      package_W_mm: 220,
+    });
+  });
+
+  it('is a package the list offers, not an off-list leftover', () => {
+    expect(PACKAGE_TYPES).toContain('Cavity Filter');
+    expect(PACKAGE_TYPE_HINTS['Cavity Filter'].zh).toBeTruthy();
   });
 });

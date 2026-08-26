@@ -48,7 +48,7 @@ const HSK_BUS_PREFIX = 'VIEW_HSK_BUS_';
  * the gap between neighbouring terminals, so a fan never reaches the branch
  * above or below it.
  */
-const HSK_BUS_BRANCH_FAN_PX = 28;
+const HSK_BUS_BRANCH_FAN_PX = 36;
 
 interface HskBusBranch {
   edgeId: string;
@@ -63,11 +63,26 @@ interface HskBusBranch {
   crossOffset: number;
 }
 
+/**
+ * Two or more branches leaving one terminal for one structure — a parallel
+ * pair, and the whole point of the mount axis's pipe mounts.
+ *
+ * It gets its own annotation because the two numbers on the two branches do not
+ * add up to anything a reader can see. `0.130` beside `0.050` is not `0.180`,
+ * and the combination is what the rest of the chain actually feels.
+ */
+interface HskBusParallelSet {
+  terminalId: string;
+  noteId: string;
+  edgeIds: string[];
+}
+
 interface HskBusGroup {
   id: string;
   sharedId: string;
   outletId: string;
   branches: HskBusBranch[];
+  parallelSets: HskBusParallelSet[];
 }
 
 /**
@@ -178,8 +193,35 @@ function hskBusGroups(
             crossOffset: (index - (list.length - 1) / 2) * HSK_BUS_BRANCH_FAN_PX,
           };
         }),
+        parallelSets: [...siblings.entries()]
+          .filter(([, edgeIds]) => edgeIds.length > 1)
+          .map(([terminalId, edgeIds]) => ({
+            terminalId,
+            noteId: `${id}_PARALLEL_${terminalId}`,
+            edgeIds,
+          })),
       };
     });
+}
+
+/**
+ * Resistance of a set of edges hung between the same two nodes, °C/W.
+ *
+ * Conductances add — that is the whole reason a heat pipe helps — so this is
+ * `1 / Σ(1/R)`. Null when ANY of them is unresolved: a total computed from the
+ * branches that happen to have numbers would be lower than the truth and would
+ * read as if the missing branch carried nothing (05 §61).
+ */
+export function parallelRth(network: ThermalNetwork, edgeIds: readonly string[]): number | null {
+  let conductance = 0;
+  for (const id of edgeIds) {
+    const edge = network.edges[id];
+    if (!edge || !edge.enabled) return null;
+    const R = activeRth(edge.rth);
+    if (R == null || !Number.isFinite(R) || R <= 0) return null;
+    conductance += 1 / R;
+  }
+  return conductance > 0 ? 1 / conductance : null;
 }
 
 export interface BusGeometry {
@@ -275,6 +317,13 @@ export function buildElements(
   const routedBranches = new Map(
     busGroups.flatMap((group) => group.branches.map((branch) => [branch.edgeId, branch] as const)),
   );
+  // Edges that share their terminal with another. A lone branch to the base
+  // needs no name — there is nothing to tell it apart from — but one of a
+  // parallel pair does, and that is exactly when "which of these is the pipe?"
+  // is the question being asked.
+  const parallelEdgeIds = new Set(
+    busGroups.flatMap((group) => group.parallelSets.flatMap((set) => set.edgeIds)),
+  );
 
   for (const node of Object.values(network.nodes)) {
     if (hidden.has(node.id)) continue;
@@ -368,6 +417,45 @@ export function buildElements(
       });
     }
 
+    /*
+       The combination, written where the branches rejoin.
+
+       Two numbers side by side on two lines do not tell a reader what the pair
+       is worth, and the arithmetic is the one people get wrong: 0.130 beside
+       0.050 is 0.036, not 0.180 and not 0.090. It sits on the bar at the
+       terminal's own level — centred between the fanned branches — and reads
+       out to the side of the bar so it lands on neither of them.
+    */
+    for (const set of group.parallelSets) {
+      const sourcePosition = network.layout.positions[set.terminalId];
+      const combined = parallelRth(network, set.edgeIds);
+      elements.push({
+        group: 'nodes',
+        data: {
+          id: set.noteId,
+          busId: group.id,
+          sourceId: set.terminalId,
+          w: 1,
+          h: 1,
+          fill: HSK_BUS_COLOR,
+          border: HSK_BUS_COLOR,
+          text: HSK_BUS_COLOR,
+          label: options.showLabels
+            ? `∥ ${combined != null ? `${combined.toFixed(3)} °C/W` : '—'}`
+            : '',
+        },
+        classes: 'view-only hsk-bus-parallel-note',
+        position:
+          geometry.along != null && sourcePosition
+            ? axis === 'vertical'
+              ? { x: geometry.along, y: sourcePosition.y }
+              : { x: sourcePosition.x, y: geometry.along }
+            : undefined,
+        selectable: false,
+        grabbable: false,
+      });
+    }
+
     elements.push({
       group: 'nodes',
       data: {
@@ -416,7 +504,10 @@ export function buildElements(
       const terminalIsSource = edge.from === routed.terminalId;
       const routedLabel = options.showLabels
         ? R != null
-          ? `${R.toFixed(3)} °C/W`
+          ? parallelEdgeIds.has(edge.id)
+            ? // Name above number: on one line this is wider than the branch.
+              `${short}\n${R.toFixed(3)} °C/W`
+            : `${R.toFixed(3)} °C/W`
           : `${short} —`
         : '';
       elements.push({
@@ -429,7 +520,9 @@ export function buildElements(
           color: edgeColor(edge),
           lineStyle: edgeLineStyle(edge),
         },
-        classes: 'routed-port-edge',
+        classes: parallelEdgeIds.has(edge.id)
+          ? 'routed-port-edge parallel-branch'
+          : 'routed-port-edge',
       });
       // Preserve the authoritative terminal-to-HSK relationship for Dagre;
       // the engineer only sees the routed branch above.

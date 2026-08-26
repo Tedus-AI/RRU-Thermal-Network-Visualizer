@@ -168,6 +168,22 @@ function positionViewBuses(cy: Core) {
           : { x: source.position('x') + offset, y: geometry.along! },
       );
     });
+
+    // The parallel note rides on the bar at its terminal's own level — between
+    // the fanned branches, which is what makes it read as their combination.
+    // It is placed separately from the junctions above because it is not a
+    // branch: counting it as one would skew the bar's span and centre.
+    cy.nodes('.hsk-bus-parallel-note')
+      .filter((note) => note.data('busId') === bus.id())
+      .forEach((note) => {
+        const source = cy.getElementById(note.data('sourceId') as string);
+        if (!source.isNode()) return;
+        note.position(
+          vertical
+            ? { x: geometry.along!, y: source.position('y') }
+            : { x: source.position('x'), y: geometry.along! },
+        );
+      });
   });
 }
 

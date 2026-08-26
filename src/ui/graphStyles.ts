@@ -352,6 +352,37 @@ export function cytoscapeStylesheet(): StylesheetCSS[] {
         'z-index': 8,
       },
     },
+    /*
+      The parallel combination, annotated on the bus where two branches rejoin.
+
+      A 1x1 invisible anchor carrying only a label: it is a note about the
+      graph, not a thing in it, so it must not paint a box, must not be
+      clickable, and must not be dragged. `text-halign: right` puts the text
+      beside the bar rather than on either branch.
+    */
+    {
+      selector: 'node.hsk-bus-parallel-note',
+      style: {
+        width: 1,
+        height: 1,
+        shape: 'ellipse',
+        'background-opacity': 0,
+        'border-width': 0,
+        label: 'data(label)',
+        color: HSK_BUS_COLOR,
+        'font-size': 9,
+        'font-weight': 700,
+        'text-halign': 'right',
+        'text-valign': 'center',
+        'text-margin-x': 10,
+        'text-background-color': '#ffffff',
+        'text-background-opacity': 0.92,
+        'text-background-padding': '2px',
+        'min-zoomed-font-size': 7,
+        events: 'no',
+        'z-index': 9,
+      },
+    },
     {
       selector: 'edge',
       style: {
@@ -389,6 +420,21 @@ export function cytoscapeStylesheet(): StylesheetCSS[] {
         'text-margin-y': -9,
         'z-index': 5,
       },
+    },
+    /*
+      One of a parallel pair, so its label carries a route name as well as a
+      number — and on one line that is WIDER THAN THE BRANCH, which is short
+      because the bar sits close to the terminals. It overhung the bar onto the
+      ∥ note at one end and the node at the other, and no horizontal offset
+      fixes a label that does not fit however it is placed.
+
+      So the name goes above the number. That halves the width to less than the
+      branch's length, and the fan is wide enough that the two stacked labels
+      clear each other. Edges do not wrap by default, hence `text-wrap`.
+    */
+    {
+      selector: 'edge.parallel-branch',
+      style: { 'text-wrap': 'wrap', 'text-margin-y': -4 },
     },
     {
       selector: 'edge.hsk-bus-trunk',
