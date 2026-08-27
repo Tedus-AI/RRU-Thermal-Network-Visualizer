@@ -171,11 +171,10 @@ function positionViewBuses(cy: Core) {
       );
     });
 
-    // Labels ride on the long post-turn lane of each branch, never on the
-    // vertical/horizontal jog. Recompute them from the rendered node positions
-    // just like the bus itself so auto-layout cannot move a line underneath its
-    // annotation.
-    cy.nodes('.hsk-bus-branch-label')
+    // Parallel branches keep the original straight fan. Their labels use
+    // separate view-only anchors on those lines, then CSS offsets the text to
+    // opposite outside edges so neither opaque label box covers a branch.
+    cy.nodes('.hsk-bus-parallel-label')
       .filter((label) => label.data('busId') === bus.id())
       .forEach((label) => {
         const source = cy.getElementById(label.data('sourceId') as string);
@@ -184,12 +183,12 @@ function positionViewBuses(cy: Core) {
         label.position(
           vertical
             ? {
-                x: source.position('x') + (geometry.along! - source.position('x')) * 0.58,
-                y: source.position('y') + offset,
+                x: source.position('x') + (geometry.along! - source.position('x')) * 0.56,
+                y: source.position('y') + offset * 0.56,
               }
             : {
-                x: source.position('x') + offset,
-                y: source.position('y') + (geometry.along! - source.position('y')) * 0.58,
+                x: source.position('x') + offset * 0.56,
+                y: source.position('y') + (geometry.along! - source.position('y')) * 0.56,
               },
         );
       });

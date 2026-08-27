@@ -48,7 +48,7 @@ const HSK_BUS_PREFIX = 'VIEW_HSK_BUS_';
  * the gap between neighbouring terminals, so a fan never reaches the branch
  * above or below it.
  */
-const HSK_BUS_BRANCH_FAN_PX = 44;
+const HSK_BUS_BRANCH_FAN_PX = 36;
 
 interface HskBusBranch {
   busId: string;
@@ -105,33 +105,6 @@ export function busAxis(layoutMode: string): 'vertical' | 'horizontal' | null {
   return null;
 }
 
-export type EdgeFlowAxis = 'horizontal' | 'vertical';
-
-/** Primary direction of an orthogonal thermal-resistance route. */
-export function edgeFlowAxis(
-  layoutMode: string,
-  from?: { x: number; y: number },
-  to?: { x: number; y: number },
-): EdgeFlowAxis {
-  if (layoutMode === 'TopBottom') return 'vertical';
-  if (layoutMode !== 'Free' || !from || !to) return 'horizontal';
-  return Math.abs(to.x - from.x) >= Math.abs(to.y - from.y) ? 'horizontal' : 'vertical';
-}
-
-/**
- * Clear an edge label completely away from the segment it describes.
- * Horizontal routes put the label above the line; vertical routes put it far
- * enough to the right that even the longest bilingual Rth label cannot cross
- * back over the line.
- */
-export function edgeLabelMargins(label: string, axis: EdgeFlowAxis) {
-  const lines = label.split('\n');
-  const longest = Math.max(0, ...lines.map((line) => line.length));
-  return axis === 'horizontal'
-    ? { x: 0, y: -(Math.ceil(lines.length * 4.5) + 7) }
-    : { x: Math.ceil(longest * 2.7) + 8, y: 0 };
-}
-
 function branchLabelPosition(
   busAxisValue: 'vertical' | 'horizontal',
   source: { x: number; y: number } | undefined,
@@ -139,15 +112,17 @@ function branchLabelPosition(
   crossOffset: number,
 ) {
   if (!source || busAlong == null) return undefined;
-  const LABEL_LANE_FRACTION = 0.58;
+  // The anchor follows the original straight branch. Styling moves its text to
+  // the outside of that line; the route itself remains completely unchanged.
+  const LABEL_EDGE_FRACTION = 0.56;
   return busAxisValue === 'vertical'
     ? {
-        x: source.x + (busAlong - source.x) * LABEL_LANE_FRACTION,
-        y: source.y + crossOffset,
+        x: source.x + (busAlong - source.x) * LABEL_EDGE_FRACTION,
+        y: source.y + crossOffset * LABEL_EDGE_FRACTION,
       }
     : {
-        x: source.x + crossOffset,
-        y: source.y + (busAlong - source.y) * LABEL_LANE_FRACTION,
+        x: source.x + crossOffset * LABEL_EDGE_FRACTION,
+        y: source.y + (busAlong - source.y) * LABEL_EDGE_FRACTION,
       };
 }
 
@@ -569,41 +544,37 @@ export function buildElements(
             : `${R.toFixed(3)} °C/W`
           : `${short} —`
         : '';
-      const routeAxis: EdgeFlowAxis = axis === 'horizontal' ? 'vertical' : 'horizontal';
       const geometry = busGeometries.get(routed.busId);
       const parallel = parallelEdgeIds.has(edge.id);
 
-      elements.push({
-        group: 'nodes',
-        data: {
-          id: `${routed.junctionId}_LABEL`,
-          busId: routed.busId,
-          sourceId: routed.terminalId,
-          crossOffset: routed.crossOffset,
-          w: 1,
-          h: 1,
-          fill: '#ffffff',
-          border: '#ffffff',
-          text: '#475569',
-          label: routedLabel,
-        },
-        classes: [
-          'view-only',
-          'hsk-bus-branch-label',
-          `flow-${routeAxis}`,
-          parallel ? 'parallel-label' : '',
-        ]
-          .filter(Boolean)
-          .join(' '),
-        position: branchLabelPosition(
-          axis!,
-          network.layout.positions[routed.terminalId],
-          geometry?.along ?? null,
-          routed.crossOffset,
-        ),
-        selectable: false,
-        grabbable: false,
-      });
+      if (parallel) {
+        const flowAxis = axis === 'horizontal' ? 'vertical' : 'horizontal';
+        const labelSide = routed.crossOffset < 0 ? 'negative' : 'positive';
+        elements.push({
+          group: 'nodes',
+          data: {
+            id: `${routed.junctionId}_LABEL`,
+            busId: routed.busId,
+            sourceId: routed.terminalId,
+            crossOffset: routed.crossOffset,
+            w: 1,
+            h: 1,
+            fill: '#ffffff',
+            border: '#ffffff',
+            text: '#475569',
+            label: routedLabel,
+          },
+          classes: `view-only hsk-bus-parallel-label flow-${flowAxis} label-${labelSide}`,
+          position: branchLabelPosition(
+            axis!,
+            network.layout.positions[routed.terminalId],
+            geometry?.along ?? null,
+            routed.crossOffset,
+          ),
+          selectable: false,
+          grabbable: false,
+        });
+      }
       elements.push({
         group: 'edges',
         data: {
@@ -613,11 +584,10 @@ export function buildElements(
           label: routedLabel,
           color: edgeColor(edge),
           lineStyle: edgeLineStyle(edge),
-          taxiDirection: routeAxis,
         },
         classes: parallel
-          ? `orthogonal-edge flow-${routeAxis} routed-port-edge parallel-branch`
-          : `orthogonal-edge flow-${routeAxis} routed-port-edge`,
+          ? 'routed-port-edge parallel-branch'
+          : 'routed-port-edge',
       });
       // Preserve the authoritative terminal-to-HSK relationship for Dagre;
       // the engineer only sees the routed branch above.
@@ -637,13 +607,6 @@ export function buildElements(
       continue;
     }
 
-    const routeAxis = edgeFlowAxis(
-      options.layoutMode,
-      network.layout.positions[edge.from],
-      network.layout.positions[edge.to],
-    );
-    const margins = edgeLabelMargins(label, routeAxis);
-
     elements.push({
       group: 'edges',
       data: {
@@ -653,11 +616,7 @@ export function buildElements(
         label,
         color: edgeColor(edge),
         lineStyle: edgeLineStyle(edge),
-        taxiDirection: routeAxis,
-        labelMarginX: margins.x,
-        labelMarginY: margins.y,
       },
-      classes: `orthogonal-edge flow-${routeAxis}`,
     });
   }
 
