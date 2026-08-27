@@ -826,10 +826,16 @@ export interface MountSpec {
    * stated power and source size, so it belongs with its conditions; the edge
    * carries those in its reference.
    *
-   * It is the resistance of ALL the pipes together, not of one of them, and it
-   * stays that way now `heat_pipe_count` exists: the count is a geometry
-   * answer, and dividing a vendor number by it would be this tool inventing a
-   * parallel model the supplier never quoted.
+   * For an embedded pipe it is ONE pipe, and `heat_pipe_count` of them run in
+   * parallel: `R_edge = R / pipes`.
+   *
+   * It was briefly "all the pipes combined", on the reasoning that dividing a
+   * vendor number by a count invents a parallel model the supplier never
+   * quoted. That was inconsistent with the very argument that split the width
+   * into one pipe and a count — it left the multiplication to be done by hand
+   * on the field next door, and stored the answer instead of the design. A
+   * supplier quotes ONE pipe; two of them under a part is two grooves, two
+   * pipes and two routes, and the parallel is the tool's to do.
    */
   heat_pipe_R_C_per_W: number | null;
   /** Milled out of the base, or a separate piece bolted to it. */
@@ -900,6 +906,19 @@ export function mountFootprintMm2(mount: MountSpec): number | null {
   const { contact_L_mm: L, contact_W_mm: W } = mount;
   if (L == null || W == null || L <= 0 || W <= 0) return null;
   return L * W * mountPipeCount(mount);
+}
+
+/**
+ * What the pipe branch is worth, °C/W — `R_one_pipe / pipes`.
+ *
+ * N identical pipes run between the same two points, so their conductances
+ * add. Null stays null: an unquoted pipe leaves that edge UNRESOLVED naming
+ * the field, and a count can neither create nor rescue a number nobody stated.
+ */
+export function mountPipeRth(mount: MountSpec): number | null {
+  const R = mount.heat_pipe_R_C_per_W;
+  if (R == null || !Number.isFinite(R) || R <= 0) return null;
+  return R / mountPipeCount(mount);
 }
 
 export function mountContactAreaMm2(spec: ThermalSpec): number | null {

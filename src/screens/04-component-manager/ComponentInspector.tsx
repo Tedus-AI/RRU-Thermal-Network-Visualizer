@@ -837,7 +837,7 @@ export function ComponentInspector({
                             label="Pipes under source"
                             zh="熱源下方熱管根數"
                             htmlFor="ins-mount-pipes"
-                            tooltip="熱源正下方有幾根熱管。銅的面積 = 長 × 單根寬 × 根數；留空視為 1 根。這只影響幾何，熱管熱阻那一欄仍然是全部熱管合計的原廠值。"
+                            tooltip="熱源正下方有幾根熱管。根數同時作用在兩邊：銅的面積 = 長 × 單根寬 × 根數，熱管支路 = 單根熱阻 ÷ 根數。留空視為 1 根。"
                           />
                           <NumberInput
                             id="ins-mount-pipes"
@@ -882,17 +882,25 @@ export function ComponentInspector({
                             label={
                               mount.type === 'VaporChamber'
                                 ? 'Vapour chamber Rth'
-                                : 'Heat pipe Rth (all pipes)'
+                                : mount.type === 'EmbeddedHeatPipe'
+                                  ? 'Heat pipe Rth (one pipe)'
+                                  : 'Heat pipe Rth'
                             }
                             zh={
-                              mount.type === 'VaporChamber' ? '均熱板熱阻' : '熱管熱阻（全部合計）'
+                              mount.type === 'VaporChamber'
+                                ? '均熱板熱阻'
+                                : mount.type === 'EmbeddedHeatPipe'
+                                  ? '單根熱管熱阻'
+                                  : '熱管熱阻'
                             }
                             unit="°C/W"
                             htmlFor="ins-mount-hp"
                             tooltip={
                               mount.type === 'VaporChamber'
                                 ? '均熱板熱阻是原廠在特定功率與熱源尺寸下量測的數值，不是常數，也無法由幾何推導。未填則該段維持未解析。'
-                                : '熱管熱阻是原廠數值，無法由幾何推導，未填則該段維持未解析。這裡填的是所有熱管「合計」的熱阻，不是單根 —— 根數欄位不會拿來除它，因為那等於工具自己編一套原廠沒量過的並聯模型。'
+                                : mount.type === 'EmbeddedHeatPipe'
+                                  ? '熱管熱阻是原廠數值，無法由幾何推導，未填則該段維持未解析。這裡填「單根」的熱阻 —— 就是規格書上查到的那個數字。旁邊的根數會把它們並聯：熱管支路 = 單根熱阻 ÷ 根數。'
+                                  : '熱管熱阻是原廠數值，無法由幾何推導，未填則該段維持未解析。'
                             }
                           />
                           <NumberInput

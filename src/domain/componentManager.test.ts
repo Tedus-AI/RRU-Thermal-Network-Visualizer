@@ -42,6 +42,7 @@ import {
   emptyMount,
   mountFootprintMm2,
   mountPipeCount,
+  mountPipeRth,
   type MountSpec,
   type ThermalSpec,
 } from './component';
@@ -1065,6 +1066,34 @@ describe('pipes under an embedded heat pipe', () => {
 
   it('still refuses to invent an area from a missing dimension', () => {
     expect(mountFootprintMm2(embedded({ contact_W_mm: null, heat_pipe_count: 2 }))).toBeNull();
+  });
+
+  /*
+     The count applies to BOTH halves. It was briefly geometry-only, with the
+     resistance left as "all pipes combined" — which asked the engineer to do by
+     hand, on the field next door, exactly the multiplication that splitting the
+     width was meant to spare them. A supplier quotes one pipe.
+  */
+  it('puts the pipes in parallel: R_one / pipes', () => {
+    expect(mountPipeRth(embedded({ heat_pipe_R_C_per_W: 0.13, heat_pipe_count: 2 }))).toBeCloseTo(0.065, 9);
+    expect(mountPipeRth(embedded({ heat_pipe_R_C_per_W: 0.13, heat_pipe_count: 4 }))).toBeCloseTo(0.0325, 9);
+  });
+
+  it('leaves a single pipe exactly as quoted', () => {
+    expect(mountPipeRth(embedded({ heat_pipe_R_C_per_W: 0.13 }))).toBeCloseTo(0.13, 9);
+    expect(mountPipeRth(embedded({ heat_pipe_R_C_per_W: 0.13, heat_pipe_count: 1 }))).toBeCloseTo(0.13, 9);
+  });
+
+  it('cannot create a number nobody stated', () => {
+    expect(mountPipeRth(embedded({ heat_pipe_R_C_per_W: null, heat_pipe_count: 2 }))).toBeNull();
+    expect(mountPipeRth(embedded({ heat_pipe_R_C_per_W: 0, heat_pipe_count: 2 }))).toBeNull();
+  });
+
+  it('does not divide a chamber or a block-mounted pipe', () => {
+    const vc: MountSpec = { ...emptyMount('VaporChamber'), heat_pipe_R_C_per_W: 0.2, heat_pipe_count: 3 };
+    const block: MountSpec = { ...emptyMount('SmallBaseHeatPipe'), heat_pipe_R_C_per_W: 0.2, heat_pipe_count: 3 };
+    expect(mountPipeRth(vc)).toBeCloseTo(0.2, 9);
+    expect(mountPipeRth(block)).toBeCloseTo(0.2, 9);
   });
 });
 

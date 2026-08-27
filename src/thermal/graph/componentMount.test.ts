@@ -236,6 +236,34 @@ describe('component mount chains', () => {
       expect(activeRth(pipe.rth)).toBe(0.1);
     });
 
+    /*
+       The count applies to BOTH halves: copper is L x W x pipes, and the branch
+       is R_one / pipes, because N identical pipes run between the same two
+       points. Anything else asks the engineer to do one of those two
+       multiplications by hand.
+    */
+    it('multiplies the copper and divides the resistance by the pipe count', () => {
+      const chain = embedded({ heat_pipe_count: 2 }, 2000);
+      const pipe = chain.edges[0];
+      expect(activeRth(pipe.rth)).toBeCloseTo(0.05, 9);
+      expect(pipe.parameters?.R_per_pipe_C_per_W).toBe(0.1);
+      expect(pipe.parameters?.pipes).toBe(2);
+      // copper = 40 x 16 x 2 = 1280
+      expect(chain.spreadingSourceAreaMm2).toBe(2000 - 1280);
+    });
+
+    it('leaves a single pipe exactly as the vendor quoted it', () => {
+      expect(activeRth(embedded({ heat_pipe_count: 1 }, 1600).edges[0].rth)).toBe(0.1);
+      expect(activeRth(embedded({}, 1600).edges[0].rth)).toBe(0.1);
+    });
+
+    it('stays unresolved when no resistance is quoted, whatever the count', () => {
+      const pipe = embedded({ heat_pipe_R_C_per_W: null, heat_pipe_count: 3 }, 1600).edges[0];
+      expect(activeRth(pipe.rth)).toBeNull();
+      expect(pipe.resolution).not.toBe('resolved');
+      expect(pipe.parameters?.pipes).toBe(3);
+    });
+
     /** The copper is not available to the aluminium branch. */
     it('leaves the caller only the aluminium that the pipes do not occupy', () => {
       expect(embedded({}, 1600).spreadingSourceAreaMm2).toBe(1600 - 640);
