@@ -383,13 +383,9 @@ export function cytoscapeStylesheet(): StylesheetCSS[] {
         'z-index': 9,
       },
     },
-    /*
-      A branch label is a view-only annotation on the long, clear lane of an
-      orthogonal route. Keeping it off the edge itself prevents Cytoscape from
-      centring an opaque label box on the taxi corner and hiding either leg.
-    */
+    /* Only parallel fan labels leave their original straight edge. */
     {
-      selector: 'node.hsk-bus-branch-label',
+      selector: 'node.hsk-bus-parallel-label',
       style: {
         width: 1,
         height: 1,
@@ -412,16 +408,20 @@ export function cytoscapeStylesheet(): StylesheetCSS[] {
       },
     },
     {
-      selector: 'node.hsk-bus-branch-label.flow-horizontal',
-      style: { 'text-margin-y': -11 },
+      selector: 'node.hsk-bus-parallel-label.flow-horizontal.label-negative',
+      style: { 'text-margin-y': -16 },
     },
     {
-      selector: 'node.hsk-bus-branch-label.flow-horizontal.parallel-label',
-      style: { 'text-margin-y': -15 },
+      selector: 'node.hsk-bus-parallel-label.flow-horizontal.label-positive',
+      style: { 'text-margin-y': 16 },
     },
     {
-      selector: 'node.hsk-bus-branch-label.flow-vertical',
-      style: { 'text-halign': 'right', 'text-margin-x': 11 },
+      selector: 'node.hsk-bus-parallel-label.flow-vertical.label-negative',
+      style: { 'text-margin-x': -42 },
+    },
+    {
+      selector: 'node.hsk-bus-parallel-label.flow-vertical.label-positive',
+      style: { 'text-margin-x': 42 },
     },
     {
       selector: 'edge',
@@ -440,46 +440,25 @@ export function cytoscapeStylesheet(): StylesheetCSS[] {
         'text-background-opacity': 0.92,
         'text-background-padding': '2px',
         'text-rotation': 'autorotate',
+        // The ordinary edge label keeps the original rotated, off-line layout.
         'text-margin-y': -9,
         'min-zoomed-font-size': 7,
       },
     },
     {
-      selector: 'edge.orthogonal-edge',
-      style: {
-        'curve-style': 'taxi',
-        'taxi-direction': 'auto',
-        'taxi-turn': '22%',
-        'taxi-turn-min-distance': 14,
-        'taxi-radius': 0,
-        'text-rotation': 'none',
-        // Horizontal routes place labels above their lane; vertical routes
-        // place them to the right. The margins are sized by the Screen 05
-        // projection so the background never sits on a resistance segment.
-        'text-margin-x': 0,
-        'text-margin-y': -12,
-      },
-    },
-    {
-      selector: 'edge.orthogonal-edge[taxiDirection]',
-      style: { 'taxi-direction': 'data(taxiDirection)' },
-    },
-    {
-      selector: 'edge.orthogonal-edge[labelMarginX][labelMarginY]',
-      style: {
-        'text-margin-x': 'data(labelMarginX)',
-        'text-margin-y': 'data(labelMarginY)',
-      },
-    },
-    {
       selector: 'edge.routed-port-edge',
       style: {
-        'curve-style': 'taxi',
-        'taxi-turn': '18%',
-        // A dedicated label anchor owns the text for bus branches.
-        label: '',
+        'curve-style': 'straight',
+        'text-rotation': 'none',
+        'text-margin-y': -9,
         'z-index': 5,
       },
+    },
+    {
+      selector: 'edge.parallel-branch',
+      // The label is rendered by its offset view-only anchor instead, so the
+      // original diagonal branch stays fully visible.
+      style: { label: '' },
     },
     {
       selector: 'edge.hsk-bus-trunk',

@@ -97,30 +97,30 @@ describe('the legend describes what the canvas actually paints', () => {
   });
 });
 
-describe('orthogonal thermal-resistance routes', () => {
-  it('uses square horizontal/vertical taxi segments for Screen 05 edges', () => {
-    const style = styleFor('edge.orthogonal-edge');
-    expect(style['curve-style']).toBe('taxi');
-    expect(style['taxi-direction']).toBe('auto');
-    expect(styleFor('edge.orthogonal-edge[taxiDirection]')['taxi-direction']).toBe(
-      'data(taxiDirection)',
+describe('edge labels sit off the original lines', () => {
+  it('keeps ordinary edges on the original bezier style', () => {
+    const style = styleFor('edge');
+    expect(style['curve-style']).toBe('bezier');
+    expect(style['text-margin-y']).toBeLessThan(0);
+    expect(style['text-rotation']).toBe('autorotate');
+  });
+
+  it('keeps the HSK fan on the original straight route', () => {
+    expect(styleFor('edge.routed-port-edge')['curve-style']).toBe('straight');
+    expect(styleFor('edge.routed-port-edge')['text-margin-y']).toBe(
+      styleFor('edge')['text-margin-y'],
     );
-    expect(style['taxi-radius']).toBe(0);
-    expect(style['text-rotation']).toBe('none');
   });
 
-  it('does not change the shared graph style used by result screens', () => {
-    expect(styleFor('edge')['curve-style']).toBe('bezier');
-    expect(styleFor('edge')['text-rotation']).toBe('autorotate');
-  });
-
-  it('renders bus-branch text on its own off-line annotation anchor', () => {
-    expect(styleFor('edge.routed-port-edge').label).toBe('');
-    expect(styleFor('edge.routed-port-edge')['curve-style']).toBe('taxi');
-    expect(styleFor('node.hsk-bus-branch-label').label).toBe('data(label)');
+  it('moves only parallel branch labels to opposite sides of their lines', () => {
+    expect(styleFor('edge.parallel-branch').label).toBe('');
+    expect(styleFor('node.hsk-bus-parallel-label').label).toBe('data(label)');
     expect(
-      styleFor('node.hsk-bus-branch-label.flow-horizontal')['text-margin-y'],
+      styleFor('node.hsk-bus-parallel-label.flow-horizontal.label-negative')['text-margin-y'],
     ).toBeLessThan(0);
+    expect(
+      styleFor('node.hsk-bus-parallel-label.flow-horizontal.label-positive')['text-margin-y'],
+    ).toBeGreaterThan(0);
   });
 
   it('still keeps the arrowhead, which is what the offset exists to protect', () => {

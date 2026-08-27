@@ -4,12 +4,7 @@ import { createRevision } from '@/domain/revision';
 import { createRth } from '@/thermal/rth';
 import type { ThermalEdge, ThermalNetwork, ThermalNode } from '@/thermal/types';
 import { canvasInteractionPolicy } from './canvasInteraction';
-import {
-  buildElements,
-  edgeFlowAxis,
-  edgeLabelMargins,
-  parallelRth,
-} from './thermalGraphElements';
+import { buildElements, parallelRth } from './thermalGraphElements';
 
 describe('merged Select and Pan pointer', () => {
   it('selects or moves objects while a background drag pans', () => {
@@ -103,52 +98,6 @@ function fanInNetwork(count: number, reversedIndex = -1): ThermalNetwork {
 
   return network;
 }
-
-describe('orthogonal edge projection', () => {
-  it('follows the requested layout axis and derives Free from node positions', () => {
-    expect(edgeFlowAxis('Auto')).toBe('horizontal');
-    expect(edgeFlowAxis('TopBottom')).toBe('vertical');
-    expect(edgeFlowAxis('Free', { x: 0, y: 0 }, { x: 20, y: 120 })).toBe('vertical');
-  });
-
-  it('moves labels above horizontal routes and fully beside vertical routes', () => {
-    expect(edgeLabelMargins('Cond 0.050 °C/W', 'horizontal')).toEqual({ x: 0, y: -12 });
-    const vertical = edgeLabelMargins('Heat Pipe ×2\n0.075 °C/W', 'vertical');
-    expect(vertical.x).toBeGreaterThan(30);
-    expect(vertical.y).toBe(0);
-  });
-
-  it('marks normal and HSK fan-in edges as orthogonal', () => {
-    const horizontal = buildElements(fanInNetwork(4), {
-      showPorts: true,
-      showLabels: true,
-      layoutMode: 'Auto',
-    }).filter(
-      (element) =>
-        Object.hasOwn(element.data, 'source') &&
-        !String(element.classes).includes('layout-only'),
-    );
-    expect(
-      horizontal.every(
-        (edge) =>
-          String(edge.classes).includes('orthogonal-edge') ||
-          String(edge.classes).includes('hsk-bus-trunk'),
-      ),
-    ).toBe(true);
-    expect(
-      horizontal
-        .filter((edge) => String(edge.classes).includes('orthogonal-edge'))
-        .every((edge) => edge.data.taxiDirection === 'horizontal'),
-    ).toBe(true);
-
-    const vertical = buildElements(fanInNetwork(3), {
-      showPorts: true,
-      showLabels: true,
-      layoutMode: 'TopBottom',
-    }).filter((element) => String(element.classes).includes('orthogonal-edge'));
-    expect(vertical.every((edge) => edge.data.taxiDirection === 'vertical')).toBe(true);
-  });
-});
 
 describe('Screen 05 HSK Base bus projection', () => {
   it('routes four or more HSK branches through view-only bus elements', () => {
@@ -278,8 +227,7 @@ describe('Screen 05 HSK Base bus projection', () => {
 
     expect(reversed.data.target).toBe('NODE_TIM_1');
     expect(reversed.data.label).toBe('0.050 °C/W');
-    expect(String(reversed.classes)).toContain('routed-port-edge');
-    expect(String(reversed.classes)).toContain('orthogonal-edge');
+    expect(String(reversed.classes)).toBe('routed-port-edge');
   });
 });
 
@@ -319,8 +267,7 @@ describe('bus branches that arrive from a mount', () => {
     const fromBoss = elements.find(
       (element) => element.data.id === 'EDGE_PORT_TIM_1_HEAT_OUT_HSK_BASE',
     )!;
-    expect(String(fromBoss.classes)).toContain('routed-port-edge');
-    expect(String(fromBoss.classes)).toContain('orthogonal-edge');
+    expect(String(fromBoss.classes)).toBe('routed-port-edge');
     expect(fromBoss.data.source).toBe('NODE_MOUNT_TIM_1_PEDESTAL');
     expect(fromBoss.data.target).not.toBe('NODE_HSK_BASE');
   });
@@ -501,18 +448,35 @@ describe('the parallel pair, annotated', () => {
     expect(ys[1]).toBeGreaterThan(found.position!.y);
   });
 
-  it('marks both branches so the stylesheet can wrap and stack their labels', () => {
-    const classes = build(withPipeAndSpreading())
+  it('keeps the original straight fan and moves only its two labels off the lines', () => {
+    const elements = build(withPipeAndSpreading());
+    const classes = elements
       .filter((e) => String(e.classes).includes('routed-port-edge'))
       .filter((e) => /TIM_1/.test(String(e.data.id)))
       .map((e) => String(e.classes));
     expect(classes.every((c) => c.includes('parallel-branch'))).toBe(true);
+
+    const anchors = elements.filter((e) =>
+      String(e.classes).includes('hsk-bus-parallel-label'),
+    );
+    expect(anchors).toHaveLength(2);
+    expect(anchors.some((anchor) => String(anchor.classes).includes('label-negative'))).toBe(true);
+    expect(anchors.some((anchor) => String(anchor.classes).includes('label-positive'))).toBe(true);
+    expect(anchors.every((anchor) => anchor.selectable === false && anchor.grabbable === false)).toBe(
+      true,
+    );
+
     // A lone branch is not marked — it has a one-line label that fits.
     expect(
       build(fanInNetwork(4))
         .filter((e) => String(e.classes).includes('routed-port-edge'))
         .every((e) => !String(e.classes).includes('parallel-branch')),
     ).toBe(true);
+    expect(
+      build(fanInNetwork(4)).some((e) =>
+        String(e.classes).includes('hsk-bus-parallel-label'),
+      ),
+    ).toBe(false);
   });
 
   it('names each branch, so the pipe is tellable from the metal', () => {
