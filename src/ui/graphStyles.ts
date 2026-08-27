@@ -383,6 +383,46 @@ export function cytoscapeStylesheet(): StylesheetCSS[] {
         'z-index': 9,
       },
     },
+    /*
+      A branch label is a view-only annotation on the long, clear lane of an
+      orthogonal route. Keeping it off the edge itself prevents Cytoscape from
+      centring an opaque label box on the taxi corner and hiding either leg.
+    */
+    {
+      selector: 'node.hsk-bus-branch-label',
+      style: {
+        width: 1,
+        height: 1,
+        shape: 'ellipse',
+        'background-opacity': 0,
+        'border-width': 0,
+        label: 'data(label)',
+        color: '#475569',
+        'font-size': 9,
+        'font-weight': 500,
+        'text-wrap': 'wrap',
+        'text-valign': 'center',
+        'text-halign': 'center',
+        'text-background-color': '#ffffff',
+        'text-background-opacity': 0.94,
+        'text-background-padding': '2px',
+        'min-zoomed-font-size': 7,
+        events: 'no',
+        'z-index': 9,
+      },
+    },
+    {
+      selector: 'node.hsk-bus-branch-label.flow-horizontal',
+      style: { 'text-margin-y': -11 },
+    },
+    {
+      selector: 'node.hsk-bus-branch-label.flow-horizontal.parallel-label',
+      style: { 'text-margin-y': -15 },
+    },
+    {
+      selector: 'node.hsk-bus-branch-label.flow-vertical',
+      style: { 'text-halign': 'right', 'text-margin-x': 11 },
+    },
     {
       selector: 'edge',
       style: {
@@ -400,41 +440,46 @@ export function cytoscapeStylesheet(): StylesheetCSS[] {
         'text-background-opacity': 0.92,
         'text-background-padding': '2px',
         'text-rotation': 'autorotate',
-        // The label rides ABOVE the line rather than on it.
-        //
-        // It used to sit centred on the edge behind an opaque white box, so how
-        // much of the connector you could still see depended on how long the
-        // text happened to be: "Cond 0.035 °C/W" left the ends showing, while
-        // "Contact 0.035 °C/W" covered the line end to end, arrowhead included.
-        // Offsetting it perpendicular makes that independent of length — the
-        // full line, tail and head, is visible under every label.
         'text-margin-y': -9,
         'min-zoomed-font-size': 7,
       },
     },
     {
-      selector: 'edge.routed-port-edge',
+      selector: 'edge.orthogonal-edge',
       style: {
-        'curve-style': 'straight',
+        'curve-style': 'taxi',
+        'taxi-direction': 'auto',
+        'taxi-turn': '22%',
+        'taxi-turn-min-distance': 14,
+        'taxi-radius': 0,
         'text-rotation': 'none',
-        'text-margin-y': -9,
-        'z-index': 5,
+        // Horizontal routes place labels above their lane; vertical routes
+        // place them to the right. The margins are sized by the Screen 05
+        // projection so the background never sits on a resistance segment.
+        'text-margin-x': 0,
+        'text-margin-y': -12,
       },
     },
-    /*
-      One of a parallel pair, so its label carries a route name as well as a
-      number — and on one line that is WIDER THAN THE BRANCH, which is short
-      because the bar sits close to the terminals. It overhung the bar onto the
-      ∥ note at one end and the node at the other, and no horizontal offset
-      fixes a label that does not fit however it is placed.
-
-      So the name goes above the number. That halves the width to less than the
-      branch's length, and the fan is wide enough that the two stacked labels
-      clear each other. Edges do not wrap by default, hence `text-wrap`.
-    */
     {
-      selector: 'edge.parallel-branch',
-      style: { 'text-wrap': 'wrap', 'text-margin-y': -4 },
+      selector: 'edge.orthogonal-edge[taxiDirection]',
+      style: { 'taxi-direction': 'data(taxiDirection)' },
+    },
+    {
+      selector: 'edge.orthogonal-edge[labelMarginX][labelMarginY]',
+      style: {
+        'text-margin-x': 'data(labelMarginX)',
+        'text-margin-y': 'data(labelMarginY)',
+      },
+    },
+    {
+      selector: 'edge.routed-port-edge',
+      style: {
+        'curve-style': 'taxi',
+        'taxi-turn': '18%',
+        // A dedicated label anchor owns the text for bus branches.
+        label: '',
+        'z-index': 5,
+      },
     },
     {
       selector: 'edge.hsk-bus-trunk',

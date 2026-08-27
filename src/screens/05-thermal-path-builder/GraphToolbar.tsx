@@ -11,7 +11,6 @@
 
 import {
   CircleCheck,
-  Hand,
   Maximize,
   Maximize2,
   Minimize2,
@@ -32,7 +31,7 @@ import type { ReactNode } from 'react';
 
 import { Select } from '@/ui/primitives';
 
-export type CanvasTool = 'select' | 'pan' | 'connect' | 'add-node' | 'add-edge' | 'zoom-box';
+export type CanvasTool = 'select' | 'connect' | 'add-node' | 'add-edge' | 'zoom-box';
 
 export const LAYOUT_MODES = [
   { value: 'Auto', label: 'Auto' },
@@ -138,17 +137,10 @@ export function GraphToolbar({
       <div className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto">
         <ToolButton
           active={tool === 'select'}
-          label="Select (drag to box-select)"
-          zh="選取（拖曳框選）"
+          label="Select & Pan (drag blank canvas to move the view)"
+          zh="選取與平移（拖曳空白處移動畫面）"
           icon={<MousePointer2 size={14} />}
           onClick={() => onTool('select')}
-        />
-        <ToolButton
-          active={tool === 'pan'}
-          label="Pan (drag to move the view)"
-          zh="平移（拖曳移動畫面）"
-          icon={<Hand size={14} />}
-          onClick={() => onTool(toggleTool(tool, 'pan'))}
         />
         <ToolButton
           active={tool === 'connect'}

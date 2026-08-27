@@ -97,23 +97,30 @@ describe('the legend describes what the canvas actually paints', () => {
   });
 });
 
-/**
- * How much of a connector stayed visible used to depend on how long its label
- * happened to be: "Cond 0.035 °C/W" left the ends showing while "Contact 0.035
- * °C/W" covered the line end to end, arrowhead included.
- */
-describe('edge labels sit off the line, not on it', () => {
-  it('offsets the label perpendicular to the edge', () => {
-    const style = styleFor('edge');
-    expect(style['text-margin-y']).toBeLessThan(0);
-    // Perpendicular only holds if the label rotates with the edge.
-    expect(style['text-rotation']).toBe('autorotate');
+describe('orthogonal thermal-resistance routes', () => {
+  it('uses square horizontal/vertical taxi segments for Screen 05 edges', () => {
+    const style = styleFor('edge.orthogonal-edge');
+    expect(style['curve-style']).toBe('taxi');
+    expect(style['taxi-direction']).toBe('auto');
+    expect(styleFor('edge.orthogonal-edge[taxiDirection]')['taxi-direction']).toBe(
+      'data(taxiDirection)',
+    );
+    expect(style['taxi-radius']).toBe(0);
+    expect(style['text-rotation']).toBe('none');
   });
 
-  it('offsets the straight routed branches the same way', () => {
-    expect(styleFor('edge.routed-port-edge')['text-margin-y']).toBe(
-      styleFor('edge')['text-margin-y'],
-    );
+  it('does not change the shared graph style used by result screens', () => {
+    expect(styleFor('edge')['curve-style']).toBe('bezier');
+    expect(styleFor('edge')['text-rotation']).toBe('autorotate');
+  });
+
+  it('renders bus-branch text on its own off-line annotation anchor', () => {
+    expect(styleFor('edge.routed-port-edge').label).toBe('');
+    expect(styleFor('edge.routed-port-edge')['curve-style']).toBe('taxi');
+    expect(styleFor('node.hsk-bus-branch-label').label).toBe('data(label)');
+    expect(
+      styleFor('node.hsk-bus-branch-label.flow-horizontal')['text-margin-y'],
+    ).toBeLessThan(0);
   });
 
   it('still keeps the arrowhead, which is what the offset exists to protect', () => {
