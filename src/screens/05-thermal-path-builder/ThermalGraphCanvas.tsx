@@ -20,6 +20,8 @@ import dagre from 'cytoscape-dagre';
 
 import type { ThermalNetwork } from '@/thermal/types';
 import { cytoscapeStylesheet } from '@/ui/graphStyles';
+import type { CanvasTool } from './GraphToolbar';
+import { canvasInteractionPolicy } from './canvasInteraction';
 import { buildElements, busGeometry } from './thermalGraphElements';
 
 cytoscape.use(dagre);
@@ -169,6 +171,29 @@ function positionViewBuses(cy: Core) {
       );
     });
 
+    // Labels ride on the long post-turn lane of each branch, never on the
+    // vertical/horizontal jog. Recompute them from the rendered node positions
+    // just like the bus itself so auto-layout cannot move a line underneath its
+    // annotation.
+    cy.nodes('.hsk-bus-branch-label')
+      .filter((label) => label.data('busId') === bus.id())
+      .forEach((label) => {
+        const source = cy.getElementById(label.data('sourceId') as string);
+        if (!source.isNode()) return;
+        const offset = (label.data('crossOffset') as number | undefined) ?? 0;
+        label.position(
+          vertical
+            ? {
+                x: source.position('x') + (geometry.along! - source.position('x')) * 0.58,
+                y: source.position('y') + offset,
+              }
+            : {
+                x: source.position('x') + offset,
+                y: source.position('y') + (geometry.along! - source.position('y')) * 0.58,
+              },
+        );
+      });
+
     // The parallel note rides on the bar at its terminal's own level — between
     // the fanned branches, which is what makes it read as their combination.
     // It is placed separately from the junctions above because it is not a
@@ -189,10 +214,12 @@ function positionViewBuses(cy: Core) {
 
 function renderedDomainPositions(cy: Core): Record<string, { x: number; y: number }> {
   const positions: Record<string, { x: number; y: number }> = {};
-  cy.nodes(':not(.view-only)').forEach((node) => {
-    const position = node.position();
-    positions[node.id() as string] = { x: position.x, y: position.y };
-  });
+  cy.nodes()
+    .filter((node) => !node.hasClass('view-only'))
+    .forEach((node) => {
+      const position = node.position();
+      positions[node.id() as string] = { x: position.x, y: position.y };
+    });
   return positions;
 }
 
@@ -203,10 +230,11 @@ export const ThermalGraphCanvas = forwardRef<
     selection: GraphSelection;
     /**
      * 'connect' and 'add-edge' both ask for two clicks (the view decides what
-     * to do with them); 'pan' disables box select; 'zoom-box' hands pointer
-     * input to the marquee overlay instead of to Cytoscape.
+     * to do with them); Select also pans when the background is dragged;
+     * 'zoom-box' hands pointer input to the marquee overlay instead of to
+     * Cytoscape.
      */
-    tool: 'select' | 'pan' | 'connect' | 'add-node' | 'add-edge' | 'zoom-box';
+    tool: CanvasTool;
     showPorts: boolean;
     showLabels: boolean;
     layoutMode: string;
@@ -380,7 +408,7 @@ export const ThermalGraphCanvas = forwardRef<
      * `cy.zoom({ level, renderedPosition })` has no such gate: it checks
      * `zoomingEnabled` and `panningEnabled`, neither of which any tool touches.
      * So the handler is ours, it anchors on the pointer, and it is the same in
-     * all six tools.
+     * all five tools.
      */
     const onWheel = (event: WheelEvent) => {
       // Without this the page behind the canvas scrolls as well.
@@ -495,22 +523,19 @@ export const ThermalGraphCanvas = forwardRef<
     const cy = cyRef.current;
     if (!cy) return;
     /**
-     * Select and Pan were all but the same tool: dragging the background panned
-     * in BOTH, so the only difference was that Pan also froze the nodes —
-     * invisible unless you happened to try dragging one.
-     *
-     * They are now the two halves of that, the way a drawing tool usually
-     * splits them. Dragging the background selects a region in Select and moves
-     * the view in Pan; nodes are grabbable only in Select.
+     * One pointer now owns both ordinary canvas actions: object gestures select
+     * or move objects, and background drags pan the viewport. The old separate
+     * Pan button made engineers switch modes for an action that has no conflict
+     * with selecting an object.
      *
      * Turning user panning off also killed Cytoscape's wheel zoom, which is
      * gated on it — so the wheel is handled by hand in the init effect and is
      * unaffected by anything set here.
      */
-    const panning = tool !== 'select' && tool !== 'zoom-box';
-    cy.userPanningEnabled(panning);
-    cy.boxSelectionEnabled(tool === 'select');
-    cy.autoungrabify(tool !== 'select');
+    const policy = canvasInteractionPolicy(tool);
+    cy.userPanningEnabled(policy.userPanning);
+    cy.boxSelectionEnabled(policy.boxSelection);
+    cy.autoungrabify(!policy.nodesGrabbable);
     if (tool !== 'connect' && tool !== 'add-edge') {
       pendingSourceRef.current = null;
       cy.nodes().removeClass('connect-source');

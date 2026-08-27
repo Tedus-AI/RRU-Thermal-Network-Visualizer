@@ -9,7 +9,7 @@ import { LAYOUT_MODES, toggleTool, type CanvasTool } from './GraphToolbar';
  * as well as sticky.
  */
 describe('toggleTool', () => {
-  const modes: CanvasTool[] = ['pan', 'connect', 'add-node', 'add-edge', 'zoom-box'];
+  const modes: CanvasTool[] = ['connect', 'add-node', 'add-edge', 'zoom-box'];
 
   it('arms a mode from select', () => {
     for (const mode of modes) {
@@ -25,7 +25,7 @@ describe('toggleTool', () => {
 
   it('switches straight between two armed modes', () => {
     expect(toggleTool('connect', 'add-edge')).toBe('add-edge');
-    expect(toggleTool('zoom-box', 'pan')).toBe('pan');
+    expect(toggleTool('zoom-box', 'add-node')).toBe('add-node');
   });
 
   // Select is the resting state, so it has nothing to toggle off to.
