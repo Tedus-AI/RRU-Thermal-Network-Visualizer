@@ -70,6 +70,7 @@ import {
   type NewZoneDraft,
 } from './SharedStructurePanel';
 import { GraphToolbar, type CanvasTool } from './GraphToolbar';
+import { FullscreenComponentVisibilityPanel } from './FullscreenComponentVisibilityPanel';
 import { ThermalGraphCanvas, type CanvasHandle, type GraphSelection } from './ThermalGraphCanvas';
 import { NodeInspector } from './NodeInspector';
 import { EdgeInspector } from './EdgeInspector';
@@ -269,6 +270,7 @@ export function ThermalPathBuilderView() {
   const [showLabels, setShowLabels] = useState(true);
   const [paletteCollapsed, setPaletteCollapsed] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
+  const [componentVisibilityOpen, setComponentVisibilityOpen] = useState(false);
   /**
    * Components switched off in the palette. Deliberately component state and
    * not persisted: it is a way of reading a crowded graph, not a property of
@@ -316,11 +318,34 @@ export function ThermalPathBuilderView() {
   useEffect(() => {
     if (!fullscreen) return;
     const leaveFullscreen = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setFullscreen(false);
+      if (event.key !== 'Escape') return;
+      if (componentVisibilityOpen) setComponentVisibilityOpen(false);
+      else setFullscreen(false);
     };
     window.addEventListener('keydown', leaveFullscreen);
     return () => window.removeEventListener('keydown', leaveFullscreen);
+  }, [componentVisibilityOpen, fullscreen]);
+
+  useEffect(() => {
+    if (fullscreen) return;
+    setComponentVisibilityOpen(false);
   }, [fullscreen]);
+
+  useEffect(() => {
+    if (!fullscreen || !componentVisibilityOpen) return;
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      if (
+        target.closest('[data-fullscreen-component-panel]') ||
+        target.closest('[data-component-visibility-toggle]')
+      )
+        return;
+      setComponentVisibilityOpen(false);
+    };
+    document.addEventListener('pointerdown', closeOnOutsidePointer);
+    return () => document.removeEventListener('pointerdown', closeOnOutsidePointer);
+  }, [componentVisibilityOpen, fullscreen]);
 
   /**
    * Entering or leaving fullscreen changes the drawing area by a large factor,
@@ -465,6 +490,19 @@ export function ThermalPathBuilderView() {
   const modeledIds = useMemo(
     () => new Set(Object.keys(network?.templates ?? {})),
     [network?.templates],
+  );
+
+  const modeledComponents = useMemo(
+    () => components.filter((component) => modeledIds.has(component.id)),
+    [components, modeledIds],
+  );
+
+  const hiddenModeledComponentIds = useMemo(
+    () =>
+      new Set(
+        [...hiddenComponentIds].filter((componentId) => modeledIds.has(componentId)),
+      ),
+    [hiddenComponentIds, modeledIds],
   );
 
   const kpis = useMemo(
@@ -1210,11 +1248,28 @@ export function ThermalPathBuilderView() {
             }}
             onTogglePorts={() => setShowPorts((value) => !value)}
             onToggleLabels={() => setShowLabels((value) => !value)}
+            componentVisibilityOpen={componentVisibilityOpen}
+            hiddenComponentCount={hiddenModeledComponentIds.size}
+            onToggleComponentVisibility={() =>
+              setComponentVisibilityOpen((value) => !value)
+            }
             fullscreen={fullscreen}
-            onToggleFullscreen={() => setFullscreen((value) => !value)}
+            onToggleFullscreen={() => {
+              if (fullscreen) setComponentVisibilityOpen(false);
+              setFullscreen((value) => !value);
+            }}
           />
 
           <div className="relative min-h-0 flex-1">
+            {fullscreen && componentVisibilityOpen && (
+              <FullscreenComponentVisibilityPanel
+                components={modeledComponents}
+                hiddenIds={hiddenModeledComponentIds}
+                onToggleVisible={toggleComponentVisible}
+                onShowAll={() => setHiddenComponentIds(new Set())}
+                onClose={() => setComponentVisibilityOpen(false)}
+              />
+            )}
             {isEmpty ? (
               <EmptyNetworkState
                 hasComponents={enabledComponents.length > 0}
