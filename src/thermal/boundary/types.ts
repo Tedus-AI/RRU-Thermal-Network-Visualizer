@@ -268,7 +268,7 @@ export function createBoundarySet(input: {
       confidence: 'medium',
     },
     site: {
-      altitude_m: null,
+      altitude_m: 0,
       wind_speed_m_s: input.wind_m_s ?? null,
       wind_direction_deg: null,
       airflow_mode: (input.wind_m_s ?? 0) > 0 ? 'external_wind' : 'natural',

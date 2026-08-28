@@ -15,6 +15,8 @@ import { useSolverStore } from './solverStore';
 interface ScenarioStoreState {
   scenarios: Scenario[];
   activeScenarioId: string | null;
+  /** Scenario edits that have not yet reached project storage. */
+  dirty: boolean;
 
   loadFor: (projectId: string) => Scenario[];
   clear: () => void;
@@ -29,6 +31,8 @@ interface ScenarioStoreState {
   touchScenarioRevision: (id: string) => void;
   /** `projectId` persists the choice onto the project record (01 §35). */
   setActiveScenario: (id: string | null, projectId?: string) => void;
+  /** Auto-persist contract shared with the other engineering stores. */
+  save: (projectId: string) => void;
   persist: (projectId: string) => void;
   replaceAll: (scenarios: Scenario[]) => void;
 
@@ -39,27 +43,37 @@ interface ScenarioStoreState {
 export const useScenarioStore = create<ScenarioStoreState>((set, get) => ({
   scenarios: [],
   activeScenarioId: null,
+  dirty: false,
 
   loadFor: (projectId) => {
+    // Never let a route change replace an edited scenario with its previous
+    // stored copy. Auto-persist normally flushes first, but a user can click a
+    // different screen inside the debounce window.
+    const current = get();
+    const currentProjectId = current.scenarios.find((scenario) => scenario.project_id)?.project_id;
+    if (current.dirty && currentProjectId) {
+      saveScenarios(currentProjectId, current.scenarios);
+    }
+
     const scenarios = loadScenarios(projectId);
     // The scenario the engineer picked survives a screen change and a reload.
     // Reloading the list must not silently drag them back to Baseline: Screens
     // 06 and 07 are both per-scenario, so that would pair one screen's boundary
     // set with another screen's solution. In memory first, then the project
     // record, then the default; a scenario that no longer exists falls through.
-    const current = get().activeScenarioId;
+    const currentActiveId = get().activeScenarioId;
     const stored = loadProject(projectId)?.active_scenario_id ?? null;
     const active =
-      scenarios.find((s) => s.id === current) ??
+      scenarios.find((s) => s.id === currentActiveId) ??
       scenarios.find((s) => s.id === stored) ??
       scenarios.find((s) => s.is_default) ??
       scenarios[0] ??
       null;
-    set({ scenarios, activeScenarioId: active?.id ?? null });
+    set({ scenarios, activeScenarioId: active?.id ?? null, dirty: false });
     return scenarios;
   },
 
-  clear: () => set({ scenarios: [], activeScenarioId: null }),
+  clear: () => set({ scenarios: [], activeScenarioId: null, dirty: false }),
 
   createDefaultScenario: (projectId) => {
     const existing = get().scenarios;
@@ -67,7 +81,7 @@ export const useScenarioStore = create<ScenarioStoreState>((set, get) => ({
     if (baseline) return baseline;
 
     const scenario = createBaselineScenario(projectId);
-    set({ scenarios: [...existing, scenario], activeScenarioId: scenario.id });
+    set({ scenarios: [...existing, scenario], activeScenarioId: scenario.id, dirty: true });
     return scenario;
   },
 
@@ -90,6 +104,7 @@ export const useScenarioStore = create<ScenarioStoreState>((set, get) => ({
             }
           : scenario,
       ),
+      dirty: true,
     });
     const changesPhysics = Object.keys(patch).some((field) =>
       ['ambient_C', 'wind_mps', 'solar_W_m2', 'power_scale'].includes(field),
@@ -108,6 +123,7 @@ export const useScenarioStore = create<ScenarioStoreState>((set, get) => ({
           ? { ...scenario, revision: createRevision('scenario') }
           : scenario,
       ),
+      dirty: true,
     }),
 
   setActiveScenario: (id, projectId) => {
@@ -128,9 +144,14 @@ export const useScenarioStore = create<ScenarioStoreState>((set, get) => ({
     useSolverStore.getState().invalidate('scenario_changed');
   },
 
-  persist: (projectId) => saveScenarios(projectId, get().scenarios),
+  save: (projectId) => {
+    saveScenarios(projectId, get().scenarios);
+    set({ dirty: false });
+  },
 
-  replaceAll: (scenarios) => set({ scenarios }),
+  persist: (projectId) => get().save(projectId),
+
+  replaceAll: (scenarios) => set({ scenarios, dirty: true }),
 
   activeScenario: () => {
     const { scenarios, activeScenarioId } = get();

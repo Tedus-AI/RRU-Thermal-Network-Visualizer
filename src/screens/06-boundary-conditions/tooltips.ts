@@ -32,16 +32,22 @@ export const T06 = {
     scenarioName: '情境名稱，例如 Baseline Hot Day、Solar Peak 或 Lab Chamber。',
     copyFromScenario: '從另一個情境複製邊界條件，複製後會成為目前情境的獨立資料。',
     externalAmbient: '外部環境溫度。05 只保留 Ambient Placeholder，實際溫度必須在 06 依情境設定。',
-    internalAir: '可選的內部空氣溫度，用於有外殼內部空氣節點的拓撲。',
-    radiationSurrounding: '輻射交換使用的周圍或天空等效溫度；若未確定，需標示為假設值。',
-    altitude: '安裝高度。V1 可先保存資料，未來可用於空氣密度或對流修正。',
-    windSpeed: '外部風速。若 V1 尚未實作自動相關式，仍需手動輸入 h 值。',
-    windDirection: '風向角度或方向描述，用於記錄此情境的安裝與環境條件。',
-    airflowMode: '選擇自然對流、強制對流、外部風或風扇/鼓風機條件。',
-    convectionMethod: 'V1 必須支援手動 h。自動對流相關式可在後續版本加入。',
-    solarEnabled: '啟用後，可對指定外殼或散熱表面加入太陽熱輸入。',
-    solarIrradiance: '太陽照射強度，單位 W/m²。此值會用來計算外部熱輸入。',
-    solarIncidence: '太陽入射角，用於記錄安裝方位與遮蔽假設。',
+    internalAir: '內部空氣溫度。目前只作情境記錄，不會自動加入 07 的熱網路求解。',
+    radiationSurrounding:
+      '周圍輻射溫度。產生新的輻射 profile 時用來預填參數；求解以已指派 profile 的參數為準。',
+    altitude:
+      '安裝海拔。目前以手動 h 或邊界 profile 為正式計算輸入，因此海拔只作情境記錄，不會自行修正熱阻。',
+    windSpeed:
+      '外部風速。Generate Defaults 會依此預填對流 h；profile 建立後，求解仍以 profile 內的 h 為準。',
+    windDirection: '風向用於記錄安裝條件，目前不會自動修正對流熱阻。',
+    airflowMode: '氣流模式用於情境分類；目前求解仍以已指派 profile 的 h 為準。',
+    convectionMethod:
+      '設定對流輸入方式。目前正式計算輸入為 profile 內的手動 h，尚未實作自動相關式。',
+    solarEnabled:
+      '啟用太陽負載設定。只有當表面已指派完整的 solar profile 時，才會成為 07 的外部熱輸入。',
+    solarIrradiance:
+      '太陽輻照度，單位 W/m²。產生新的 solar profile 時用來預填；求解以已指派 profile 的值為準。',
+    solarIncidence: '太陽入射角用於記錄安裝方位，目前不會自動轉換為投影面積係數。',
     absorptivity: '表面吸收太陽能的比例，需介於 0 到 1。',
     emissivity: '表面發射率，用於輻射熱交換計算，需介於 0 到 1。',
     shadingFactor: '遮蔽係數，1 代表無遮蔽，0 代表完全遮蔽。',
@@ -54,7 +60,7 @@ export const T06 = {
     boundaryType: '此邊界端口採用的邊界條件型別。',
     representation: '此 profile 在 07 求解時的表示方式，例如並聯邊界或外部熱負載。',
     dataSource: '資料來源：manual、analytical、datasheet、assumed、measurement、flotherm 或 vendor。',
-    confidence: '此邊界輸入的信心度。低信心度會在驗證中顯示警告。',
+    confidence: '此邊界輸入的信心度。低信心度會顯示警告，但不會改變數值求解結果。',
   },
 
   derived: {

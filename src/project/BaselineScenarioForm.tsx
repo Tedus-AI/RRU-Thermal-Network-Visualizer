@@ -8,7 +8,6 @@
 import { Field, NumberInput, SectionCard, TextInput } from '@/ui/primitives';
 import { SCENARIO_LIMITS, type Scenario } from '@/domain/project';
 import { useScenarioStore } from '@/data/scenarioStore';
-import { useProjectStore } from '@/data/projectStore';
 import { useBoundaryStore } from '@/data/boundaryStore';
 import { useFormTouch, useSectionAlert, useVisibleError } from './formTouch';
 
@@ -31,7 +30,6 @@ export function BaselineScenarioForm({
   readOnly: boolean;
 }) {
   const updateScenario = useScenarioStore((s) => s.updateScenario);
-  const markDirty = useProjectStore((s) => s.markDirty);
   const touch = useFormTouch((s) => s.touch);
   const visibleError = useVisibleError(errors);
   const alert = useSectionAlert(errors, SCENARIO_FIELDS);
@@ -68,7 +66,6 @@ export function BaselineScenarioForm({
       values,
       synchronized ? { skipRevision: true, skipInvalidate: true } : undefined,
     );
-    markDirty();
   };
 
   // Empty input must not silently become 0 — keep NaN so validation can report it.

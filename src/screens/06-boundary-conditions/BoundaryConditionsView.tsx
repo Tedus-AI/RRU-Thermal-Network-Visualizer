@@ -93,17 +93,17 @@ function KpiTile({
 }) {
   return (
     <div
-      className="flex items-center gap-2.5 rounded-lg border border-line bg-surface px-3 py-2.5"
+      className="min-w-0 rounded-lg border border-line bg-surface px-2 py-2"
       title={`${label} / ${zh} — ${tooltip}`}
     >
-      <span className="shrink-0 text-ink-400">{icon}</span>
-      <span className="min-w-0">
-        <span className="block truncate text-[11px] font-semibold text-ink-700">{label}</span>
-        <span className="block truncate text-[10px] text-ink-400">{zh}</span>
-        <span className={`block truncate text-[15px] leading-tight font-bold tabular ${tone}`}>
-          {value}
-        </span>
-        {status && <span className="block truncate text-[10px] text-ink-400">{status}</span>}
+      <span className="flex min-w-0 items-baseline gap-1.5 text-[13px] font-semibold text-ink-900">
+        <span className="shrink-0 text-ink-400">{icon}</span>
+        <span className="min-w-0 flex-1 truncate">{label}</span>
+        <span className={`shrink-0 pl-2 font-bold tabular ${tone}`}>{value}</span>
+      </span>
+      <span className="mt-0.5 flex min-w-0 items-center gap-2 text-[11px] text-ink-400">
+        <span className="min-w-0 flex-1 truncate">{zh}</span>
+        {status && <span className="shrink-0 truncate text-[10px]">{status}</span>}
       </span>
     </div>
   );
@@ -442,7 +442,6 @@ export function BoundaryConditionsView() {
       <ScreenWorkspace
         title="Boundary Conditions"
         titleZh="邊界條件"
-        description="Define scenario-specific ambient, convection, radiation, solar and fixed-temperature boundaries for the saved thermal graph."
         descriptionZh="為已儲存的熱網路設定此情境的環境溫度、對流、輻射、太陽負載與固定溫度邊界。"
       >
         <div className="flex h-full items-center justify-center">
@@ -471,7 +470,6 @@ export function BoundaryConditionsView() {
     <ScreenWorkspace
       title="Boundary Conditions"
       titleZh="邊界條件"
-      description="Define scenario-specific ambient, convection, radiation, solar and fixed-temperature boundaries for the saved thermal graph. Topology stays read-only and no solve happens here."
       descriptionZh="為已儲存的熱網路設定此情境的邊界條件。拓樸在此唯讀，本畫面不進行求解。"
       badge={
         <div className="flex flex-wrap items-center gap-2">
@@ -483,9 +481,9 @@ export function BoundaryConditionsView() {
         </div>
       }
       metrics={
-        <div className="grid grid-cols-2 gap-2.5 md:grid-cols-3 xl:grid-cols-6">
+        <div className="grid grid-cols-2 gap-1.5 md:grid-cols-3 xl:grid-cols-6">
           <KpiTile
-            icon={<Sparkles size={18} />}
+            icon={<Sparkles size={13} />}
             label="Scenario Boundary Set"
             zh="情境邊界集"
             tooltip={T06.kpi.boundarySet}
@@ -493,7 +491,7 @@ export function BoundaryConditionsView() {
             tone={set?.status === 'ready_for_solve' ? 'text-ok-600' : 'text-warn-600'}
           />
           <KpiTile
-            icon={<Waves size={18} />}
+            icon={<Waves size={13} />}
             label="Boundary Ports"
             zh="邊界端口"
             tooltip={T06.kpi.boundaryPorts}
@@ -504,7 +502,7 @@ export function BoundaryConditionsView() {
             }
           />
           <KpiTile
-            icon={<Thermometer size={18} />}
+            icon={<Thermometer size={13} />}
             label="Ambient"
             zh="環境溫度"
             tooltip={T06.kpi.ambient}
@@ -512,7 +510,7 @@ export function BoundaryConditionsView() {
             status="external / 外部"
           />
           <KpiTile
-            icon={<Wind size={18} />}
+            icon={<Wind size={13} />}
             label="Convection"
             zh="對流"
             tooltip={T06.kpi.convection}
@@ -521,7 +519,7 @@ export function BoundaryConditionsView() {
             tone={summary.convectionMissingInputs > 0 ? 'text-warn-600' : 'text-ink-900'}
           />
           <KpiTile
-            icon={<Sun size={18} />}
+            icon={<Sun size={13} />}
             label="Radiation / Solar"
             zh="輻射 / 太陽"
             tooltip={T06.kpi.radiationSolar}
@@ -529,7 +527,7 @@ export function BoundaryConditionsView() {
             status="radiation / solar loads"
           />
           <KpiTile
-            icon={<CircleCheck size={18} />}
+            icon={<CircleCheck size={13} />}
             label="Solve Readiness"
             zh="求解就緒度"
             tooltip={T06.kpi.solveReadiness}
