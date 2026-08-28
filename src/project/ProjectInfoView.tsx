@@ -38,6 +38,8 @@ import { nextStepFor, useProjectHealth } from './projectHealth';
 import { useFormTouch } from './formTouch';
 import { seedDemoProject } from '@/mock/seed';
 import { useFolderStore } from '@/data/folderStore';
+import { createScenario } from '@/domain/project';
+import { ProjectScenarioManagement } from './ProjectScenarioManagement';
 
 function PageHeader({ subtitle }: { subtitle?: string }) {
   return (
@@ -182,6 +184,7 @@ export function ProjectInfoView() {
   const [showArchive, setShowArchive] = useState(false);
 
   const scenarios = useScenarioStore((s) => s.scenarios);
+  const activeScenarioId = useScenarioStore((s) => s.activeScenarioId);
   const health = useProjectHealth();
   const { save, canSave, errors, warnings, scenario } = useProjectSave();
 
@@ -243,6 +246,26 @@ export function ProjectInfoView() {
     navigate(projectPath(target, wasNew ? 'import-components' : step.screenPath));
   };
 
+  const selectScenario = (scenarioId: string) => {
+    const storageProjectId = draft?.project_id.trim() || (projectId === 'new' ? '' : projectId!);
+    useScenarioStore.getState().setActiveScenario(scenarioId, storageProjectId || undefined);
+    useProjectStore.getState().setActiveScenarioId(scenarioId);
+    if (storageProjectId) {
+      useBoundaryStore.getState().loadFor(storageProjectId, scenarioId);
+      useSolutionStore.getState().loadFor(storageProjectId, scenarioId);
+    }
+  };
+
+  const createProjectScenario = () => {
+    const storageProjectId = draft?.project_id.trim() || (projectId === 'new' ? '' : projectId!);
+    const source = scenarios.find((entry) => entry.id === activeScenarioId) ?? scenarios[0];
+    const scenario = createScenario(storageProjectId, `Scenario ${scenarios.length + 1}`, source);
+    useScenarioStore.getState().replaceAll([...scenarios, scenario]);
+    if (storageProjectId) useScenarioStore.getState().persist(storageProjectId);
+    selectScenario(scenario.id);
+    toast.success('Scenario created / 已建立情境');
+  };
+
   if (!projectId) return <EmptyProjectState />;
   if (status === 'loading' || (status === 'idle' && !draft)) return <LoadingState />;
   if (status === 'error') {
@@ -291,7 +314,29 @@ export function ProjectInfoView() {
       <ProjectIdentityForm errors={errors} readOnly={readOnly} />
       <ProductThermalContextForm readOnly={readOnly} />
       <BaselineScenarioForm scenario={scenario} errors={errors} readOnly={readOnly} />
-      <MaterialDefaultsForm step={4} readOnly={readOnly} />
+      <ProjectScenarioManagement
+        scenarios={scenarios}
+        activeScenarioId={activeScenarioId}
+        readOnly={readOnly}
+        onSelect={selectScenario}
+        onCreate={createProjectScenario}
+        onCopyFrom={(scenarioId) => {
+          const copied = useBoundaryStore.getState().copyFromScenario(scenarioId);
+          toast[copied ? 'success' : 'warning'](
+            copied
+              ? 'Boundary conditions copied — review them / 已複製，請檢查'
+              : 'That scenario has no saved boundary set / 該情境尚無邊界條件',
+          );
+        }}
+        onDelete={(scenarioId) => {
+          const next = scenarios.filter((entry) => entry.id !== scenarioId);
+          useScenarioStore.getState().replaceAll(next);
+          const storageProjectId = draft.project_id.trim();
+          if (storageProjectId) useScenarioStore.getState().persist(storageProjectId);
+          toast.success('Scenario deleted / 已刪除情境');
+        }}
+      />
+      <MaterialDefaultsForm step={5} readOnly={readOnly} />
       <ProjectNotes readOnly={readOnly} />
 
       {showDuplicate && (

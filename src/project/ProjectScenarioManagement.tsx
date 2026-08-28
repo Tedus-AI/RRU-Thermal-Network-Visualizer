@@ -1,20 +1,10 @@
-/**
- * Section 5 — Scenario Management (06 §5 step 1, §14.3, PNG §5).
- *
- * Boundary conditions are stored per scenario. Switching scenario loads that
- * scenario's set; copying creates INDEPENDENT data so editing the copy can
- * never reach back into the scenario it came from (06 §14.3).
- */
-
 import { Copy, Plus, Trash2 } from 'lucide-react';
 
-import { Badge, Button } from '@/ui/primitives';
+import type { Scenario } from '@/domain/project';
+import { Badge, Button, SectionCard } from '@/ui/primitives';
 import { Bi, ColumnLabel, biTitle } from '@/ui/FieldLabel';
 
-import type { Scenario } from '@/domain/project';
-import { T06 } from './tooltips';
-
-export function ScenarioManagementPanel({
+export function ProjectScenarioManagement({
   scenarios,
   activeScenarioId,
   readOnly,
@@ -31,16 +21,20 @@ export function ScenarioManagementPanel({
   onCopyFrom: (scenarioId: string) => void;
   onDelete: (scenarioId: string) => void;
 }) {
+  const active = scenarios.find((scenario) => scenario.id === activeScenarioId);
+
   return (
-    <div>
-      <div className="mb-2 flex items-start justify-between gap-2">
-        <p className="text-[11px] leading-relaxed text-ink-500">
-          Create, duplicate or manage boundary condition scenarios.
-          <span className="block text-ink-400">建立、複製或管理邊界條件情境。</span>
-        </p>
+    <SectionCard
+      step={4}
+      title="Scenario Management"
+      subtitle="情境管理"
+      collapsible
+      defaultOpen
+      summary={active ? `Active / 使用中：${active.name}` : 'No active scenario / 尚無使用中情境'}
+      actions={
         <Button
           variant="primary"
-          className="h-8 shrink-0"
+          className="h-8"
           disabled={readOnly}
           icon={<Plus size={13} />}
           title={biTitle('New Scenario', '新增情境')}
@@ -48,14 +42,22 @@ export function ScenarioManagementPanel({
         >
           New Scenario
         </Button>
-      </div>
+      }
+    >
+      <p className="mb-3 text-[12px] leading-relaxed text-ink-500">
+        Create, select and manage project scenarios here. Screen 06 edits the boundary set of the
+        active scenario.
+        <span className="block text-ink-400">
+          在此建立、切換與管理專案情境；Screen 06 僅編輯使用中情境的邊界條件。
+        </span>
+      </p>
 
-      <div className="max-h-44 overflow-auto rounded-md border border-line">
+      <div className="overflow-auto rounded-md border border-line">
         <table className="w-full border-collapse text-[11px]">
-          <thead className="sticky top-0 z-10 bg-surface-muted">
+          <thead className="bg-surface-muted">
             <tr className="text-left text-ink-500">
               <th className="px-2 py-1.5 font-semibold">
-                <ColumnLabel label="Scenario Name" zh="情境名稱" tooltip={T06.field.scenarioName} />
+                <ColumnLabel label="Scenario Name" zh="情境名稱" />
               </th>
               <th className="px-2 py-1.5 text-right font-semibold">
                 <ColumnLabel label="Ambient" zh="環境溫度" unit="°C" />
@@ -73,21 +75,20 @@ export function ScenarioManagementPanel({
           </thead>
           <tbody>
             {scenarios.map((scenario) => {
-              const active = scenario.id === activeScenarioId;
+              const isActive = scenario.id === activeScenarioId;
               return (
                 <tr
                   key={scenario.id}
-                  className={`border-t border-line ${active ? 'bg-accent-100/60' : ''}`}
+                  className={`border-t border-line ${isActive ? 'bg-accent-100/60' : ''}`}
                 >
                   <td className="px-2 py-1">
                     <button
                       type="button"
                       onClick={() => onSelect(scenario.id)}
-                      title={biTitle(`Switch to ${scenario.name}`, '切換至此情境')}
                       className="flex items-center gap-1.5 text-left font-semibold text-ink-900"
                     >
-                      <span className="max-w-[9rem] truncate">{scenario.name}</span>
-                      {active && (
+                      <span className="max-w-[16rem] truncate">{scenario.name}</span>
+                      {isActive && (
                         <Badge tone="ok">
                           <Bi en="Active" zh="使用中" inline />
                         </Badge>
@@ -104,17 +105,17 @@ export function ScenarioManagementPanel({
                     {scenario.solar_W_m2.toFixed(0)}
                   </td>
                   <td className="px-2 py-1">
-                    <span className="flex items-center gap-1.5">
+                    <span className="flex items-center gap-2">
                       <button
                         type="button"
-                        disabled={readOnly || active}
+                        disabled={readOnly || isActive}
                         title={biTitle(
                           `Copy boundary conditions from ${scenario.name}`,
-                          T06.field.copyFromScenario,
+                          '從此情境複製邊界條件到使用中情境',
                         )}
                         aria-label={biTitle(
                           `Copy boundary conditions from ${scenario.name}`,
-                          '從此情境複製邊界條件',
+                          '從此情境複製邊界條件到使用中情境',
                         )}
                         onClick={() => onCopyFrom(scenario.id)}
                         className="text-ink-400 hover:text-accent-600 disabled:opacity-30"
@@ -123,7 +124,7 @@ export function ScenarioManagementPanel({
                       </button>
                       <button
                         type="button"
-                        disabled={readOnly || scenario.is_default}
+                        disabled={readOnly || isActive || scenarios.length === 1}
                         title={biTitle(`Delete ${scenario.name}`, '刪除此情境')}
                         aria-label={biTitle(`Delete ${scenario.name}`, '刪除此情境')}
                         onClick={() => onDelete(scenario.id)}
@@ -139,11 +140,10 @@ export function ScenarioManagementPanel({
           </tbody>
         </table>
       </div>
-
-      <p className="mt-1.5 text-[10px] leading-relaxed text-ink-400">
-        Copying makes independent data — editing the copy never changes the scenario it came from.
-        <span className="block">複製後為獨立資料，編輯副本不會影響來源情境。</span>
+      <p className="mt-2 text-[10px] leading-relaxed text-ink-400">
+        Copying makes independent boundary data; later edits never change the source scenario.
+        <span className="block">複製後為獨立邊界資料，後續編輯不會影響來源情境。</span>
       </p>
-    </div>
+    </SectionCard>
   );
 }

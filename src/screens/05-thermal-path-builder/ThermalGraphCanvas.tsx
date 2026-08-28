@@ -330,6 +330,8 @@ export const ThermalGraphCanvas = forwardRef<
     showPorts: boolean;
     showLabels: boolean;
     layoutMode: string;
+    /** Prevents topology edits while retaining selection, pan and zoom. */
+    readOnly?: boolean;
     /** Components switched off in the palette. A view filter, never the model. */
     hiddenComponentIds: ReadonlySet<string>;
     onSelect: (selection: GraphSelection) => void;
@@ -353,6 +355,7 @@ export const ThermalGraphCanvas = forwardRef<
     showPorts,
     showLabels,
     layoutMode,
+    readOnly = false,
     hiddenComponentIds,
     onSelect,
     onNodeMoved,
@@ -390,6 +393,7 @@ export const ThermalGraphCanvas = forwardRef<
     onZoomChange,
     onLayout,
     tool,
+    readOnly,
   });
   handlers.current = {
     onSelect,
@@ -399,6 +403,7 @@ export const ThermalGraphCanvas = forwardRef<
     onZoomChange,
     onLayout,
     tool,
+    readOnly,
   };
 
   const elements = useMemo(
@@ -425,7 +430,7 @@ export const ThermalGraphCanvas = forwardRef<
       const id = event.target.id() as string;
       const mode = handlers.current.tool;
 
-      if (mode === 'connect' || mode === 'add-edge') {
+      if (!handlers.current.readOnly && (mode === 'connect' || mode === 'add-edge')) {
         const pending = pendingSourceRef.current;
         if (!pending) {
           pendingSourceRef.current = id;
@@ -456,13 +461,13 @@ export const ThermalGraphCanvas = forwardRef<
     });
 
     cy.on('dragfree', 'node', (event) => {
-      if (event.target.hasClass('view-only')) return;
+      if (handlers.current.readOnly || event.target.hasClass('view-only')) return;
       const position = event.target.position();
       handlers.current.onNodeMoved(event.target.id() as string, { x: position.x, y: position.y });
     });
 
     cy.on('cxttap', 'node', (event) => {
-      if (event.target.hasClass('view-only')) return;
+      if (handlers.current.readOnly || event.target.hasClass('view-only')) return;
       handlers.current.onContextMenu(
         { kind: 'node', id: event.target.id() as string },
         { x: event.renderedPosition.x, y: event.renderedPosition.y },
@@ -470,7 +475,12 @@ export const ThermalGraphCanvas = forwardRef<
     });
 
     cy.on('cxttap', 'edge', (event) => {
-      if (event.target.hasClass('view-only') || event.target.hasClass('layout-only')) return;
+      if (
+        handlers.current.readOnly ||
+        event.target.hasClass('view-only') ||
+        event.target.hasClass('layout-only')
+      )
+        return;
       handlers.current.onContextMenu(
         { kind: 'edge', id: event.target.id() as string },
         { x: event.renderedPosition.x, y: event.renderedPosition.y },
@@ -627,7 +637,7 @@ export const ThermalGraphCanvas = forwardRef<
     const policy = canvasInteractionPolicy(tool);
     cy.userPanningEnabled(policy.userPanning);
     cy.boxSelectionEnabled(policy.boxSelection);
-    cy.autoungrabify(!policy.nodesGrabbable);
+    cy.autoungrabify(readOnly || !policy.nodesGrabbable);
     if (tool !== 'connect' && tool !== 'add-edge') {
       pendingSourceRef.current = null;
       cy.nodes().removeClass('connect-source');
@@ -636,7 +646,7 @@ export const ThermalGraphCanvas = forwardRef<
       marqueeStart.current = null;
       setMarquee(null);
     }
-  }, [tool, pendingSourceRef]);
+  }, [tool, readOnly, pendingSourceRef]);
 
   /**
    * Zoom the viewport onto a region the engineer drew, in container pixels.

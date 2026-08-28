@@ -207,7 +207,7 @@ export function createBaselineScenario(projectId: string): Scenario {
 }
 
 /**
- * An additional scenario, authored in Screen 06 (00 §34).
+ * An additional scenario, authored in Screen 01.
  * It inherits the baseline environment so a new scenario starts from something
  * real rather than from zeros, and the engineer edits from there.
  */
