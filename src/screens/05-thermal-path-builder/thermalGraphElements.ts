@@ -31,6 +31,10 @@ const EDGE_SHORT: Record<string, string> = {
 
 const HSK_BUS_MIN_BRANCHES = 4;
 const HSK_BUS_PREFIX = 'VIEW_HSK_BUS_';
+/** Portion of the source-to-base gap used by the visible branch before the bus. */
+export const HSK_BUS_FLOW_FRACTION = 0.72;
+/** Clear space on both sides of a two-line parallel-branch label. */
+const PARALLEL_LABEL_FLOW_PADDING_PX = 56;
 
 /**
  * How far apart two branches leaving the SAME terminal are fanned on the bus.
@@ -294,7 +298,7 @@ export function busGeometry(
   const sourceFront =
     fronts?.sourceFront ?? (targetAfter ? Math.max(...flows) : Math.min(...flows));
   const targetFront = fronts?.targetFront ?? target[flow];
-  const along = sourceFront + (targetFront - sourceFront) * 0.72;
+  const along = sourceFront + (targetFront - sourceFront) * HSK_BUS_FLOW_FRACTION;
 
   const crosses = [...sources.map((position) => position[cross]), target[cross]];
   const min = Math.min(...crosses);
@@ -308,6 +312,22 @@ export function busGeometry(
     outletPosition:
       axis === 'vertical' ? { x: along, y: target.y } : { x: target.x, y: along },
   };
+}
+
+/**
+ * Extra rank distance Auto Layout must add before a bus so a parallel-branch
+ * label fits between the terminal box and the bus instead of painting over
+ * either one. A negative direction is handled by the caller; this is only the
+ * positive distance to add.
+ */
+export function parallelBusRankShift(
+  sourceFront: number,
+  targetFront: number,
+  requiredBranchRoom: number,
+): number {
+  const currentGap = Math.abs(targetFront - sourceFront);
+  const requiredGap = requiredBranchRoom / HSK_BUS_FLOW_FRACTION;
+  return Math.max(0, requiredGap - currentGap);
 }
 
 function storedBusGeometry(
@@ -550,6 +570,7 @@ export function buildElements(
       if (parallel) {
         const flowAxis = axis === 'horizontal' ? 'vertical' : 'horizontal';
         const labelSide = routed.crossOffset < 0 ? 'negative' : 'positive';
+        const box = labelBox(routedLabel);
         elements.push({
           group: 'nodes',
           data: {
@@ -563,6 +584,11 @@ export function buildElements(
             border: '#ffffff',
             text: '#475569',
             label: routedLabel,
+            // Auto Layout reads this value and lengthens only the final
+            // terminal-to-bus segment when the label would otherwise not fit.
+            requiredFlowRoom: options.showLabels
+              ? (flowAxis === 'horizontal' ? box.w : box.h) + PARALLEL_LABEL_FLOW_PADDING_PX
+              : 0,
           },
           classes: `view-only hsk-bus-parallel-label flow-${flowAxis} label-${labelSide}`,
           position: branchLabelPosition(
