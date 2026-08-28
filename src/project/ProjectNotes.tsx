@@ -11,7 +11,7 @@ export function ProjectNotes({ readOnly }: { readOnly: boolean }) {
 
   return (
     <SectionCard
-      step={5}
+      step={6}
       title="Project Notes / Thermal Assumptions"
       subtitle="專案備註與熱設計假設"
       collapsible

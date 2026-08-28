@@ -1,8 +1,8 @@
 /**
- * Section C — Default Scenario (01 §8).
+ * Section C — Active Scenario Settings (01 §8).
  *
- * Screen 01 only authors the Baseline scenario. The full scenario matrix
- * (55°C / Pi mode / Fan off …) belongs to Screen 06 (00 §34).
+ * Screen 01 owns project scenarios. Screen 06 owns the active scenario's
+ * boundary-condition set and mirrors these shared environmental defaults.
  */
 
 import { Field, NumberInput, SectionCard, TextInput } from '@/ui/primitives';
@@ -38,8 +38,8 @@ export function BaselineScenarioForm({
     return (
       <SectionCard
         step={3}
-        title="Default Scenario"
-        subtitle="預設情境"
+        title="Scenario Settings"
+        subtitle="情境設定"
         collapsible
         summary="Created on first save / 首次儲存時建立"
       >
@@ -74,8 +74,8 @@ export function BaselineScenarioForm({
   return (
     <SectionCard
       step={3}
-      title="Default Scenario"
-      subtitle={`預設情境 — ${scenario.id}`}
+      title="Scenario Settings"
+      subtitle={`目前情境 — ${scenario.id}`}
       collapsible
       alert={alert}
       summary={
