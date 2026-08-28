@@ -11,6 +11,7 @@
 
 import {
   CircleCheck,
+  Eye,
   Maximize,
   Maximize2,
   Minimize2,
@@ -46,6 +47,7 @@ function ToolButton({
   label,
   zh,
   icon,
+  badge,
   onClick,
 }: {
   active?: boolean;
@@ -53,6 +55,7 @@ function ToolButton({
   label: string;
   zh: string;
   icon: ReactNode;
+  badge?: number;
   onClick: () => void;
 }) {
   return (
@@ -63,13 +66,18 @@ function ToolButton({
       aria-pressed={active}
       aria-label={`${label} / ${zh}`}
       title={`${label} / ${zh}`}
-      className={`flex size-8 shrink-0 items-center justify-center rounded-md border transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+      className={`relative flex size-8 shrink-0 items-center justify-center rounded-md border transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
         active
           ? 'border-accent-500 bg-accent-100 text-accent-700'
           : 'border-transparent text-ink-500 hover:bg-surface-muted hover:text-ink-900'
       }`}
     >
       {icon}
+      {badge != null && badge > 0 && (
+        <span className="absolute -top-1 -right-1 min-w-4 rounded-full bg-accent-600 px-1 text-center text-[9px] leading-4 font-bold text-white shadow-sm">
+          {badge > 99 ? '99+' : badge}
+        </span>
+      )}
     </button>
   );
 }
@@ -107,6 +115,9 @@ export function GraphToolbar({
   onValidate,
   onTogglePorts,
   onToggleLabels,
+  componentVisibilityOpen,
+  hiddenComponentCount,
+  onToggleComponentVisibility,
   fullscreen,
   onToggleFullscreen,
 }: {
@@ -129,6 +140,9 @@ export function GraphToolbar({
   onValidate: () => void;
   onTogglePorts: () => void;
   onToggleLabels: () => void;
+  componentVisibilityOpen: boolean;
+  hiddenComponentCount: number;
+  onToggleComponentVisibility: () => void;
   fullscreen: boolean;
   onToggleFullscreen: () => void;
 }) {
@@ -279,7 +293,19 @@ export function GraphToolbar({
           onClick={onToggleLabels}
         />
       </div>
-      <div className="ml-1 shrink-0 border-l border-line pl-1">
+      <div className="ml-1 flex shrink-0 items-center gap-0.5 border-l border-line pl-1">
+        {fullscreen && (
+          <span data-component-visibility-toggle>
+            <ToolButton
+              active={componentVisibilityOpen}
+              label="Component Visibility"
+              zh="元件顯示"
+              icon={<Eye size={14} />}
+              badge={hiddenComponentCount}
+              onClick={onToggleComponentVisibility}
+            />
+          </span>
+        )}
         <ToolButton
           active={fullscreen}
           label={fullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
