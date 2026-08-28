@@ -7,8 +7,8 @@
  * shortly after anything changes, which persists and — through the storage
  * write listener — reaches the project folder.
  *
- * Centralised on purpose. Scattering a scheduler through six stores would mean
- * six chances to forget one, and the rule is identical for all of them.
+ * Centralised on purpose. Scattering a scheduler through every persistable
+ * store would create several chances to forget one, while the rule is shared.
  *
  * Explicitly NOT included: `solverStore`. Its `DIRTY` means a solved result is
  * stale, not that something needs writing, and re-solving is an engineering
@@ -21,6 +21,7 @@ import { useComponentStore } from './componentStore';
 import { useNetworkStore } from './networkStore';
 import { useProjectStore } from './projectStore';
 import { useReportStore } from './reportStore';
+import { useScenarioStore } from './scenarioStore';
 import { useSolutionStore } from './solutionStore';
 import { markSavePending } from './saveStatus';
 
@@ -33,6 +34,7 @@ interface PersistableStore {
 const STORES: Array<{ name: string; store: PersistableStore }> = [
   { name: 'components', store: useComponentStore as unknown as PersistableStore },
   { name: 'network', store: useNetworkStore as unknown as PersistableStore },
+  { name: 'scenarios', store: useScenarioStore as unknown as PersistableStore },
   { name: 'boundary', store: useBoundaryStore as unknown as PersistableStore },
   { name: 'analysis', store: useAnalysisStore as unknown as PersistableStore },
   { name: 'report', store: useReportStore as unknown as PersistableStore },

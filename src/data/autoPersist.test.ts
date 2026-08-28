@@ -2,9 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { seedDemoProject } from '@/mock/seed';
 import { DEMO_PROJECT_ID } from '@/mock/demoProject';
-import { loadProject } from './persistence';
+import { loadProject, loadScenarios } from './persistence';
 import { useProjectStore } from './projectStore';
 import { useComponentStore } from './componentStore';
+import { useScenarioStore } from './scenarioStore';
 import { useSolverStore } from './solverStore';
 import { startAutoPersist } from './autoPersist';
 
@@ -40,6 +41,7 @@ afterEach(() => {
   stop?.();
   stop = null;
   useProjectStore.getState().clear();
+  useScenarioStore.getState().clear();
   vi.unstubAllGlobals();
   vi.useRealTimers();
 });
@@ -75,6 +77,35 @@ describe('startAutoPersist', () => {
     await vi.advanceTimersByTimeAsync(600);
 
     expect(save).toHaveBeenCalledTimes(1);
+  });
+
+  it('persists a Screen 01 scenario edit before the screen is reopened', async () => {
+    await seedDemoProject();
+    useProjectStore.getState().openProject(DEMO_PROJECT_ID);
+    useScenarioStore.getState().loadFor(DEMO_PROJECT_ID);
+
+    vi.useFakeTimers();
+    stop = startAutoPersist();
+
+    useScenarioStore.getState().updateScenario('SCN_001', { name: '55C 3m/s' });
+    await vi.advanceTimersByTimeAsync(600);
+
+    expect(loadScenarios(DEMO_PROJECT_ID).find((scenario) => scenario.id === 'SCN_001')?.name).toBe(
+      '55C 3m/s',
+    );
+  });
+
+  it('flushes a scenario edit when navigation reloads the store before the debounce', async () => {
+    await seedDemoProject();
+    useScenarioStore.getState().loadFor(DEMO_PROJECT_ID);
+
+    useScenarioStore.getState().updateScenario('SCN_001', { name: 'Immediate navigation' });
+    useScenarioStore.getState().loadFor(DEMO_PROJECT_ID);
+
+    expect(useScenarioStore.getState().activeScenario()?.name).toBe('Immediate navigation');
+    expect(loadScenarios(DEMO_PROJECT_ID).find((scenario) => scenario.id === 'SCN_001')?.name).toBe(
+      'Immediate navigation',
+    );
   });
 
   // A project that was never created has no file to write into.

@@ -16,7 +16,6 @@ import { FieldLabel, biTitle } from '@/ui/FieldLabel';
 import type {
   AirflowMode,
   AmbientDefinition,
-  BoundaryDataSource,
   ConvectionMethod,
   SiteConditions,
 } from '@/thermal/boundary/types';
@@ -36,14 +35,11 @@ const CONVECTION_METHODS: Array<{ value: ConvectionMethod; label: string }> = [
   { value: 'future_correlation', label: 'Future Correlation' },
 ];
 
-const DATA_SOURCES: BoundaryDataSource[] = [
-  'manual',
-  'analytical',
-  'datasheet',
-  'assumed',
-  'measurement',
-  'flotherm',
-  'vendor',
+export const ALTITUDE_OPTIONS = [
+  { value: '0', label: '0 m — Sea Level / 海平面' },
+  { value: '1000', label: '1000 m — Moderate Altitude / 中海拔' },
+  { value: '1500', label: '1500 m — High Altitude / 高海拔' },
+  { value: '3000', label: '3000 m — Very High Altitude / 極高海拔' },
 ];
 
 const WIND_DIRECTIONS = [
@@ -281,31 +277,13 @@ export function ScenarioEnvironmentPanel({
           htmlFor="bc-altitude"
           tooltip={T06.field.altitude}
         />
-        <NumberInput
+        <Select
           id="bc-altitude"
           className="mt-1 h-8 !text-[12px]"
-          value={number(site.altitude_m)}
+          value={String(site.altitude_m ?? 0)}
           disabled={readOnly}
-          onChange={(event) =>
-            onSite({ altitude_m: event.target.value === '' ? null : Number(event.target.value) })
-          }
-        />
-      </div>
-
-      <div>
-        <FieldLabel
-          label="Data Source"
-          zh="資料來源"
-          htmlFor="bc-source"
-          tooltip={T06.field.dataSource}
-        />
-        <Select
-          id="bc-source"
-          className="mt-1 h-8 !text-[12px]"
-          value={ambient.source}
-          disabled={readOnly}
-          options={DATA_SOURCES}
-          onChange={(event) => onAmbient({ source: event.target.value as BoundaryDataSource })}
+          items={ALTITUDE_OPTIONS}
+          onChange={(event) => onSite({ altitude_m: Number(event.target.value) })}
         />
       </div>
 
