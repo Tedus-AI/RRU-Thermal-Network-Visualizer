@@ -75,9 +75,9 @@ describe('bootstrapStorage', () => {
 
     // The seed re-populates solutions for the Golden Demo, so the collection is
     // not empty afterwards — what matters is that the old project's entry went.
-    const solutions = JSON.parse(store.getItem('tnv.thermal_solutions') ?? '{}');
-    expect(solutions.OLD_PROJECT).toBeUndefined();
-    expect(solutions[DEMO_PROJECT_ID]).toBeDefined();
+    const { loadSolutions } = await import('./persistence');
+    expect(loadSolutions('OLD_PROJECT')).toEqual([]);
+    expect(loadSolutions(DEMO_PROJECT_ID).length).toBeGreaterThan(0);
   });
 
   it('records the running build id', async () => {
@@ -126,7 +126,8 @@ describe('bootstrapStorage', () => {
 
     const projects = JSON.parse(store.getItem('tnv.projects') ?? '{}');
     expect(projects[DEMO_PROJECT_ID]).toBeDefined();
-    expect(JSON.parse(store.getItem('tnv.components') ?? '{}').JUNK).toBeUndefined();
+    const { loadComponents } = await import('./persistence');
+    expect(loadComponents('JUNK')).toEqual([]);
   });
 
   // Reloading before the Golden Flow finishes writing would leave storage

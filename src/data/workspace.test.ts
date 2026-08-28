@@ -2,14 +2,20 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { seedDemoProject } from '@/mock/seed';
 import { DEMO_PROJECT_ID } from '@/mock/demoProject';
-import { loadComponents, loadProject, loadProjects, saveProject } from './persistence';
+import {
+  PERSISTENCE_COMPRESSION_PREFIX,
+  loadComponents,
+  loadProject,
+  loadProjects,
+  saveProject,
+} from './persistence';
 import { collectProject, serializeProjectFile } from './projectFile';
 import { mirrorFilename, type DirectoryHandle } from './folderBinding';
 import { isSyncSuspended } from './syncSuspend';
 import { hydrateFromFolder } from './workspace';
 
 class MemoryStorage {
-  private map = new Map<string, string>();
+  protected map = new Map<string, string>();
   get length() {
     return this.map.size;
   }
@@ -27,6 +33,22 @@ class MemoryStorage {
   }
   clear() {
     this.map.clear();
+  }
+}
+
+/** Browser-like quota shared with unrelated apps on the same origin. */
+class QuotaStorage extends MemoryStorage {
+  constructor(private readonly limit: number) {
+    super();
+  }
+
+  override setItem(k: string, v: string) {
+    const next = [...this.map.entries()].reduce(
+      (sum, [key, value]) => sum + (key === k ? 0 : key.length + value.length),
+      k.length + v.length,
+    );
+    if (next > this.limit) throw new DOMException('Storage quota exceeded', 'QuotaExceededError');
+    super.setItem(k, v);
   }
 }
 
@@ -102,6 +124,26 @@ describe('hydrateFromFolder', () => {
     expect(result.skipped).toEqual([]);
     expect(loadProject(DEMO_PROJECT_ID)).not.toBeNull();
     expect(loadComponents(DEMO_PROJECT_ID).length).toBeGreaterThan(0);
+  });
+
+  it('compresses the working cache so folder hydration survives a shared-origin quota', async () => {
+    const text = await demoFileText();
+    const storage = new QuotaStorage(220_000);
+    // Data owned by another GitHub Pages app shares the origin and cannot be
+    // deleted by this tool. The project must still fit beside it.
+    storage.setItem('another.app.cache', 'x'.repeat(100_000));
+    vi.stubGlobal('localStorage', storage as unknown as Storage);
+
+    const result = await hydrateFromFolder(
+      fakeFolder({ [mirrorFilename(DEMO_PROJECT_ID)]: text }),
+    );
+
+    expect(result.projectIds).toEqual([DEMO_PROJECT_ID]);
+    expect(storage.getItem('another.app.cache')).toHaveLength(100_000);
+    expect(storage.getItem('tnv.thermal_networks')).toMatch(
+      new RegExp(`^${PERSISTENCE_COMPRESSION_PREFIX}`),
+    );
+    expect(loadProject(DEMO_PROJECT_ID)?.project_id).toBe(DEMO_PROJECT_ID);
   });
 
   // An empty folder is an empty project list — that is the whole contract.
