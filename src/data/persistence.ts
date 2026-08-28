@@ -41,6 +41,7 @@ import type {
   ReportTemplate,
   ThermalReportConfig,
 } from '@/report/reportTypes';
+import { compressToUTF16, decompressFromUTF16 } from 'lz-string';
 import { migrateComponents } from './componentMigration';
 
 const PROJECTS_KEY = 'tnv.projects';
@@ -59,6 +60,19 @@ const REPORT_CONFIGS_KEY = 'tnv.report_configs';
 const REPORT_TEMPLATES_KEY = 'tnv.report_templates';
 const REPORT_PAYLOADS_KEY = 'tnv.report_export_payloads';
 const EXPORT_STAMPS_KEY = 'tnv.export_stamps';
+
+/**
+ * localStorage is only the synchronous working cache; the selected folder is
+ * the durable source of truth. GitHub Pages also shares one localStorage quota
+ * across every app on the same origin, so a perfectly ordinary project can hit
+ * the browser's small string limit even though its .tnv.json file is healthy.
+ *
+ * Keep the small project/revision indexes plain JSON for compatibility with
+ * lightweight boot and migration checks. Heavier collections are stored as
+ * LZ-compressed UTF-16 strings and transparently decoded here.
+ */
+export const PERSISTENCE_COMPRESSION_PREFIX = 'tnv:lz16:';
+const PLAIN_JSON_KEYS = new Set([PROJECTS_KEY, COMPONENT_REVISIONS_KEY]);
 
 /** Keys on a project document that belong to this tool. Everything else is foreign. */
 const OWNED_PROJECT_KEYS = [
@@ -94,7 +108,14 @@ const recoveryIssues = new Map<string, PersistenceRecoveryIssue>();
 
 function parseCollection(key: string, raw: string): Record<string, RawDoc> {
   try {
-    const parsed: unknown = JSON.parse(raw);
+    const encoded = raw.startsWith(PERSISTENCE_COMPRESSION_PREFIX)
+      ? raw.slice(PERSISTENCE_COMPRESSION_PREFIX.length)
+      : null;
+    const json = encoded == null ? raw : decompressFromUTF16(encoded);
+    if (json == null || json === '') {
+      throw new Error('compressed collection could not be decoded');
+    }
+    const parsed: unknown = JSON.parse(json);
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
       throw new Error('expected a JSON object at the collection root');
     }
@@ -154,7 +175,14 @@ function writeCollection(key: string, value: Record<string, RawDoc>): void {
   if (typeof localStorage === 'undefined') return;
   const existing = localStorage.getItem(key);
   if (existing) parseCollection(key, existing);
-  localStorage.setItem(key, JSON.stringify(value));
+  const json = JSON.stringify(value);
+  const compressed = `${PERSISTENCE_COMPRESSION_PREFIX}${compressToUTF16(json)}`;
+  // Tiny documents can grow after adding the prefix. Keep those, and the
+  // project index, as readable JSON; compression starts automatically once it
+  // actually saves quota.
+  const stored =
+    !PLAIN_JSON_KEYS.has(key) && compressed.length < json.length ? compressed : json;
+  localStorage.setItem(key, stored);
 
   for (const listener of writeListeners) {
     try {
