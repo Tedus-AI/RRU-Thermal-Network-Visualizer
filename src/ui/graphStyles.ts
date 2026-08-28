@@ -409,11 +409,11 @@ export function cytoscapeStylesheet(): StylesheetCSS[] {
     },
     {
       selector: 'node.hsk-bus-parallel-label.flow-horizontal.label-negative',
-      style: { 'text-margin-y': -16 },
+      style: { 'text-margin-y': -20 },
     },
     {
       selector: 'node.hsk-bus-parallel-label.flow-horizontal.label-positive',
-      style: { 'text-margin-y': 16 },
+      style: { 'text-margin-y': 20 },
     },
     {
       selector: 'node.hsk-bus-parallel-label.flow-vertical.label-negative',

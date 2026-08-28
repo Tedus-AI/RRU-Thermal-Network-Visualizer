@@ -4,7 +4,7 @@ import { createRevision } from '@/domain/revision';
 import { createRth } from '@/thermal/rth';
 import type { ThermalEdge, ThermalNetwork, ThermalNode } from '@/thermal/types';
 import { canvasInteractionPolicy } from './canvasInteraction';
-import { buildElements, parallelRth } from './thermalGraphElements';
+import { buildElements, parallelBusRankShift, parallelRth } from './thermalGraphElements';
 
 describe('merged Select and Pan pointer', () => {
   it('selects or moves objects while a background drag pans', () => {
@@ -465,6 +465,7 @@ describe('the parallel pair, annotated', () => {
     expect(anchors.every((anchor) => anchor.selectable === false && anchor.grabbable === false)).toBe(
       true,
     );
+    expect(anchors.every((anchor) => Number(anchor.data.requiredFlowRoom) >= 120)).toBe(true);
 
     // A lone branch is not marked — it has a one-line label that fits.
     expect(
@@ -477,6 +478,20 @@ describe('the parallel pair, annotated', () => {
         String(e.classes).includes('hsk-bus-parallel-label'),
       ),
     ).toBe(false);
+  });
+
+  it('adds rank distance only when Auto Layout has too little label room', () => {
+    // 120px between ranks gives the branch only 86.4px before the 72% bus.
+    expect(parallelBusRankShift(100, 220, 144)).toBeCloseTo(80);
+    // A gap of 220px already provides 158.4px before the bus, so it stays put.
+    expect(parallelBusRankShift(100, 320, 144)).toBe(0);
+  });
+
+  it('does not reserve hidden-label space', () => {
+    const anchors = build(withPipeAndSpreading(), false).filter((element) =>
+      String(element.classes).includes('hsk-bus-parallel-label'),
+    );
+    expect(anchors.every((anchor) => anchor.data.requiredFlowRoom === 0)).toBe(true);
   });
 
   it('names each branch, so the pipe is tellable from the metal', () => {
