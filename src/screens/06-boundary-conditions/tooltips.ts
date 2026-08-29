@@ -56,10 +56,11 @@ export const T06 = {
     hConv: '對流熱傳係數 h，單位 W/m²K。V1 由工程師手動輸入。',
     area: '參與此邊界條件的有效表面積，單位 m²。',
     fixedTemperature: '固定溫度邊界的溫度值，例如恆溫槽或受控冷板。',
-    adiabaticReason: '絕熱邊界必須說明理由，否則驗證會視為未指定。',
+    adiabaticReason: '絕熱邊界不需要數值；理由僅供稽核，可留白且不會阻擋求解。',
     boundaryType: '此邊界端口採用的邊界條件型別。',
     representation: '此 profile 在 07 求解時的表示方式，例如並聯邊界或外部熱負載。',
-    dataSource: '資料來源：manual、analytical、datasheet、assumed、measurement、flotherm 或 vendor。',
+    dataSource:
+      '資料來源：manual、analytical、datasheet、assumed、measurement 或 vendor。FloTHERM 來源需等 Screen 03 完成後再啟用。',
     confidence: '此邊界輸入的信心度。低信心度會顯示警告，但不會改變數值求解結果。',
   },
 

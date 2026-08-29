@@ -120,7 +120,11 @@ export function validateBoundarySet(input: BoundaryValidationInput): BoundaryVal
       );
     });
 
-  if (set.ambient.external_ambient_C == null && !everyPortIsFixedOrAdiabatic) {
+  if (
+    (set.ambient.external_ambient_C == null ||
+      !Number.isFinite(set.ambient.external_ambient_C)) &&
+    !everyPortIsFixedOrAdiabatic
+  ) {
     errors.push(
       message(
         'error',
@@ -350,12 +354,12 @@ export function validateBoundarySet(input: BoundaryValidationInput): BoundaryVal
 
       case 'adiabatic_symmetry': {
         if (!p.reason) {
-          errors.push(
+          warnings.push(
             message(
-              'error',
+              'warning',
               `PROFILE_ADIABATIC_REASON_${id}`,
-              `"${profile.name}": an adiabatic boundary needs a stated reason.`,
-              `「${profile.name}」的絕熱邊界必須說明理由。`,
+              `"${profile.name}": add a reason for audit traceability when practical.`,
+              `「${profile.name}」可補充絕熱理由，方便日後稽核。`,
               { profile_id: id },
             ),
           );
@@ -364,17 +368,8 @@ export function validateBoundarySet(input: BoundaryValidationInput): BoundaryVal
       }
 
       case 'ambient_reservoir': {
-        if (typeof p.temperature_C !== 'number') {
-          errors.push(
-            message(
-              'error',
-              `PROFILE_AMBIENT_T_${id}`,
-              `"${profile.name}": a reference temperature is required.`,
-              `「${profile.name}」必須輸入參考溫度。`,
-              { profile_id: id },
-            ),
-          );
-        }
+        // Legacy profile retained for data compatibility. Scenario
+        // Environment owns the ambient reference and validation occurs there.
         break;
       }
 
@@ -412,6 +407,9 @@ export function validateBoundarySet(input: BoundaryValidationInput): BoundaryVal
 
     // Solved values must never live in a boundary set.
     for (const key of SOLVED_KEYS) {
+      // `temperature_C` is a legacy ambient-reservoir input name, not a solved
+      // result for that profile type. Other profile types must still reject it.
+      if (key === 'temperature_C' && profile.type === 'ambient_reservoir') continue;
       if (p[key] != null) {
         errors.push(
           message(
