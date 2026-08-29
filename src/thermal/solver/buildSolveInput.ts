@@ -233,12 +233,9 @@ export function buildSolveInput(options: BuildSolveInputOptions): SolveInput {
         }
 
         case 'ambient_reservoir': {
-          const value = profile.parameters.temperature_C;
-          if (finite(value as number)) {
-            node.boundary_type = 'fixed_temperature';
-            node.fixed_temperature_C = value as number;
-            fixedNodes[node.id] = value as number;
-          }
+          // Legacy compatibility only. The authoritative ambient value was
+          // already applied from Scenario Environment in step 2. A saved
+          // profile must never create a second owner or override it.
           break;
         }
 

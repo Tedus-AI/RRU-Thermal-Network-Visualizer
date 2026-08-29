@@ -72,6 +72,11 @@ export interface ProvenanceRecord {
 /**
  * Reserved for Screen 03 — 06 §2.2, §8.3 Mapping tab.
  * Aliases are free text. Nothing here parses a FloTHERM file.
+ *
+ * SCREEN 03 RE-ENABLEMENT: keep this schema and its persistence hooks while
+ * mapping controls are hidden in Screen 06. When Screen 03 has a verified
+ * import contract/parser, restore the Boundary Inspector mapping UI and add
+ * cross-screen mapping/freshness tests before treating aliases as active data.
  */
 export interface ExternalBoundaryMappings {
   flotherm_object_alias?: string;

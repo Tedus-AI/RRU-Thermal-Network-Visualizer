@@ -89,8 +89,10 @@ export function summarize(
       (profile.parameters.area_m2 as number) <= 0,
   ).length;
 
+  const dissipatingPortIds = new Set(dissipating.map((port) => port.id));
   const complete = set.derived_preview.filter(
-    (preview) => preview.completeness !== 'blocked',
+    (preview) =>
+      dissipatingPortIds.has(preview.boundary_port_id) && preview.completeness !== 'blocked',
   ).length;
 
   return {
@@ -132,6 +134,11 @@ export function portStatus(
   set: ScenarioBoundaryConditionSet | null,
   port: BoundaryPort,
 ): PortStatus {
+  if (!port.dissipating) {
+    const ambient_C = set?.ambient.external_ambient_C;
+    return ambient_C != null && Number.isFinite(ambient_C) ? 'ok' : 'blocked';
+  }
+
   const profiles = profilesForPort(set, port.id);
   if (profiles.length === 0) return 'unassigned';
   if (profiles.some((profile) => profile.type === 'adiabatic_symmetry')) return 'adiabatic';

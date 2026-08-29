@@ -97,6 +97,47 @@ function solve(net: ThermalNetwork, ambient_C = 20, scenarioId = 'SCN_A', powerS
   });
 }
 
+describe('Screen 06 ambient ownership', () => {
+  it('does not let a legacy ambient profile override Scenario Environment', () => {
+    const net = network(
+      [node('SRC', { power: 10 }), node('AMB', { ambient: true })],
+      [edge('E1', 'SRC', 'AMB', 1)],
+    );
+    const boundarySet = ambientOnly('SCN_A', 20);
+    const ports = deriveBoundaryPorts(net);
+    const ambientPort = ports.find((entry) => !entry.dissipating)!;
+
+    boundarySet.profiles.push({
+      id: 'LEGACY_AMBIENT',
+      name: 'Legacy Ambient Reservoir',
+      type: 'ambient_reservoir',
+      representation: 'fixed_temperature_reservoir',
+      parameters: { temperature_C: 99 },
+      source: 'manual',
+      confidence: 'medium',
+    });
+    boundarySet.assignments.push({
+      id: 'ASSIGN_LEGACY_AMBIENT',
+      boundary_port_id: ambientPort.id,
+      profile_ids: ['LEGACY_AMBIENT'],
+      assignment_mode: 'manual',
+      enabled: true,
+    });
+
+    const input = buildSolveInput({
+      materials: defaultMaterials(),
+      network: net,
+      boundarySet,
+      ports,
+      scenarioId: 'SCN_A',
+    });
+
+    expect(input.ambient_C).toBe(20);
+    expect(input.fixed_nodes.AMB).toBe(20);
+    expect(input.network.nodes.AMB.fixed_temperature_C).toBe(20);
+  });
+});
+
 const close = (value: number, expected: number, tolerance = 1e-9) =>
   expect(Math.abs(value - expected)).toBeLessThan(tolerance);
 

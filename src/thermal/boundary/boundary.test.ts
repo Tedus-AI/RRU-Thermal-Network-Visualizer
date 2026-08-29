@@ -206,6 +206,23 @@ describe('derived preview (06 §8.3)', () => {
     expect(preview.completeness).toBe('blocked');
   });
 
+  it('treats a non-dissipating ambient reference as ready from Scenario Environment', () => {
+    const ambient = buildDerivedPreview(
+      port({ id: 'BP_AMBIENT', dissipating: false, area_m2: null }),
+      [],
+      { ambient_C: 55 },
+    );
+    const missing = buildDerivedPreview(
+      port({ id: 'BP_AMBIENT', dissipating: false, area_m2: null }),
+      [],
+      { ambient_C: null },
+    );
+
+    expect(ambient.completeness).toBe('complete');
+    expect(ambient.r_conv_C_per_W).toBeUndefined();
+    expect(missing.completeness).toBe('blocked');
+  });
+
   it('produces convection, radiation and combined Rth for a mixed port', () => {
     const preview = buildDerivedPreview(
       port(),
@@ -438,7 +455,7 @@ describe('boundary validation (06 §12)', () => {
     expect(codes).toContain('PROFILE_AREA_P2');
   });
 
-  it('blocks a fixed-temperature boundary with no temperature and an adiabatic one with no reason', () => {
+  it('blocks a fixed-temperature boundary with no temperature but only warns on a missing adiabatic reason', () => {
     const set = setWith([
       profile({
         id: 'P_FIXED',
@@ -447,16 +464,40 @@ describe('boundary validation (06 §12)', () => {
       }),
       profile({ id: 'P_ADIA', type: 'adiabatic_symmetry', parameters: {} }),
     ]);
-    const codes = validateBoundarySet({
+    const result = validateBoundarySet({
       set,
       ports,
       hasTopology: true,
       hasScenario: true,
       topologyVersion: 1,
+    });
+    const errorCodes = result.errors.map((error) => error.id);
+    const warningCodes = result.warnings.map((warning) => warning.id);
+
+    expect(errorCodes).toContain('PROFILE_FIXED_T_P_FIXED');
+    expect(errorCodes).not.toContain('PROFILE_ADIABATIC_REASON_P_ADIA');
+    expect(warningCodes).toContain('PROFILE_ADIABATIC_REASON_P_ADIA');
+  });
+
+  it('accepts a legacy ambient profile temperature without mistaking it for a solved value', () => {
+    const set = setWith([
+      profile({
+        id: 'P_AMBIENT',
+        type: 'ambient_reservoir',
+        representation: 'fixed_temperature_reservoir',
+        parameters: { temperature_C: 99 },
+      }),
+    ]);
+    const codes = validateBoundarySet({
+      set,
+      ports: [],
+      hasTopology: true,
+      hasScenario: true,
+      topologyVersion: 1,
     }).errors.map((error) => error.id);
 
-    expect(codes).toContain('PROFILE_FIXED_T_P_FIXED');
-    expect(codes).toContain('PROFILE_ADIABATIC_REASON_P_ADIA');
+    expect(codes).not.toContain('PROFILE_SOLVED_VALUE_P_AMBIENT_temperature_C');
+    expect(codes).not.toContain('PROFILE_AMBIENT_T_P_AMBIENT');
   });
 
   it('blocks a solar profile that is missing any factor', () => {

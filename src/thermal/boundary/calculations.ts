@@ -149,6 +149,15 @@ export function buildDerivedPreview(
     disclaimer: 'pre_solve_boundary_input_only',
   };
 
+  // The ambient placeholder is a non-dissipating temperature reference. It
+  // does not need a profile or an Rth preview; readiness follows the one
+  // authoritative ambient value in Scenario Environment.
+  if (!port.dissipating) {
+    preview.completeness =
+      options.ambient_C != null && Number.isFinite(options.ambient_C) ? 'complete' : 'blocked';
+    return preview;
+  }
+
   if (profiles.length === 0) return preview;
 
   let assumed = false;
@@ -225,12 +234,12 @@ export function buildDerivedPreview(
 
       case 'adiabatic_symmetry': {
         // Intentional no-flow. No resistance is invented (06 §9.7).
-        if (!profile.parameters.reason) missing = true;
         break;
       }
 
       case 'ambient_reservoir': {
-        if (parameter(profile, 'temperature_C') == null) missing = true;
+        // Legacy compatibility only. Scenario Environment owns the ambient
+        // value; a stored ambient profile neither overrides it nor blocks it.
         break;
       }
 

@@ -275,6 +275,15 @@ export function BoundaryConditionsView() {
   const selectedPort = ports.find((port) => port.id === selectedPortId) ?? null;
   const validation = set?.validation ?? { status: 'blocked' as const, errors: [], warnings: [], infos: [] };
 
+  const focusScenarioEnvironment = () => {
+    setOpenPanels((current) => ({ ...current, environment: true }));
+    requestAnimationFrame(() => {
+      document
+        .getElementById('boundary-panel-environment')
+        ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  };
+
   const fixedPortIds = useMemo(() => {
     if (!set) return new Set<string>();
     return new Set(
@@ -794,7 +803,9 @@ export function BoundaryConditionsView() {
                     (entry) => entry.boundary_port_id === selectedPort.id,
                   )}
                   validation={validation}
+                  ambientTemperature_C={set.ambient.external_ambient_C}
                   readOnly={readOnly}
+                  onEditAmbient={focusScenarioEnvironment}
                   onUpsertProfile={(profile) => useBoundaryStore.getState().upsertProfile(profile)}
                   onRemoveProfile={removeProfile}
                   onAddProfile={(type) => addProfileToPort(selectedPort.id, type)}
