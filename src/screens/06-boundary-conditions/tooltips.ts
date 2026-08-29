@@ -12,7 +12,7 @@ export const T06 = {
 
   step: {
     scenario: '選擇目前要設定邊界條件的情境。不同情境可以共用 05 的拓撲，但邊界條件彼此獨立。',
-    ambientSite: '設定外部環境溫度、風速、風向、高度與太陽條件。',
+    ambientSite: '檢查由 Screen 01 情境設定帶入的環境溫度、風速與太陽條件。',
     surfaceMapping: '將 05 建立的 boundary port 對應到此情境的對流、輻射、太陽或固定溫度條件。',
     convection: '設定表面到空氣的對流係數 h 與有效面積，用於推導邊界熱阻。',
     radiationSolar: '設定輻射參數與太陽熱輸入。太陽負載是外部熱源，不是熱阻。',
@@ -31,14 +31,14 @@ export const T06 = {
   field: {
     scenarioName: '情境名稱，例如 Baseline Hot Day、Solar Peak 或 Lab Chamber。',
     copyFromScenario: '從另一個情境複製邊界條件，複製後會成為目前情境的獨立資料。',
-    externalAmbient: '外部環境溫度。05 只保留 Ambient Placeholder，實際溫度必須在 06 依情境設定。',
+    externalAmbient: '外部環境溫度由 Screen 01 情境設定統一管理，06 僅引用此值。',
     internalAir: '內部空氣溫度。目前只作情境記錄，不會自動加入 07 的熱網路求解。',
     radiationSurrounding:
       '周圍輻射溫度。產生新的輻射 profile 時用來預填參數；求解以已指派 profile 的參數為準。',
     altitude:
       '安裝海拔。目前以手動 h 或邊界 profile 為正式計算輸入，因此海拔只作情境記錄，不會自行修正熱阻。',
     windSpeed:
-      '外部風速。Generate Defaults 會依此預填對流 h；profile 建立後，求解仍以 profile 內的 h 為準。',
+      '外部風速由 Screen 01 管理，供情境識別；目前不會自動推算對流 h，求解以 profile 內的手動 h 為準。',
     windDirection: '風向用於記錄安裝條件，目前不會自動修正對流熱阻。',
     airflowMode: '氣流模式用於情境分類；目前求解仍以已指派 profile 的 h 為準。',
     convectionMethod:

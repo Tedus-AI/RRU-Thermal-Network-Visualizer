@@ -7,7 +7,7 @@
  */
 
 import { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { AlertTriangle, FilePlus2, RefreshCw } from 'lucide-react';
 
 import { Badge, Button, Skeleton } from '@/ui/primitives';
@@ -173,6 +173,7 @@ export function EmptyProjectState() {
 export function ProjectInfoView() {
   const { projectId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const status = useProjectStore((s) => s.status);
   const error = useProjectStore((s) => s.error);
@@ -187,6 +188,16 @@ export function ProjectInfoView() {
   const activeScenarioId = useScenarioStore((s) => s.activeScenarioId);
   const health = useProjectHealth();
   const { save, canSave, errors, warnings, scenario } = useProjectSave();
+
+  useEffect(() => {
+    if (location.hash !== '#scenario-settings' || !draft) return;
+    const frame = window.requestAnimationFrame(() => {
+      document
+        .getElementById('scenario-settings')
+        ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [location.hash, draft, scenario?.id]);
 
   // Load the project (or start a new one) whenever the route target changes.
   useEffect(() => {
@@ -313,7 +324,9 @@ export function ProjectInfoView() {
     >
       <ProjectIdentityForm errors={errors} readOnly={readOnly} />
       <ProductThermalContextForm readOnly={readOnly} />
-      <BaselineScenarioForm scenario={scenario} errors={errors} readOnly={readOnly} />
+      <div id="scenario-settings" className="scroll-mt-4">
+        <BaselineScenarioForm scenario={scenario} errors={errors} readOnly={readOnly} />
+      </div>
       <ProjectScenarioManagement
         scenarios={scenarios}
         activeScenarioId={activeScenarioId}

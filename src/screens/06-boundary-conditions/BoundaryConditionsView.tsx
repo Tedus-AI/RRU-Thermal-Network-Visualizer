@@ -36,7 +36,7 @@ import { ScreenWorkspace } from '@/app/ScreenWorkspace';
 import { projectPath } from '@/app/navigation';
 import { useShellActions } from '@/app/shellActions';
 import { Badge, Button, Modal, Skeleton } from '@/ui/primitives';
-import { Bi, biTitle } from '@/ui/FieldLabel';
+import { biTitle } from '@/ui/FieldLabel';
 import { toast } from '@/ui/toast';
 
 import { useProjectStore } from '@/data/projectStore';
@@ -54,7 +54,6 @@ import {
 } from '@/thermal/boundary/types';
 
 import { BOUNDARY_STEPS, BoundaryStepper, type BoundaryStep } from './BoundaryStepper';
-import { ScenarioEnvironmentPanel } from './ScenarioEnvironmentPanel';
 import { SurfacePropertiesPanel } from './SurfacePropertiesPanel';
 import { BoundaryInspector, BoundaryInspectorEmpty } from './BoundaryInspector';
 import { BoundarySummaryCard } from './BoundarySummaryCard';
@@ -158,7 +157,7 @@ function SidebarSection({
   );
 }
 
-type BoundaryPanelId = 'environment' | 'surface' | 'conditions' | 'summary' | 'fixed';
+type BoundaryPanelId = 'surface' | 'conditions' | 'summary' | 'fixed';
 const EMPTY_HIDDEN_COMPONENTS = new Set<string>();
 
 function LoadingState() {
@@ -195,12 +194,12 @@ export function BoundaryConditionsView() {
 
   const [step, setStep] = useState<BoundaryStep>('scenario');
   const [selectedPortId, setSelectedPortId] = useState<string | null>(null);
+  const [preferredProfileId, setPreferredProfileId] = useState<string | null>(null);
   const [warningConfirm, setWarningConfirm] = useState<number | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [openPanels, setOpenPanels] = useState<Record<BoundaryPanelId, boolean>>({
-    environment: true,
-    surface: false,
-    conditions: false,
+    surface: true,
+    conditions: true,
     summary: false,
     fixed: false,
   });
@@ -240,6 +239,7 @@ export function BoundaryConditionsView() {
     useBoundaryStore.getState().loadFor(projectId, activeScenarioId);
     useSolutionStore.getState().loadFor(projectId, activeScenarioId);
     setSelectedPortId(null);
+    setPreferredProfileId(null);
   }, [projectId, activeScenarioId]);
 
   useEffect(() => {
@@ -275,13 +275,8 @@ export function BoundaryConditionsView() {
   const selectedPort = ports.find((port) => port.id === selectedPortId) ?? null;
   const validation = set?.validation ?? { status: 'blocked' as const, errors: [], warnings: [], infos: [] };
 
-  const focusScenarioEnvironment = () => {
-    setOpenPanels((current) => ({ ...current, environment: true }));
-    requestAnimationFrame(() => {
-      document
-        .getElementById('boundary-panel-environment')
-        ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    });
+  const editScenarioSettings = () => {
+    navigate(`${projectPath(projectId!, 'info')}#scenario-settings`);
   };
 
   const fixedPortIds = useMemo(() => {
@@ -417,6 +412,7 @@ export function BoundaryConditionsView() {
     const port = ports.find((entry) => entry.connected_node_id === next.id);
     if (!port) return;
     setSelectedPortId(port.id);
+    setPreferredProfileId(null);
     setOpenPanels((current) => ({ ...current, conditions: true }));
   };
 
@@ -432,6 +428,58 @@ export function BoundaryConditionsView() {
       toast.warning(`${state.warnings.length} warning(s) / 有警告`);
     } else {
       toast.success('Boundary conditions are ready for 07 / 可交付 07');
+    }
+  };
+
+  const createBoundaryProfiles = () => {
+    const store = useBoundaryStore.getState();
+    const { created, firstCreatedPortId } = store.generateDefaults();
+    const latest = store.current();
+    const firstError = latest?.validation.errors[0];
+    const errorPortId =
+      firstError?.boundary_port_id ??
+      (firstError?.profile_id
+        ? latest?.assignments.find((assignment) =>
+            assignment.profile_ids.includes(firstError.profile_id!),
+          )?.boundary_port_id
+        : undefined);
+    const targetPortId = firstCreatedPortId ?? errorPortId ?? null;
+    const targetProfileId =
+      firstError?.profile_id ??
+      (targetPortId
+        ? latest?.assignments.find(
+            (assignment) => assignment.boundary_port_id === targetPortId,
+          )?.profile_ids[0]
+        : undefined) ??
+      null;
+
+    if (targetPortId) {
+      const targetPort = ports.find((port) => port.id === targetPortId);
+      setSelectedPortId(targetPortId);
+      setPreferredProfileId(targetProfileId);
+      setOpenPanels((current) => ({ ...current, conditions: true }));
+      if (targetPort) {
+        setSelection({ kind: 'node', id: targetPort.connected_node_id });
+        canvasRef.current?.center(targetPort.connected_node_id);
+      }
+      requestAnimationFrame(() => {
+        document
+          .getElementById('boundary-panel-conditions')
+          ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        document.getElementById('bc-param-h_W_m2K')?.focus();
+      });
+    }
+
+    if (created > 0) {
+      toast.success(
+        `${created} boundary profile(s) created — complete h and other required inputs / 已建立條件，請完成 h 等必要輸入`,
+      );
+    } else if (targetPortId) {
+      toast.warning(
+        'Profiles already exist — complete the highlighted required inputs / Profile 已存在，請完成必要輸入',
+      );
+    } else {
+      toast.success('All boundary profiles are complete / 所有邊界條件皆已完成');
     }
   };
 
@@ -634,17 +682,13 @@ export function BoundaryConditionsView() {
           <Button
             icon={<Sparkles size={15} />}
             disabled={readOnly}
-            title={biTitle('Generate default profiles', '依專案預設產生邊界條件')}
-            onClick={() => {
-              const { created } = useBoundaryStore.getState().generateDefaults();
-              toast[created > 0 ? 'success' : 'warning'](
-                created > 0
-                  ? `${created} default profile(s) created — review them / 已產生預設條件，請檢查`
-                  : 'Every port already has a condition / 所有端口皆已設定',
-              );
-            }}
+            title={biTitle(
+              'Create missing boundary profiles and open the first incomplete one',
+              '建立缺少的邊界條件，並開啟第一個未完成項目',
+            )}
+            onClick={createBoundaryProfiles}
           >
-            Generate Defaults
+            Create Boundary Profiles
           </Button>
           <Button
             disabled={readOnly || !selectedPort}
@@ -713,33 +757,8 @@ export function BoundaryConditionsView() {
             </button>
 
             <SidebarSection
-              id="boundary-panel-environment"
-              index={1}
-              title="Scenario Environment"
-              zh="情境環境"
-              open={openPanels.environment}
-              onToggle={() =>
-                setOpenPanels((current) => ({ ...current, environment: !current.environment }))
-              }
-            >
-              {set ? (
-                <ScenarioEnvironmentPanel
-                  ambient={set.ambient}
-                  site={set.site}
-                  readOnly={readOnly}
-                  onAmbient={(patch) => useBoundaryStore.getState().setAmbient(patch)}
-                  onSite={(patch) => useBoundaryStore.getState().setSite(patch)}
-                />
-              ) : (
-                <p className="text-[11px] text-ink-400">
-                  <Bi en="Select a scenario first." zh="請先選擇情境。" inline />
-                </p>
-              )}
-            </SidebarSection>
-
-            <SidebarSection
               id="boundary-panel-surface"
-              index={2}
+              index={1}
               title="Surface Properties"
               zh="表面性質"
               open={openPanels.surface}
@@ -757,7 +776,7 @@ export function BoundaryConditionsView() {
 
             <SidebarSection
               id="boundary-panel-conditions"
-              index={3}
+              index={2}
               title="Boundary Conditions"
               zh="邊界條件"
               open={openPanels.conditions}
@@ -778,6 +797,7 @@ export function BoundaryConditionsView() {
                       type="button"
                       onClick={() => {
                         setSelectedPortId(port.id);
+                        setPreferredProfileId(null);
                         setSelection({ kind: 'node', id: port.connected_node_id });
                         canvasRef.current?.center(port.connected_node_id);
                       }}
@@ -799,13 +819,14 @@ export function BoundaryConditionsView() {
                   port={selectedPort}
                   status={portStatus(set, selectedPort)}
                   profiles={profilesForPort(set, selectedPort.id)}
+                  preferredProfileId={preferredProfileId}
                   preview={set.derived_preview.find(
                     (entry) => entry.boundary_port_id === selectedPort.id,
                   )}
                   validation={validation}
                   ambientTemperature_C={set.ambient.external_ambient_C}
                   readOnly={readOnly}
-                  onEditAmbient={focusScenarioEnvironment}
+                  onEditAmbient={editScenarioSettings}
                   onUpsertProfile={(profile) => useBoundaryStore.getState().upsertProfile(profile)}
                   onRemoveProfile={removeProfile}
                   onAddProfile={(type) => addProfileToPort(selectedPort.id, type)}
@@ -817,7 +838,7 @@ export function BoundaryConditionsView() {
 
             <SidebarSection
               id="boundary-panel-summary"
-              index={4}
+              index={3}
               title="Boundary Summary"
               zh="邊界條件摘要"
               open={openPanels.summary}
@@ -830,7 +851,7 @@ export function BoundaryConditionsView() {
 
             <SidebarSection
               id="boundary-panel-fixed"
-              index={5}
+              index={4}
               title="Fixed Temperature (optional)"
               zh="固定溫度（選填）"
               open={openPanels.fixed}
@@ -922,6 +943,7 @@ export function BoundaryConditionsView() {
                 if (!message.boundary_port_id) return;
                 const port = ports.find((entry) => entry.id === message.boundary_port_id);
                 setSelectedPortId(message.boundary_port_id);
+                setPreferredProfileId(message.profile_id ?? null);
                 setOpenPanels((current) => ({ ...current, conditions: true }));
                 if (port) {
                   setSelection({ kind: 'node', id: port.connected_node_id });

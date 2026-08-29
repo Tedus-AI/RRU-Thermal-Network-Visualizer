@@ -4,9 +4,9 @@
  * Contracts with the other stores (06 §2.4, §3.2):
  *   networkStore   [read only]  — topology comes from Screen 05 and is never
  *                                 mutated here, not even to record an area;
- *   scenarioStore  [read/write] — ambient/wind/solar are mirrored onto the
- *                                 scenario record so the header and Screen 01
- *                                 keep showing one number, not two;
+ *   scenarioStore  [read only]  — Screen 01 owns ambient/wind/solar. They are
+ *                                 projected into this scenario overlay so the
+ *                                 solver sees the same values as Screen 01;
  *   solverStore    [invalidate] — a boundary change makes any previous solve
  *                                 stale. Screen 06 never solves.
  */
@@ -53,8 +53,6 @@ interface BoundaryStoreState {
   current: () => ScenarioBoundaryConditionSet | null;
   mutate: (recipe: (set: ScenarioBoundaryConditionSet) => void) => void;
 
-  setAmbient: (patch: Partial<ScenarioBoundaryConditionSet['ambient']>) => void;
-  setSite: (patch: Partial<ScenarioBoundaryConditionSet['site']>) => void;
   /** One-way Screen 01 -> Screen 06 synchronization for shared scenario defaults. */
   syncScenarioDefaults: (
     scenarioId: string,
@@ -65,7 +63,7 @@ interface BoundaryStoreState {
   assignProfiles: (portId: string, profileIds: string[]) => void;
   setSurfaceProperty: (property: SurfaceProperty) => void;
 
-  generateDefaults: () => { created: number };
+  generateDefaults: () => { created: number; firstCreatedPortId: string | null };
   copyFromScenario: (sourceScenarioId: string) => boolean;
   resetScenario: () => void;
 
@@ -96,10 +94,10 @@ export const useBoundaryStore = create<BoundaryStoreState>((set, get) => ({
     }
 
     const key = keyOf(networkId, scenarioId);
+    const scenario = useScenarioStore
+      .getState()
+      .scenarios.find((entry) => entry.id === scenarioId);
     if (!sets[key]) {
-      const scenario = useScenarioStore
-        .getState()
-        .scenarios.find((entry) => entry.id === scenarioId);
       sets[key] = createBoundarySet({
         projectId,
         networkId,
@@ -109,6 +107,23 @@ export const useBoundaryStore = create<BoundaryStoreState>((set, get) => ({
         wind_m_s: scenario?.wind_mps ?? null,
         solar_W_m2: scenario?.solar_W_m2 ?? null,
       });
+    } else if (scenario) {
+      // Screen 01 is the sole editor of shared scenario inputs. Re-project its
+      // current values whenever Screen 06 loads so an older persisted boundary
+      // overlay can never make the UI or solver fall back to stale numbers.
+      sets[key] = {
+        ...sets[key],
+        ambient: {
+          ...sets[key].ambient,
+          external_ambient_C: scenario.ambient_C,
+        },
+        site: {
+          ...sets[key].site,
+          wind_speed_m_s: scenario.wind_mps,
+          solar_enabled: scenario.solar_W_m2 > 0,
+          solar_irradiance_W_m2: scenario.solar_W_m2,
+        },
+      };
     }
 
     set({ sets, activeKey: key, ports, dirty: false });
@@ -148,48 +163,6 @@ export const useBoundaryStore = create<BoundaryStoreState>((set, get) => ({
     get().revalidate();
   },
 
-  setAmbient: (patch) => {
-    get().mutate((current) => {
-      current.ambient = { ...current.ambient, ...patch };
-    });
-
-    // Keep the scenario record in step so the shell and Screen 01 do not show a
-    // different ambient from the one Screen 07 will solve with.
-    const current = get().current();
-    if (current && patch.external_ambient_C != null) {
-      useScenarioStore
-        .getState()
-        .updateScenario(
-          current.scenario_id,
-          { ambient_C: patch.external_ambient_C },
-          { skipRevision: true, skipInvalidate: true },
-        );
-    }
-  },
-
-  setSite: (patch) => {
-    get().mutate((current) => {
-      current.site = { ...current.site, ...patch };
-    });
-
-    const current = get().current();
-    if (!current) return;
-    const scenarioPatch: Record<string, number> = {};
-    if (patch.wind_speed_m_s != null) scenarioPatch.wind_mps = patch.wind_speed_m_s;
-    if (patch.solar_irradiance_W_m2 != null) {
-      scenarioPatch.solar_W_m2 = patch.solar_irradiance_W_m2;
-    }
-    if (Object.keys(scenarioPatch).length > 0) {
-      useScenarioStore
-        .getState()
-        .updateScenario(
-          current.scenario_id,
-          scenarioPatch,
-          { skipRevision: true, skipInvalidate: true },
-        );
-    }
-  },
-
   syncScenarioDefaults: (scenarioId, patch) => {
     const current = get().current();
     if (!current || current.scenario_id !== scenarioId) return false;
@@ -212,6 +185,7 @@ export const useBoundaryStore = create<BoundaryStoreState>((set, get) => ({
         }
         if (Object.hasOwn(patch, 'solar_W_m2')) {
           next.site.solar_irradiance_W_m2 = patch.solar_W_m2 ?? null;
+          next.site.solar_enabled = (patch.solar_W_m2 ?? 0) > 0;
         }
       });
     }
@@ -266,12 +240,13 @@ export const useBoundaryStore = create<BoundaryStoreState>((set, get) => ({
     }),
 
   /**
-   * Fills every unassigned dissipating port with a convection + radiation
-   * profile built from the scenario's own numbers. Everything it creates is
-   * marked `generated_default` so the engineer can see what to review.
+   * Creates an editable boundary-profile scaffold for every unassigned
+   * dissipating port. It intentionally does not guess convection h or a view
+   * factor: those are engineering inputs, not project defaults.
    */
   generateDefaults: () => {
     let created = 0;
+    let firstCreatedPortId: string | null = null;
     const ports = get().ports;
 
     get().mutate((current) => {
@@ -288,23 +263,21 @@ export const useBoundaryStore = create<BoundaryStoreState>((set, get) => ({
         const profileId = `BCP_${port.id}_DEFAULT`;
         const profile: BoundaryConditionProfile = {
           id: profileId,
-          name: `${port.name} — default convection + radiation`,
+          name: `${port.name} — convection + radiation`,
           type: 'combined_convection_radiation',
-          representation: 'parallel_boundary_edges',
+          representation: 'single_combined_edge',
           parameters: {
-            // Natural convection in still air, and a mid-range emissivity.
-            // Both are assumptions, and both are labelled as such.
-            h_W_m2K: (current.site.wind_speed_m_s ?? 0) > 1 ? 25 : 8,
+            h_W_m2K: null,
             area_m2: port.area_m2,
-            emissivity: surface?.emissivity ?? 0.85,
-            viewFactor: 0.9,
+            emissivity: surface?.emissivity ?? null,
+            viewFactor: null,
             radiationTemperature_C: current.ambient.radiation_surrounding_C ?? current.ambient.external_ambient_C,
           },
-          source: 'assumed',
-          confidence: 'low',
+          source: 'manual',
+          confidence: 'medium',
           provenance: {
-            source_label: 'Generated from project defaults',
-            reference: '06 §16 Generate Default Profiles',
+            source_label: 'Screen 06 boundary profile scaffold',
+            reference: 'Create Boundary Profiles',
           },
           external_mappings: { import_status: 'deferred' },
         };
@@ -329,10 +302,11 @@ export const useBoundaryStore = create<BoundaryStoreState>((set, get) => ({
         else current.assignments.push(assignment);
 
         created++;
+        firstCreatedPortId ??= port.id;
       }
     });
 
-    return { created };
+    return { created, firstCreatedPortId };
   },
 
   /**
