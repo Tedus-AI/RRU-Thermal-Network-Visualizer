@@ -81,8 +81,8 @@ describe('BoundaryInspector simplification', () => {
     );
 
     expect(html).toContain('55.0 °C');
-    expect(html).toContain('Inherited from Scenario Environment');
-    expect(html).toContain('Edit Scenario Environment');
+    expect(html).toContain('Inherited from Screen 01 Scenario Settings');
+    expect(html).toContain('Edit Scenario Settings in 01');
     expect(html).not.toContain('Add Boundary Type');
     expect(html).not.toContain('Calculated Preview');
     expect(html).not.toContain('FloTHERM');

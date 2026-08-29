@@ -4,7 +4,7 @@
  * A dissipating surface gets one continuous setup flow: profile selection,
  * required parameters, applicable pre-solve previews and inline checks. The
  * ambient placeholder is different: it is a non-dissipating temperature
- * reference owned by Scenario Environment, so it gets a compact summary and
+ * reference owned by Screen 01 Scenario Settings, so it gets a compact summary and
  * never creates a second temperature profile.
  *
  * SCREEN 03 RE-ENABLEMENT NOTE:
@@ -14,7 +14,7 @@
  * references and dissipating ports, then add cross-screen import tests.
  */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { CheckCircle2, Thermometer, Trash2, TriangleAlert } from 'lucide-react';
 
 import { Badge, Button, NumberInput, Select, TextInput } from '@/ui/primitives';
@@ -49,7 +49,7 @@ const TYPE_PARAMETERS: Record<
   BoundaryConditionType,
   Array<{ key: string; label: string; zh: string; unit: string; tip?: string; max?: number }>
 > = {
-  // Ambient temperature is authoritative in Scenario Environment. This entry
+  // Ambient temperature is authoritative in Screen 01 Scenario Settings. This entry
   // remains empty for legacy schema compatibility and is never offered by this UI.
   ambient_reservoir: [],
   convection_to_ambient: [
@@ -130,8 +130,8 @@ const TYPE_PARAMETERS: Record<
 
 const TYPE_REQUIREMENT: Record<BoundaryConditionType, { en: string; zh: string }> = {
   ambient_reservoir: {
-    en: 'Ambient temperature is inherited from Scenario Environment.',
-    zh: '環境溫度由「情境環境」統一提供。',
+    en: 'Ambient temperature is inherited from Screen 01 Scenario Settings.',
+    zh: '環境溫度由 Screen 01「情境設定」統一提供。',
   },
   convection_to_ambient: {
     en: 'h and effective area are required. Without either value, Rconv cannot be calculated and Screen 07 is blocked.',
@@ -316,7 +316,7 @@ function AmbientReferenceSummary({
                 {ready ? `${ambientTemperature_C!.toFixed(1)} °C` : 'Not configured / 未設定'}
               </p>
               <p className="mt-1 text-[10px] leading-relaxed text-ink-500">
-                Inherited from Scenario Environment / 由「情境環境」統一提供
+                Inherited from Screen 01 Scenario Settings / 由 Screen 01「情境設定」統一提供
               </p>
             </div>
             <Badge tone={statusLabel.tone as 'ok'}>{statusLabel.label}</Badge>
@@ -346,7 +346,7 @@ function AmbientReferenceSummary({
         </p>
 
         <Button className="mt-3 h-8 w-full" onClick={onEditAmbient}>
-          Edit Scenario Environment / 編輯情境環境
+          Edit Scenario Settings in 01 / 前往 01 編輯情境
         </Button>
 
         <details className="mt-3 rounded border border-line bg-surface-muted px-2.5 py-2 text-[10px] text-ink-500">
@@ -366,6 +366,7 @@ export function BoundaryInspector({
   port,
   status,
   profiles,
+  preferredProfileId,
   preview,
   validation,
   ambientTemperature_C,
@@ -378,6 +379,7 @@ export function BoundaryInspector({
   port: BoundaryPort;
   status: PortStatus;
   profiles: BoundaryConditionProfile[];
+  preferredProfileId?: string | null;
   preview: BoundaryDerivedPreview | undefined;
   validation: BoundaryValidationState;
   ambientTemperature_C: number | null;
@@ -387,7 +389,13 @@ export function BoundaryInspector({
   onRemoveProfile: (profileId: string) => void;
   onAddProfile: (type: BoundaryConditionType) => void;
 }) {
-  const [activeProfileId, setActiveProfileId] = useState<string | null>(null);
+  const [activeProfileId, setActiveProfileId] = useState<string | null>(
+    preferredProfileId ?? null,
+  );
+
+  useEffect(() => {
+    if (preferredProfileId) setActiveProfileId(preferredProfileId);
+  }, [preferredProfileId]);
   const activeProfile =
     profiles.find((profile) => profile.id === activeProfileId) ?? profiles[0] ?? null;
 

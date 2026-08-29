@@ -9,6 +9,7 @@ import { createComponent } from '@/domain/component';
 import { createBaselineScenario } from '@/domain/project';
 import { createComponentRevisionSet } from '@/domain/revision';
 import { sourced } from '@/domain/sourcedValue';
+import type { BoundaryPort } from '@/thermal/boundary/types';
 import type { ThermalNode } from '@/thermal/types';
 
 function component() {
@@ -149,18 +150,24 @@ describe('Phase 1 revision propagation', () => {
     expect(useSolverStore.getState().dirtyReasons).toContain('topology_changed');
   });
 
-  it('advances the scenario clock when the separate boundary store changes', () => {
+  it('advances the scenario clock when a Screen 06-owned boundary input changes', () => {
     const scenario = createBaselineScenario('P');
     useScenarioStore.setState({ scenarios: [scenario], activeScenarioId: scenario.id });
     useNetworkStore.getState().loadFor('P');
     useBoundaryStore.getState().loadFor('P', scenario.id);
     useSolverStore.getState().setSolutionState('SOLVED', '2026-08-13T01:00:00.000Z');
 
-    useBoundaryStore.getState().setAmbient({ external_ambient_C: 60 });
+    useBoundaryStore.getState().setSurfaceProperty({
+      surface_group_id: 'SG_FIN',
+      name: 'Fin surface',
+      emissivity: 0.86,
+      absorptivity: 0.7,
+      source: 'manual',
+    });
 
     const updated = useScenarioStore.getState().scenarios[0];
     expect(updated.revision).not.toBe(scenario.revision);
-    expect(updated.ambient_C).toBe(60);
+    expect(updated.ambient_C).toBe(scenario.ambient_C);
     expect(useSolverStore.getState().state).toBe('DIRTY');
     expect(useSolverStore.getState().dirtyReasons).toContain('boundary_changed');
   });
@@ -186,10 +193,66 @@ describe('Phase 1 revision propagation', () => {
     expect(useBoundaryStore.getState().current()?.ambient.external_ambient_C).toBe(60);
     expect(useBoundaryStore.getState().current()?.site.wind_speed_m_s).toBe(3);
     expect(useBoundaryStore.getState().current()?.site.solar_irradiance_W_m2).toBe(700);
+    expect(useBoundaryStore.getState().current()?.site.solar_enabled).toBe(true);
     expect(useScenarioStore.getState().activeScenario()).toMatchObject({
       ambient_C: 60,
       wind_mps: 3,
       solar_W_m2: 700,
+    });
+  });
+
+  it('creates incomplete boundary profile scaffolds without guessing h', () => {
+    const scenario = createBaselineScenario('P');
+    useScenarioStore.setState({ scenarios: [scenario], activeScenarioId: scenario.id });
+    useNetworkStore.getState().loadFor('P');
+    useNetworkStore.getState().upsertNode(node());
+    useBoundaryStore.getState().loadFor('P', scenario.id);
+
+    const port: BoundaryPort = {
+      id: 'BP_FIN',
+      name: 'Fin Surface Boundary',
+      connected_node_id: 'N_PA',
+      surface_group_id: 'SG_FIN',
+      area_m2: 0.42,
+      orientation: 'vertical_fins',
+      allowed_boundary_types: ['combined_convection_radiation'],
+      dissipating: true,
+      external_mappings: { import_status: 'deferred' },
+    };
+    useBoundaryStore.setState({ ports: [port] });
+    useBoundaryStore.getState().setSurfaceProperty({
+      surface_group_id: 'SG_FIN',
+      name: 'Fin surface',
+      emissivity: 0.86,
+      absorptivity: 0.7,
+      source: 'manual',
+    });
+
+    expect(useBoundaryStore.getState().generateDefaults()).toEqual({
+      created: 1,
+      firstCreatedPortId: 'BP_FIN',
+    });
+    const generated = useBoundaryStore.getState().current()?.profiles[0];
+    expect(generated).toMatchObject({
+      type: 'combined_convection_radiation',
+      representation: 'single_combined_edge',
+      source: 'manual',
+      confidence: 'medium',
+      parameters: {
+        h_W_m2K: null,
+        area_m2: 0.42,
+        emissivity: 0.86,
+        viewFactor: null,
+      },
+    });
+    expect(useBoundaryStore.getState().current()?.validation.errors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ profile_id: generated?.id }),
+      ]),
+    );
+    expect(useBoundaryStore.getState().generateDefaults()).toEqual({
+      created: 0,
+      firstCreatedPortId: null,
     });
   });
 });

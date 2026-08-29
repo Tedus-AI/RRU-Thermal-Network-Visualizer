@@ -131,7 +131,7 @@ export function validateBoundarySet(input: BoundaryValidationInput): BoundaryVal
         'MISSING_AMBIENT',
         'External ambient temperature is required for this scenario.',
         '此情境缺少外部環境溫度。',
-        { suggested_action: 'Enter the external ambient temperature in Scenario Environment.' },
+        { suggested_action: 'Enter the external ambient temperature in Screen 01 Scenario Settings.' },
       ),
     );
   }
