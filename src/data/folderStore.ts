@@ -4,10 +4,9 @@
  * Owns the bound folder, its permission state, and the mirroring that happens
  * after a save. The mechanics live in `folderBinding`; the policy is here.
  *
- * Mirroring is deliberately best-effort. A failed disk write is surfaced but
- * never blocks or reverts the localStorage write that already succeeded — the
- * folder is a durable copy of the working store, not a second source of truth
- * that could disagree with it.
+ * The browser cache is the synchronous working copy; the selected folder is
+ * the durable source of truth. "Saved" therefore means the latest edit
+ * generation reached its project JSON file, not merely localStorage.
  */
 
 import { create } from 'zustand';
@@ -18,7 +17,7 @@ import { collectProject, serializeProjectFile } from './projectFile';
 import { clearOwnedStorage } from './buildStamp';
 import { hydrateFromFolder } from './workspace';
 import { isSyncSuspended, withSyncSuspended } from './syncSuspend';
-import { markSaveSettled } from './saveStatus';
+import { currentSaveGeneration, markSaveSettled } from './saveStatus';
 import { useProjectStore } from './projectStore';
 import {
   clearStoredHandle,
@@ -56,6 +55,8 @@ interface FolderStoreState {
   lastSyncedProjectId: string | null;
   lastError: string | null;
   syncing: boolean;
+  /** Actual JSON filename each project was loaded from. */
+  projectFilenames: Record<string, string>;
 
   /**
    * True until the startup restore has settled. Without it the gate would flash
@@ -96,6 +97,7 @@ export const useFolderStore = create<FolderStoreState>((set, get) => ({
   lastSyncedProjectId: null,
   lastError: null,
   syncing: false,
+  projectFilenames: {},
   restoring: true,
   hydrated: false,
   skipped: [],
@@ -185,6 +187,7 @@ export const useFolderStore = create<FolderStoreState>((set, get) => ({
       lastError: null,
       hydrated: false,
       skipped: [],
+      projectFilenames: {},
     });
   },
 
@@ -193,7 +196,12 @@ export const useFolderStore = create<FolderStoreState>((set, get) => ({
     if (!handle) return;
     try {
       const result = await hydrateFromFolder(handle);
-      set({ hydrated: true, skipped: result.skipped, lastError: null });
+      set({
+        hydrated: true,
+        skipped: result.skipped,
+        projectFilenames: result.projectFiles,
+        lastError: null,
+      });
       // The cache was replaced wholesale; the project list must be re-read.
       useProjectStore.getState().refreshProjects();
     } catch (error) {
@@ -208,32 +216,42 @@ export const useFolderStore = create<FolderStoreState>((set, get) => ({
   mirror: async (projectId) => {
     const { handle, status } = get();
     if (!handle || status === 'unsupported' || status === 'unbound') return false;
+    const saveGeneration = currentSaveGeneration();
 
     // Re-check rather than trusting the cached status: the browser can revoke
     // between one save and the next.
     if ((await queryPermission(handle)) !== 'granted') {
-      markSaveSettled();
+      markSaveSettled(saveGeneration);
       set({ status: 'needs_permission' });
       return false;
     }
 
     const file = collectProject(projectId, BUILD_ID);
-    if (!file) return false;
+    if (!file) {
+      markSaveSettled(saveGeneration);
+      set({
+        status: 'error',
+        lastError: `Project "${projectId}" is missing from the working cache`,
+      });
+      return false;
+    }
 
     set({ syncing: true });
     try {
-      await writeTextFile(handle, mirrorFilename(projectId), serializeProjectFile(file));
-      markSaveSettled();
+      const filename = get().projectFilenames[projectId] ?? mirrorFilename(projectId);
+      await writeTextFile(handle, filename, serializeProjectFile(file));
+      markSaveSettled(saveGeneration);
       set({
         status: 'connected',
         syncing: false,
         lastSyncAt: new Date().toISOString(),
         lastSyncedProjectId: projectId,
+        projectFilenames: { ...get().projectFilenames, [projectId]: filename },
         lastError: null,
       });
       return true;
     } catch (error) {
-      markSaveSettled();
+      markSaveSettled(saveGeneration);
       set({
         status: 'error',
         syncing: false,

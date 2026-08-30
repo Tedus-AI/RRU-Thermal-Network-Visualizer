@@ -18,23 +18,40 @@ import { create } from 'zustand';
 interface SaveStatusState {
   /** An edit has happened and has not finished being written. */
   pending: boolean;
+  /** Monotonic edit generation used to reject stale write completions. */
+  generation: number;
   /** Called the moment something changes. */
-  markPending: () => void;
-  /** Called once a write completes, successfully or not. */
-  markSettled: () => void;
+  markPending: () => number;
+  /** Called once the write containing `generation` completes. */
+  markSettled: (generation: number) => void;
 }
 
 export const useSaveStatus = create<SaveStatusState>((set) => ({
   pending: false,
-  markPending: () => set({ pending: true }),
-  markSettled: () => set({ pending: false }),
+  generation: 0,
+  markPending: () => {
+    let nextGeneration = 0;
+    set((state) => {
+      nextGeneration = state.generation + 1;
+      return { pending: true, generation: nextGeneration };
+    });
+    return nextGeneration;
+  },
+  markSettled: (generation) =>
+    set((state) =>
+      generation >= state.generation ? { pending: false } : state,
+    ),
 }));
 
 /** Non-hook access, for stores and watchers. */
-export function markSavePending(): void {
-  useSaveStatus.getState().markPending();
+export function markSavePending(): number {
+  return useSaveStatus.getState().markPending();
 }
 
-export function markSaveSettled(): void {
-  useSaveStatus.getState().markSettled();
+export function currentSaveGeneration(): number {
+  return useSaveStatus.getState().generation;
+}
+
+export function markSaveSettled(generation: number): void {
+  useSaveStatus.getState().markSettled(generation);
 }

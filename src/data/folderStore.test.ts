@@ -2,10 +2,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { seedDemoProject } from '@/mock/seed';
 import { DEMO_PROJECT_ID } from '@/mock/demoProject';
-import { saveProject, loadProject } from './persistence';
+import { saveProject, loadProject, loadScenarios } from './persistence';
 import { mirrorFilename } from './folderBinding';
 import type { DirectoryHandle, PermissionState } from './folderBinding';
 import { setSyncProject, startFolderAutoSync, useFolderStore } from './folderStore';
+import { collectProject, serializeProjectFile } from './projectFile';
+import { useSaveStatus } from './saveStatus';
+import { startAutoPersist } from './autoPersist';
+import { useScenarioStore } from './scenarioStore';
+import { useProjectStore } from './projectStore';
 
 class MemoryStorage {
   private map = new Map<string, string>();
@@ -30,8 +35,14 @@ class MemoryStorage {
 }
 
 /** A directory handle backed by a Map, standing in for a real folder. */
-function fakeFolder(options: { permission?: PermissionState; failWrites?: boolean } = {}) {
-  const files = new Map<string, string>();
+function fakeFolder(
+  options: {
+    permission?: PermissionState;
+    failWrites?: boolean;
+    files?: Record<string, string>;
+  } = {},
+) {
+  const files = new Map<string, string>(Object.entries(options.files ?? {}));
   const handle: DirectoryHandle & { files: Map<string, string> } = {
     name: 'ThermalProjects',
     kind: 'directory',
@@ -80,6 +91,7 @@ function connect(handle: DirectoryHandle) {
 }
 
 let stopAutoSync: (() => void) | null = null;
+let stopAutoPersist: (() => void) | null = null;
 
 beforeEach(() => {
   vi.stubGlobal('localStorage', new MemoryStorage() as unknown as Storage);
@@ -91,13 +103,19 @@ beforeEach(() => {
     lastSyncedProjectId: null,
     lastError: null,
     syncing: false,
+    projectFilenames: {},
   });
+  useSaveStatus.setState({ pending: false, generation: 0 });
   setSyncProject(null);
 });
 
 afterEach(() => {
   stopAutoSync?.();
   stopAutoSync = null;
+  stopAutoPersist?.();
+  stopAutoPersist = null;
+  useScenarioStore.getState().clear();
+  useProjectStore.getState().clear();
   vi.unstubAllGlobals();
   vi.useRealTimers();
 });
@@ -131,6 +149,31 @@ describe('mirror', () => {
     expect(folder.files.size).toBe(1);
     const written = JSON.parse(folder.files.get(mirrorFilename(DEMO_PROJECT_ID))!);
     expect(written.data.project.project_name).toBe('Renamed');
+  });
+
+  it('writes back to the JSON filename the project was loaded from', async () => {
+    await seedDemoProject();
+    const sourceName = 'FR1_RRU_GOLDEN_DEMO_20260829.tnv.json';
+    const sourceText = serializeProjectFile(collectProject(DEMO_PROJECT_ID, 'test')!);
+    const folder = fakeFolder({ files: { [sourceName]: sourceText } });
+    connect(folder);
+    await useFolderStore.getState().hydrate();
+
+    const project = loadProject(DEMO_PROJECT_ID)!;
+    saveProject({ ...project, project_name: 'Persisted into source JSON' });
+    const ok = await useFolderStore.getState().mirror(DEMO_PROJECT_ID);
+
+    expect(ok).toBe(true);
+    expect([...folder.files.keys()]).toEqual([sourceName]);
+    const written = JSON.parse(folder.files.get(sourceName)!);
+    expect(written.data.project.project_name).toBe('Persisted into source JSON');
+    expect(useFolderStore.getState().projectFilenames[DEMO_PROJECT_ID]).toBe(sourceName);
+
+    // A hard refresh rebuilds the cache from the folder. The edited value must
+    // therefore survive even after the browser working copy is discarded.
+    localStorage.clear();
+    await useFolderStore.getState().hydrate();
+    expect(loadProject(DEMO_PROJECT_ID)?.project_name).toBe('Persisted into source JSON');
   });
 
   it('records the failure without throwing when the write fails', async () => {
@@ -191,6 +234,34 @@ describe('auto-sync', () => {
 
     const written = JSON.parse(folder.files.get(mirrorFilename(DEMO_PROJECT_ID))!);
     expect(written.data.project.project_name).toBe('C');
+  });
+
+  it('persists an edited store through the project JSON and a hard refresh', async () => {
+    vi.useFakeTimers();
+    await seedDemoProject();
+    const folder = fakeFolder();
+    connect(folder);
+    useProjectStore.getState().openProject(DEMO_PROJECT_ID);
+    useScenarioStore.getState().loadFor(DEMO_PROJECT_ID);
+    setSyncProject(DEMO_PROJECT_ID);
+    stopAutoSync = startFolderAutoSync();
+    stopAutoPersist = startAutoPersist();
+
+    useScenarioStore.getState().updateScenario('SCN_001', {
+      name: 'Survives Ctrl Shift R',
+    });
+    await vi.advanceTimersByTimeAsync(2500);
+    await vi.waitFor(() =>
+      expect(folder.files.has(mirrorFilename(DEMO_PROJECT_ID))).toBe(true),
+    );
+
+    const written = JSON.parse(folder.files.get(mirrorFilename(DEMO_PROJECT_ID))!);
+    expect(written.data.scenarios[0].name).toBe('Survives Ctrl Shift R');
+    expect(useSaveStatus.getState().pending).toBe(false);
+
+    localStorage.clear();
+    await useFolderStore.getState().hydrate();
+    expect(loadScenarios(DEMO_PROJECT_ID)[0].name).toBe('Survives Ctrl Shift R');
   });
 
   it('stays quiet while no folder is connected', async () => {

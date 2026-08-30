@@ -53,7 +53,10 @@ class QuotaStorage extends MemoryStorage {
 }
 
 /** A folder backed by a Map of filename → text. */
-function fakeFolder(seed: Record<string, string> = {}) {
+function fakeFolder(
+  seed: Record<string, string> = {},
+  modified: Record<string, number> = {},
+) {
   const files = new Map(Object.entries(seed));
   const handle: DirectoryHandle & { files: Map<string, string> } = {
     name: 'Workspace',
@@ -72,7 +75,11 @@ function fakeFolder(seed: Record<string, string> = {}) {
         kind: 'file' as const,
         async getFile() {
           const text = files.get(name) ?? '';
-          return { text: async () => text, lastModified: 1, size: text.length };
+          return {
+            text: async () => text,
+            lastModified: modified[name] ?? 1,
+            size: text.length,
+          };
         },
         async createWritable() {
           let buffer = '';
@@ -200,6 +207,35 @@ describe('hydrateFromFolder', () => {
       'broken.json',
       'shopping-list.json',
     ]);
+  });
+
+  it('uses only the newest JSON when multiple files contain the same project', async () => {
+    const olderText = await demoFileText();
+    const olderFile = JSON.parse(olderText);
+    olderFile.data.project.project_name = 'Older project value';
+    olderFile.project_name = 'Older project value';
+    const newerFile = structuredClone(olderFile);
+    newerFile.data.project.project_name = 'Newest saved value';
+    newerFile.project_name = 'Newest saved value';
+
+    const olderName = 'FR1_RRU_GOLDEN_DEMO_older.tnv.json';
+    const newerName = mirrorFilename(DEMO_PROJECT_ID);
+    const result = await hydrateFromFolder(
+      fakeFolder(
+        {
+          [olderName]: JSON.stringify(olderFile),
+          [newerName]: JSON.stringify(newerFile),
+        },
+        { [olderName]: 100, [newerName]: 200 },
+      ),
+    );
+
+    expect(loadProject(DEMO_PROJECT_ID)?.project_name).toBe('Newest saved value');
+    expect(result.projectFiles[DEMO_PROJECT_ID]).toBe(newerName);
+    expect(result.skipped).toContainEqual({
+      filename: olderName,
+      reason: `older duplicate; using ${newerName}`,
+    });
   });
 
   // Replaying files goes through the normal save path, which is what triggers

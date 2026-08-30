@@ -24,6 +24,8 @@ import { LIBRARY_FILENAME } from './componentLibraryFile';
 export interface HydrateResult {
   /** Project ids now in the cache, in the order their files were read. */
   projectIds: string[];
+  /** Newest valid source filename selected for each project id. */
+  projectFiles: Record<string, string>;
   /** Files that were present but could not be used, with the reason. */
   skipped: Array<{ filename: string; reason: string }>;
 }
@@ -41,6 +43,7 @@ export interface HydrateResult {
 export async function hydrateFromFolder(handle: DirectoryHandle): Promise<HydrateResult> {
   const entries = await listProjectFiles(handle);
   const projectIds: string[] = [];
+  const projectFiles: Record<string, string> = {};
   const skipped: Array<{ filename: string; reason: string }> = [];
 
   await withSyncSuspended(async () => {
@@ -64,10 +67,22 @@ export async function hydrateFromFolder(handle: DirectoryHandle): Promise<Hydrat
         continue;
       }
 
+      const existingFilename = projectFiles[parsed.file.project_id];
+      if (existingFilename) {
+        // Entries are newest-first. Loading this older duplicate would silently
+        // roll the project back after a hard refresh.
+        skipped.push({
+          filename: entry.filename,
+          reason: `older duplicate; using ${existingFilename}`,
+        });
+        continue;
+      }
+
       applyProjectFile(parsed.file, 'overwrite');
       projectIds.push(parsed.file.project_id);
+      projectFiles[parsed.file.project_id] = entry.filename;
     }
   });
 
-  return { projectIds, skipped };
+  return { projectIds, projectFiles, skipped };
 }

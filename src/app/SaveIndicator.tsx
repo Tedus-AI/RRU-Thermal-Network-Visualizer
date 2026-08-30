@@ -30,6 +30,8 @@ export function SaveIndicator() {
   const syncing = useFolderStore((s) => s.syncing);
   const lastSyncAt = useFolderStore((s) => s.lastSyncAt);
   const folderName = useFolderStore((s) => s.folderName);
+  const lastSyncedProjectId = useFolderStore((s) => s.lastSyncedProjectId);
+  const projectFilenames = useFolderStore((s) => s.projectFilenames);
   const lastError = useFolderStore((s) => s.lastError);
   const reconnect = useFolderStore((s) => s.reconnect);
 
@@ -72,6 +74,10 @@ export function SaveIndicator() {
   }
 
   const busy = pending || syncing;
+  const syncedFilename = lastSyncedProjectId
+    ? projectFilenames[lastSyncedProjectId]
+    : null;
+  const diskTarget = [folderName, syncedFilename].filter(Boolean).join(' / ');
 
   return (
     <span
@@ -86,22 +92,22 @@ export function SaveIndicator() {
       aria-live="polite"
       title={biTitle(
         busy
-          ? 'Writing your changes to the project folder'
-          : `All changes written to ${folderName ?? 'the project folder'}`,
+          ? 'Writing your latest changes to the project JSON file'
+          : `All changes written to ${diskTarget || 'the project JSON file'}`,
         busy
-          ? '正在將變更寫入專案資料夾。'
-          : `所有變更已寫入 ${folderName ?? '專案資料夾'}；不需要手動儲存。`,
+          ? '正在將最新變更寫入專案 JSON 檔案。'
+          : `所有變更已寫入 ${diskTarget || '專案 JSON 檔案'}；重新整理後仍會保留。`,
       )}
     >
       {busy ? (
         <>
           <Loader2 className="size-3.5 animate-spin" aria-hidden />
-          Saving… / 儲存中
+          Writing JSON… / 寫入中
         </>
       ) : (
         <>
           <Check className="size-3.5" aria-hidden />
-          Saved / 已儲存
+          Saved to JSON / 已寫入 JSON
           {lastSyncAt && <span className="font-normal opacity-70">{timeOf(lastSyncAt)}</span>}
         </>
       )}
