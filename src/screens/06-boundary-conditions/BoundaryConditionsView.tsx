@@ -745,7 +745,7 @@ export function BoundaryConditionsView() {
         )}
 
         {!fullscreen && !sidebarCollapsed && (
-          <aside className="relative flex w-full shrink-0 flex-col gap-2 overflow-y-auto pr-1 lg:w-[22rem]">
+          <aside className="relative flex w-full shrink-0 flex-col gap-2 overflow-y-auto pr-1 lg:w-[29.333rem]">
             <button
               type="button"
               title={biTitle('Collapse boundary panels', '向左收合邊界條件面板')}

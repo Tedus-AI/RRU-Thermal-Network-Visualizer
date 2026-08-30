@@ -351,9 +351,13 @@ describe('boundary ports derived from Screen 05 (06 §5)', () => {
   });
 
   it('groups surfaces for the surface-properties table', () => {
-    const groups = surfaceGroupsOf(deriveBoundaryPorts(networkWithBoundary()));
+    const ports = deriveBoundaryPorts(networkWithBoundary());
+    const groups = surfaceGroupsOf(ports);
     expect(groups.length).toBeGreaterThan(0);
     expect(new Set(groups.map((group) => group.id)).size).toBe(groups.length);
+    expect(groups.map((group) => group.id)).not.toContain(
+      ports.find((port) => !port.dissipating)?.surface_group_id,
+    );
   });
 });
 

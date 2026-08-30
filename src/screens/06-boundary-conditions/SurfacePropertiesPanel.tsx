@@ -14,7 +14,13 @@ import { Bi, ColumnLabel, biTitle } from '@/ui/FieldLabel';
 import type { BoundaryDataSource, SurfaceProperty } from '@/thermal/boundary/types';
 import { T06 } from './tooltips';
 
-const SOURCES: BoundaryDataSource[] = ['manual', 'datasheet', 'assumed', 'measurement', 'vendor'];
+const SOURCE_ITEMS: ReadonlyArray<{ value: BoundaryDataSource; label: string }> = [
+  { value: 'manual', label: '手動輸入' },
+  { value: 'datasheet', label: '規格書' },
+  { value: 'assumed', label: '工程假設' },
+  { value: 'measurement', label: '實測值' },
+  { value: 'vendor', label: '原廠資料' },
+];
 
 export function SurfacePropertiesPanel({
   groups,
@@ -129,7 +135,7 @@ export function SurfacePropertiesPanel({
                       aria-label={biTitle(`Source for ${group.name}`, '資料來源')}
                       value={property.source}
                       disabled={readOnly}
-                      options={SOURCES}
+                      items={SOURCE_ITEMS}
                       onChange={(event) =>
                         onChange({
                           ...property,
@@ -146,9 +152,11 @@ export function SurfacePropertiesPanel({
       </div>
 
       <p className="mt-1.5 text-[10px] leading-relaxed text-ink-400">
-        Emissivity drives radiation exchange; absorptivity drives solar gain. Blank stays N/A and is
-        never treated as 0.
-        <span className="block">發射率影響輻射交換，吸收率影響太陽吸熱；留空維持 N/A，不會當成 0。</span>
+        Only physical heat-rejection surfaces are listed. Emissivity drives radiation exchange;
+        absorptivity drives solar gain. Blank stays N/A and is never treated as 0.
+        <span className="block">
+          此處只列實體散熱表面；環境參考節點不適用。發射率影響輻射交換，吸收率影響太陽吸熱；留空維持 N/A，不會當成 0。
+        </span>
       </p>
     </div>
   );
