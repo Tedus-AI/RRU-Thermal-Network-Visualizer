@@ -6,11 +6,9 @@
  * whenever a new build is deployed. Binding a folder adds a durable copy on
  * real disk that survives all of that.
  *
- * The folder is a mirror, not the database. Nothing here changes where the app
- * reads from — it writes a project file per project after each save, and can
- * read one back on request. That keeps the feature additive: if the API is
- * missing, permission is refused, or the disk write fails, the app carries on
- * exactly as before.
+ * The folder is the durable source of truth. Screens use localStorage only as
+ * a synchronous working cache; each successful save writes the project JSON,
+ * and startup hydrates the cache from those files.
  *
  * `showDirectoryPicker` is Chromium-only. Firefox and Safari have no equivalent,
  * which is why the portable route stays the manual project file in

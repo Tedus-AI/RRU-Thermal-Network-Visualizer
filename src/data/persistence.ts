@@ -1,9 +1,9 @@
 /**
  * Persistence adapter.
  *
- * V1 uses localStorage. The screens never talk to this module directly — they go
- * through the stores — so the backend can be swapped for the shared project DB
- * without touching any UI (01 §37).
+ * V1 uses localStorage as its synchronous working cache. The selected folder's
+ * project JSON files are the durable source of truth and are hydrated into this
+ * adapter at startup. Screens never talk to this module directly.
  *
  * Shared-DB safety rules it must honour (01 §35, 00 §35.2, AC-09):
  *   - merge semantics, never whole-document replace;
