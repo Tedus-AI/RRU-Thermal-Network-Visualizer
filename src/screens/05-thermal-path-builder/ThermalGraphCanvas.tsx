@@ -19,7 +19,7 @@ import cytoscape, { type Core, type NodeSingular } from 'cytoscape';
 import dagre from 'cytoscape-dagre';
 
 import type { ThermalNetwork } from '@/thermal/types';
-import { cytoscapeStylesheet } from '@/ui/graphStyles';
+import { cytoscapeStylesheet, edgeLabelFlowLength } from '@/ui/graphStyles';
 import type { CanvasTool } from './GraphToolbar';
 import { canvasInteractionPolicy } from './canvasInteraction';
 import {
@@ -75,16 +75,44 @@ function wheelNotches(event: WheelEvent): number {
   return pixels / 100;
 }
 
-function layoutOptions(mode: string) {
+const EDGE_LABEL_FLOW_PADDING_PX = 28;
+const MAX_LABEL_AWARE_RANK_SEP_PX = 260;
+
+/** Rank spacing chosen from the labels that are actually visible in this graph. */
+export function labelAwareRankSep(mode: string, labels: readonly string[]): number {
+  const base = mode === 'TopBottom' ? 70 : 80;
+  const longest = labels.reduce(
+    (maximum, label) => Math.max(maximum, edgeLabelFlowLength(label)),
+    0,
+  );
+  return Math.min(
+    MAX_LABEL_AWARE_RANK_SEP_PX,
+    Math.max(base, longest + EDGE_LABEL_FLOW_PADDING_PX),
+  );
+}
+
+function layoutOptions(mode: string, labels: readonly string[] = []) {
   switch (mode) {
     case 'TopBottom':
-      return { name: 'dagre', rankDir: 'TB', nodeSep: 30, rankSep: 70, animate: false };
+      return {
+        name: 'dagre',
+        rankDir: 'TB',
+        nodeSep: 30,
+        rankSep: labelAwareRankSep(mode, labels),
+        animate: false,
+      };
     case 'Free':
       return { name: 'cose', animate: false };
     case 'LeftRight':
     case 'Auto':
     default:
-      return { name: 'dagre', rankDir: 'LR', nodeSep: 26, rankSep: 80, animate: false };
+      return {
+        name: 'dagre',
+        rankDir: 'LR',
+        nodeSep: 26,
+        rankSep: labelAwareRankSep(mode, labels),
+        animate: false,
+      };
   }
 }
 
@@ -94,6 +122,48 @@ function layoutElements(cy: Core) {
     return element.hasClass('layout-only') ||
       (!element.hasClass('view-only') && !element.hasClass('routed-port-edge'));
   });
+}
+
+function layoutEdgeLabels(cy: Core): string[] {
+  const labels: string[] = [];
+  layoutElements(cy)
+    .edges()
+    .forEach((edge) => {
+      const label = edge.data('label');
+      if (typeof label === 'string' && label.trim()) labels.push(label);
+    });
+  return labels;
+}
+
+/** True when saved positions pre-date the current label-aware spacing rule. */
+function edgeLabelsNeedRoom(cy: Core, mode: string): boolean {
+  if (mode === 'Free') return false;
+  const topBottom = mode === 'TopBottom';
+  let needsRoom = false;
+  layoutElements(cy)
+    .edges()
+    .forEach((edge) => {
+      if (needsRoom) return;
+      const label = edge.data('label');
+      if (typeof label !== 'string' || !label.trim()) return;
+      const source = edge.source();
+      const target = edge.target();
+      if (!source.isNode() || !target.isNode()) return;
+      const sourceBox = source.boundingBox();
+      const targetBox = target.boundingBox();
+      const sourceFlow = source.position(topBottom ? 'y' : 'x');
+      const targetFlow = target.position(topBottom ? 'y' : 'x');
+      const forward = targetFlow >= sourceFlow;
+      const gap = topBottom
+        ? forward
+          ? targetBox.y1 - sourceBox.y2
+          : sourceBox.y1 - targetBox.y2
+        : forward
+          ? targetBox.x1 - sourceBox.x2
+          : sourceBox.x1 - targetBox.x2;
+      if (gap < edgeLabelFlowLength(label) + EDGE_LABEL_FLOW_PADDING_PX) needsRoom = true;
+    });
+  return needsRoom;
 }
 
 /**
@@ -387,6 +457,9 @@ export const ThermalGraphCanvas = forwardRef<
   // Signature of the last rendered element set, so a pure attribute change keeps
   // the engineer's viewport while an added or removed object brings it into view.
   const elementSignature = useRef('');
+  // Prevents a saved layout that cannot quite meet a metric from relayouting on
+  // every store write. A changed graph, label or mode produces a new key.
+  const labelSpacingSignature = useRef('');
   const cyRef = useRef<Core | null>(null);
   // Handlers are read through a ref so the Cytoscape listeners are bound once.
   const handlers = useRef({
@@ -602,11 +675,20 @@ export const ThermalGraphCanvas = forwardRef<
         !node.hasClass('view-only') && !network.layout.positions[node.id() as string],
       );
 
-    if (unpositioned.length > 0 && cy.nodes().length > 0) {
+    const labels = layoutEdgeLabels(cy);
+    const labelSpacingKey = `${signature}|${layoutModeRef.current}|${labels.join('\u0000')}`;
+    const needsLabelRoom =
+      showLabels &&
+      labelSpacingSignature.current !== labelSpacingKey &&
+      edgeLabelsNeedRoom(cy, layoutModeRef.current);
+    if ((unpositioned.length > 0 || needsLabelRoom) && cy.nodes().length > 0) {
+      labelSpacingSignature.current = labelSpacingKey;
       // The layout applies positions asynchronously; they are written back to
       // the store on `layoutstop` so the next rebuild reuses them instead of
       // laying the graph out again under a viewport that no longer matches.
-      const layout = layoutElements(cy).layout(layoutOptions(layoutModeRef.current));
+      const layout = layoutElements(cy).layout(
+        layoutOptions(layoutModeRef.current, labels),
+      );
       layout.one('layoutstop', () => {
         positionViewBuses(cy, true);
         handlers.current.onLayout(renderedDomainPositions(cy));
@@ -721,7 +803,7 @@ export const ThermalGraphCanvas = forwardRef<
       runLayout: (mode) => {
         const cy = cyRef.current;
         if (!cy || cy.nodes().length === 0) return;
-        const layout = layoutElements(cy).layout(layoutOptions(mode));
+        const layout = layoutElements(cy).layout(layoutOptions(mode, layoutEdgeLabels(cy)));
         layout.one('layoutstop', () => {
           positionViewBuses(cy, true);
           handlers.current.onLayout(renderedDomainPositions(cy));

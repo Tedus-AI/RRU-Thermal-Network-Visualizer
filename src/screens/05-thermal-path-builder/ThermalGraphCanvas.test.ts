@@ -5,6 +5,7 @@ import { createRth } from '@/thermal/rth';
 import type { ThermalEdge, ThermalNetwork, ThermalNode } from '@/thermal/types';
 import { canvasInteractionPolicy } from './canvasInteraction';
 import { buildElements, parallelBusRankShift, parallelRth } from './thermalGraphElements';
+import { labelAwareRankSep } from './ThermalGraphCanvas';
 
 describe('merged Select and Pan pointer', () => {
   it('selects or moves objects while a background drag pans', () => {
@@ -18,6 +19,24 @@ describe('merged Select and Pan pointer', () => {
   it('reserves the drag gesture only while Zoom to Region is armed', () => {
     expect(canvasInteractionPolicy('zoom-box').userPanning).toBe(false);
     expect(canvasInteractionPolicy('connect').nodesGrabbable).toBe(false);
+  });
+});
+
+describe('label-aware automatic rank spacing', () => {
+  it('keeps the compact default for short annotations', () => {
+    expect(labelAwareRankSep('Auto', ['Rjc'])).toBe(80);
+    expect(labelAwareRankSep('TopBottom', [])).toBe(70);
+  });
+
+  it('lengthens every automatic rank gap when the visible Rth label needs room', () => {
+    const compact = labelAwareRankSep('Auto', ['Rjc 0.180 °C/W']);
+    const boundary = labelAwareRankSep('Auto', ['Boundary 123.456 °C/W']);
+    expect(boundary).toBeGreaterThan(compact);
+    expect(boundary).toBeGreaterThan(80);
+  });
+
+  it('caps pathological custom labels instead of making the graph unbounded', () => {
+    expect(labelAwareRankSep('Auto', ['X'.repeat(1_000)])).toBe(260);
   });
 });
 
