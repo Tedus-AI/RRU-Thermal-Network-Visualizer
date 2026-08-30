@@ -12,6 +12,7 @@ import {
   labelBox,
   nodeGroup,
 } from '@/ui/graphStyles';
+import type { ScenarioBoundaryEdgeView } from './scenarioBoundaryProjection';
 
 const EDGE_SHORT: Record<string, string> = {
   package_rjc: 'Rjc',
@@ -354,6 +355,8 @@ export function buildElements(
     layoutMode: string;
     /** Components switched off in the palette. A view filter only. */
     hiddenComponentIds?: ReadonlySet<string>;
+    /** Active Screen 06 values shown without mutating the Screen 05 edge. */
+    scenarioBoundaryEdges?: ReadonlyMap<string, ScenarioBoundaryEdgeView>;
   },
 ): ElementDefinition[] {
   const elements: ElementDefinition[] = [];
@@ -542,15 +545,24 @@ export function buildElements(
   for (const edge of Object.values(network.edges)) {
     if (!network.nodes[edge.from] || !network.nodes[edge.to]) continue;
     if (hidden.has(edge.from) || hidden.has(edge.to)) continue;
-    const R = activeRth(edge.rth);
+    const scenarioBoundary = options.scenarioBoundaryEdges?.get(edge.id);
+    const R = scenarioBoundary?.rth_C_per_W ?? activeRth(edge.rth);
+    const isothermal = edge.parameters?.ideal_link === true;
     // A pipe branch carries every pipe at once, so it says how many. Without
     // it the number reads as one pipe's and nobody can check the division.
     const pipes = edge.parameters?.pipes;
-    const short =
-      (EDGE_SHORT[edge.type] ?? edge.type) +
-      (edge.type === 'heat_pipe' && typeof pipes === 'number' && pipes > 1 ? ` ×${pipes}` : '');
+    const short = scenarioBoundary
+      ? scenarioBoundary.kind === 'radiation'
+        ? 'Rad'
+        : scenarioBoundary.kind === 'convection'
+          ? 'Conv'
+          : 'Boundary'
+      : (EDGE_SHORT[edge.type] ?? edge.type) +
+        (edge.type === 'heat_pipe' && typeof pipes === 'number' && pipes > 1 ? ` ×${pipes}` : '');
     const label = options.showLabels
-      ? `${short} ${R != null ? `${R.toFixed(3)} °C/W` : '—'}`
+      ? isothermal
+        ? 'Isothermal / 等溫'
+        : `${short} ${R != null ? `${R.toFixed(3)} °C/W` : '—'}`
       : '';
     const routed = routedBranches.get(edge.id);
 
@@ -609,7 +621,7 @@ export function buildElements(
           target: terminalIsSource ? routed.junctionId : routed.terminalId,
           label: routedLabel,
           color: edgeColor(edge),
-          lineStyle: edgeLineStyle(edge),
+          lineStyle: scenarioBoundary?.resolved ? 'solid' : edgeLineStyle(edge),
         },
         classes: parallel
           ? 'routed-port-edge parallel-branch'
@@ -641,7 +653,7 @@ export function buildElements(
         target: edge.to,
         label,
         color: edgeColor(edge),
-        lineStyle: edgeLineStyle(edge),
+        lineStyle: scenarioBoundary?.resolved ? 'solid' : edgeLineStyle(edge),
       },
     });
   }

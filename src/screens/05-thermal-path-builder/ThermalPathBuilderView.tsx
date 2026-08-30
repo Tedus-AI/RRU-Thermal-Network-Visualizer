@@ -79,6 +79,7 @@ import { NetworkValidationPanel } from './NetworkValidationPanel';
 import { EmptyNetworkState, GenerateNetworkPreview } from './GenerateNetworkPreview';
 import { LEGEND, type LegendEntry } from '@/ui/graphStyles';
 import { applyBoundaryValidationOverlay } from './boundaryValidationOverlay';
+import { projectScenarioBoundaryEdges } from './scenarioBoundaryProjection';
 
 // --- Small building blocks -------------------------------------------------
 
@@ -520,6 +521,10 @@ export function ThermalPathBuilderView() {
   );
 
   const activeBoundarySet = activeBoundaryKey ? (boundarySets[activeBoundaryKey] ?? null) : null;
+  const scenarioBoundaryEdges = useMemo(
+    () => projectScenarioBoundaryEdges(network, boundaryPorts, activeBoundarySet),
+    [network, boundaryPorts, activeBoundarySet],
+  );
   const displayValidation = useMemo(
     () => applyBoundaryValidationOverlay(validation, network, boundaryPorts, activeBoundarySet),
     [validation, network, boundaryPorts, activeBoundarySet],
@@ -995,6 +1000,9 @@ export function ThermalPathBuilderView() {
 
   const selectedNode = selection?.kind === 'node' ? network.nodes[selection.id] : null;
   const selectedEdge = selection?.kind === 'edge' ? network.edges[selection.id] : null;
+  const selectedScenarioBoundary = selectedEdge
+    ? scenarioBoundaryEdges.get(selectedEdge.id)
+    : undefined;
 
   const completedSteps: BuilderStep[] = [];
   if (components.length > 0) completedSteps.push('components');
@@ -1328,6 +1336,7 @@ export function ThermalPathBuilderView() {
                   showLabels={showLabels}
                   layoutMode={layoutMode}
                   hiddenComponentIds={hiddenComponentIds}
+                  scenarioBoundaryEdges={scenarioBoundaryEdges}
                   onSelect={setSelection}
                   onNodeMoved={(nodeId, position) =>
                     useNetworkStore.getState().setNodePosition(nodeId, position)
@@ -1533,15 +1542,17 @@ export function ThermalPathBuilderView() {
                 tone={
                   !selectedEdge!.enabled
                     ? 'neutral'
-                    : selectedEdge!.resolution === 'resolved'
+                    : selectedScenarioBoundary?.resolved || selectedEdge!.resolution === 'resolved'
                       ? 'ok'
                       : 'warn'
                 }
               >
                 {!selectedEdge!.enabled
                   ? 'DISABLED'
-                  : selectedEdge!.resolution === 'resolved'
-                    ? 'RESOLVED'
+                  : selectedScenarioBoundary?.resolved
+                    ? 'SCENARIO RESOLVED'
+                    : selectedEdge!.resolution === 'resolved'
+                      ? 'RESOLVED'
                     : 'UNRESOLVED'}
               </Badge>
             )
@@ -1598,6 +1609,7 @@ export function ThermalPathBuilderView() {
                 warnings: displayValidation?.warnings ?? 0,
                 info: displayValidation?.info ?? 0,
               }}
+              scenarioBoundary={selectedScenarioBoundary}
               onPatch={(patch) =>
                 useNetworkStore.getState().upsertEdge({ ...selectedEdge!, ...patch })
               }

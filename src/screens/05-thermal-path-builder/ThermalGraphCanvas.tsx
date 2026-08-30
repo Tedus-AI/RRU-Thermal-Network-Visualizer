@@ -27,6 +27,7 @@ import {
   busGeometry,
   parallelBusRankShift,
 } from './thermalGraphElements';
+import type { ScenarioBoundaryEdgeView } from './scenarioBoundaryProjection';
 
 cytoscape.use(dagre);
 
@@ -334,6 +335,8 @@ export const ThermalGraphCanvas = forwardRef<
     readOnly?: boolean;
     /** Components switched off in the palette. A view filter, never the model. */
     hiddenComponentIds: ReadonlySet<string>;
+    /** Read-only values calculated by the active Screen 06 scenario. */
+    scenarioBoundaryEdges?: ReadonlyMap<string, ScenarioBoundaryEdgeView>;
     onSelect: (selection: GraphSelection) => void;
     onNodeMoved: (nodeId: string, position: { x: number; y: number }) => void;
     onConnect: (sourceId: string, targetId: string) => void;
@@ -357,6 +360,7 @@ export const ThermalGraphCanvas = forwardRef<
     layoutMode,
     readOnly = false,
     hiddenComponentIds,
+    scenarioBoundaryEdges,
     onSelect,
     onNodeMoved,
     onConnect,
@@ -407,8 +411,15 @@ export const ThermalGraphCanvas = forwardRef<
   };
 
   const elements = useMemo(
-    () => buildElements(network, { showPorts, showLabels, layoutMode, hiddenComponentIds }),
-    [network, showPorts, showLabels, layoutMode, hiddenComponentIds],
+    () =>
+      buildElements(network, {
+        showPorts,
+        showLabels,
+        layoutMode,
+        hiddenComponentIds,
+        scenarioBoundaryEdges,
+      }),
+    [network, showPorts, showLabels, layoutMode, hiddenComponentIds, scenarioBoundaryEdges],
   );
 
   useEffect(() => {

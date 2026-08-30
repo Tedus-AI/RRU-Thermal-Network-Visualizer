@@ -27,6 +27,7 @@ import {
   type ThermalEdge,
   type ThermalNetwork,
 } from '@/thermal/types';
+import type { ScenarioBoundaryEdgeView } from './scenarioBoundaryProjection';
 
 const TABS = [
   { id: 'overview', label: 'Overview', zh: '總覽' },
@@ -286,11 +287,25 @@ function SpreadingBreakdown({
   );
 }
 
-function statusOf(edge: ThermalEdge): {
+function isIsothermalLink(edge: ThermalEdge): boolean {
+  return edge.parameters?.ideal_link === true;
+}
+
+function formatRth(value: number | null | undefined, isothermal = false): string | null {
+  if (value == null || !Number.isFinite(value)) return null;
+  if (isothermal && value > 0 && value < 0.0001) return '< 0.0001 °C/W';
+  return `${value.toFixed(4)} °C/W`;
+}
+
+function statusOf(
+  edge: ThermalEdge,
+  scenarioBoundary?: ScenarioBoundaryEdgeView,
+): {
   tone: 'ok' | 'warn' | 'danger';
   label: string;
 } {
   if (!edge.enabled) return { tone: 'warn', label: 'Disabled' };
+  if (scenarioBoundary?.resolved) return { tone: 'ok', label: 'Scenario Resolved' };
   if (edge.resolution === 'resolved') return { tone: 'ok', label: 'Resolved' };
   if (edge.method === 'convection_hA' || edge.method === 'radiation_hA') {
     return { tone: 'warn', label: 'Boundary Required' };
@@ -304,6 +319,7 @@ export function EdgeInspector({
   network,
   readOnly,
   readiness,
+  scenarioBoundary,
   onPatch,
   onDelete,
   onReverse,
@@ -315,13 +331,17 @@ export function EdgeInspector({
   readOnly: boolean;
   /** Whole-network validation counts, shown as the Readiness footer (05.png). */
   readiness: { errors: number; warnings: number; info: number };
+  /** Active Screen 06 values, shown without writing them into this topology edge. */
+  scenarioBoundary?: ScenarioBoundaryEdgeView;
   onPatch: (patch: Partial<ThermalEdge>) => void;
   onDelete: () => void;
   onReverse: () => void;
 }) {
   const [tab, setTab] = useState<Tab>('overview');
-  const R = activeRth(edge.rth);
-  const status = statusOf(edge);
+  const isothermal = isIsothermalLink(edge);
+  const R = scenarioBoundary?.rth_C_per_W ?? activeRth(edge.rth);
+  const formattedRth = formatRth(R, isothermal);
+  const status = statusOf(edge, scenarioBoundary);
   const from = network.nodes[edge.from]?.name ?? edge.from;
   const to = network.nodes[edge.to]?.name ?? edge.to;
 
@@ -394,11 +414,13 @@ export function EdgeInspector({
                 {edge.type}
               </Row>
               <Row label="Method" zh="方法">
-                {METHODS.find((method) => method.value === edge.method)?.label ?? edge.method}
+                {isothermal
+                  ? 'Isothermal solver link / 等溫求解連結'
+                  : (METHODS.find((method) => method.value === edge.method)?.label ?? edge.method)}
               </Row>
               <Row label="Active Rth Source" zh="使用中熱阻來源">
-                {R != null ? (
-                  `${edge.rth.active_source} · ${R.toFixed(4)} °C/W`
+                {formattedRth != null ? (
+                  `${scenarioBoundary ? `Screen 06 · ${scenarioBoundary.scenario_id}` : edge.rth.active_source} · ${formattedRth}`
                 ) : (
                   <BilingualTooltip zh={TOOLTIPS_ZH.unresolvedRth}>
                     <span className="text-warn-600">Unresolved</span>
@@ -415,15 +437,26 @@ export function EdgeInspector({
                 Nominal ({from} → {to})
               </Row>
 
-              {edge.resolution_note && (
-                <p className="mt-2 rounded border border-warn-500/40 bg-warn-100 p-2 text-[10px] leading-relaxed text-warn-600">
-                  {edge.resolution_note}
+              {(scenarioBoundary?.resolved || edge.resolution_note) && (
+                <p
+                  className={`mt-2 rounded border p-2 text-[10px] leading-relaxed ${
+                    scenarioBoundary?.resolved || isothermal
+                      ? 'border-accent-500/40 bg-accent-50 text-accent-700'
+                      : 'border-warn-500/40 bg-warn-100 text-warn-600'
+                  }`}
+                >
+                  {scenarioBoundary?.resolved
+                    ? `Active scenario boundary preview from Screen 06; the Screen 05 topology remains unchanged. / 已套用 SCR06 目前情境的邊界熱阻預覽，SCR05 拓樸本身未被改寫。`
+                    : isothermal
+                      ? 'This is an intentionally near-zero solver link, not a missing resistance. Fin efficiency is represented by the Screen 06 effective area. / 此為刻意設定的近零等溫求解連結，並非漏填熱阻；鰭片效率由 SCR06 有效面積表示。'
+                      : edge.resolution_note}
                 </p>
               )}
 
               <p className="mt-2 text-[10px] leading-relaxed text-ink-400">
-                Heat flow Q and ΔT are not shown here: Screen 05 has no boundary conditions, so no
-                solve has run (05 §22). / 05 尚未有邊界條件，因此不顯示 Q 與 ΔT。
+                {scenarioBoundary
+                  ? 'This Rth is a pre-solve boundary input. Heat flow Q and ΔT remain unavailable until Screen 07 solves the active scenario. / 此熱阻僅為求解前的邊界輸入；須由 SCR07 求解目前情境後才會有 Q 與 ΔT。'
+                  : 'Heat flow Q and ΔT are not shown here: Screen 05 has not run a solve (05 §22). / SCR05 尚未求解，因此不顯示 Q 與 ΔT。'}
               </p>
 
               {(edge.method === 'convection_hA' || edge.method === 'radiation_hA') && (
@@ -433,13 +466,39 @@ export function EdgeInspector({
                     <span className="font-semibold text-ink-400">(Screen 06)</span>
                   </p>
                   <Row label="Convection h" zh="對流係數">
-                    <span className="text-ink-400">— W/m²·K</span>
+                    {scenarioBoundary?.h_W_m2K != null ? (
+                      `${scenarioBoundary.h_W_m2K.toFixed(2)} W/m²·K`
+                    ) : (
+                      <span className="text-ink-400">— W/m²·K</span>
+                    )}
                   </Row>
                   <Row label="Radiation ε" zh="輻射率">
-                    <span className="text-ink-400">—</span>
+                    {scenarioBoundary?.emissivity != null ? (
+                      scenarioBoundary.emissivity.toFixed(3)
+                    ) : (
+                      <span className="text-ink-400">—</span>
+                    )}
+                  </Row>
+                  <Row label="Effective Area" zh="有效面積">
+                    {scenarioBoundary?.area_m2 != null ? (
+                      `${scenarioBoundary.area_m2.toFixed(6)} m²`
+                    ) : (
+                      <span className="text-ink-400">— m²</span>
+                    )}
                   </Row>
                   <Row label="Ambient Temperature" zh="環境溫度">
-                    <span className="text-ink-400">— °C</span>
+                    {scenarioBoundary?.ambient_C != null ? (
+                      `${scenarioBoundary.ambient_C.toFixed(1)} °C`
+                    ) : (
+                      <span className="text-ink-400">— °C</span>
+                    )}
+                  </Row>
+                  <Row label="Boundary Rth Preview" zh="邊界熱阻預覽">
+                    {scenarioBoundary?.rth_C_per_W != null ? (
+                      `${scenarioBoundary.rth_C_per_W.toFixed(4)} °C/W`
+                    ) : (
+                      <span className="text-ink-400">— °C/W</span>
+                    )}
                   </Row>
                 </section>
               )}
@@ -451,11 +510,20 @@ export function EdgeInspector({
                 </p>
                 <Row label="Analytical (Rth / Model)">
                   {edge.rth.analytical != null ? (
-                    `${edge.rth.analytical.toFixed(4)} °C/W`
+                    formatRth(edge.rth.analytical, isothermal)
                   ) : (
                     <span className="text-ink-400">Not Defined</span>
                   )}
                 </Row>
+                {scenarioBoundary && (
+                  <Row label="Screen 06 Scenario Preview">
+                    {scenarioBoundary.rth_C_per_W != null ? (
+                      `${scenarioBoundary.rth_C_per_W.toFixed(4)} °C/W`
+                    ) : (
+                      <span className="text-ink-400">Not Ready</span>
+                    )}
+                  </Row>
+                )}
                 <Row label="Manual / Override">
                   {edge.rth.manual != null ? (
                     `${edge.rth.manual.toFixed(4)} °C/W`
@@ -556,8 +624,8 @@ export function EdgeInspector({
 
             <div className="mt-3 rounded-md border border-line bg-surface-muted p-2.5">
               <Row label="Calculated Rth" zh="計算熱阻">
-                {edge.rth.analytical != null ? (
-                  `${edge.rth.analytical.toFixed(4)} °C/W`
+                {formattedRth != null ? (
+                  formattedRth
                 ) : (
                   <span className="text-warn-600">Unresolved</span>
                 )}
@@ -681,11 +749,20 @@ export function EdgeInspector({
             </p>
             <Row label="Analytical (model)">
               {edge.rth.analytical != null ? (
-                `${edge.rth.analytical.toFixed(4)} °C/W`
+                formatRth(edge.rth.analytical, isothermal)
               ) : (
                 <span className="text-ink-400">Not defined</span>
               )}
             </Row>
+            {scenarioBoundary && (
+              <Row label="Screen 06 Scenario Preview">
+                {scenarioBoundary.rth_C_per_W != null ? (
+                  `${scenarioBoundary.rth_C_per_W.toFixed(4)} °C/W`
+                ) : (
+                  <span className="text-ink-400">Not ready</span>
+                )}
+              </Row>
+            )}
             <Row label="Manual / Override">
               {edge.rth.manual != null ? (
                 `${edge.rth.manual.toFixed(4)} °C/W`

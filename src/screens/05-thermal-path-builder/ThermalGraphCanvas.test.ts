@@ -587,3 +587,59 @@ describe('parallelRth', () => {
     expect(parallelRth(twoEdges(0.13, 0.05), ['A', 'MISSING'])).toBeNull();
   });
 });
+
+describe('scenario and ideal-link edge labels', () => {
+  it('labels a solver ideal link as isothermal instead of rounding it to zero', () => {
+    const network = fanInNetwork(1);
+    const edge = network.edges.EDGE_PORT_TIM_1_HEAT_OUT_HSK_BASE;
+    edge.parameters = { ideal_link: true };
+    edge.rth = createRth(0.000001, 'Analytical', 'high');
+
+    const rendered = buildElements(network, {
+      showPorts: true,
+      showLabels: true,
+      layoutMode: 'Free',
+    }).find((element) => element.data.id === edge.id)!;
+
+    expect(rendered.data.label).toBe('Isothermal / 等溫');
+  });
+
+  it('uses the active Screen 06 Rth and resolved style without changing the edge', () => {
+    const network = fanInNetwork(1);
+    const edge = network.edges.EDGE_PORT_TIM_1_HEAT_OUT_HSK_BASE;
+    edge.type = 'custom';
+    edge.method = 'convection_hA';
+    edge.rth = createRth(null, 'Analytical', 'low');
+    edge.resolution = 'unresolved';
+    const scenarioBoundaryEdges = new Map([
+      [
+        edge.id,
+        {
+          edge_id: edge.id,
+          boundary_port_id: 'BP_FIN',
+          scenario_id: 'SCN_55C',
+          kind: 'combined' as const,
+          rth_C_per_W: 0.02442,
+          h_W_m2K: 12,
+          emissivity: 0.85,
+          area_m2: 2,
+          ambient_C: 55,
+          completeness: 'complete' as const,
+          resolved: true,
+        },
+      ],
+    ]);
+
+    const rendered = buildElements(network, {
+      showPorts: true,
+      showLabels: true,
+      layoutMode: 'Free',
+      scenarioBoundaryEdges,
+    }).find((element) => element.data.id === edge.id)!;
+
+    expect(rendered.data.label).toBe('Boundary 0.024 °C/W');
+    expect(rendered.data.lineStyle).toBe('solid');
+    expect(edge.resolution).toBe('unresolved');
+    expect(edge.rth.analytical).toBeNull();
+  });
+});
