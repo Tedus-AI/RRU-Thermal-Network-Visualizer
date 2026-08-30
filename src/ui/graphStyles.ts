@@ -253,6 +253,17 @@ function wrapLabel(line: string, maxWidth: number): { lines: number; width: numb
 }
 
 /**
+ * Flow-axis room an ordinary autorotated edge label needs between two nodes.
+ * Edge text is not wrapped automatically, so measuring the complete longest
+ * line prevents a long Rth annotation from painting over either node.
+ */
+export function edgeLabelFlowLength(label: string): number {
+  if (!label.trim()) return 0;
+  const widest = Math.max(...label.split('\n').map((line) => textWidth(line)));
+  return Math.ceil(widest) + 12;
+}
+
+/**
  * Deterministic node box, so nothing depends on asynchronous text measurement.
  * Cytoscape's `width: label` is measured late; a node measured as 0x0 is cached
  * as "takes up no space" and then never painted.

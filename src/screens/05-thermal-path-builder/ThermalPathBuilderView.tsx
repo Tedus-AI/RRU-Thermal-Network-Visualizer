@@ -998,6 +998,32 @@ export function ThermalPathBuilderView() {
     navigate(projectPath(projectId, 'boundary'));
   };
 
+  /** Both Validate buttons must report the same active-scenario view as the panel. */
+  const handleValidate = () => {
+    const rawResult = useNetworkStore.getState().revalidate();
+    const boundaryState = useBoundaryStore.getState();
+    const result = applyBoundaryValidationOverlay(
+      rawResult,
+      useNetworkStore.getState().network,
+      boundaryState.ports,
+      boundaryState.current(),
+    );
+    setStep('validate');
+    if (!result) {
+      toast.warning('Nothing to validate yet / 尚無可驗證的網路');
+    } else if (result.errors > 0) {
+      toast.error(
+        `${result.errors} error(s), ${result.warnings} warning(s) / ${result.errors} 個錯誤、${result.warnings} 個警告`,
+      );
+    } else if (result.warnings > 0) {
+      toast.warning(
+        `No errors, ${result.warnings} warning(s) / 無錯誤，${result.warnings} 個警告`,
+      );
+    } else {
+      toast.success('Network is valid / 熱網路驗證通過');
+    }
+  };
+
   const selectedNode = selection?.kind === 'node' ? network.nodes[selection.id] : null;
   const selectedEdge = selection?.kind === 'edge' ? network.edges[selection.id] : null;
   const selectedScenarioBoundary = selectedEdge
@@ -1093,15 +1119,7 @@ export function ThermalPathBuilderView() {
           <div className="ml-auto flex gap-2">
             <Button
               icon={<CircleCheck size={15} />}
-              onClick={() => {
-                const result = useNetworkStore.getState().revalidate();
-                if (!result) return;
-                setStep('validate');
-                if (result.errors > 0) toast.error(`${result.errors} blocking error(s) / 有錯誤`);
-                else if (result.warnings > 0)
-                  toast.warning(`${result.warnings} warning(s) / 有警告`);
-                else toast.success('Topology is valid / 拓樸驗證通過');
-              }}
+              onClick={handleValidate}
             >
               Validate / 驗證
             </Button>
@@ -1263,33 +1281,7 @@ export function ThermalPathBuilderView() {
             onZoom={(delta) => canvasRef.current?.zoomBy(delta)}
             onUndo={() => useNetworkStore.getState().undo()}
             onRedo={() => useNetworkStore.getState().redo()}
-            onValidate={() => {
-              const rawResult = useNetworkStore.getState().revalidate();
-              const boundaryState = useBoundaryStore.getState();
-              const result = applyBoundaryValidationOverlay(
-                rawResult,
-                useNetworkStore.getState().network,
-                boundaryState.ports,
-                boundaryState.current(),
-              );
-              setStep('validate');
-              // It always did re-run validation, but said nothing — and on an
-              // already-valid network nothing on screen changed either, so the
-              // button read as broken.
-              if (!result) {
-                toast.warning('Nothing to validate yet / 尚無可驗證的網路');
-              } else if (result.errors > 0) {
-                toast.error(
-                  `${result.errors} error(s), ${result.warnings} warning(s) / ${result.errors} 個錯誤、${result.warnings} 個警告`,
-                );
-              } else if (result.warnings > 0) {
-                toast.warning(
-                  `No errors, ${result.warnings} warning(s) / 無錯誤，${result.warnings} 個警告`,
-                );
-              } else {
-                toast.success('Network is valid / 熱網路驗證通過');
-              }
-            }}
+            onValidate={handleValidate}
             onTogglePorts={() => setShowPorts((value) => !value)}
             onToggleLabels={() => setShowLabels((value) => !value)}
             componentVisibilityOpen={componentVisibilityOpen}

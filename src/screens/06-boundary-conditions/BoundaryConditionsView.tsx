@@ -67,6 +67,7 @@ import {
 import type { CanvasTool } from '@/screens/05-thermal-path-builder/GraphToolbar';
 import { BoundaryGraphToolbar } from './BoundaryGraphToolbar';
 import { BoundaryValidationOverlay } from './BoundaryValidationOverlay';
+import { projectScenarioBoundaryEdges } from '@/screens/05-thermal-path-builder/scenarioBoundaryProjection';
 import {
   PORT_STATUS_LABELS,
   REPRESENTATION_FOR,
@@ -214,6 +215,10 @@ export function BoundaryConditionsView() {
   const pendingSourceRef = useRef<string | null>(null);
 
   const set = activeKey ? (sets[activeKey] ?? null) : null;
+  const scenarioBoundaryEdges = useMemo(
+    () => projectScenarioBoundaryEdges(network, ports, set),
+    [network, ports, set],
+  );
 
   useEffect(() => {
     if (!projectId) return;
@@ -924,6 +929,7 @@ export function BoundaryConditionsView() {
               layoutMode={layoutMode}
               readOnly
               hiddenComponentIds={EMPTY_HIDDEN_COMPONENTS}
+              scenarioBoundaryEdges={scenarioBoundaryEdges}
               onSelect={selectGraphObject}
               onNodeMoved={() => undefined}
               onConnect={() => undefined}
