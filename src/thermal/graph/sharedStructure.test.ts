@@ -4,11 +4,15 @@ import { normalizeZoneKey, UNASSIGNED_ZONE } from '@/domain/component';
 import { resolvePortTarget, suggestedZoneFor } from './networkBuilder';
 import { structureNodeId } from './idFactory';
 import {
+  ISOTHERMAL_FIN_LINK_RTH_C_PER_W,
   STRUCTURE_PRESETS,
   buildSharedStructure,
   presetZones,
+  repairLegacySharedFinLinks,
   zoneKeyOf,
 } from './sharedStructure';
+import { activeRth, createRth } from '../rth';
+import { DEFAULT_SOLVER_SETTINGS, type ThermalNetwork } from '../types';
 
 describe('supported HSK structures', () => {
   it('exposes only the two product structures', () => {
@@ -93,6 +97,50 @@ describe('independent heat-sink tails', () => {
     expect(zoneKeyOf('NODE_RF_HSK_BASE', 'DUAL_HSK_BASE')).toBe('RF_HSK_BASE');
     expect(zoneKeyOf('NODE_DIGITAL_HSK_BASE', 'DUAL_HSK_BASE')).toBe('DIGITAL_HSK_BASE');
     expect(zoneKeyOf('NODE_RF_FIN_SURFACE', 'DUAL_HSK_BASE')).toBeNull();
+  });
+
+  it('uses an isothermal fin-root link and leaves only the ambient boundary unresolved', () => {
+    const structure = buildSharedStructure('SINGLE_MAIN_BASE');
+    const finLink = structure.edges.find((edge) => edge.to === 'NODE_FIN_SURFACE')!;
+    expect(finLink.method).toBe('direct_rth');
+    expect(finLink.resolution).toBe('resolved');
+    expect(activeRth(finLink.rth)).toBe(ISOTHERMAL_FIN_LINK_RTH_C_PER_W);
+    expect(structure.edges.filter((edge) => edge.resolution === 'unresolved')).toHaveLength(1);
+  });
+
+  it('repairs only untouched legacy shared fin links', () => {
+    const structure = buildSharedStructure('SINGLE_MAIN_BASE');
+    const finLink = structure.edges.find((edge) => edge.to === 'NODE_FIN_SURFACE')!;
+    finLink.method = 'conduction_LkA';
+    finLink.rth = createRth(null, 'Analytical', 'low');
+    finLink.resolution = 'unresolved';
+    const network: ThermalNetwork = {
+      schema_version: '1.0',
+      project_id: 'P',
+      revision: 'R',
+      network_name: 'Main Thermal Network',
+      mode: 'analytical',
+      status: 'DRAFT',
+      nodes: Object.fromEntries(structure.nodes.map((node) => [node.id, node])),
+      edges: Object.fromEntries(structure.edges.map((edge) => [edge.id, edge])),
+      templates: {},
+      zones: Object.fromEntries(structure.zones.map((zone) => [zone.id, zone])),
+      layout: { mode: 'Auto', positions: {} },
+      flotherm_mappings: {},
+      solver_settings: { ...DEFAULT_SOLVER_SETTINGS },
+    };
+
+    expect(repairLegacySharedFinLinks(network)).toBe(1);
+    expect(network.edges[finLink.id]).toMatchObject({
+      method: 'direct_rth',
+      resolution: 'resolved',
+      parameters: { ideal_link: true },
+    });
+
+    network.edges[finLink.id].origin = { kind: 'shared_structure', modified: true };
+    network.edges[finLink.id].method = 'conduction_LkA';
+    network.edges[finLink.id].resolution = 'unresolved';
+    expect(repairLegacySharedFinLinks(network)).toBe(0);
   });
 });
 

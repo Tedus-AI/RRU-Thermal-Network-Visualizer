@@ -10,17 +10,18 @@
 
 import { NumberInput, Select } from '@/ui/primitives';
 import { Bi, ColumnLabel, biTitle } from '@/ui/FieldLabel';
+import { dataSourceItemsZh } from '@/ui/dataSourceLabels';
 
 import type { BoundaryDataSource, SurfaceProperty } from '@/thermal/boundary/types';
 import { T06 } from './tooltips';
 
-const SOURCE_ITEMS: ReadonlyArray<{ value: BoundaryDataSource; label: string }> = [
-  { value: 'manual', label: '手動輸入' },
-  { value: 'datasheet', label: '規格書' },
-  { value: 'assumed', label: '工程假設' },
-  { value: 'measurement', label: '實測值' },
-  { value: 'vendor', label: '原廠資料' },
-];
+const SOURCE_ITEMS = dataSourceItemsZh<BoundaryDataSource>([
+  'manual',
+  'datasheet',
+  'assumed',
+  'measurement',
+  'vendor',
+]);
 
 export function SurfacePropertiesPanel({
   groups,

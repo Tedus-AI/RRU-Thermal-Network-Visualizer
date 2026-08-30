@@ -87,12 +87,20 @@ function synchronizeInheritedProfileInputs(
     boundarySet.surface_properties.map((surface) => [surface.surface_group_id, surface]),
   );
   const groupByProfile = new Map<string, string | null>();
+  const portByProfile = new Map<string, string | null>();
 
   for (const assignment of boundarySet.assignments) {
     const groupId =
       assignment.surface_group_id ?? portById.get(assignment.boundary_port_id)?.surface_group_id;
     if (!groupId) continue;
     for (const profileId of assignment.profile_ids) {
+      if (!portByProfile.has(profileId)) {
+        portByProfile.set(profileId, assignment.boundary_port_id);
+      } else if (portByProfile.get(profileId) !== assignment.boundary_port_id) {
+        // The normal UI creates one profile per port. Preserve an ambiguous
+        // legacy shared profile rather than borrowing one port's geometry.
+        portByProfile.set(profileId, null);
+      }
       if (!groupByProfile.has(profileId)) {
         groupByProfile.set(profileId, groupId);
         continue;
@@ -109,8 +117,33 @@ function synchronizeInheritedProfileInputs(
   boundarySet.profiles = boundarySet.profiles.map((profile) => {
     const groupId = groupByProfile.get(profile.id);
     const surface = groupId ? surfaceByGroup.get(groupId) : undefined;
+    const portId = portByProfile.get(profile.id);
+    const topologyArea = portId ? portById.get(portId)?.area_m2 : null;
     const parameters = { ...profile.parameters };
     let changed = false;
+
+    // Package top + four sides is authored in Screen 04 and projected through
+    // Screen 05 as boundary_area_mm2. Once that geometry exists it is the area
+    // authority; a copied profile value must not drift after dimensions change.
+    // HSK fin surfaces have no topology area, so their effective area remains a
+    // required engineer input and is intentionally left untouched here.
+    if (topologyArea != null) {
+      if (
+        profile.type === 'convection_to_ambient' ||
+        profile.type === 'radiation_to_surroundings' ||
+        profile.type === 'combined_convection_radiation'
+      ) {
+        if (!Object.is(parameters.area_m2, topologyArea)) {
+          parameters.area_m2 = topologyArea;
+          changed = true;
+        }
+      } else if (profile.type === 'solar_load') {
+        if (!Object.is(parameters.receivingArea_m2, topologyArea)) {
+          parameters.receivingArea_m2 = topologyArea;
+          changed = true;
+        }
+      }
+    }
 
     if (
       profile.type === 'radiation_to_surroundings' ||

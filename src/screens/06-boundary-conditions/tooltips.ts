@@ -54,13 +54,14 @@ export const T06 = {
     projectedAreaFactor: '投影面積係數，代表實際承受日照的比例。',
     viewFactor: '視角因子，代表表面與周圍環境之間的輻射交換比例。',
     hConv: '對流熱傳係數 h，單位 W/m²K。V1 由工程師手動輸入。',
-    area: '參與此邊界條件的有效表面積，單位 m²。',
+    area:
+      '參與此邊界條件的有效表面積，單位 m²。封裝已建立「頂面＋四側面」暴露幾何時由 SCR04/05 自動同步；HSK Fin Surface 則請輸入已包含 fin efficiency 的有效翅片面積，不是未修正的總幾何面積。',
     fixedTemperature: '固定溫度邊界的溫度值，例如恆溫槽或受控冷板。',
     adiabaticReason: '絕熱邊界不需要數值；理由僅供稽核，可留白且不會阻擋求解。',
     boundaryType: '此邊界端口採用的邊界條件型別。',
     representation: '此 profile 在 07 求解時的表示方式，例如並聯邊界或外部熱負載。',
     dataSource:
-      '資料來源：manual、analytical、datasheet、assumed、measurement 或 vendor。FloTHERM 來源需等 Screen 03 完成後再啟用。',
+      '資料來源可選手動輸入、解析計算、規格書、工程假設、實測值或原廠資料。FloTHERM 來源需等 Screen 03 完成後再啟用。',
     confidence: '此邊界輸入的信心度。低信心度會顯示警告，但不會改變數值求解結果。',
   },
 

@@ -19,6 +19,7 @@ import { CheckCircle2, Thermometer, Trash2, TriangleAlert } from 'lucide-react';
 
 import { Badge, Button, NumberInput, Select, TextInput } from '@/ui/primitives';
 import { Bi, FieldLabel, biTitle } from '@/ui/FieldLabel';
+import { dataSourceItemsZh } from '@/ui/dataSourceLabels';
 
 import {
   BOUNDARY_TYPE_LABELS,
@@ -573,7 +574,10 @@ export function BoundaryInspector({
                       ? 'SCR01 情境設定'
                       : parameter.key === 'emissivity' || parameter.key === 'absorptivity'
                         ? '表面性質'
-                        : null;
+                        : (parameter.key === 'area_m2' || parameter.key === 'receivingArea_m2') &&
+                            port.area_m2 != null
+                          ? 'SCR04/05 邊界幾何'
+                          : null;
                   const value = activeProfile.parameters[parameter.key];
                   return (
                     <div key={parameter.key} className="mb-2">
@@ -674,7 +678,7 @@ export function BoundaryInspector({
                   className="mt-1 mb-2 h-8 !text-[12px]"
                   value={activeProfile.source}
                   disabled={readOnly}
-                  options={SOURCES}
+                  items={dataSourceItemsZh(SOURCES)}
                   onChange={(event) =>
                     patchProfile({ source: event.target.value as BoundaryDataSource })
                   }

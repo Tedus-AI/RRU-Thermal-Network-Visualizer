@@ -9,6 +9,7 @@ import { Thermometer, Trash2 } from 'lucide-react';
 
 import { Badge, Button, NumberInput, Select } from '@/ui/primitives';
 import { Bi, ColumnLabel, biTitle } from '@/ui/FieldLabel';
+import { dataSourceItemsZh } from '@/ui/dataSourceLabels';
 
 import type {
   BoundaryConditionProfile,
@@ -114,7 +115,7 @@ export function FixedTemperaturePanel({
                       aria-label={biTitle(`Source for ${port.name}`, '資料來源')}
                       value={profile.source}
                       disabled={readOnly}
-                      options={SOURCES}
+                      items={dataSourceItemsZh(SOURCES)}
                       onChange={(event) =>
                         onPatch({ ...profile, source: event.target.value as BoundaryDataSource })
                       }

@@ -749,10 +749,10 @@ export function EdgeInspector({
                 value={edge.rth.active_source}
                 disabled={readOnly}
                 items={[
-                  { value: 'Analytical', label: 'Analytical' },
-                  { value: 'Manual', label: 'Manual' },
-                  { value: 'Measurement', label: 'Measurement (reserved)' },
-                  { value: 'FloTHERM', label: 'FloTHERM (deferred)' },
+                  { value: 'Analytical', label: '解析計算' },
+                  { value: 'Manual', label: '手動輸入' },
+                  { value: 'Measurement', label: '實測值（預留）' },
+                  { value: 'FloTHERM', label: 'FloTHERM（延後）' },
                 ]}
                 onChange={(event) =>
                   onPatch({

@@ -10,6 +10,7 @@ import { Minus, Play, Plus, RefreshCw, RotateCcw, Square } from 'lucide-react';
 
 import { Button, Select } from '@/ui/primitives';
 import { FieldLabel, biTitle } from '@/ui/FieldLabel';
+import { dataSourceLabelZh } from '@/ui/dataSourceLabels';
 import type { Scenario } from '@/domain/project';
 import {
   CANDIDATE_SCOPES,
@@ -297,7 +298,10 @@ export function FilterPanel({
       {cell('Zone', '區域', 'ba-f-zone', filters.zone, withAll(options.zones), (value) =>
         onChange({ zone: value }),
       )}
-      {cell('Rth Source', '熱阻來源', 'ba-f-src', filters.rth_source, withAll(options.sources), (value) =>
+      {cell('Rth Source', '熱阻來源', 'ba-f-src', filters.rth_source, [
+        { value: 'All', label: '全部' },
+        ...options.sources.map((value) => ({ value, label: dataSourceLabelZh(value) })),
+      ], (value) =>
         onChange({ rth_source: value }),
       )}
       {cell(
