@@ -148,6 +148,9 @@ export function deriveBoundaryPorts(network: ThermalNetwork | null): BoundaryPor
 export function surfaceGroupsOf(ports: BoundaryPort[]): Array<{ id: string; name: string }> {
   const groups = new Map<string, string>();
   for (const port of ports) {
+    // Ambient placeholders are temperature references, not physical surfaces.
+    // Emissivity and solar absorptivity therefore do not apply to them.
+    if (!port.dissipating) continue;
     if (!groups.has(port.surface_group_id)) {
       groups.set(port.surface_group_id, port.name.replace(/ (Boundary|Reference)$/, ''));
     }
