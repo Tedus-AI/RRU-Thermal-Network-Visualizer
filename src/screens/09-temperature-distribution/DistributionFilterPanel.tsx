@@ -164,7 +164,7 @@ export function DistributionFilterPanel({
         filters.result_source,
         // 09 §46, AC-09-23/24 — only datasets that actually exist are offered.
         // FloTHERM and measurement appear when Screen 03 lands, never before.
-        [{ value: 'analytical', label: 'Analytical' }],
+        [{ value: 'analytical', label: '解析計算' }],
         (value) => onChange({ result_source: value as DistributionFilters['result_source'] }),
         T09.resultSource,
       )}

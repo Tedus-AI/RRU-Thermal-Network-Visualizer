@@ -8,7 +8,18 @@
 
 import { createRth } from '../rth';
 import { structureEdgeId, structureNodeId, zoneNodeId } from './idFactory';
-import type { BaseZone, NodeType, ThermalEdge, ThermalNode } from '../types';
+import type { BaseZone, NodeType, ThermalEdge, ThermalNetwork, ThermalNode } from '../types';
+
+/**
+ * HSK Base / Fin Root and Fin Surface are two display planes of one lumped
+ * heat-sink boundary, not a separately specified series resistance. Fin
+ * conduction efficiency belongs in Screen 06's effective area. A tiny positive
+ * link keeps the solver matrix connected while remaining below the bottleneck
+ * analyser's ideal-link threshold.
+ */
+export const ISOTHERMAL_FIN_LINK_RTH_C_PER_W = 1e-6;
+const ISOTHERMAL_FIN_LINK_REFERENCE =
+  'Isothermal fin-root link; fin efficiency is represented by Screen 06 effective area.';
 
 export const STRUCTURE_PRESETS = ['SINGLE_MAIN_BASE', 'DUAL_HSK_BASE'] as const;
 export type StructurePreset = (typeof STRUCTURE_PRESETS)[number];
@@ -77,25 +88,33 @@ function structuralEdge(
     method: ThermalEdge['method'];
     kind?: string;
     unresolvedNote?: string;
+    resolvedRth?: number;
   },
 ): ThermalEdge {
   const boundaryDerived = options.method === 'convection_hA' || options.method === 'radiation_hA';
+  const resolved = options.resolvedRth != null;
   return {
     id: structureEdgeId(from.id, to.id, options.kind),
     from: from.id,
     to: to.id,
     type: options.type,
     method: options.method,
-    rth: createRth(null, 'Analytical', 'low'),
-    parameters: {},
+    rth: createRth(
+      options.resolvedRth ?? null,
+      'Analytical',
+      resolved ? 'high' : 'low',
+      resolved ? ISOTHERMAL_FIN_LINK_REFERENCE : undefined,
+    ),
+    parameters: resolved ? { ideal_link: true } : {},
     heat_flow_W: null,
     delta_T_C: null,
-    resolution: 'unresolved',
-    resolution_note:
-      options.unresolvedNote ??
-      (boundaryDerived
-        ? 'Boundary derived — resolved in Screen 06 once ambient, h and radiation are defined.'
-        : 'Resistance not yet defined.'),
+    resolution: resolved ? 'resolved' : 'unresolved',
+    resolution_note: resolved
+      ? ISOTHERMAL_FIN_LINK_REFERENCE
+      : options.unresolvedNote ??
+        (boundaryDerived
+          ? 'Boundary derived — resolved in Screen 06 once ambient, h and radiation are defined.'
+          : 'Resistance not yet defined.'),
     enabled: true,
     origin: { kind: 'shared_structure' },
   };
@@ -117,8 +136,8 @@ function heatSinkTail(prefix: '' | 'RF_' | 'DIGITAL_', displayPrefix = ''): Stru
     edges: [
       structuralEdge(hsk, finSurface, {
         type: 'conduction',
-        method: 'conduction_LkA',
-        unresolvedNote: 'Fin equivalent conduction resistance not yet defined.',
+        method: 'direct_rth',
+        resolvedRth: ISOTHERMAL_FIN_LINK_RTH_C_PER_W,
       }),
       structuralEdge(finSurface, ambient, {
         type: 'custom',
@@ -128,6 +147,45 @@ function heatSinkTail(prefix: '' | 'RF_' | 'DIGITAL_', displayPrefix = ''): Stru
     ],
     zones: [{ id: hsk.id, name: `${displayPrefix}HSK Base`.trim(), type: 'heat_sink_base' }],
   };
+}
+
+/**
+ * Repairs the pre-effective-area shared-structure edge saved by older builds.
+ * A human-edited edge is never touched.
+ */
+export function repairLegacySharedFinLinks(network: ThermalNetwork): number {
+  let repaired = 0;
+  for (const edge of Object.values(network.edges)) {
+    if (
+      edge.origin?.kind !== 'shared_structure' ||
+      edge.origin.modified ||
+      edge.method !== 'conduction_LkA' ||
+      edge.resolution !== 'unresolved'
+    ) {
+      continue;
+    }
+    const from = network.nodes[edge.from];
+    const to = network.nodes[edge.to];
+    if (!from || !to) continue;
+    const isFinRootLink =
+      (from.type === 'heat_sink_base' && to.type === 'fin_surface') ||
+      (from.type === 'fin_surface' && to.type === 'heat_sink_base');
+    if (!isFinRootLink) continue;
+
+    edge.method = 'direct_rth';
+    edge.rth = createRth(
+      ISOTHERMAL_FIN_LINK_RTH_C_PER_W,
+      'Analytical',
+      'high',
+      ISOTHERMAL_FIN_LINK_REFERENCE,
+    );
+    edge.parameters = { ideal_link: true };
+    edge.resolution = 'resolved';
+    edge.resolution_note = ISOTHERMAL_FIN_LINK_REFERENCE;
+    edge.confidence = 'high';
+    repaired += 1;
+  }
+  return repaired;
 }
 
 export function buildSharedStructure(preset: StructurePreset): StructureResult {

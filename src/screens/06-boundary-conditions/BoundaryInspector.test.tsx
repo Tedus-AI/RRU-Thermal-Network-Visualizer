@@ -115,8 +115,59 @@ describe('BoundaryInspector simplification', () => {
     expect(html).toContain('0.1323 °C/W');
     expect(html).toContain('No issues for this boundary port.');
     expect(html).toContain('Advanced Details');
+    expect(html).toContain('由SCR04/05 邊界幾何同步');
+    expect(html).not.toMatch(/<input[^>]+id="bc-param-area_m2"/);
     expect(html).not.toContain('External Mapping');
     expect(html).not.toContain('FloTHERM Surface Alias');
+  });
+
+  it('keeps HSK fin effective area editable when topology has no derived area', () => {
+    const suppressSsrLayoutWarning = vi.spyOn(console, 'error').mockImplementation(() => {});
+    let html = '';
+    try {
+      html = renderToStaticMarkup(
+        <BoundaryInspector
+          port={port({ area_m2: null })}
+          status="ok"
+          profiles={[profile()]}
+          preview={preview()}
+          validation={validation}
+          ambientTemperature_C={55}
+          readOnly={false}
+          {...callbacks}
+        />,
+      );
+    } finally {
+      suppressSsrLayoutWarning.mockRestore();
+    }
+
+    expect(html).toMatch(/<input[^>]+id="bc-param-area_m2"/);
+    expect(html).not.toContain('由SCR04/05 邊界幾何同步');
+  });
+
+  it('shows Chinese labels in the data-source selector', () => {
+    const suppressSsrLayoutWarning = vi.spyOn(console, 'error').mockImplementation(() => {});
+    let html = '';
+    try {
+      html = renderToStaticMarkup(
+        <BoundaryInspector
+          port={port()}
+          status="ok"
+          profiles={[profile()]}
+          preview={preview()}
+          validation={validation}
+          ambientTemperature_C={55}
+          readOnly={false}
+          {...callbacks}
+        />,
+      );
+    } finally {
+      suppressSsrLayoutWarning.mockRestore();
+    }
+
+    expect(html).toContain('<option value="manual" selected="">手動輸入</option>');
+    expect(html).toContain('<option value="analytical">解析計算</option>');
+    expect(html).not.toContain('>assumed</option>');
   });
 
   it('shows profile emissivity as inherited from the authoritative surface property', () => {

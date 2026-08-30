@@ -2,6 +2,7 @@
 
 import { Copy, Layers, Library, Plus, RotateCcw, Settings2, Trash2 } from 'lucide-react';
 import { Button } from '@/ui/primitives';
+import { dataSourceLabelZh } from '@/ui/dataSourceLabels';
 import { COMPONENT_CATEGORIES, componentTotalPowerW, type Component, type ComponentCategory } from '@/domain/component';
 import { statusOf } from '@/domain/componentReadiness';
 
@@ -143,10 +144,10 @@ export function ComponentToolbar({
         onChange={(event) => set({ source: event.target.value })}
         className="h-8 rounded-md border border-line-strong bg-surface px-2 text-[12px]"
       >
-        <option value="ALL">All sources / 全部來源</option>
+        <option value="ALL">全部來源</option>
         {sources.map((source) => (
           <option key={source} value={source}>
-            {source}
+            {dataSourceLabelZh(source)}
           </option>
         ))}
       </select>

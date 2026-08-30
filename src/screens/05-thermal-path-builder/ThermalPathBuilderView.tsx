@@ -40,6 +40,7 @@ import { useProjectStore } from '@/data/projectStore';
 import { useComponentStore } from '@/data/componentStore';
 import { useNetworkStore } from '@/data/networkStore';
 import { useScenarioStore } from '@/data/scenarioStore';
+import { useBoundaryStore } from '@/data/boundaryStore';
 import { useSolverStore } from '@/data/solverStore';
 
 import { powerWOf, type Component } from '@/domain/component';
@@ -77,6 +78,7 @@ import { EdgeInspector } from './EdgeInspector';
 import { NetworkValidationPanel } from './NetworkValidationPanel';
 import { EmptyNetworkState, GenerateNetworkPreview } from './GenerateNetworkPreview';
 import { LEGEND, type LegendEntry } from '@/ui/graphStyles';
+import { applyBoundaryValidationOverlay } from './boundaryValidationOverlay';
 
 // --- Small building blocks -------------------------------------------------
 
@@ -249,6 +251,10 @@ export function ThermalPathBuilderView() {
   const components = useComponentStore((s) => s.components);
   const network = useNetworkStore((s) => s.network);
   const validation = useNetworkStore((s) => s.validation);
+  const activeScenarioId = useScenarioStore((s) => s.activeScenarioId);
+  const boundarySets = useBoundaryStore((s) => s.sets);
+  const activeBoundaryKey = useBoundaryStore((s) => s.activeKey);
+  const boundaryPorts = useBoundaryStore((s) => s.ports);
   const requiresReview = useNetworkStore((s) => s.requiresReview);
   const past = useNetworkStore((s) => s.past);
   const future = useNetworkStore((s) => s.future);
@@ -382,6 +388,14 @@ export function ThermalPathBuilderView() {
     useNetworkStore.getState().loadFor(projectId);
   }, [projectId]);
 
+  // Screen 05 still validates topology, but its visible readiness also reflects
+  // the active scenario's saved Screen 06 overlay. Re-loading on network
+  // revision keeps the derived boundary ports aligned after regeneration.
+  useEffect(() => {
+    if (!projectId || !network || network.project_id !== projectId) return;
+    useBoundaryStore.getState().loadFor(projectId, activeScenarioId);
+  }, [projectId, activeScenarioId, network?.revision]);
+
   // Older saved networks may already contain linked HSK-base edges. Refresh
   // their analytical value when the project is opened or Screen 01 changes
   // the shared base inputs; no manual edge override is discarded.
@@ -505,19 +519,32 @@ export function ThermalPathBuilderView() {
     [hiddenComponentIds, modeledIds],
   );
 
+  const activeBoundarySet = activeBoundaryKey ? (boundarySets[activeBoundaryKey] ?? null) : null;
+  const displayValidation = useMemo(
+    () => applyBoundaryValidationOverlay(validation, network, boundaryPorts, activeBoundarySet),
+    [validation, network, boundaryPorts, activeBoundarySet],
+  );
+
   const kpis = useMemo(
-    () =>
-      network
-        ? networkKpis(network, enabledComponents.length)
-        : {
-            componentsModeled: 0,
-            componentsTotal: enabledComponents.length,
-            nodes: 0,
-            edges: 0,
-            unconnectedPorts: 0,
-            unresolvedRth: 0,
-          },
-    [network, enabledComponents.length],
+    () => {
+      if (network) {
+        const result = networkKpis(network, enabledComponents.length);
+        result.unresolvedRth =
+          displayValidation?.issues.filter(
+            (issue) => issue.code === 'UNRESOLVED_RTH' || issue.code === 'BOUNDARY_NOT_CONFIGURED',
+          ).length ?? result.unresolvedRth;
+        return result;
+      }
+      return {
+        componentsModeled: 0,
+        componentsTotal: enabledComponents.length,
+        nodes: 0,
+        edges: 0,
+        unconnectedPorts: 0,
+        unresolvedRth: 0,
+      };
+    },
+    [network, enabledComponents.length, displayValidation],
   );
 
   const selectedComponent: Component | null =
@@ -952,8 +979,8 @@ export function ThermalPathBuilderView() {
 
   if (projectStatus === 'loading' || !draft || !network) return <LoadingState />;
 
-  const blockingErrors = validation?.errors ?? 0;
-  const warnings = validation?.warnings ?? 0;
+  const blockingErrors = displayValidation?.errors ?? 0;
+  const warnings = displayValidation?.warnings ?? 0;
   const isEmpty = Object.keys(network.nodes).length === 0;
 
   const handleSaveAndContinue = () => {
@@ -974,7 +1001,9 @@ export function ThermalPathBuilderView() {
   if (modeledIds.size > 0) completedSteps.push('templates');
   if (Object.keys(network.zones).length > 0) completedSteps.push('structure');
   if (kpis.unconnectedPorts === 0 && kpis.nodes > 0) completedSteps.push('connections');
-  if (validation && validation.errors === 0 && kpis.nodes > 0) completedSteps.push('validate');
+  if (displayValidation && displayValidation.errors === 0 && kpis.nodes > 0) {
+    completedSteps.push('validate');
+  }
 
   return (
     <ScreenWorkspace
@@ -1227,7 +1256,14 @@ export function ThermalPathBuilderView() {
             onUndo={() => useNetworkStore.getState().undo()}
             onRedo={() => useNetworkStore.getState().redo()}
             onValidate={() => {
-              const result = useNetworkStore.getState().revalidate();
+              const rawResult = useNetworkStore.getState().revalidate();
+              const boundaryState = useBoundaryStore.getState();
+              const result = applyBoundaryValidationOverlay(
+                rawResult,
+                useNetworkStore.getState().network,
+                boundaryState.ports,
+                boundaryState.current(),
+              );
               setStep('validate');
               // It always did re-run validation, but said nothing — and on an
               // already-valid network nothing on screen changed either, so the
@@ -1313,7 +1349,7 @@ export function ThermalPathBuilderView() {
                   pendingSourceRef={pendingSourceRef}
                 />
                 <Legend />
-                <NetworkValidationPanel validation={validation} onFocus={focusIssue} />
+                <NetworkValidationPanel validation={displayValidation} onFocus={focusIssue} />
                 {/* Beside the legend, not on top of it — and it names which of
                     the two wiring tools is armed, since they ask for the same
                     two clicks but do different things with them. */}
@@ -1558,9 +1594,9 @@ export function ThermalPathBuilderView() {
               network={network}
               readOnly={readOnly}
               readiness={{
-                errors: validation?.errors ?? 0,
-                warnings: validation?.warnings ?? 0,
-                info: validation?.info ?? 0,
+                errors: displayValidation?.errors ?? 0,
+                warnings: displayValidation?.warnings ?? 0,
+                info: displayValidation?.info ?? 0,
               }}
               onPatch={(patch) =>
                 useNetworkStore.getState().upsertEdge({ ...selectedEdge!, ...patch })

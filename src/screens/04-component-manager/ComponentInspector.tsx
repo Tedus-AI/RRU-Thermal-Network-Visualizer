@@ -83,11 +83,8 @@ import {
   resolveTim,
 } from '@/domain/materials';
 import { useProjectStore } from '@/data/projectStore';
-import {
-  DATA_SOURCE_LABELS,
-  SELECTABLE_DATA_SOURCES,
-  type DataSource,
-} from '@/thermal/types';
+import { SELECTABLE_DATA_SOURCES, type DataSource } from '@/thermal/types';
+import { dataSourceLabelZh } from '@/ui/dataSourceLabels';
 import {
   COMPLETENESS_ITEMS,
   COMPLETENESS_ITEMS_ZH,
@@ -116,7 +113,7 @@ function sourceOptions(current: DataSource | undefined) {
   if (current && !values.includes(current)) values.unshift(current);
   return values.map((value) => ({
     value,
-    label: `${DATA_SOURCE_LABELS[value].en} / ${DATA_SOURCE_LABELS[value].zh}`,
+    label: dataSourceLabelZh(value),
   }));
 }
 

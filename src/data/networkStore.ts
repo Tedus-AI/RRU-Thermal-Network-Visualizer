@@ -38,6 +38,7 @@ import {
   mountOf,
 } from '@/thermal/graph/componentMount';
 import { reconcilePortConnections } from '@/thermal/graph/portConnectionReconciliation';
+import { repairLegacySharedFinLinks } from '@/thermal/graph/sharedStructure';
 import type { MaterialDefaults } from '@/domain/materials';
 
 export function emptyNetwork(projectId: string): ThermalNetwork {
@@ -327,14 +328,17 @@ export const useNetworkStore = create<NetworkStoreState>((set, get) => ({
   loadFor: (projectId) => {
     const stored = loadNetwork(projectId);
     const network = stored ?? emptyNetwork(projectId);
-    const repaired = reconcilePortConnections(network);
+    const repairedConnections = reconcilePortConnections(network);
+    const repairedFinLinks = repairLegacySharedFinLinks(network);
+    if (repairedFinLinks > 0) network.revision = createRevision('network');
     const validation = validateGraph(network);
-    if (repaired.length > 0) {
+    if (repairedConnections.length > 0 || repairedFinLinks > 0) {
       network.status = statusFor(network, validation);
-      // This is a metadata repair of topology that already exists, so keep the
-      // engineering revision and solver freshness while persisting the fix.
+      // Port reconciliation is metadata-only. The legacy fin-link migration is
+      // an engineering-model correction and therefore advances the revision.
       saveNetwork(projectId, network);
     }
+    if (repairedFinLinks > 0) useSolverStore.getState().invalidate('topology_changed');
     const review = loadNetworkReviewState(projectId);
     set({
       network,

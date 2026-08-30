@@ -283,7 +283,7 @@ describe('Phase 1 revision propagation', () => {
         name: 'Fin radiation',
         type: 'radiation_to_surroundings',
         representation: 'parallel_boundary_edges',
-        parameters: { emissivity: 0.1, viewFactor: 0.9, area_m2: 0.42 },
+        parameters: { emissivity: 0.1, viewFactor: 0.9, area_m2: 0.1 },
         source: 'manual',
         confidence: 'medium',
       },
@@ -295,7 +295,7 @@ describe('Phase 1 revision propagation', () => {
         parameters: {
           irradiance_W_m2: 100,
           absorptivity: 0.1,
-          receivingArea_m2: 0.42,
+          receivingArea_m2: 0.1,
           projectedAreaFactor: 1,
           shadingFactor: 1,
         },
@@ -329,9 +329,9 @@ describe('Phase 1 revision propagation', () => {
       solar_irradiance_W_m2: 0,
     });
     expect(repaired.profiles.find((profile) => profile.id === 'BCP_RAD_STALE')?.parameters)
-      .toMatchObject({ emissivity: 0.91 });
+      .toMatchObject({ emissivity: 0.91, area_m2: 0.42 });
     expect(repaired.profiles.find((profile) => profile.id === 'BCP_SOLAR_STALE')?.parameters)
-      .toMatchObject({ irradiance_W_m2: 0, absorptivity: 0.55 });
+      .toMatchObject({ irradiance_W_m2: 0, absorptivity: 0.55, receivingArea_m2: 0.42 });
     expect(repaired.external_loads).toEqual([]);
     expect(useBoundaryStore.getState().dirty).toBe(true);
   });
@@ -371,7 +371,7 @@ describe('Phase 1 revision propagation', () => {
         parameters: {
           emissivity: 0.1,
           viewFactor: 0.9,
-          area_m2: 0.42,
+          area_m2: 0.1,
           surfaceReferenceTemperatureGuess_C: 90,
         },
         source: 'manual',
@@ -385,7 +385,7 @@ describe('Phase 1 revision propagation', () => {
         parameters: {
           irradiance_W_m2: 100,
           absorptivity: 0.1,
-          receivingArea_m2: 0.42,
+          receivingArea_m2: 0.1,
           projectedAreaFactor: 1,
           shadingFactor: 1,
         },
@@ -399,8 +399,10 @@ describe('Phase 1 revision propagation', () => {
     let current = useBoundaryStore.getState().current()!;
     expect(current.profiles.find((profile) => profile.id === 'BCP_RAD')?.parameters.emissivity)
       .toBe(0.86);
+    expect(current.profiles.find((profile) => profile.id === 'BCP_RAD')?.parameters.area_m2)
+      .toBe(0.42);
     expect(current.profiles.find((profile) => profile.id === 'BCP_SOLAR')?.parameters)
-      .toMatchObject({ irradiance_W_m2: 800, absorptivity: 0.72 });
+      .toMatchObject({ irradiance_W_m2: 800, absorptivity: 0.72, receivingArea_m2: 0.42 });
     expect(current.external_loads[0]?.q_W).toBeCloseTo(241.92, 2);
 
     useBoundaryStore.getState().setSurfaceProperty({
