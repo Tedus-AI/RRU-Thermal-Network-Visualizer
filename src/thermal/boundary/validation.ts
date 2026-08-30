@@ -47,6 +47,18 @@ function positive(value: unknown): boolean {
   return typeof value === 'number' && Number.isFinite(value) && value > 0;
 }
 
+function isHeatRejectionProfile(profile: BoundaryConditionProfile): boolean {
+  return ![
+    'solar_load',
+    'ambient_reservoir',
+    'external_cfd_placeholder',
+  ].includes(profile.type);
+}
+
+function isSolarActive(set: ScenarioBoundaryConditionSet): boolean {
+  return set.site.solar_enabled && (set.site.solar_irradiance_W_m2 ?? 0) > 0;
+}
+
 export interface BoundaryValidationInput {
   set: ScenarioBoundaryConditionSet | null;
   ports: BoundaryPort[];
@@ -109,7 +121,10 @@ export function validateBoundarySet(input: BoundaryValidationInput): BoundaryVal
     dissipating.every((port) => {
       const profiles = (assignmentsByPort.get(port.id)?.profile_ids ?? [])
         .map((id) => profileById.get(id))
-        .filter(Boolean) as BoundaryConditionProfile[];
+        .filter(
+          (profile): profile is BoundaryConditionProfile =>
+            profile != null && isHeatRejectionProfile(profile),
+        );
       return (
         profiles.length > 0 &&
         profiles.every(
@@ -153,8 +168,9 @@ export function validateBoundarySet(input: BoundaryValidationInput): BoundaryVal
     const profiles = (assignment?.profile_ids ?? [])
       .map((id) => profileById.get(id))
       .filter(Boolean) as BoundaryConditionProfile[];
+    const heatRejectionProfiles = profiles.filter(isHeatRejectionProfile);
 
-    if (port.dissipating && profiles.length === 0) {
+    if (port.dissipating && heatRejectionProfiles.length === 0) {
       errors.push(
         message(
           'error',
@@ -170,8 +186,10 @@ export function validateBoundarySet(input: BoundaryValidationInput): BoundaryVal
       continue;
     }
 
-    if (profiles.length > 1) {
-      const representations = new Set(profiles.map((profile) => profile.representation));
+    if (heatRejectionProfiles.length > 1) {
+      const representations = new Set(
+        heatRejectionProfiles.map((profile) => profile.representation),
+      );
       if (representations.size > 1) {
         warnings.push(
           message(
@@ -185,7 +203,7 @@ export function validateBoundarySet(input: BoundaryValidationInput): BoundaryVal
       }
     }
 
-    if (profiles.some((profile) => profile.type === 'adiabatic_symmetry')) {
+    if (heatRejectionProfiles.some((profile) => profile.type === 'adiabatic_symmetry')) {
       warnings.push(
         message(
           'warning',
@@ -314,6 +332,10 @@ export function validateBoundarySet(input: BoundaryValidationInput): BoundaryVal
       }
 
       case 'solar_load': {
+        // The profile is retained so a scenario can turn solar back on without
+        // losing its projected-area and shading setup. At zero irradiance it is
+        // inactive and must neither block validation nor inject heat.
+        if (!isSolarActive(set)) break;
         const required: Array<[string, string, (value: unknown) => boolean]> = [
           ['irradiance_W_m2', 'irradiance', positive],
           ['receivingArea_m2', 'receiving area', positive],
@@ -436,7 +458,7 @@ export function validateBoundarySet(input: BoundaryValidationInput): BoundaryVal
     );
   }
 
-  if (set.site.solar_enabled) {
+  if (isSolarActive(set)) {
     const hasSolarProfile = set.profiles.some((profile) => profile.type === 'solar_load');
     const assignedSolar = set.assignments.some((assignment) =>
       assignment.profile_ids.some(
@@ -453,6 +475,15 @@ export function validateBoundarySet(input: BoundaryValidationInput): BoundaryVal
         ),
       );
     }
+  } else if (set.profiles.some((profile) => profile.type === 'solar_load')) {
+    infos.push(
+      message(
+        'info',
+        'SOLAR_PROFILES_INACTIVE',
+        'Solar profiles are retained but inactive because Screen 01 solar load is 0 W/m².',
+        'SCR01 日照負載為 0 W/m²；太陽 profile 已保留但不參與計算。',
+      ),
+    );
   }
 
   // --- Informational notes ----------------------------------------------
@@ -514,7 +545,10 @@ export function buildAllPreviews(
     );
     const profiles = (assignment?.profile_ids ?? [])
       .map((id) => profileById.get(id))
-      .filter(Boolean) as BoundaryConditionProfile[];
+      .filter(Boolean)
+      .filter(
+        (profile) => isSolarActive(set) || profile?.type !== 'solar_load',
+      ) as BoundaryConditionProfile[];
 
     return buildDerivedPreview(port, profiles, {
       ambient_C: set.ambient.external_ambient_C,

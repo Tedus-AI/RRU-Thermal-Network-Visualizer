@@ -435,6 +435,46 @@ describe('boundary validation (06 §12)', () => {
     expect(result.status).toBe('blocked');
   });
 
+  it('does not mistake a solar heat load for a heat-rejection boundary', () => {
+    const solar = profile({
+      id: 'P_SOLAR',
+      type: 'solar_load',
+      representation: 'external_load_only',
+      parameters: {
+        irradiance_W_m2: 800,
+        receivingArea_m2: 0.42,
+        absorptivity: 0.72,
+        projectedAreaFactor: 1,
+        shadingFactor: 1,
+      },
+    });
+    const set = setWith([solar], {
+      site: {
+        ...setWith([]).site,
+        solar_enabled: true,
+        solar_irradiance_W_m2: 800,
+      },
+      assignments: [
+        {
+          id: 'A_SOLAR',
+          boundary_port_id: 'BP_TEST',
+          profile_ids: ['P_SOLAR'],
+          assignment_mode: 'manual',
+          enabled: true,
+        },
+      ],
+    });
+
+    const result = validateBoundarySet({
+      set,
+      ports,
+      hasTopology: true,
+      hasScenario: true,
+      topologyVersion: 1,
+    });
+    expect(result.errors.map((error) => error.id)).toContain('PORT_UNASSIGNED_BP_TEST');
+  });
+
   it('blocks non-positive h and area, and out-of-range emissivity and view factor', () => {
     const set = setWith([
       profile({ id: 'P1', type: 'convection_to_ambient', parameters: { h_W_m2K: 0, area_m2: -1 } }),
@@ -505,13 +545,19 @@ describe('boundary validation (06 §12)', () => {
   });
 
   it('blocks a solar profile that is missing any factor', () => {
-    const set = setWith([
-      profile({
-        id: 'P_SOLAR',
-        type: 'solar_load',
-        parameters: { irradiance_W_m2: 800, receivingArea_m2: 0.38, absorptivity: 0.72 },
-      }),
-    ]);
+    const base = setWith([]);
+    const set = setWith(
+      [
+        profile({
+          id: 'P_SOLAR',
+          type: 'solar_load',
+          parameters: { irradiance_W_m2: 800, receivingArea_m2: 0.38, absorptivity: 0.72 },
+        }),
+      ],
+      {
+        site: { ...base.site, solar_enabled: true, solar_irradiance_W_m2: 800 },
+      },
+    );
     const codes = validateBoundarySet({
       set,
       ports,

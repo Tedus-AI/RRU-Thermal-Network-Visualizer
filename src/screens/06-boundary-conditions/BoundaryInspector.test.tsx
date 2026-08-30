@@ -11,6 +11,7 @@ import { BoundaryInspector } from './BoundaryInspector';
 
 const validation = { status: 'ready_for_07' as const, errors: [], warnings: [], infos: [] };
 const callbacks = {
+  solarEnabled: true,
   onEditAmbient: vi.fn(),
   onUpsertProfile: vi.fn(),
   onRemoveProfile: vi.fn(),
@@ -116,6 +117,79 @@ describe('BoundaryInspector simplification', () => {
     expect(html).toContain('Advanced Details');
     expect(html).not.toContain('External Mapping');
     expect(html).not.toContain('FloTHERM Surface Alias');
+  });
+
+  it('shows profile emissivity as inherited from the authoritative surface property', () => {
+    const suppressSsrLayoutWarning = vi.spyOn(console, 'error').mockImplementation(() => {});
+    let html = '';
+    try {
+      html = renderToStaticMarkup(
+        <BoundaryInspector
+          port={port({ allowed_boundary_types: ['radiation_to_surroundings'] })}
+          status="ok"
+          profiles={[
+            profile({
+              id: 'BCP_RAD',
+              type: 'radiation_to_surroundings',
+              parameters: { emissivity: 0.91, viewFactor: 0.9, area_m2: 0.42 },
+            }),
+          ]}
+          preview={preview({ h_rad_W_m2K: 5.2, r_rad_C_per_W: 0.45 })}
+          validation={validation}
+          ambientTemperature_C={55}
+          readOnly={false}
+          {...callbacks}
+        />,
+      );
+    } finally {
+      suppressSsrLayoutWarning.mockRestore();
+    }
+
+    expect(html).toContain('由表面性質同步');
+    expect(html).toContain('0.91');
+    expect(html).not.toMatch(/<input[^>]+id="bc-param-emissivity"/);
+  });
+
+  it('retains but disables a solar profile when Screen 01 solar load is zero', () => {
+    const suppressSsrLayoutWarning = vi.spyOn(console, 'error').mockImplementation(() => {});
+    let html = '';
+    try {
+      html = renderToStaticMarkup(
+        <BoundaryInspector
+          port={port({
+            allowed_boundary_types: ['convection_to_ambient', 'solar_load'],
+          })}
+          status="unassigned"
+          profiles={[
+            profile({
+              id: 'BCP_SOLAR',
+              type: 'solar_load',
+              representation: 'external_load_only',
+              parameters: {
+                irradiance_W_m2: 0,
+                absorptivity: 0.7,
+                receivingArea_m2: 0.42,
+                projectedAreaFactor: 1,
+                shadingFactor: 1,
+              },
+            }),
+          ]}
+          preview={preview({ profile_ids: [] })}
+          validation={validation}
+          ambientTemperature_C={55}
+          readOnly={false}
+          {...callbacks}
+          solarEnabled={false}
+        />,
+      );
+    } finally {
+      suppressSsrLayoutWarning.mockRestore();
+    }
+
+    expect(html).toContain('（停用）');
+    expect(html).toContain('SCR01 日照負載為 0 W/m²');
+    expect(html).not.toContain('value="solar_load"');
+    expect(html).not.toContain('bc-param-irradiance_W_m2');
   });
 
   it('marks an adiabatic reason as optional', () => {
