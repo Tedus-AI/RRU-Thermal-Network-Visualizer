@@ -274,6 +274,9 @@ export function BoundaryConditionsView() {
   const surfaceGroups = useMemo(() => surfaceGroupsOf(ports), [ports]);
   const selectedPort = ports.find((port) => port.id === selectedPortId) ?? null;
   const validation = set?.validation ?? { status: 'blocked' as const, errors: [], warnings: [], infos: [] };
+  const solarEnabled = Boolean(
+    set?.site.solar_enabled && (set.site.solar_irradiance_W_m2 ?? 0) > 0,
+  );
 
   const editScenarioSettings = () => {
     navigate(`${projectPath(projectId!, 'info')}#scenario-settings`);
@@ -322,6 +325,10 @@ export function BoundaryConditionsView() {
   const addProfileToPort = (portId: string, type: BoundaryConditionType) => {
     const port = ports.find((entry) => entry.id === portId);
     if (!port || !set) return;
+    if (type === 'solar_load' && !solarEnabled) {
+      toast.warning('SCR01 日照負載為 0 W/m²，無法啟用太陽熱負載。');
+      return;
+    }
 
     const surface = set.surface_properties.find(
       (entry) => entry.surface_group_id === port.surface_group_id,
@@ -769,6 +776,8 @@ export function BoundaryConditionsView() {
               <SurfacePropertiesPanel
                 groups={surfaceGroups}
                 properties={set?.surface_properties ?? []}
+                solarEnabled={solarEnabled}
+                solarIrradiance_W_m2={set?.site.solar_irradiance_W_m2 ?? null}
                 readOnly={readOnly}
                 onChange={(property) => useBoundaryStore.getState().setSurfaceProperty(property)}
               />
@@ -825,6 +834,7 @@ export function BoundaryConditionsView() {
                   )}
                   validation={validation}
                   ambientTemperature_C={set.ambient.external_ambient_C}
+                  solarEnabled={solarEnabled}
                   readOnly={readOnly}
                   onEditAmbient={editScenarioSettings}
                   onUpsertProfile={(profile) => useBoundaryStore.getState().upsertProfile(profile)}

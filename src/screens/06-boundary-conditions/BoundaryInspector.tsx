@@ -370,6 +370,7 @@ export function BoundaryInspector({
   preview,
   validation,
   ambientTemperature_C,
+  solarEnabled,
   readOnly,
   onEditAmbient,
   onUpsertProfile,
@@ -383,6 +384,7 @@ export function BoundaryInspector({
   preview: BoundaryDerivedPreview | undefined;
   validation: BoundaryValidationState;
   ambientTemperature_C: number | null;
+  solarEnabled: boolean;
   readOnly: boolean;
   onEditAmbient: () => void;
   onUpsertProfile: (profile: BoundaryConditionProfile) => void;
@@ -398,6 +400,7 @@ export function BoundaryInspector({
   }, [preferredProfileId]);
   const activeProfile =
     profiles.find((profile) => profile.id === activeProfileId) ?? profiles[0] ?? null;
+  const solarProfileInactive = activeProfile?.type === 'solar_load' && !solarEnabled;
 
   if (!port.dissipating) {
     return (
@@ -480,6 +483,9 @@ export function BoundaryInspector({
                   <span className="block truncate text-[11px] font-semibold text-ink-900">
                     {BOUNDARY_TYPE_LABELS[profile.type].label}
                     <span className="font-normal text-ink-400"> / {BOUNDARY_TYPE_LABELS[profile.type].zh}</span>
+                    {profile.type === 'solar_load' && !solarEnabled && (
+                      <span className="ml-1 font-semibold text-ink-400">（停用）</span>
+                    )}
                   </span>
                   <span className="block truncate text-[10px] text-ink-400">{profile.name}</span>
                 </button>
@@ -523,7 +529,9 @@ export function BoundaryInspector({
                 ...port.allowed_boundary_types
                   .filter(
                     (type) =>
-                      type !== 'ambient_reservoir' && type !== 'external_cfd_placeholder',
+                      type !== 'ambient_reservoir' &&
+                      type !== 'external_cfd_placeholder' &&
+                      (solarEnabled || type !== 'solar_load'),
                   )
                   .map((type) => ({
                     value: type,
@@ -543,41 +551,73 @@ export function BoundaryInspector({
             <p className="mb-1.5 text-[11px] font-bold text-ink-700">
               Required Inputs <span className="font-normal text-ink-400">/ 必要輸入</span>
             </p>
-            <p className="mb-2 rounded border border-line bg-surface-muted p-2 text-[10px] leading-relaxed text-ink-500">
-              {TYPE_REQUIREMENT[activeProfile.type].en}
-              <span className="block text-ink-400">{TYPE_REQUIREMENT[activeProfile.type].zh}</span>
-            </p>
+            {solarProfileInactive ? (
+              <p className="mb-2 rounded border border-line bg-surface-muted p-2 text-[10px] leading-relaxed text-ink-500">
+                Solar load is 0 W/m² in Screen 01. This profile and its saved setup are retained but
+                do not participate in validation, preview or the Screen 07 heat load.
+                <span className="block text-ink-400">
+                  SCR01 日照負載為 0 W/m²；此 profile 與既有設定會保留，但不參與驗證、預覽或
+                  Screen 07 熱負載。
+                </span>
+              </p>
+            ) : (
+              <>
+                <p className="mb-2 rounded border border-line bg-surface-muted p-2 text-[10px] leading-relaxed text-ink-500">
+                  {TYPE_REQUIREMENT[activeProfile.type].en}
+                  <span className="block text-ink-400">{TYPE_REQUIREMENT[activeProfile.type].zh}</span>
+                </p>
 
-            {TYPE_PARAMETERS[activeProfile.type].map((parameter) => (
-              <div key={parameter.key} className="mb-2">
-                <FieldLabel
-                  label={parameter.label}
-                  zh={parameter.zh}
-                  unit={parameter.unit || undefined}
-                  htmlFor={`bc-param-${parameter.key}`}
-                  tooltip={parameter.tip}
-                  required={parameter.key !== 'surfaceReferenceTemperatureGuess_C'}
-                />
-                <NumberInput
-                  id={`bc-param-${parameter.key}`}
-                  className="mt-1 h-8 !text-[12px]"
-                  step="any"
-                  max={parameter.max}
-                  value={
-                    typeof activeProfile.parameters[parameter.key] === 'number'
-                      ? (activeProfile.parameters[parameter.key] as number)
-                      : ''
-                  }
-                  disabled={readOnly}
-                  onChange={(event) =>
-                    patchParameter(
-                      parameter.key,
-                      event.target.value === '' ? null : Number(event.target.value),
-                    )
-                  }
-                />
-              </div>
-            ))}
+                {TYPE_PARAMETERS[activeProfile.type].map((parameter) => {
+                  const inheritedOwner =
+                    parameter.key === 'irradiance_W_m2'
+                      ? 'SCR01 情境設定'
+                      : parameter.key === 'emissivity' || parameter.key === 'absorptivity'
+                        ? '表面性質'
+                        : null;
+                  const value = activeProfile.parameters[parameter.key];
+                  return (
+                    <div key={parameter.key} className="mb-2">
+                      <FieldLabel
+                        label={parameter.label}
+                        zh={parameter.zh}
+                        unit={parameter.unit || undefined}
+                        htmlFor={`bc-param-${parameter.key}`}
+                        tooltip={parameter.tip}
+                        required={parameter.key !== 'surfaceReferenceTemperatureGuess_C'}
+                      />
+                      {inheritedOwner ? (
+                        <div
+                          id={`bc-param-${parameter.key}`}
+                          className="mt-1 flex h-8 items-center justify-between rounded-md border border-line bg-surface-muted px-2.5 text-[11px] text-ink-700"
+                        >
+                          <span className="font-semibold tabular">
+                            {typeof value === 'number' ? value : 'N/A'}
+                          </span>
+                          <span className="text-[10px] text-ink-400">
+                            由{inheritedOwner}同步
+                          </span>
+                        </div>
+                      ) : (
+                        <NumberInput
+                          id={`bc-param-${parameter.key}`}
+                          className="mt-1 h-8 !text-[12px]"
+                          step="any"
+                          max={parameter.max}
+                          value={typeof value === 'number' ? value : ''}
+                          disabled={readOnly}
+                          onChange={(event) =>
+                            patchParameter(
+                              parameter.key,
+                              event.target.value === '' ? null : Number(event.target.value),
+                            )
+                          }
+                        />
+                      )}
+                    </div>
+                  );
+                })}
+              </>
+            )}
 
             {activeProfile.type === 'adiabatic_symmetry' && (
               <div className="mb-2">
@@ -605,7 +645,9 @@ export function BoundaryInspector({
               </p>
             )}
 
-            <ApplicablePreview preview={preview} activeProfile={activeProfile} />
+            {!solarProfileInactive && (
+              <ApplicablePreview preview={preview} activeProfile={activeProfile} />
+            )}
 
             <details className="mt-3 rounded border border-line bg-surface-muted px-2.5 py-2 text-[10px] text-ink-500">
               <summary className="cursor-pointer font-semibold text-ink-600">

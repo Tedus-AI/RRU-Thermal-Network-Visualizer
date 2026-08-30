@@ -73,6 +73,75 @@ interface BoundaryStoreState {
 
 const keyOf = (networkId: string, scenarioId: string) => `${networkId}::${scenarioId}`;
 
+/**
+ * Surface Properties and Screen 01 are the authoritative owners of these
+ * inputs. Profiles retain resolved copies for the solver/export schema, but
+ * those copies must never drift from their owners.
+ */
+function synchronizeInheritedProfileInputs(
+  boundarySet: ScenarioBoundaryConditionSet,
+  ports: BoundaryPort[],
+): boolean {
+  const portById = new Map(ports.map((port) => [port.id, port]));
+  const surfaceByGroup = new Map(
+    boundarySet.surface_properties.map((surface) => [surface.surface_group_id, surface]),
+  );
+  const groupByProfile = new Map<string, string | null>();
+
+  for (const assignment of boundarySet.assignments) {
+    const groupId =
+      assignment.surface_group_id ?? portById.get(assignment.boundary_port_id)?.surface_group_id;
+    if (!groupId) continue;
+    for (const profileId of assignment.profile_ids) {
+      if (!groupByProfile.has(profileId)) {
+        groupByProfile.set(profileId, groupId);
+        continue;
+      }
+      const existing = groupByProfile.get(profileId);
+      // A profile shared across different physical surfaces is ambiguous. The
+      // UI creates per-surface copies, so leave legacy ambiguous data untouched
+      // instead of choosing one surface arbitrarily.
+      if (existing !== groupId) groupByProfile.set(profileId, null);
+    }
+  }
+
+  let synchronized = false;
+  boundarySet.profiles = boundarySet.profiles.map((profile) => {
+    const groupId = groupByProfile.get(profile.id);
+    const surface = groupId ? surfaceByGroup.get(groupId) : undefined;
+    const parameters = { ...profile.parameters };
+    let changed = false;
+
+    if (
+      profile.type === 'radiation_to_surroundings' ||
+      profile.type === 'combined_convection_radiation'
+    ) {
+      const emissivity = surface?.emissivity ?? null;
+      if (!Object.is(parameters.emissivity, emissivity)) {
+        parameters.emissivity = emissivity;
+        changed = true;
+      }
+    }
+
+    if (profile.type === 'solar_load') {
+      const absorptivity = surface?.absorptivity ?? null;
+      const irradiance = boundarySet.site.solar_irradiance_W_m2 ?? null;
+      if (!Object.is(parameters.absorptivity, absorptivity)) {
+        parameters.absorptivity = absorptivity;
+        changed = true;
+      }
+      if (!Object.is(parameters.irradiance_W_m2, irradiance)) {
+        parameters.irradiance_W_m2 = irradiance;
+        changed = true;
+      }
+    }
+
+    if (changed) synchronized = true;
+    return changed ? { ...profile, parameters } : profile;
+  });
+  return synchronized;
+}
+
 export const useBoundaryStore = create<BoundaryStoreState>((set, get) => ({
   sets: {},
   activeKey: null,
@@ -97,6 +166,7 @@ export const useBoundaryStore = create<BoundaryStoreState>((set, get) => ({
     const scenario = useScenarioStore
       .getState()
       .scenarios.find((entry) => entry.id === scenarioId);
+    let scenarioProjectionChanged = false;
     if (!sets[key]) {
       sets[key] = createBoundarySet({
         projectId,
@@ -108,6 +178,11 @@ export const useBoundaryStore = create<BoundaryStoreState>((set, get) => ({
         solar_W_m2: scenario?.solar_W_m2 ?? null,
       });
     } else if (scenario) {
+      scenarioProjectionChanged =
+        !Object.is(sets[key].ambient.external_ambient_C, scenario.ambient_C) ||
+        !Object.is(sets[key].site.wind_speed_m_s, scenario.wind_mps) ||
+        !Object.is(sets[key].site.solar_enabled, scenario.solar_W_m2 > 0) ||
+        !Object.is(sets[key].site.solar_irradiance_W_m2, scenario.solar_W_m2);
       // Screen 01 is the sole editor of shared scenario inputs. Re-project its
       // current values whenever Screen 06 loads so an older persisted boundary
       // overlay can never make the UI or solver fall back to stale numbers.
@@ -126,7 +201,17 @@ export const useBoundaryStore = create<BoundaryStoreState>((set, get) => ({
       };
     }
 
-    set({ sets, activeKey: key, ports, dirty: false });
+    // Persisted legacy profiles may still carry copies of the old scenario or
+    // surface inputs. Reconcile those copies before validation so reloading an
+    // existing project cannot revive stale solar/radiation calculations.
+    const inheritedInputsChanged = synchronizeInheritedProfileInputs(sets[key], ports);
+
+    set({
+      sets,
+      activeKey: key,
+      ports,
+      dirty: scenarioProjectionChanged || inheritedInputsChanged,
+    });
     get().revalidate();
   },
 
@@ -152,6 +237,7 @@ export const useBoundaryStore = create<BoundaryStoreState>((set, get) => ({
       surface_properties: [...sets[activeKey].surface_properties],
     };
     recipe(next);
+    synchronizeInheritedProfileInputs(next, get().ports);
     next.updated_at = new Date().toISOString();
 
     set({ sets: { ...sets, [activeKey]: next }, dirty: true });
@@ -365,34 +451,38 @@ export const useBoundaryStore = create<BoundaryStoreState>((set, get) => ({
     const current = sets[activeKey];
 
     const derived = buildAllPreviews(current, ports);
+    const solarActive =
+      current.site.solar_enabled && (current.site.solar_irradiance_W_m2 ?? 0) > 0;
 
     // Solar is an external heat input, kept out of component power (06 §9.5).
-    const loads = current.assignments.flatMap((assignment) => {
-      const port = ports.find((entry) => entry.id === assignment.boundary_port_id);
-      if (!port || !assignment.enabled) return [];
-      return assignment.profile_ids.flatMap((profileId) => {
-        const profile = current.profiles.find((entry) => entry.id === profileId);
-        if (!profile || profile.type !== 'solar_load') return [];
-        const q = calculateSolarHeatLoad({
-          irradiance_W_m2: profile.parameters.irradiance_W_m2 as number,
-          receivingArea_m2: (profile.parameters.receivingArea_m2 as number) ?? port.area_m2,
-          absorptivity: profile.parameters.absorptivity as number,
-          projectedAreaFactor: profile.parameters.projectedAreaFactor as number,
-          shadingFactor: profile.parameters.shadingFactor as number,
+    const loads = !solarActive
+      ? []
+      : current.assignments.flatMap((assignment) => {
+          const port = ports.find((entry) => entry.id === assignment.boundary_port_id);
+          if (!port || !assignment.enabled) return [];
+          return assignment.profile_ids.flatMap((profileId) => {
+            const profile = current.profiles.find((entry) => entry.id === profileId);
+            if (!profile || profile.type !== 'solar_load') return [];
+            const q = calculateSolarHeatLoad({
+              irradiance_W_m2: profile.parameters.irradiance_W_m2 as number,
+              receivingArea_m2: (profile.parameters.receivingArea_m2 as number) ?? port.area_m2,
+              absorptivity: profile.parameters.absorptivity as number,
+              projectedAreaFactor: profile.parameters.projectedAreaFactor as number,
+              shadingFactor: profile.parameters.shadingFactor as number,
+            });
+            return [
+              {
+                id: `LOAD_${port.id}`,
+                type: 'solar' as const,
+                target_boundary_port_id: port.id,
+                target_node_id: port.connected_node_id,
+                q_W: q,
+                source_profile_id: profile.id,
+                inject_in_screen_07: true,
+              },
+            ];
+          });
         });
-        return [
-          {
-            id: `LOAD_${port.id}`,
-            type: 'solar' as const,
-            target_boundary_port_id: port.id,
-            target_node_id: port.connected_node_id,
-            q_W: q,
-            source_profile_id: profile.id,
-            inject_in_screen_07: true,
-          },
-        ];
-      });
-    });
 
     const validation = validateBoundarySet({
       set: { ...current, derived_preview: derived },

@@ -25,11 +25,15 @@ const SOURCE_ITEMS: ReadonlyArray<{ value: BoundaryDataSource; label: string }> 
 export function SurfacePropertiesPanel({
   groups,
   properties,
+  solarEnabled,
+  solarIrradiance_W_m2,
   readOnly,
   onChange,
 }: {
   groups: Array<{ id: string; name: string }>;
   properties: SurfaceProperty[];
+  solarEnabled: boolean;
+  solarIrradiance_W_m2: number | null;
   readOnly: boolean;
   onChange: (property: SurfaceProperty) => void;
 }) {
@@ -112,22 +116,31 @@ export function SurfacePropertiesPanel({
                     />
                   </td>
                   <td className="px-2 py-1">
-                    <NumberInput
-                      className="h-7 w-16 !text-[11px]"
-                      step="0.01"
-                      min="0"
-                      max="1"
-                      aria-label={biTitle(`Absorptivity for ${group.name}`, '吸收率')}
-                      value={property.absorptivity ?? ''}
-                      disabled={readOnly}
-                      onChange={(event) =>
-                        onChange({
-                          ...property,
-                          absorptivity:
-                            event.target.value === '' ? null : Number(event.target.value),
-                        })
-                      }
-                    />
+                    {solarEnabled ? (
+                      <NumberInput
+                        className="h-7 w-16 !text-[11px]"
+                        step="0.01"
+                        min="0"
+                        max="1"
+                        aria-label={biTitle(`Absorptivity for ${group.name}`, '吸收率')}
+                        value={property.absorptivity ?? ''}
+                        disabled={readOnly}
+                        onChange={(event) =>
+                          onChange({
+                            ...property,
+                            absorptivity:
+                              event.target.value === '' ? null : Number(event.target.value),
+                          })
+                        }
+                      />
+                    ) : (
+                      <span
+                        className="inline-flex h-7 min-w-16 items-center justify-center rounded border border-line bg-surface-muted px-2 text-[10px] font-semibold text-ink-400"
+                        title="SCR01 日照負載為 0 W/m²；保留既有吸收率，但本情境不使用。"
+                      >
+                        未使用
+                      </span>
+                    )}
                   </td>
                   <td className="px-2 py-1">
                     <Select
@@ -157,6 +170,12 @@ export function SurfacePropertiesPanel({
         <span className="block">
           此處只列實體散熱表面；環境參考節點不適用。發射率影響輻射交換，吸收率影響太陽吸熱；留空維持 N/A，不會當成 0。
         </span>
+        {!solarEnabled && (
+          <span className="mt-1 block font-semibold text-ink-500">
+            SCR01 日照負載為 {solarIrradiance_W_m2 ?? 0} W/m²：吸收率與太陽 profile
+            暫停使用，既有資料會保留。
+          </span>
+        )}
       </p>
     </div>
   );

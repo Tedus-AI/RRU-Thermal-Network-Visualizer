@@ -54,6 +54,10 @@ function isRadiative(profile: BoundaryConditionProfile): boolean {
   );
 }
 
+function isHeatRejection(profile: BoundaryConditionProfile): boolean {
+  return !['solar_load', 'ambient_reservoir', 'external_cfd_placeholder'].includes(profile.type);
+}
+
 export function summarize(
   set: ScenarioBoundaryConditionSet | null,
   ports: BoundaryPort[],
@@ -74,9 +78,17 @@ export function summarize(
     };
   }
 
+  const profileById = new Map(set.profiles.map((profile) => [profile.id, profile]));
   const assignedPorts = new Set(
     set.assignments
-      .filter((assignment) => assignment.enabled && assignment.profile_ids.length > 0)
+      .filter(
+        (assignment) =>
+          assignment.enabled &&
+          assignment.profile_ids.some((id) => {
+            const profile = profileById.get(id);
+            return profile != null && isHeatRejection(profile);
+          }),
+      )
       .map((assignment) => assignment.boundary_port_id),
   );
 
@@ -101,7 +113,9 @@ export function summarize(
     convectionProfiles: convection.length,
     convectionMissingInputs: missing,
     radiationProfiles: set.profiles.filter(isRadiative).length,
-    solarLoads: set.profiles.filter((profile) => profile.type === 'solar_load').length,
+    solarLoads: set.site.solar_enabled && (set.site.solar_irradiance_W_m2 ?? 0) > 0
+      ? set.profiles.filter((profile) => profile.type === 'solar_load').length
+      : 0,
     fixedTemperatureProfiles: set.profiles.filter(
       (profile) => profile.type === 'fixed_temperature_boundary',
     ).length,
@@ -139,7 +153,7 @@ export function portStatus(
     return ambient_C != null && Number.isFinite(ambient_C) ? 'ok' : 'blocked';
   }
 
-  const profiles = profilesForPort(set, port.id);
+  const profiles = profilesForPort(set, port.id).filter(isHeatRejection);
   if (profiles.length === 0) return 'unassigned';
   if (profiles.some((profile) => profile.type === 'adiabatic_symmetry')) return 'adiabatic';
 

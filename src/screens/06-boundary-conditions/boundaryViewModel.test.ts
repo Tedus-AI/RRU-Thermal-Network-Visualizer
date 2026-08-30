@@ -70,4 +70,43 @@ describe('boundary view model ambient reference', () => {
 
     expect(summarize(set, [ambientPort, finPort]).readinessPct).toBe(0);
   });
+
+  it('treats retained solar-only data as inactive rather than an assigned heat outlet', () => {
+    const set = createBoundarySet({
+      projectId: 'P1',
+      networkId: 'MAIN',
+      scenarioId: 'SCN_001',
+      topologyVersion: 1,
+      ambient_C: 55,
+      solar_W_m2: 0,
+    });
+    set.profiles = [
+      {
+        id: 'BCP_SOLAR',
+        name: 'Fin solar',
+        type: 'solar_load',
+        representation: 'external_load_only',
+        parameters: { irradiance_W_m2: 0, absorptivity: 0.7 },
+        source: 'manual',
+        confidence: 'medium',
+      },
+    ];
+    set.assignments = [
+      {
+        id: 'BCA_FIN',
+        boundary_port_id: finPort.id,
+        profile_ids: ['BCP_SOLAR'],
+        assignment_mode: 'manual',
+        enabled: true,
+      },
+    ];
+
+    expect(portStatus(set, finPort)).toBe('unassigned');
+    expect(summarize(set, [finPort])).toMatchObject({ portsAssigned: 0, solarLoads: 0 });
+
+    set.site.solar_enabled = true;
+    set.site.solar_irradiance_W_m2 = 800;
+    expect(summarize(set, [finPort]).solarLoads).toBe(1);
+    expect(portStatus(set, finPort)).toBe('unassigned');
+  });
 });

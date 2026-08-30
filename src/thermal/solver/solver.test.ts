@@ -746,6 +746,8 @@ describe('Scenario boundary conditions feed the solve (07 §12)', () => {
     const ports = deriveBoundaryPorts(net);
     const finPort = ports.find((port) => port.connected_node_id === 'FIN') as BoundaryPort;
     const set = withConvection('SCN_SUN', 20, 10, 0.5, finPort);
+    set.site.solar_enabled = true;
+    set.site.solar_irradiance_W_m2 = 1000;
 
     set.profiles.push({
       id: 'P_SOLAR',
@@ -779,6 +781,42 @@ describe('Scenario boundary conditions feed the solve (07 §12)', () => {
     close(outcome.solution.energy_balance.generated_W, 220, 1e-9);
     close(outcome.solution.energy_balance.rejected_W, 220, 1e-9);
     expect(outcome.solution.energy_balance.grade).toBe('green');
+  });
+
+  it('does not inject a retained solar profile when the scenario solar load is disabled', () => {
+    const net = boundaryNetwork();
+    const ports = deriveBoundaryPorts(net);
+    const finPort = ports.find((port) => port.connected_node_id === 'FIN') as BoundaryPort;
+    const set = withConvection('SCN_NO_SUN', 20, 10, 0.5, finPort);
+
+    set.profiles.push({
+      id: 'P_SOLAR_RETAINED',
+      name: 'Retained fin solar',
+      type: 'solar_load',
+      representation: 'external_load_only',
+      parameters: {
+        irradiance_W_m2: 1000,
+        receivingArea_m2: 0.5,
+        absorptivity: 0.4,
+        projectedAreaFactor: 1,
+        shadingFactor: 1,
+      },
+      source: 'assumed',
+      confidence: 'low',
+    });
+    set.assignments[0].profile_ids = ['P_CONV', 'P_SOLAR_RETAINED'];
+
+    const outcome = solveScenario({
+      materials: defaultMaterials(),
+      network: net,
+      boundarySet: set,
+      ports,
+      scenarioId: 'SCN_NO_SUN',
+    });
+
+    close(outcome.solution.energy_balance.component_W, 10, 1e-9);
+    close(outcome.solution.energy_balance.solar_W, 0, 1e-9);
+    close(outcome.solution.energy_balance.generated_W, 10, 1e-9);
   });
 
   it('honours a fixed-temperature boundary profile', () => {
