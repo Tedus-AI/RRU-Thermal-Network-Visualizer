@@ -223,36 +223,80 @@ function effectiveEdgeSpec(
 }
 
 /**
- * DIRECT_METAL is one user-facing template with two mutually-exclusive source
- * models. Materializing it here keeps the registry data-driven while ensuring
- * Screen 05 previews and generated graphs use the component's actual choice.
+ * Removes the Junction node and its Rjc edge, moving the dissipation onto the
+ * face heat leaves through.
+ *
+ * Every template starts `JUNCTION --Rjc--> <exit face>`, which is right for a
+ * die behind a package resistance and wrong for an isothermal lump: a ferrite
+ * circulator, a machined filter body, a bolted power module. For those the
+ * surface temperature, the mounting-pad temperature and the body temperature
+ * are one number, and there is no second node for them to differ across.
+ *
+ * The exit face keeps its own name and gains the source, so the chain reads
+ * "Body / E-PAD → vias → TIM" rather than losing the face it was built around.
+ *
+ * A template with no `package_rjc` edge — CUSTOM, whose junction goes straight
+ * to the port — is returned untouched. There is no exit-face node to move the
+ * source onto, and stripping the junction would leave a component with no nodes
+ * at all.
+ */
+function withoutJunction(template: ThermalTemplate): ThermalTemplate {
+  const rjc = template.edges.find(
+    (edge) => edge.fromRole === 'JUNCTION' && edge.type === 'package_rjc',
+  );
+  const exitFace = rjc && template.nodes.find((node) => node.role === rjc.toRole);
+  if (!rjc || !exitFace) return template;
+
+  return {
+    ...template,
+    nodes: template.nodes
+      .filter((node) => node.role !== 'JUNCTION')
+      .map((node) =>
+        node.role === exitFace.role
+          ? {
+              ...node,
+              label: `Body / ${node.label}`,
+              labelZh: `本體／${node.labelZh}`,
+              heatSource: true,
+            }
+          : node,
+      ),
+    edges: template.edges.filter((edge) => edge !== rjc),
+    // Rjc is not merely unknown for a body source, it does not exist. Leaving it
+    // required would report a missing input that has nothing to be filled in.
+    requiredComponentFields: template.requiredComponentFields.filter(
+      (field) => field.path !== 'thermal_spec.r_jc_C_per_W',
+    ),
+  };
+}
+
+/**
+ * Materializes the template a component actually gets.
+ *
+ * Two things vary per component. The source model applies to every template —
+ * whether there is a junction behind an Rjc at all — and DIRECT_METAL adds its
+ * own interface and exposed-surface variants on top. Resolving both here keeps
+ * the registry data-driven while ensuring Screen 05 previews and generated
+ * graphs use the component's actual choices.
  */
 export function templateForComponent(
   component: Component,
   templateId: string,
 ): ThermalTemplate | null {
   const base = getTemplate(templateId);
-  if (!base || base.id !== 'DIRECT_METAL') return base;
+  if (!base) return base;
 
-  const template = structuredClone(base);
   const sourceModel = metalBaseSourceModel(component.thermal_spec);
+  const bodySourced = sourceModel === 'SurfaceBodyBased';
+
+  if (base.id !== 'DIRECT_METAL') {
+    return bodySourced ? withoutJunction(structuredClone(base)) : base;
+  }
+
+  let template = structuredClone(base);
   const exposed = metalBaseExposedSurfaceEnabled(component.thermal_spec);
 
-  if (sourceModel === 'SurfaceBodyBased') {
-    template.nodes = template.nodes
-      .filter((node) => node.role !== 'JUNCTION')
-      .map((node) =>
-        node.role === 'METAL_BASE'
-          ? {
-              ...node,
-              label: 'Body / Metal Base',
-              labelZh: '本體／金屬底面',
-              heatSource: true,
-            }
-          : node,
-      );
-    template.edges = template.edges.filter((edge) => edge.fromRole !== 'JUNCTION');
-  }
+  if (bodySourced) template = withoutJunction(template);
 
   if (isDirectContact(component.thermal_spec.tim)) {
     template.nodes = template.nodes.map((node) =>

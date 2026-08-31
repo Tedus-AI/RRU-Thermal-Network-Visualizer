@@ -15,7 +15,7 @@ import {
   LIMIT_TYPES,
   componentTotalPowerW,
   heatPathPatch,
-  metalBaseSourceModel,
+  isBodySourced,
   type HeatPathType,
   type Component,
   type ComponentCategory,
@@ -139,11 +139,9 @@ export function ComponentTable({
             const meta = STATUS_META[status];
             const Icon = meta.icon;
             const spec = component.thermal_spec;
-            // Rjc has no meaning when the dissipation is referenced to the
-            // metal face itself rather than to a junction behind it.
-            const surfaceReferenced =
-              spec.heat_path.type === 'DirectMetal' &&
-              metalBaseSourceModel(spec) === 'SurfaceBodyBased';
+            // Rjc has no meaning when the dissipation is referenced to the exit
+            // face itself rather than to a junction behind it — on any heat path.
+            const surfaceReferenced = isBodySourced(spec);
             const selected = component.id === selectedId;
 
             return (

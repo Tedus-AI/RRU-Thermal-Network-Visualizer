@@ -261,14 +261,26 @@ export function runPreSolveChecks(input: SolveInput): PreSolveReport {
     }
 
     if (R <= 0) {
+      // An Rjc of 0 is not a stray zero — it is someone saying "this part has no
+      // internal resistance", which is true of a circulator, a filter body or a
+      // bolted module whose surface, pad and body are all one temperature. The
+      // generic message sent them to Screen 05 to edit an edge that is doing
+      // exactly what it was told; the fix is the component's Heat Source
+      // Reference in Screen 04, followed by a subgraph rebuild so the junction
+      // step goes away instead of being short-circuited.
+      const packageRjc = edge.type === 'package_rjc' && R === 0;
       errors.push(
         issue(
           'error',
-          'active_rth_non_positive',
+          packageRjc ? 'package_rjc_zero' : 'active_rth_non_positive',
           'pre_solve',
-          `Edge "${edge.id}" has a resistance of ${R}. An active edge must have Rth > 0.`,
-          `連線 "${edge.id}" 的熱阻為 ${R}，作用中的連線熱阻必須大於 0。`,
-          { edge_id: edge.id, fix_in: '05' },
+          packageRjc
+            ? `Edge "${edge.id}" is a package Rjc of 0, which has infinite conductance and cannot be solved. If the part is one isothermal body, set its Heat Source Reference to surface/body in Screen 04, then rebuild its subgraph in Screen 05.`
+            : `Edge "${edge.id}" has a resistance of ${R}. An active edge must have Rth > 0.`,
+          packageRjc
+            ? `連線 "${edge.id}" 的封裝熱阻為 0，導熱率為無限大而無法求解。若此零件為等溫本體，請於 04 將「熱源基準」改為表面／本體型，再於 05 重建其子圖。`
+            : `連線 "${edge.id}" 的熱阻為 ${R}，作用中的連線熱阻必須大於 0。`,
+          { edge_id: edge.id, fix_in: packageRjc ? '04' : '05' },
         ),
       );
       continue;

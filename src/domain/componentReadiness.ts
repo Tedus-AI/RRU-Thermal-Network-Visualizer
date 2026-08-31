@@ -7,6 +7,7 @@
 
 import {
   GEOMETRY_RULES,
+  isBodySourced,
   isHeatSource,
   metalBaseExposedAreaMm2,
   metalBaseParameters,
@@ -58,12 +59,11 @@ export type CompletenessMap = Record<CompletenessItem, boolean>;
 
 export function completenessOf(component: Component): CompletenessMap {
   const spec = component.thermal_spec;
-  const metalBase = spec.heat_path.type === 'DirectMetal';
-  const metalBaseModel = metalBaseParameters(spec);
-  // ModuleSurface used to be a second way of saying this. It folded into
-  // DirectMetal, where "the dissipation is referenced to a surface rather than
-  // to a junction behind an Rjc" is what SurfaceBodyBased means.
-  const surfaceReferenced = metalBase && metalBaseModel.source_model === 'SurfaceBodyBased';
+  // "The dissipation is referenced to a surface rather than to a junction behind
+  // an Rjc" is what SurfaceBodyBased means, and it is true of a circulator on
+  // board vias as much as of a filter body on a metal face — so the heat path
+  // no longer gates it.
+  const surfaceReferenced = isBodySourced(spec);
   return {
     Identity: Boolean(component.name.trim()) && component.qty > 0,
     Power: component.power_W.value != null,
@@ -102,12 +102,11 @@ export function completenessScore(map: CompletenessMap): { done: number; total: 
 export function validateComponent(component: Component): ComponentIssue[] {
   const issues: ComponentIssue[] = [];
   const spec = component.thermal_spec;
+  const surfaceReferenced = isBodySourced(spec);
+  // Contact geometry and the exposed-surface boundary really are Metal Face
+  // settings — unlike the source model, which applies to every heat path.
   const metalBase = spec.heat_path.type === 'DirectMetal';
   const metalBaseModel = metalBaseParameters(spec);
-  // ModuleSurface used to be a second way of saying this. It folded into
-  // DirectMetal, where "the dissipation is referenced to a surface rather than
-  // to a junction behind an Rjc" is what SurfaceBodyBased means.
-  const surfaceReferenced = metalBase && metalBaseModel.source_model === 'SurfaceBodyBased';
 
   if (!component.name.trim()) {
     issues.push({
@@ -220,6 +219,23 @@ export function validateComponent(component: Component): ComponentIssue[] {
       field: 'r_jc_C_per_W',
       message: 'Rjc is missing for a heat source.',
       message_zh: '此為熱源但缺少 Rjc。',
+    });
+  }
+
+  // Rjc = 0 is how people said "this part has no internal resistance" before
+  // there was a way to say it. It does not survive the solve: a zero-resistance
+  // edge has infinite conductance, so Screen 07 rejects it and the whole
+  // scenario stops — three screens away from where it was typed, with an error
+  // about an edge rather than about the part. Caught here, and named with the
+  // setting that actually expresses the intent.
+  if (!surfaceReferenced && rjc != null && rjc <= 0) {
+    issues.push({
+      severity: 'error',
+      field: 'r_jc_C_per_W',
+      message:
+        'Rjc must be greater than 0. For an isothermal part with no junction, set Heat Source Reference to surface/body instead.',
+      message_zh:
+        'Rjc 必須大於 0。若此零件為等溫本體、沒有接面，請將「熱源基準」改為表面／本體型，而不是填 0。',
     });
   }
 

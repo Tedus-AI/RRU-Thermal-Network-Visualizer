@@ -351,7 +351,6 @@ export function demoBoundarySet(network: ThermalNetwork): ScenarioBoundaryCondit
     ambient: {
       external_ambient_C: 55,
       internal_air_C: null,
-      radiation_surrounding_C: 55,
       source: 'analytical',
       confidence: 'high',
       provenance: {

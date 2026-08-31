@@ -168,6 +168,64 @@ describe('architecture templates', () => {
       template.requiredComponentFields.some((field: { label: string }) => field.label === 'Rjc'),
     ).toBe(false);
   });
+
+  // A ferrite circulator taken out through board vias is one isothermal body
+  // just as much as a filter bolted to a metal land, so the source model is not
+  // a Metal Face setting. Before this, the only way to say it on a Board path
+  // was Rjc = 0, which built a zero-resistance edge the solver has to reject.
+  it.each([
+    ['BOTTOM_COOL_VIA', 'EPAD', 'Body / EPAD'],
+    ['BOTTOM_COOL_COIN', 'CASE', 'Body / Case'],
+    ['TOP_COOL_LID', 'LID', 'Body / Lid'],
+  ])('drops the junction from %s when the source is the body', (templateId, role, label) => {
+    const body = component({
+      thermal_spec: {
+        ...component().thermal_spec,
+        limit_type: 'Ts',
+        heat_path: {
+          type: 'Board',
+          parameters: { source_model: 'SurfaceBodyBased' },
+        },
+      },
+    });
+    const template = templateForComponent(body, templateId)!;
+
+    expect(template.nodes.some((node) => node.role === 'JUNCTION')).toBe(false);
+    expect(template.edges.some((edge) => edge.type === 'package_rjc')).toBe(false);
+    const exitFace = template.nodes.find((node) => node.role === role)!;
+    expect(exitFace.heatSource).toBe(true);
+    expect(exitFace.label).toBe(label);
+    expect(
+      template.requiredComponentFields.some((field) => field.label === 'Rjc'),
+    ).toBe(false);
+  });
+
+  it('keeps the junction when the same template is junction-based', () => {
+    const junction = component({
+      thermal_spec: {
+        ...component().thermal_spec,
+        heat_path: { type: 'Board', parameters: {} },
+      },
+    });
+    const template = templateForComponent(junction, 'BOTTOM_COOL_VIA')!;
+
+    expect(template.nodes.some((node) => node.role === 'JUNCTION')).toBe(true);
+    expect(template.nodes.find((node) => node.role === 'EPAD')?.heatSource).toBeFalsy();
+  });
+
+  // CUSTOM's junction goes straight to the port, so there is no exit-face node
+  // to move the source onto. Stripping it would leave a component with no nodes.
+  it('leaves the Custom template alone even when the source is the body', () => {
+    const body = component({
+      thermal_spec: {
+        ...component().thermal_spec,
+        heat_path: { type: 'Board', parameters: { source_model: 'SurfaceBodyBased' } },
+      },
+    });
+    const template = templateForComponent(body, 'CUSTOM')!;
+
+    expect(template.nodes.map((node) => node.role)).toEqual(['JUNCTION']);
+  });
 });
 
 describe('Metal Base + Interface template', () => {

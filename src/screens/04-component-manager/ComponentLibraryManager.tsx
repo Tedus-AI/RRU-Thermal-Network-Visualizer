@@ -22,7 +22,7 @@ import { useFolderStore } from '@/data/folderStore';
 import { triggerDownload, textBlob } from '@/export/download';
 import {
   COMPONENT_CATEGORIES,
-  metalBaseSourceModel,
+  isBodySourced,
   type ComponentCategory,
 } from '@/domain/component';
 
@@ -108,8 +108,7 @@ function EntryRow({
             {entry.default_power_W == null ? '— W' : `${entry.default_power_W} W`} ·{' '}
             {spec.heat_path.type} ·{' '}
             {spec.limit_C?.value == null ? '— °C' : `${spec.limit_C.value} °C`} ·{' '}
-            {spec.heat_path.type === 'DirectMetal' &&
-            metalBaseSourceModel(spec) === 'SurfaceBodyBased'
+            {isBodySourced(spec)
               ? 'Rjc N/A'
               : spec.r_jc_C_per_W?.value == null
                 ? 'Rjc —'

@@ -169,9 +169,41 @@ function migrateHeatPath(
       : parameters;
 
   return {
-    heat_path: { type: known ?? inferHeatPath(category), parameters: migrated },
+    heat_path: {
+      type: known ?? inferHeatPath(category),
+      parameters: withBodySourceForZeroRjc(migrated, spec),
+    },
     heat_path_confirmed: confirmed && known != null,
   };
+}
+
+/**
+ * Reads `Rjc = 0` as "this part is one isothermal body".
+ *
+ * Before the source model applied to every heat path, that was the only way to
+ * say it: a circulator whose surface temperature, mounting-pad temperature and
+ * body temperature are the same number got `Rjc = 0` so the junction step would
+ * vanish. It never vanished — it became a zero-resistance edge, which has
+ * infinite conductance and cannot appear in `[G][T] = [P]`, so Screen 07
+ * refused to solve the scenario at all.
+ *
+ * The stored 0 is left in place rather than cleared. It is no longer read while
+ * the part is body-sourced, and an engineer who switches back to a junction is
+ * better served seeing the number they typed — with Screen 04 now reporting it
+ * as an error — than finding the field silently emptied.
+ *
+ * Only applied when nothing was stated. A component that already carries a
+ * `source_model` has had the question answered, and answering it again from a
+ * leftover 0 would override a deliberate choice.
+ */
+function withBodySourceForZeroRjc(
+  parameters: Component['thermal_spec']['heat_path']['parameters'],
+  spec: Raw,
+): Component['thermal_spec']['heat_path']['parameters'] {
+  if (parameters.source_model != null) return parameters;
+  const rjc = toSourced(spec.r_jc_C_per_W);
+  if (rjc?.value !== 0) return parameters;
+  return { ...parameters, source_model: 'SurfaceBodyBased' };
 }
 
 /**
