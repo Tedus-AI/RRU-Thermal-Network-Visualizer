@@ -594,6 +594,16 @@ function FinGeometryPanel({
             </div>
           </dl>
         )}
+        {/* The same honesty rule the retired radiation sink temperature was
+            removed under: a value the screen shows but the solve never reads
+            misrepresents what was modelled. Emissivity is still editable in
+            Surface Properties and still drives a manually-entered radiation
+            profile — it just does not reach THIS surface, and the engineer is
+            entitled to know which. */}
+        <p className="mt-1.5 text-[10px] leading-relaxed text-ink-400">
+          發射率與視角因子不參與此表面的計算：h_rad 的關聯式已將表面發射率、通道間的多次反射與
+          包絡面積比一併校準在內。表面性質的發射率仍作用於手動輸入的輻射 profile。
+        </p>
         {verdict != null && verdict !== 'inside' && (
           <p className="mt-1.5 text-[10px] leading-relaxed text-warn-600">
             流阻比在 {FIN_ASPECT_RATIO_BAND.min}–{FIN_ASPECT_RATIO_BAND.max} 的校準範圍之外
@@ -676,7 +686,7 @@ export function BoundaryInspector({
     onUpsertProfile({ ...activeProfile, ...patch });
   };
 
-  const patchParameter = (key: string, value: number | string | null) => {
+  const patchParameter = (key: string, value: number | string | boolean | null) => {
     if (!activeProfile) return;
     onUpsertProfile({
       ...activeProfile,
@@ -684,7 +694,7 @@ export function BoundaryInspector({
     });
   };
 
-  const patchParameters = (patch: Record<string, number | string | null>) => {
+  const patchParameters = (patch: BoundaryConditionProfile['parameters']) => {
     if (!activeProfile) return;
     onUpsertProfile({
       ...activeProfile,
@@ -696,16 +706,23 @@ export function BoundaryInspector({
    * Switches a surface between "state h and an area" and "state the fin
    * geometry".
    *
-   * Turning geometry ON seeds the base from Screen 01 and the conductivity from
-   * the process, so the engineer starts from the heat sink the project already
-   * describes rather than from an empty form. Turning it OFF clears the trigger
-   * only: the rest of the geometry stays, so a mis-click is one click to undo
-   * and nobody retypes five dimensions.
+   * The mode is its own flag rather than the presence of a fin height. Deriving
+   * it from the height made that one field behave unlike every other number on
+   * the screen: clearing it to retype switched the mode off mid-edit, and
+   * toggling off then on again wiped the value instead of restoring it.
+   *
+   * Turning geometry ON seeds only what the project already knows — the base
+   * from Screen 01, the conductivity from the process. The fin dimensions are
+   * left blank, because a seeded 0 is a measurement nobody took, and the derived
+   * panel says the geometry is incomplete until they are filled in.
+   *
+   * Turning it OFF keeps every dimension, so a mis-click costs one click rather
+   * than five retyped numbers.
    */
   const setFinGeometryEnabled = (enabled: boolean) => {
     if (!activeProfile) return;
     if (!enabled) {
-      patchParameter(FIN_GEOMETRY_KEYS.height, null);
+      patchParameter(FIN_GEOMETRY_KEYS.enabled, false);
       return;
     }
     const p = activeProfile.parameters;
@@ -714,8 +731,7 @@ export function BoundaryInspector({
         ? (p[FIN_GEOMETRY_KEYS.technology] as FinTechnology)
         : 'Embedded';
     patchParameters({
-      [FIN_GEOMETRY_KEYS.height]:
-        typeof p[FIN_GEOMETRY_KEYS.height] === 'number' ? (p[FIN_GEOMETRY_KEYS.height] as number) : 0,
+      [FIN_GEOMETRY_KEYS.enabled]: true,
       [FIN_GEOMETRY_KEYS.technology]: technology,
       ...(p[FIN_GEOMETRY_KEYS.baseLength] == null && heatSinkBase?.L_mm != null
         ? { [FIN_GEOMETRY_KEYS.baseLength]: heatSinkBase.L_mm }
