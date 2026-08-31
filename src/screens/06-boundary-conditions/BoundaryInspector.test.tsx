@@ -95,7 +95,9 @@ describe('BoundaryInspector simplification', () => {
     try {
       html = renderToStaticMarkup(
         <BoundaryInspector
-          port={port()}
+          // A flat housing wall. The effective-area field this asserts belongs
+          // to the manual description, which a fin stack no longer offers.
+          port={port({ orientation: 'housing_wall' })}
           status="ok"
           profiles={[profile()]}
           preview={preview()}
@@ -127,7 +129,7 @@ describe('BoundaryInspector simplification', () => {
     try {
       html = renderToStaticMarkup(
         <BoundaryInspector
-          port={port({ area_m2: null })}
+          port={port({ area_m2: null, orientation: 'housing_wall' })}
           status="ok"
           profiles={[profile()]}
           preview={preview()}
@@ -143,6 +145,36 @@ describe('BoundaryInspector simplification', () => {
 
     expect(html).toMatch(/<input[^>]+id="bc-param-area_m2"/);
     expect(html).not.toContain('由SCR04/05 邊界幾何同步');
+  });
+
+  // A fin stack has no h of its own to state, so the manual description is not
+  // offered there at all — the geometry panel replaces it.
+  it('offers only the fin geometry on a finned surface', () => {
+    const suppressSsrLayoutWarning = vi.spyOn(console, 'error').mockImplementation(() => {});
+    let html = '';
+    try {
+      html = renderToStaticMarkup(
+        <BoundaryInspector
+          port={port({ orientation: 'vertical_fins' })}
+          status="ok"
+          profiles={[profile()]}
+          preview={preview()}
+          validation={validation}
+          ambientTemperature_C={55}
+          readOnly={false}
+          {...callbacks}
+        />,
+      );
+    } finally {
+      suppressSsrLayoutWarning.mockRestore();
+    }
+
+    expect(html).toContain('Described as a fin array');
+    // No toggle: it is not a choice on this surface.
+    expect(html).not.toContain('Describe as a fin array');
+    expect(html).toMatch(/<input[^>]+id="bc-fin-finGap_mm"/);
+    expect(html).not.toMatch(/<input[^>]+id="bc-param-h_W_m2K"/);
+    expect(html).not.toMatch(/<input[^>]+id="bc-param-area_m2"/);
   });
 
   it('shows Chinese labels in the data-source selector', () => {

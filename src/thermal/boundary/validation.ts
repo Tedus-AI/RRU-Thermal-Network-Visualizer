@@ -12,6 +12,7 @@
 
 import { buildDerivedPreview, finArrayOf, usesFinGeometry } from './calculations';
 import { FIN_ASPECT_RATIO_BAND, finAspectRatioVerdict } from './finArray';
+import { isFinnedSurfacePort } from './boundaryPorts';
 import type {
   BoundaryConditionProfile,
   BoundaryDerivedPreview,
@@ -218,9 +219,21 @@ export function validateBoundarySet(input: BoundaryValidationInput): BoundaryVal
   }
 
   // --- Profiles ----------------------------------------------------------
+  // Which surface each profile lands on. A finned port requires fin geometry,
+  // so a profile assigned to one is validated as fin-derived whether or not it
+  // carries the flag.
+  const portByProfile = new Map<string, BoundaryPort>();
+  for (const assignment of set.assignments) {
+    if (!assignment.enabled) continue;
+    const port = input.ports.find((entry) => entry.id === assignment.boundary_port_id);
+    if (!port) continue;
+    for (const profileId of assignment.profile_ids) portByProfile.set(profileId, port);
+  }
+
   for (const profile of set.profiles) {
     const p = profile.parameters;
     const id = profile.id;
+    const profilePort = portByProfile.get(id) ?? null;
 
     switch (profile.type) {
       case 'convection_to_ambient':
@@ -229,8 +242,25 @@ export function validateBoundarySet(input: BoundaryValidationInput): BoundaryVal
         // for the combined type — the radiation coefficient. Asking it for
         // those as well would demand the four numbers this mode exists to stop
         // anyone typing.
-        if (usesFinGeometry(profile)) {
-          const fin = finArrayOf(profile);
+        // A finned surface still carrying an h and an area was described before
+        // the geometry mode existed. It keeps solving — reinterpreting stored
+        // numbers under a different model would be worse than leaving them —
+        // but it is named, because those four values cannot be checked against
+        // anything: there is no fin height they follow from.
+        if (profilePort != null && isFinnedSurfacePort(profilePort) && !usesFinGeometry(profile, profilePort)) {
+          warnings.push(
+            message(
+              'warning',
+              `PROFILE_FIN_LEGACY_MANUAL_${id}`,
+              `"${profile.name}" describes a finned surface with a stated h and area. Restate it as fin geometry so h, the radiation term, the fin efficiency and the wetted area follow from the heat sink.`,
+              `「${profile.name}」以手動 h 與面積描述鰭片表面。請改以鰭片幾何描述，讓 h、輻射項、鰭片效率與散熱面積由散熱器本身推導。`,
+              { profile_id: id },
+            ),
+          );
+        }
+
+        if (usesFinGeometry(profile, profilePort)) {
+          const fin = finArrayOf(profile, profilePort);
           if (fin == null) {
             errors.push(
               message(

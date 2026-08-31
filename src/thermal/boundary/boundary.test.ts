@@ -352,6 +352,47 @@ describe('a surface described as a fin array', () => {
     expect(finArrayOf(legacy)?.area_m2).toBeCloseTo(0.918, 3);
   });
 
+  // A fin stack has no honest h of its own, so the geometry is the only
+  // description Screen 06 offers there. A flat housing wall keeps both modes.
+  it('is the default description on a finned port', () => {
+    const bare = profile({ type: 'combined_convection_radiation', parameters: {} });
+
+    expect(usesFinGeometry(bare, port({ orientation: 'vertical_fins' }))).toBe(true);
+    expect(usesFinGeometry(bare, port({ orientation: 'housing_wall' }))).toBe(false);
+    expect(usesFinGeometry(bare)).toBe(false);
+  });
+
+  // Reinterpreting stored numbers under a different model would be worse than
+  // leaving them, so a set saved before this existed keeps solving — and is
+  // told, once, that it should be restated.
+  it('leaves an already-described finned surface on its stored h, and says so', () => {
+    const legacy = profile({
+      type: 'combined_convection_radiation',
+      parameters: { h_W_m2K: 8, area_m2: 0.89, emissivity: 0.85, viewFactor: 0.9 },
+    });
+    const finPort = port({ orientation: 'vertical_fins' });
+
+    expect(usesFinGeometry(legacy, finPort)).toBe(false);
+
+    const preview = buildDerivedPreview(finPort, [legacy], { ambient_C: 55 });
+    expect(preview.fin_array).toBeUndefined();
+    expect(preview.r_conv_C_per_W).toBeCloseTo(1 / (8 * 0.89), 9);
+
+    const result = validateWithFinProfile(legacy.parameters);
+    expect(result.warnings.map((entry) => entry.id)).toContain('PROFILE_FIN_LEGACY_MANUAL_BCP_TEST');
+  });
+
+  // Radiation and solar are not things the fin correlation has an opinion
+  // about, so sweeping them in would delete two boundary types from the surface.
+  it('does not claim radiation or solar profiles on a finned port', () => {
+    const finPort = port({ orientation: 'vertical_fins' });
+    const radiation = profile({ type: 'radiation_to_surroundings', parameters: {} });
+    const solar = profile({ type: 'solar_load', parameters: {} });
+
+    expect(usesFinGeometry(radiation, finPort)).toBe(false);
+    expect(usesFinGeometry(solar, finPort)).toBe(false);
+  });
+
   it('leaves a manual h profile alone', () => {
     const preview = buildDerivedPreview(
       port({ area_m2: 0.89 }),
@@ -823,7 +864,9 @@ describe('boundary validation (06 §12)', () => {
 
     const result = validateBoundarySet({
       set,
-      ports,
+      // A flat housing wall, where a stated h and area IS the description. The
+      // same profile on a fin stack draws a warning instead — see below.
+      ports: [port({ orientation: 'housing_wall' })],
       hasTopology: true,
       hasScenario: true,
       topologyVersion: 1,
