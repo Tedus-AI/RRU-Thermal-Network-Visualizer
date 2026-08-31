@@ -19,6 +19,9 @@ import {
   calculateLinearizedRadiationHrad,
   calculateRadiationRth,
   calculateSolarHeatLoad,
+  FIN_GEOMETRY_KEYS,
+  finArrayOf,
+  usesFinGeometry,
 } from './calculations';
 import { deriveBoundaryPorts, surfaceGroupsOf } from './boundaryPorts';
 import { buildAllPreviews, validateBoundarySet } from './validation';
@@ -307,6 +310,46 @@ describe('a surface described as a fin array', () => {
 
     expect(raised.warnings.map((entry) => entry.id)).toContain('PROFILE_FIN_PROCESS_BCP_TEST');
     expect(honest.warnings.map((entry) => entry.id)).not.toContain('PROFILE_FIN_PROCESS_BCP_TEST');
+  });
+
+  // The fin height doubled as the mode switch at first, which made that one
+  // field behave unlike every other number on the screen.
+  it('stays in fin mode while the height is being retyped', () => {
+    const mid = profile({
+      type: 'combined_convection_radiation',
+      parameters: { ...FIN_GEOMETRY, [FIN_GEOMETRY_KEYS.enabled]: true, finHeight_mm: null },
+    });
+
+    expect(usesFinGeometry(mid)).toBe(true);
+    // No resistance yet — but the mode is still on, so the panel stays open and
+    // the manual h fields do not reappear underneath the engineer.
+    expect(finArrayOf(mid)).toBeNull();
+  });
+
+  it('keeps every dimension when the mode is switched off', () => {
+    const off = profile({
+      type: 'combined_convection_radiation',
+      parameters: { ...FIN_GEOMETRY, [FIN_GEOMETRY_KEYS.enabled]: false },
+    });
+
+    expect(usesFinGeometry(off)).toBe(false);
+    expect(off.parameters.finHeight_mm).toBe(55.86);
+    // Switching back on recovers the geometry rather than starting from zero.
+    const backOn = { ...off, parameters: { ...off.parameters, [FIN_GEOMETRY_KEYS.enabled]: true } };
+    expect(finArrayOf(backOn)?.h_conv_W_m2K).toBeCloseTo(6.23, 2);
+  });
+
+  // PR #91 shipped without the flag, so profiles already saved carry only a
+  // height. They must keep working.
+  it('reads a profile stored before the flag existed', () => {
+    const legacy = profile({
+      type: 'combined_convection_radiation',
+      parameters: FIN_GEOMETRY,
+    });
+
+    expect(legacy.parameters[FIN_GEOMETRY_KEYS.enabled]).toBeUndefined();
+    expect(usesFinGeometry(legacy)).toBe(true);
+    expect(finArrayOf(legacy)?.area_m2).toBeCloseTo(0.918, 3);
   });
 
   it('leaves a manual h profile alone', () => {

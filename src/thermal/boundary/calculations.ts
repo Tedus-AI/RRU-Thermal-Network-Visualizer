@@ -140,10 +140,10 @@ function parameter(profile: BoundaryConditionProfile, key: string): number | nul
  * array rather than as an h and an area.
  *
  * They live in the same free-form `parameters` bag as everything else so no
- * stored profile changes shape; what makes a profile fin-derived is simply
- * that `FIN_GEOMETRY_TRIGGER_KEY` is set.
+ * stored profile changes shape; `enabled` is what makes a profile fin-derived.
  */
 export const FIN_GEOMETRY_KEYS = {
+  enabled: 'finGeometryEnabled',
   baseLength: 'finBaseLength_mm',
   baseWidth: 'finBaseWidth_mm',
   height: 'finHeight_mm',
@@ -156,11 +156,22 @@ export const FIN_GEOMETRY_KEYS = {
   countOverride: 'finCount',
 } as const;
 
-/** Stating a fin height is what switches a profile into geometry mode. */
-export const FIN_GEOMETRY_TRIGGER_KEY = FIN_GEOMETRY_KEYS.height;
-
+/**
+ * Whether this profile is described as a fin array.
+ *
+ * An explicit flag, not an inference from the fin height. The height was the
+ * trigger at first, and conflating "is this mode on" with "how tall are the
+ * fins" made the height field behave unlike every other number on the screen:
+ * clearing it to retype switched the whole mode off, and switching the mode off
+ * and on again erased the one value that had been entered.
+ *
+ * A stored profile written before the flag existed is still read correctly: a
+ * height on its own continues to mean fin mode.
+ */
 export function usesFinGeometry(profile: BoundaryConditionProfile): boolean {
-  return parameter(profile, FIN_GEOMETRY_TRIGGER_KEY) != null;
+  const flag = profile.parameters[FIN_GEOMETRY_KEYS.enabled];
+  if (typeof flag === 'boolean') return flag;
+  return parameter(profile, FIN_GEOMETRY_KEYS.height) != null;
 }
 
 /**
