@@ -32,9 +32,115 @@ import {
   type BoundaryValidationState,
 } from '@/thermal/boundary/types';
 import type { Confidence } from '@/thermal/types';
+import { FIN_GEOMETRY_KEYS, finArrayOf, usesFinGeometry } from '@/thermal/boundary/calculations';
+import {
+  FIN_ASPECT_RATIO_BAND,
+  FIN_TECHNOLOGIES,
+  FIN_TECHNOLOGY_DEFAULT_K_W_mK,
+  FIN_TECHNOLOGY_LABELS,
+  finAspectRatioVerdict,
+  type FinArrayResult,
+  type FinTechnology,
+} from '@/thermal/boundary/finArray';
 
 import { T06 } from './tooltips';
 import { PORT_STATUS_LABELS, formatNumber, formatRth, type PortStatus } from './boundaryViewModel';
+
+/** Types whose surface can be described as a fin array instead of an h. */
+const FIN_CAPABLE_TYPES = new Set<BoundaryConditionType>([
+  'convection_to_ambient',
+  'combined_convection_radiation',
+]);
+
+/**
+ * Parameters the geometry supersedes.
+ *
+ * They are hidden rather than disabled while geometry is on. A greyed-out `h`
+ * still showing 8 next to a computed 6.23 invites the reader to wonder which
+ * one the solve used, and the answer — that the stored value is inert — is not
+ * visible in a disabled box.
+ */
+const FIN_DERIVED_PARAMETER_KEYS = new Set([
+  'h_W_m2K',
+  'area_m2',
+  'emissivity',
+  'viewFactor',
+  'surfaceReferenceTemperatureGuess_C',
+]);
+
+const FIN_GEOMETRY_FIELDS: Array<{
+  key: string;
+  label: string;
+  zh: string;
+  unit: string;
+  tip: string;
+  dieCastingOnly?: boolean;
+}> = [
+  {
+    key: FIN_GEOMETRY_KEYS.baseLength,
+    label: 'Base L',
+    zh: '底座長',
+    unit: 'mm',
+    tip: '散熱器底座沿鰭片長度方向的尺寸；切換到鰭片模式時會由 SCR01 帶入。',
+  },
+  {
+    key: FIN_GEOMETRY_KEYS.baseWidth,
+    label: 'Base W',
+    zh: '底座寬',
+    unit: 'mm',
+    tip: '散熱器底座橫跨鰭片排列方向的尺寸；鰭片數由此推算。',
+  },
+  {
+    key: FIN_GEOMETRY_KEYS.height,
+    label: 'Fin Height',
+    zh: '鰭片高度',
+    unit: 'mm',
+    tip: '鰭片自底座算起的高度。h 會隨鰭片變高而下降（邊界層變厚），這正是固定 h 模型會高估高鰭片的原因。',
+  },
+  {
+    key: FIN_GEOMETRY_KEYS.gap,
+    label: 'Channel Gap',
+    zh: '通道間距',
+    unit: 'mm',
+    tip: '相鄰兩鰭片之間的淨間距。h 的對流項與輻射項都由它決定。',
+  },
+  {
+    key: FIN_GEOMETRY_KEYS.thickness,
+    label: 'Fin Thickness',
+    zh: '鰭片厚度',
+    unit: 'mm',
+    tip: '鰭片尖端厚度。壓鑄件的根部較厚，由拔模角推算。',
+  },
+  {
+    key: FIN_GEOMETRY_KEYS.conductivity,
+    label: 'Fin k',
+    zh: '鰭片導熱係數',
+    unit: 'W/mK',
+    tip: '鰭片本身的導熱係數，決定鰭片效率。預設由製程帶入：純鋁 200、ADC12 壓鑄 160。',
+  },
+  {
+    key: FIN_GEOMETRY_KEYS.draftAngle,
+    label: 'Draft Angle',
+    zh: '拔模角',
+    unit: '°',
+    tip: '壓鑄鰭片的脫模斜度。根部變厚會壓縮通道並可能少排一片鰭片。',
+    dieCastingOnly: true,
+  },
+  {
+    key: FIN_GEOMETRY_KEYS.processEfficiency,
+    label: 'Process Factor',
+    zh: '製程係數',
+    unit: '',
+    tip: '鰭片模型未涵蓋部分的殘差修正，預設 1.0（不修正）。大於 1 代表表面效能超過鰭片效率本身，那是在吸收模型缺少的物理量——而本工具另外計算擴散熱阻，可能重複計入。',
+  },
+  {
+    key: FIN_GEOMETRY_KEYS.countOverride,
+    label: 'Fin Count',
+    zh: '鰭片數',
+    unit: 'pcs',
+    tip: '留白即由底座寬度、間距與厚度自動推算；只有實際排片與計算不同時才覆寫。',
+  },
+];
 
 const SOURCES: BoundaryDataSource[] = [
   'manual',
@@ -363,6 +469,142 @@ function AmbientReferenceSummary({
   );
 }
 
+/**
+ * Fin geometry in, coefficients out.
+ *
+ * The readout is the point of the panel, not decoration: `h_conv`, `h_rad`, the
+ * fin efficiency and the wetted area are exactly the four numbers that used to
+ * be typed in by hand, so showing what the geometry produced is what lets an
+ * engineer check the mode against whatever they were copying from before.
+ */
+function FinGeometryPanel({
+  profile,
+  result,
+  readOnly,
+  onPatch,
+}: {
+  profile: BoundaryConditionProfile;
+  result: FinArrayResult | null;
+  readOnly: boolean;
+  onPatch: (key: string, value: number | string | null) => void;
+}) {
+  const technology: FinTechnology =
+    profile.parameters[FIN_GEOMETRY_KEYS.technology] === 'DieCasting' ? 'DieCasting' : 'Embedded';
+  const verdict = finAspectRatioVerdict(result?.aspect_ratio);
+  const number = (value: number | null | undefined, digits: number) =>
+    value == null ? 'N/A' : value.toFixed(digits);
+
+  return (
+    <div className="mb-2 rounded-md border border-line bg-surface p-2.5">
+      <div className="mb-2">
+        <FieldLabel
+          label="Fin Technology"
+          zh="鰭片製程"
+          htmlFor="bc-fin-technology"
+          tooltip="決定鰭片導熱係數與拔模角的預設值。"
+        />
+        <Select
+          id="bc-fin-technology"
+          className="mt-1 h-8 !text-[12px]"
+          value={technology}
+          disabled={readOnly}
+          items={FIN_TECHNOLOGIES.map((value) => ({
+            value,
+            label: `${FIN_TECHNOLOGY_LABELS[value].en} / ${FIN_TECHNOLOGY_LABELS[value].zh}`,
+          }))}
+          onChange={(event) => onPatch(FIN_GEOMETRY_KEYS.technology, event.target.value)}
+        />
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        {FIN_GEOMETRY_FIELDS.filter(
+          (field) => !field.dieCastingOnly || technology === 'DieCasting',
+        ).map((field) => {
+          const value = profile.parameters[field.key];
+          return (
+            <div key={field.key}>
+              <FieldLabel
+                label={field.label}
+                zh={field.zh}
+                unit={field.unit || undefined}
+                htmlFor={`bc-fin-${field.key}`}
+                tooltip={field.tip}
+                required={
+                  field.key !== FIN_GEOMETRY_KEYS.countOverride &&
+                  field.key !== FIN_GEOMETRY_KEYS.draftAngle &&
+                  field.key !== FIN_GEOMETRY_KEYS.processEfficiency
+                }
+              />
+              <NumberInput
+                id={`bc-fin-${field.key}`}
+                className="mt-1 h-8 !text-[12px]"
+                step="any"
+                placeholder={
+                  field.key === FIN_GEOMETRY_KEYS.countOverride
+                    ? result != null
+                      ? String(result.fin_count)
+                      : 'auto'
+                    : field.key === FIN_GEOMETRY_KEYS.processEfficiency
+                      ? '1.00'
+                      : undefined
+                }
+                value={typeof value === 'number' ? value : ''}
+                disabled={readOnly}
+                onChange={(event) =>
+                  onPatch(field.key, event.target.value === '' ? null : Number(event.target.value))
+                }
+              />
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="mt-2.5 rounded border border-line bg-surface-muted p-2">
+        <p className="mb-1.5 text-[10px] font-bold text-ink-600">
+          Derived from geometry / 由幾何算出
+          <span className="ml-1 font-normal text-ink-400">— 唯讀</span>
+        </p>
+        {result == null ? (
+          <p className="text-[11px] leading-relaxed text-warn-600">
+            Geometry incomplete — no coefficients yet.
+            <span className="block">幾何尚未填齊，無法計算係數。</span>
+          </p>
+        ) : (
+          <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
+            {[
+              ['h_conv', `${number(result.h_conv_W_m2K, 2)} W/m²K`],
+              ['h_rad', `${number(result.h_rad_W_m2K, 2)} W/m²K`],
+              ['h 合計', `${number(result.h_total_W_m2K, 2)} W/m²K`],
+              ['η_fin', number(result.eta_fin, 3)],
+              ['有效效率 eff', number(result.effectiveness, 3)],
+              ['鰭片數', `${result.fin_count} pcs`],
+              ['散熱面積', `${number(result.area_m2, 4)} m²`],
+              ['流阻比', number(result.aspect_ratio, 2)],
+            ].map(([label, value]) => (
+              <div key={label} className="flex items-baseline justify-between gap-2">
+                <dt className="text-ink-400">{label}</dt>
+                <dd className="tabular font-semibold text-ink-800">{value}</dd>
+              </div>
+            ))}
+            <div className="col-span-2 mt-0.5 flex items-baseline justify-between gap-2 border-t border-line pt-1">
+              <dt className="text-ink-500">R = 1 / (h · A · eff)</dt>
+              <dd className="tabular font-bold text-ink-900">
+                {number(result.R_C_per_W, 4)} °C/W
+              </dd>
+            </div>
+          </dl>
+        )}
+        {verdict != null && verdict !== 'inside' && (
+          <p className="mt-1.5 text-[10px] leading-relaxed text-warn-600">
+            流阻比在 {FIN_ASPECT_RATIO_BAND.min}–{FIN_ASPECT_RATIO_BAND.max} 的校準範圍之外
+            {verdict === 'narrow' ? '（通道過窄）' : '（通道過寬）'}，此處的 h 為外推值。
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function BoundaryInspector({
   port,
   status,
@@ -372,6 +614,7 @@ export function BoundaryInspector({
   validation,
   ambientTemperature_C,
   solarEnabled,
+  heatSinkBase,
   readOnly,
   onEditAmbient,
   onUpsertProfile,
@@ -386,6 +629,8 @@ export function BoundaryInspector({
   validation: BoundaryValidationState;
   ambientTemperature_C: number | null;
   solarEnabled: boolean;
+  /** Screen 01's heat sink base, used to seed a fin-geometry profile. */
+  heatSinkBase?: { L_mm: number | null; W_mm: number | null } | null;
   readOnly: boolean;
   onEditAmbient: () => void;
   onUpsertProfile: (profile: BoundaryConditionProfile) => void;
@@ -438,6 +683,54 @@ export function BoundaryInspector({
       parameters: { ...activeProfile.parameters, [key]: value },
     });
   };
+
+  const patchParameters = (patch: Record<string, number | string | null>) => {
+    if (!activeProfile) return;
+    onUpsertProfile({
+      ...activeProfile,
+      parameters: { ...activeProfile.parameters, ...patch },
+    });
+  };
+
+  /**
+   * Switches a surface between "state h and an area" and "state the fin
+   * geometry".
+   *
+   * Turning geometry ON seeds the base from Screen 01 and the conductivity from
+   * the process, so the engineer starts from the heat sink the project already
+   * describes rather than from an empty form. Turning it OFF clears the trigger
+   * only: the rest of the geometry stays, so a mis-click is one click to undo
+   * and nobody retypes five dimensions.
+   */
+  const setFinGeometryEnabled = (enabled: boolean) => {
+    if (!activeProfile) return;
+    if (!enabled) {
+      patchParameter(FIN_GEOMETRY_KEYS.height, null);
+      return;
+    }
+    const p = activeProfile.parameters;
+    const technology =
+      typeof p[FIN_GEOMETRY_KEYS.technology] === 'string'
+        ? (p[FIN_GEOMETRY_KEYS.technology] as FinTechnology)
+        : 'Embedded';
+    patchParameters({
+      [FIN_GEOMETRY_KEYS.height]:
+        typeof p[FIN_GEOMETRY_KEYS.height] === 'number' ? (p[FIN_GEOMETRY_KEYS.height] as number) : 0,
+      [FIN_GEOMETRY_KEYS.technology]: technology,
+      ...(p[FIN_GEOMETRY_KEYS.baseLength] == null && heatSinkBase?.L_mm != null
+        ? { [FIN_GEOMETRY_KEYS.baseLength]: heatSinkBase.L_mm }
+        : {}),
+      ...(p[FIN_GEOMETRY_KEYS.baseWidth] == null && heatSinkBase?.W_mm != null
+        ? { [FIN_GEOMETRY_KEYS.baseWidth]: heatSinkBase.W_mm }
+        : {}),
+      ...(p[FIN_GEOMETRY_KEYS.conductivity] == null
+        ? { [FIN_GEOMETRY_KEYS.conductivity]: FIN_TECHNOLOGY_DEFAULT_K_W_mK[technology] }
+        : {}),
+    });
+  };
+
+  const finGeometryActive = activeProfile != null && usesFinGeometry(activeProfile);
+  const finResult = activeProfile != null ? finArrayOf(activeProfile) : null;
 
   const statusLabel = PORT_STATUS_LABELS[status];
 
@@ -568,7 +861,41 @@ export function BoundaryInspector({
                   <span className="block text-ink-400">{TYPE_REQUIREMENT[activeProfile.type].zh}</span>
                 </p>
 
-                {TYPE_PARAMETERS[activeProfile.type].map((parameter) => {
+                {FIN_CAPABLE_TYPES.has(activeProfile.type) && (
+                  <label className="mb-2 flex cursor-pointer items-start gap-2 rounded-md border border-line bg-surface-muted p-2">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5 size-3.5 accent-[var(--color-accent-600)]"
+                      checked={finGeometryActive}
+                      disabled={readOnly}
+                      onChange={(event) => setFinGeometryEnabled(event.target.checked)}
+                    />
+                    <span className="text-[11px] leading-relaxed">
+                      <span className="font-bold text-ink-800">
+                        Describe as a fin array / 以鰭片幾何描述
+                      </span>
+                      <span className="mt-0.5 block text-[10px] text-ink-400">
+                        h、輻射項、鰭片效率與散熱面積由幾何算出，不需手動填寫或從其他工具抄寫。
+                      </span>
+                    </span>
+                  </label>
+                )}
+
+                {finGeometryActive && (
+                  <FinGeometryPanel
+                    profile={activeProfile}
+                    result={finResult}
+                    readOnly={readOnly}
+                    onPatch={patchParameter}
+                  />
+                )}
+
+                {(finGeometryActive
+                  ? TYPE_PARAMETERS[activeProfile.type].filter(
+                      (parameter) => !FIN_DERIVED_PARAMETER_KEYS.has(parameter.key),
+                    )
+                  : TYPE_PARAMETERS[activeProfile.type]
+                ).map((parameter) => {
                   const inheritedOwner =
                     parameter.key === 'irradiance_W_m2'
                       ? 'SCR01 情境設定'

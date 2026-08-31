@@ -838,6 +838,12 @@ export function BoundaryConditionsView() {
                   validation={validation}
                   ambientTemperature_C={set.ambient.external_ambient_C}
                   solarEnabled={solarEnabled}
+                  // Seeds a fin-geometry profile so the base is not retyped
+                  // here, which is how the two come to disagree.
+                  heatSinkBase={{
+                    L_mm: draft?.materials.hsk_base_L_mm?.value ?? null,
+                    W_mm: draft?.materials.hsk_base_W_mm?.value ?? null,
+                  }}
                   readOnly={readOnly}
                   onEditAmbient={editScenarioSettings}
                   onUpsertProfile={(profile) => useBoundaryStore.getState().upsertProfile(profile)}

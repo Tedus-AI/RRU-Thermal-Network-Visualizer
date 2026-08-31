@@ -15,6 +15,7 @@
  */
 
 import type { Confidence } from '../types';
+import type { FinArrayResult } from './finArray';
 
 export const BOUNDARY_CONDITION_TYPES = [
   'ambient_reservoir',
@@ -159,6 +160,13 @@ export interface BoundaryDerivedPreview {
   r_rad_C_per_W?: number | null;
   r_combined_C_per_W?: number | null;
   q_solar_W?: number | null;
+  /**
+   * Present when the profile stated fin geometry instead of an h and an area.
+   * Carries every intermediate — the two coefficients, the fin efficiency, the
+   * count, the areas — so the screen can show what the geometry produced rather
+   * than only the resistance it ended at.
+   */
+  fin_array?: FinArrayResult | null;
   completeness: 'complete' | 'warning' | 'blocked';
   /** 06 §8.3 — the label that keeps a preview from reading as a result. */
   disclaimer: 'pre_solve_boundary_input_only';

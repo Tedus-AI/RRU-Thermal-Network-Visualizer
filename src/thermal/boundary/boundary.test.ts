@@ -199,6 +199,133 @@ describe('boundary calculations (06 §13)', () => {
 
 // --- derived preview -------------------------------------------------------
 
+describe('a surface described as a fin array', () => {
+  const FIN_GEOMETRY = {
+    finBaseLength_mm: 336,
+    finBaseWidth_mm: 275,
+    finHeight_mm: 55.86,
+    finGap_mm: 11.66,
+    finThickness_mm: 1.2,
+    finTechnology: 'Embedded',
+  };
+
+  const validateWithFinProfile = (parameters: BoundaryConditionProfile['parameters']) =>
+    validateBoundarySet({
+      set: setWith(
+        [profile({ type: 'combined_convection_radiation', parameters })],
+        {
+          assignments: [
+            {
+              id: 'A1',
+              boundary_port_id: 'BP_TEST',
+              profile_ids: ['BCP_TEST'],
+              assignment_mode: 'manual',
+              enabled: true,
+            },
+          ],
+        },
+      ),
+      ports: [port()],
+      hasTopology: true,
+      hasScenario: true,
+      topologyVersion: 1,
+    });
+
+  it('computes h, the radiation term and the area from the geometry', () => {
+    const preview = buildDerivedPreview(
+      port({ area_m2: 0.42 }),
+      [profile({ type: 'combined_convection_radiation', parameters: FIN_GEOMETRY })],
+      { ambient_C: 45 },
+    );
+
+    expect(preview.fin_array?.h_conv_W_m2K).toBeCloseTo(6.23, 2);
+    expect(preview.fin_array?.area_m2).toBeCloseTo(0.918, 3);
+    // The port's own 0.42 m² is the graph's guess at the surface; the geometry
+    // is the real heat sink, so it wins.
+    expect(preview.r_combined_C_per_W).toBeCloseTo(preview.fin_array!.R_C_per_W, 9);
+    expect(preview.completeness).toBe('complete');
+  });
+
+  // Emissivity and view factor are the two fields that turned into fudge
+  // factors, so a fin-derived profile must not consult them at all.
+  it('ignores emissivity and view factor entirely', () => {
+    const withOptics = buildDerivedPreview(
+      port(),
+      [
+        profile({
+          type: 'combined_convection_radiation',
+          parameters: { ...FIN_GEOMETRY, emissivity: 0.05, viewFactor: 0.01, h_W_m2K: 999 },
+        }),
+      ],
+      { ambient_C: 45 },
+    );
+    const without = buildDerivedPreview(
+      port(),
+      [profile({ type: 'combined_convection_radiation', parameters: FIN_GEOMETRY })],
+      { ambient_C: 45 },
+    );
+
+    expect(withOptics.r_combined_C_per_W).toBeCloseTo(without.r_combined_C_per_W!, 12);
+  });
+
+  it('reports incomplete geometry rather than falling back to a stale h', () => {
+    const parameters: BoundaryConditionProfile['parameters'] = {
+      ...FIN_GEOMETRY,
+      finGap_mm: null,
+      h_W_m2K: 8,
+      area_m2: 0.89,
+    };
+    const result = validateWithFinProfile(parameters);
+
+    expect(result.errors.map((entry) => entry.id)).toContain('PROFILE_FIN_GEOMETRY_BCP_TEST');
+
+    const preview = buildDerivedPreview(
+      port(),
+      [profile({ type: 'combined_convection_radiation', parameters })],
+      { ambient_C: 45 },
+    );
+    expect(preview.fin_array).toBeUndefined();
+    // The stale h = 8 and area = 0.89 are still stored, and 1/(8 × 0.89) is
+    // exactly the plausible-looking resistance that must NOT come back.
+    expect(preview.r_combined_C_per_W ?? null).toBeNull();
+    expect(preview.r_conv_C_per_W ?? null).toBeNull();
+    expect(preview.completeness).toBe('blocked');
+  });
+
+  it('warns when the channel leaves the calibrated aspect-ratio band', () => {
+    const result = validateWithFinProfile({ ...FIN_GEOMETRY, finGap_mm: 30 });
+
+    expect(result.warnings.map((entry) => entry.id)).toContain('PROFILE_FIN_ASPECT_BCP_TEST');
+  });
+
+  // A process factor above 1 is not a fin efficiency; it absorbs physics the
+  // fin model omits, and this tool computes the largest such term — spreading
+  // resistance — separately.
+  it('warns when a process factor above 1 would double-count spreading', () => {
+    const raised = validateWithFinProfile({ ...FIN_GEOMETRY, finProcessEfficiency: 1.06 });
+    const honest = validateWithFinProfile(FIN_GEOMETRY);
+
+    expect(raised.warnings.map((entry) => entry.id)).toContain('PROFILE_FIN_PROCESS_BCP_TEST');
+    expect(honest.warnings.map((entry) => entry.id)).not.toContain('PROFILE_FIN_PROCESS_BCP_TEST');
+  });
+
+  it('leaves a manual h profile alone', () => {
+    const preview = buildDerivedPreview(
+      port({ area_m2: 0.89 }),
+      [
+        profile({
+          type: 'convection_to_ambient',
+          parameters: { h_W_m2K: 8 },
+        }),
+      ],
+      { ambient_C: 55 },
+    );
+
+    expect(preview.fin_array).toBeUndefined();
+    expect(preview.r_conv_C_per_W).toBeCloseTo(1 / (8 * 0.89), 9);
+  });
+});
+
 describe('derived preview (06 §8.3)', () => {
   it('carries the pre-solve disclaimer on every preview', () => {
     const preview = buildDerivedPreview(port(), []);

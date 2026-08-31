@@ -10,7 +10,8 @@
  * screen says so rather than quietly passing it to Screen 07.
  */
 
-import { buildDerivedPreview } from './calculations';
+import { buildDerivedPreview, finArrayOf, usesFinGeometry } from './calculations';
+import { FIN_ASPECT_RATIO_BAND, finAspectRatioVerdict } from './finArray';
 import type {
   BoundaryConditionProfile,
   BoundaryDerivedPreview,
@@ -224,6 +225,53 @@ export function validateBoundarySet(input: BoundaryValidationInput): BoundaryVal
     switch (profile.type) {
       case 'convection_to_ambient':
       case 'combined_convection_radiation': {
+        // A fin-derived profile states geometry and computes h, the area and —
+        // for the combined type — the radiation coefficient. Asking it for
+        // those as well would demand the four numbers this mode exists to stop
+        // anyone typing.
+        if (usesFinGeometry(profile)) {
+          const fin = finArrayOf(profile);
+          if (fin == null) {
+            errors.push(
+              message(
+                'error',
+                `PROFILE_FIN_GEOMETRY_${id}`,
+                `"${profile.name}": the fin geometry is incomplete, so no boundary resistance can be computed. Base L and W, fin height, channel gap and fin thickness are all required.`,
+                `「${profile.name}」的鰭片幾何不完整，無法計算邊界熱阻。底座長寬、鰭片高度、通道間距與鰭片厚度皆為必填。`,
+                { profile_id: id },
+              ),
+            );
+            break;
+          }
+          const verdict = finAspectRatioVerdict(fin.aspect_ratio);
+          if (verdict !== 'inside') {
+            warnings.push(
+              message(
+                'warning',
+                `PROFILE_FIN_ASPECT_${id}`,
+                `"${profile.name}": channel aspect ratio ${fin.aspect_ratio.toFixed(1)} is outside the ${FIN_ASPECT_RATIO_BAND.min}–${FIN_ASPECT_RATIO_BAND.max} band the h correlation was calibrated on, so h is being extrapolated.`,
+                `「${profile.name}」的流阻比 ${fin.aspect_ratio.toFixed(1)} 超出 h 關聯式的校準範圍 ${FIN_ASPECT_RATIO_BAND.min}–${FIN_ASPECT_RATIO_BAND.max}，此處的 h 為外推值。`,
+                { profile_id: id },
+              ),
+            );
+          }
+          // Above 1 it is not a fin efficiency at all — it is a residual
+          // absorbing physics the fin model has no term for, and the largest
+          // such term in THIS tool is computed separately as spreading
+          // resistance. Left unflagged, the same heat gets credited twice.
+          if ((fin.effectiveness ?? 0) > fin.eta_fin + 1e-9) {
+            warnings.push(
+              message(
+                'warning',
+                `PROFILE_FIN_PROCESS_${id}`,
+                `"${profile.name}": a process factor above 1 makes the surface better than its own fin efficiency. It absorbs physics the fin model omits — and this tool computes spreading resistance separately, so the same heat may be credited twice.`,
+                `「${profile.name}」的製程係數大於 1，使表面效能超過鰭片效率本身。它吸收的是鰭片模型缺少的物理量，而本工具另外計算擴散熱阻，可能重複計入。`,
+                { profile_id: id },
+              ),
+            );
+          }
+          break;
+        }
         if (!positive(p.h_W_m2K)) {
           errors.push(
             message(

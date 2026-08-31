@@ -6,6 +6,12 @@
  * 07 (06 §3.3, §8.3). A missing input yields `null`, never 0.
  */
 
+import {
+  finArrayBoundary,
+  FIN_TECHNOLOGIES,
+  type FinArrayResult,
+  type FinTechnology,
+} from './finArray';
 import type {
   BoundaryConditionProfile,
   BoundaryDerivedPreview,
@@ -130,6 +136,66 @@ function parameter(profile: BoundaryConditionProfile, key: string): number | nul
 }
 
 /**
+ * Parameter keys a profile carries when its surface is described as a fin
+ * array rather than as an h and an area.
+ *
+ * They live in the same free-form `parameters` bag as everything else so no
+ * stored profile changes shape; what makes a profile fin-derived is simply
+ * that `FIN_GEOMETRY_TRIGGER_KEY` is set.
+ */
+export const FIN_GEOMETRY_KEYS = {
+  baseLength: 'finBaseLength_mm',
+  baseWidth: 'finBaseWidth_mm',
+  height: 'finHeight_mm',
+  gap: 'finGap_mm',
+  thickness: 'finThickness_mm',
+  technology: 'finTechnology',
+  conductivity: 'finConductivity_W_mK',
+  draftAngle: 'finDraftAngle_deg',
+  processEfficiency: 'finProcessEfficiency',
+  countOverride: 'finCount',
+} as const;
+
+/** Stating a fin height is what switches a profile into geometry mode. */
+export const FIN_GEOMETRY_TRIGGER_KEY = FIN_GEOMETRY_KEYS.height;
+
+export function usesFinGeometry(profile: BoundaryConditionProfile): boolean {
+  return parameter(profile, FIN_GEOMETRY_TRIGGER_KEY) != null;
+}
+
+/**
+ * The fin-array boundary a profile describes, or null when it describes an h
+ * and an area instead.
+ *
+ * Returning null for a half-filled geometry rather than falling back to the
+ * manual parameters is deliberate: a surface that is halfway through being
+ * described as a fin array has no resistance yet, and silently answering with
+ * whatever `h_W_m2K` happened to be left behind would be the transcription bug
+ * this mode exists to remove.
+ */
+export function finArrayOf(profile: BoundaryConditionProfile): FinArrayResult | null {
+  if (!usesFinGeometry(profile)) return null;
+  const stored = profile.parameters[FIN_GEOMETRY_KEYS.technology];
+  const technology: FinTechnology =
+    typeof stored === 'string' && (FIN_TECHNOLOGIES as readonly string[]).includes(stored)
+      ? (stored as FinTechnology)
+      : 'Embedded';
+
+  return finArrayBoundary({
+    baseLength_mm: parameter(profile, FIN_GEOMETRY_KEYS.baseLength),
+    baseWidth_mm: parameter(profile, FIN_GEOMETRY_KEYS.baseWidth),
+    finHeight_mm: parameter(profile, FIN_GEOMETRY_KEYS.height),
+    gap_mm: parameter(profile, FIN_GEOMETRY_KEYS.gap),
+    thickness_mm: parameter(profile, FIN_GEOMETRY_KEYS.thickness),
+    technology,
+    k_W_mK: parameter(profile, FIN_GEOMETRY_KEYS.conductivity),
+    draftAngle_deg: parameter(profile, FIN_GEOMETRY_KEYS.draftAngle),
+    processEfficiency: parameter(profile, FIN_GEOMETRY_KEYS.processEfficiency),
+    finCountOverride: parameter(profile, FIN_GEOMETRY_KEYS.countOverride),
+  });
+}
+
+/**
  * The Derived Preview for one boundary port, from every profile assigned to it.
  *
  * `completeness` is about the INPUTS, not about a result:
@@ -166,10 +232,32 @@ export function buildDerivedPreview(
   let hrad: number | null = null;
 
   for (const profile of profiles) {
-    const area = parameter(profile, 'area_m2') ?? port.area_m2;
+    // A fin-derived profile computes its own area from the geometry: the whole
+    // point is that the wetted area is not a number anyone retypes.
+    const fin = finArrayOf(profile);
+    if (fin != null) preview.fin_array = fin;
+    const area = fin?.area_m2 ?? parameter(profile, 'area_m2') ?? port.area_m2;
+
+    // Fin mode with the geometry half-filled has no resistance yet. Answering
+    // with whatever `h_W_m2K` and `area_m2` were left behind by an earlier
+    // manual setup would be the transcription bug this mode exists to remove —
+    // and it would look completely convincing, because those stale numbers were
+    // once correct. The port is reported as blocked instead.
+    if (fin == null && usesFinGeometry(profile)) {
+      missing = true;
+      continue;
+    }
 
     switch (profile.type) {
       case 'convection_to_ambient': {
+        if (fin != null) {
+          // The efficiency belongs on this branch and nowhere else. Folding it
+          // into `h` or into the area is what made it invisible in the first
+          // place, so it is applied here, once, where it can be read back.
+          hconv = fin.h_conv_W_m2K * fin.effectiveness;
+          preview.r_conv_C_per_W = calculateConvectionRth(hconv, area);
+          break;
+        }
         hconv = parameter(profile, 'h_W_m2K');
         preview.r_conv_C_per_W = calculateConvectionRth(hconv, area);
         if (preview.r_conv_C_per_W == null) missing = true;
@@ -194,6 +282,19 @@ export function buildDerivedPreview(
       }
 
       case 'combined_convection_radiation': {
+        if (fin != null) {
+          // Both coefficients come from the geometry, so neither the emissivity
+          // nor the view factor is consulted — the radiation fit already has
+          // the emissivity, the cavity effect and the envelope ratio inside it,
+          // and asking for a view factor as well is what turned that field into
+          // an area ratio in disguise.
+          hconv = fin.h_conv_W_m2K * fin.effectiveness;
+          hrad = fin.h_rad_W_m2K * fin.effectiveness;
+          preview.h_rad_W_m2K = hrad;
+          preview.r_conv_C_per_W = calculateConvectionRth(hconv, area);
+          preview.r_rad_C_per_W = calculateRadiationRth(hrad, area);
+          break;
+        }
         hconv = parameter(profile, 'h_W_m2K');
         const guess =
           parameter(profile, 'surfaceReferenceTemperatureGuess_C') ??
@@ -253,6 +354,7 @@ export function buildDerivedPreview(
 
   if (hconv != null || hrad != null) {
     const area =
+      preview.fin_array?.area_m2 ??
       profiles.map((profile) => parameter(profile, 'area_m2')).find((value) => value != null) ??
       port.area_m2;
     preview.r_combined_C_per_W = calculateCombinedBoundaryRth({
