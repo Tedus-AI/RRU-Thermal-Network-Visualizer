@@ -144,16 +144,39 @@ export function deriveBoundaryPorts(network: ThermalNetwork | null): BoundaryPor
   return ports.sort((a, b) => a.name.localeCompare(b.name));
 }
 
+/**
+ * True for the fin stack itself, as opposed to a flat exposed wall.
+ *
+ * The distinction decides how the surface may be described at all. A fin array
+ * has no honest `h` on its own: the coefficient depends on the channel width
+ * and the fin height, the wetted area is set by the fin count, and the fin
+ * efficiency discounts part of that area — four numbers that only exist once
+ * the geometry does. Asking for them directly is asking for them to be invented
+ * or copied, and copying is what put an area ratio in a view-factor field.
+ *
+ * A flat housing wall has none of that structure, so a stated `h`, area,
+ * emissivity and view factor are exactly the right description for it and stay
+ * available there.
+ */
+export function isFinnedSurfacePort(port: BoundaryPort): boolean {
+  return port.dissipating && port.orientation === 'vertical_fins';
+}
+
 /** Surface groups the Surface Properties table works with (06 §8.1, PNG §2). */
-export function surfaceGroupsOf(ports: BoundaryPort[]): Array<{ id: string; name: string }> {
-  const groups = new Map<string, string>();
+export function surfaceGroupsOf(
+  ports: BoundaryPort[],
+): Array<{ id: string; name: string; finned: boolean }> {
+  const groups = new Map<string, { name: string; finned: boolean }>();
   for (const port of ports) {
     // Ambient placeholders are temperature references, not physical surfaces.
     // Emissivity and solar absorptivity therefore do not apply to them.
     if (!port.dissipating) continue;
     if (!groups.has(port.surface_group_id)) {
-      groups.set(port.surface_group_id, port.name.replace(/ (Boundary|Reference)$/, ''));
+      groups.set(port.surface_group_id, {
+        name: port.name.replace(/ (Boundary|Reference)$/, ''),
+        finned: isFinnedSurfacePort(port),
+      });
     }
   }
-  return [...groups.entries()].map(([id, name]) => ({ id, name }));
+  return [...groups.entries()].map(([id, group]) => ({ id, ...group }));
 }

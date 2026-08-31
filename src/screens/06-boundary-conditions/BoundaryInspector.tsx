@@ -33,6 +33,7 @@ import {
 } from '@/thermal/boundary/types';
 import type { Confidence } from '@/thermal/types';
 import { FIN_GEOMETRY_KEYS, finArrayOf, usesFinGeometry } from '@/thermal/boundary/calculations';
+import { isFinnedSurfacePort } from '@/thermal/boundary/boundaryPorts';
 import {
   FIN_ASPECT_RATIO_BAND,
   FIN_TECHNOLOGIES,
@@ -745,8 +746,17 @@ export function BoundaryInspector({
     });
   };
 
-  const finGeometryActive = activeProfile != null && usesFinGeometry(activeProfile);
-  const finResult = activeProfile != null ? finArrayOf(activeProfile) : null;
+  // A fin stack has no honest h of its own, so on a finned port the geometry is
+  // the only description offered and the toggle is not shown at all. A flat
+  // exposed wall keeps both modes: there, a stated h and area IS the right
+  // description, and nothing about it has to be invented.
+  const finGeometryForced = isFinnedSurfacePort(port);
+  const finGeometryActive = activeProfile != null && usesFinGeometry(activeProfile, port);
+  const finResult = activeProfile != null ? finArrayOf(activeProfile, port) : null;
+  const finCapable = activeProfile != null && FIN_CAPABLE_TYPES.has(activeProfile.type);
+  const finPanelShown = finCapable && (finGeometryForced || finGeometryActive);
+  /** Saved before the geometry mode existed, and still what the solve uses. */
+  const legacyManualInUse = finCapable && finGeometryForced && !finGeometryActive;
 
   const statusLabel = PORT_STATUS_LABELS[status];
 
@@ -877,7 +887,19 @@ export function BoundaryInspector({
                   <span className="block text-ink-400">{TYPE_REQUIREMENT[activeProfile.type].zh}</span>
                 </p>
 
-                {FIN_CAPABLE_TYPES.has(activeProfile.type) && (
+                {finCapable && finGeometryForced && (
+                  <p className="mb-2 rounded-md border border-line bg-surface-muted p-2 text-[11px] leading-relaxed">
+                    <span className="font-bold text-ink-800">
+                      Described as a fin array / 以鰭片幾何描述
+                    </span>
+                    <span className="mt-0.5 block text-[10px] text-ink-400">
+                      鰭片表面沒有可獨立成立的 h：對流係數由通道間距與鰭片高度決定，散熱面積由鰭片數決定，
+                      鰭片效率又折扣其中一部分。這四個數字要等幾何存在才存在，所以此表面只以幾何描述。
+                    </span>
+                  </p>
+                )}
+
+                {finCapable && !finGeometryForced && (
                   <label className="mb-2 flex cursor-pointer items-start gap-2 rounded-md border border-line bg-surface-muted p-2">
                     <input
                       type="checkbox"
@@ -897,7 +919,11 @@ export function BoundaryInspector({
                   </label>
                 )}
 
-                {finGeometryActive && (
+                {/* On a finned port the panel is always here, even while a
+                    stored h is still doing the solving. Showing the notice
+                    without the fields it refers to would be a claim the screen
+                    does not back up. */}
+                {finPanelShown && (
                   <FinGeometryPanel
                     profile={activeProfile}
                     result={finResult}
@@ -906,7 +932,30 @@ export function BoundaryInspector({
                   />
                 )}
 
-                {(finGeometryActive
+                {/* Named rather than silently replaced. The stored numbers were
+                    solved with, so they are reported as what is still in force
+                    — but not offered for editing, because editing them would be
+                    extending a description this surface is not supposed to
+                    have. Completing the geometry above retires them. */}
+                {legacyManualInUse && (
+                  <p className="mb-2 rounded-md border border-warn-500/40 bg-warn-100/40 p-2 text-[11px] leading-relaxed text-warn-600">
+                    <span className="font-bold">
+                      Still solving from a stored h / 目前仍以先前輸入的 h 求解
+                    </span>
+                    <span className="mt-0.5 block text-[10px]">
+                      此表面在鰭片幾何存在之前就已設定，目前仍使用 h ={' '}
+                      {formatNumber(activeProfile.parameters.h_W_m2K as number | null, 2)} W/m²K、面積 ={' '}
+                      {formatNumber(
+                        (activeProfile.parameters.area_m2 as number | null) ?? port.area_m2,
+                        3,
+                      )}{' '}
+                      m²。改以另一套模型重新解讀這些數字並不比留著它們誠實，所以它們維持有效，
+                      直到上方幾何填齊後由幾何取代。
+                    </span>
+                  </p>
+                )}
+
+                {(finPanelShown
                   ? TYPE_PARAMETERS[activeProfile.type].filter(
                       (parameter) => !FIN_DERIVED_PARAMETER_KEYS.has(parameter.key),
                     )

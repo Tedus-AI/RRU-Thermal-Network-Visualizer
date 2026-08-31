@@ -31,7 +31,8 @@ export function SurfacePropertiesPanel({
   readOnly,
   onChange,
 }: {
-  groups: Array<{ id: string; name: string }>;
+  /** `finned` surfaces get their emissivity from the fin correlation instead. */
+  groups: Array<{ id: string; name: string; finned?: boolean }>;
   properties: SurfaceProperty[];
   solarEnabled: boolean;
   solarIrradiance_W_m2: number | null;
@@ -99,22 +100,41 @@ export function SurfacePropertiesPanel({
                     <span className="block max-w-[8rem] truncate">{group.name}</span>
                   </td>
                   <td className="px-2 py-1">
-                    <NumberInput
-                      className="h-7 w-16 !text-[11px]"
-                      step="0.01"
-                      min="0"
-                      max="1"
-                      aria-label={biTitle(`Emissivity for ${group.name}`, '發射率')}
-                      value={property.emissivity ?? ''}
-                      disabled={readOnly}
-                      onChange={(event) =>
-                        onChange({
-                          ...property,
-                          emissivity:
-                            event.target.value === '' ? null : Number(event.target.value),
-                        })
-                      }
-                    />
+                    {group.finned ? (
+                      // Not merely unused here — superseded. The fin
+                      // correlation's radiation term is a calibrated constant
+                      // that already contains the surface emissivity, the
+                      // reflections between fins and the envelope-to-wetted
+                      // area ratio. Leaving an editable 0.85 next to it would
+                      // read as an input the solve honours, which is the same
+                      // fiction the retired radiation sink temperature told.
+                      <span
+                        className="inline-flex h-7 min-w-16 items-center justify-center rounded border border-line bg-surface-muted px-2 text-[10px] font-semibold text-ink-400"
+                        title={biTitle(
+                          'Superseded by the fin-array correlation, which already includes the surface emissivity.',
+                          '已由鰭片幾何的輻射關聯式取代，該關聯式已包含表面發射率。',
+                        )}
+                      >
+                        已包含
+                      </span>
+                    ) : (
+                      <NumberInput
+                        className="h-7 w-16 !text-[11px]"
+                        step="0.01"
+                        min="0"
+                        max="1"
+                        aria-label={biTitle(`Emissivity for ${group.name}`, '發射率')}
+                        value={property.emissivity ?? ''}
+                        disabled={readOnly}
+                        onChange={(event) =>
+                          onChange({
+                            ...property,
+                            emissivity:
+                              event.target.value === '' ? null : Number(event.target.value),
+                          })
+                        }
+                      />
+                    )}
                   </td>
                   <td className="px-2 py-1">
                     {solarEnabled ? (

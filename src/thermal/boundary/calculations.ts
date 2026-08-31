@@ -12,6 +12,7 @@ import {
   type FinArrayResult,
   type FinTechnology,
 } from './finArray';
+import { isFinnedSurfacePort } from './boundaryPorts';
 import type {
   BoundaryConditionProfile,
   BoundaryDerivedPreview,
@@ -159,19 +160,64 @@ export const FIN_GEOMETRY_KEYS = {
 /**
  * Whether this profile is described as a fin array.
  *
- * An explicit flag, not an inference from the fin height. The height was the
- * trigger at first, and conflating "is this mode on" with "how tall are the
- * fins" made the height field behave unlike every other number on the screen:
- * clearing it to retype switched the whole mode off, and switching the mode off
- * and on again erased the one value that had been entered.
+ * On a finned port the answer is always yes and the flag is not consulted: a
+ * fin stack has no honest `h` of its own, so "state h and an area" was never a
+ * description of it, only a place to put numbers copied from somewhere else.
+ * The manual mode stays available on flat surfaces, where it IS the right
+ * description.
+ *
+ * Off a finned port it is an explicit flag, not an inference from the fin
+ * height. The height was the trigger at first, and conflating "is this mode on"
+ * with "how tall are the fins" made that field behave unlike every other number
+ * on the screen: clearing it to retype switched the whole mode off, and
+ * toggling off then on again erased the one value that had been entered.
  *
  * A stored profile written before the flag existed is still read correctly: a
  * height on its own continues to mean fin mode.
  */
-export function usesFinGeometry(profile: BoundaryConditionProfile): boolean {
+export function usesFinGeometry(
+  profile: BoundaryConditionProfile,
+  port?: BoundaryPort | null,
+): boolean {
   const flag = profile.parameters[FIN_GEOMETRY_KEYS.enabled];
-  if (typeof flag === 'boolean') return flag;
-  return parameter(profile, FIN_GEOMETRY_KEYS.height) != null;
+  const stated = typeof flag === 'boolean' ? flag : parameter(profile, FIN_GEOMETRY_KEYS.height) != null;
+  if (stated) return true;
+  // On a finned port the geometry is the only description Screen 06 offers, so
+  // a convection profile that has not already been described some other way is
+  // fin-derived by default. A set saved before this existed keeps computing
+  // from the h and area it was solved with — silently reinterpreting stored
+  // numbers under a different model would be worse than leaving them — and
+  // `validateBoundarySet` says loudly that it should be restated as geometry.
+  //
+  // Only the convection-carrying types. A radiation-only profile on the same
+  // port is still `4·ε·σ·F·T³` and a solar load is still an absorbed flux;
+  // neither is a thing the fin correlation has an opinion about, and sweeping
+  // them in would delete two boundary types from the finned surface.
+  if (!FIN_CAPABLE_TYPES.has(profile.type)) return false;
+  return port != null && isFinnedSurfacePort(port) && !hasManualSurfaceDescription(profile, port);
+}
+
+/** Boundary types whose surface the fin geometry can describe. */
+const FIN_CAPABLE_TYPES = new Set<BoundaryConditionProfile['type']>([
+  'convection_to_ambient',
+  'combined_convection_radiation',
+]);
+
+/**
+ * True when the profile already carries the numbers the manual mode needs.
+ *
+ * Only a COMPLETE description counts. A leftover `h` with no area anywhere is
+ * not a description of anything, and treating it as one would be the fallback
+ * the fin mode exists to remove. The port's own area counts, because that is
+ * the area the preview would have used.
+ */
+export function hasManualSurfaceDescription(
+  profile: BoundaryConditionProfile,
+  port?: BoundaryPort | null,
+): boolean {
+  const h = positive(profile.parameters.h_W_m2K);
+  const area = positive(profile.parameters.area_m2) ?? positive(port?.area_m2);
+  return h != null && area != null;
 }
 
 /**
@@ -184,8 +230,11 @@ export function usesFinGeometry(profile: BoundaryConditionProfile): boolean {
  * whatever `h_W_m2K` happened to be left behind would be the transcription bug
  * this mode exists to remove.
  */
-export function finArrayOf(profile: BoundaryConditionProfile): FinArrayResult | null {
-  if (!usesFinGeometry(profile)) return null;
+export function finArrayOf(
+  profile: BoundaryConditionProfile,
+  port?: BoundaryPort | null,
+): FinArrayResult | null {
+  if (!usesFinGeometry(profile, port)) return null;
   const stored = profile.parameters[FIN_GEOMETRY_KEYS.technology];
   const technology: FinTechnology =
     typeof stored === 'string' && (FIN_TECHNOLOGIES as readonly string[]).includes(stored)
@@ -245,7 +294,7 @@ export function buildDerivedPreview(
   for (const profile of profiles) {
     // A fin-derived profile computes its own area from the geometry: the whole
     // point is that the wetted area is not a number anyone retypes.
-    const fin = finArrayOf(profile);
+    const fin = finArrayOf(profile, port);
     if (fin != null) preview.fin_array = fin;
     const area = fin?.area_m2 ?? parameter(profile, 'area_m2') ?? port.area_m2;
 
@@ -254,7 +303,7 @@ export function buildDerivedPreview(
     // manual setup would be the transcription bug this mode exists to remove —
     // and it would look completely convincing, because those stale numbers were
     // once correct. The port is reported as blocked instead.
-    if (fin == null && usesFinGeometry(profile)) {
+    if (fin == null && usesFinGeometry(profile, port)) {
       missing = true;
       continue;
     }
