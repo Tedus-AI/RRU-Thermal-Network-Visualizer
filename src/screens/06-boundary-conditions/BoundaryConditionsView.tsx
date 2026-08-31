@@ -350,8 +350,6 @@ export function BoundaryConditionsView() {
     ) {
       parameters.emissivity = surface?.emissivity ?? null;
       parameters.area_m2 = port.area_m2;
-      parameters.radiationTemperature_C =
-        set.ambient.radiation_surrounding_C ?? set.ambient.external_ambient_C;
     }
     if (type === 'solar_load') {
       parameters.irradiance_W_m2 = set.site.solar_irradiance_W_m2;

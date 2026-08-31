@@ -29,6 +29,7 @@ import {
   type ThermalNode,
 } from '@/thermal/types';
 import type { ScenarioBoundaryConditionSet } from '@/thermal/boundary/types';
+import { normalizeBoundarySet } from '@/thermal/boundary/boundaryMigration';
 import type { ThermalSolution } from '@/thermal/solver/solverTypes';
 import type {
   BottleneckAnalysis,
@@ -427,7 +428,9 @@ function boundaryKey(networkId: string, scenarioId: string): string {
 export function loadBoundarySets(projectId: string): ScenarioBoundaryConditionSet[] {
   const all = readCollection(BOUNDARY_KEY);
   const bucket = (all[projectId] ?? {}) as Record<string, ScenarioBoundaryConditionSet>;
-  return Object.values(bucket).filter((set) => set && typeof set === 'object');
+  return Object.values(bucket)
+    .filter((set) => set && typeof set === 'object')
+    .map(normalizeBoundarySet);
 }
 
 export function saveBoundarySet(
@@ -436,7 +439,9 @@ export function saveBoundarySet(
 ): void {
   const all = readCollection(BOUNDARY_KEY);
   const bucket = (all[projectId] ?? {}) as Record<string, unknown>;
-  bucket[boundaryKey(set.network_id, set.scenario_id)] = set;
+  // Normalized on write as well as on read: reading alone would clean what the
+  // app sees while leaving the retired keys in storage for the next reader.
+  bucket[boundaryKey(set.network_id, set.scenario_id)] = normalizeBoundarySet(set);
   all[projectId] = bucket as RawDoc;
   writeCollection(BOUNDARY_KEY, all);
 }

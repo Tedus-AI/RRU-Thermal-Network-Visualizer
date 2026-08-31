@@ -39,8 +39,6 @@ export interface ScenarioJsonDocument {
     wind_direction_deg: number | null;
     wind_direction_label: string | null;
     solar_W_m2: number;
-    /** 12 §14 "Radiation Reference" — the surrounding temperature radiation sees. */
-    radiation_reference_C: number | null;
     power_scale: number;
     notes: string;
     is_default: boolean;
@@ -86,7 +84,6 @@ export function exportScenarioJson(input: ScenarioJsonInput): ScenarioJsonDocume
       wind_direction_deg: boundary?.site.wind_direction_deg ?? null,
       wind_direction_label: boundary?.site.wind_direction_label ?? null,
       solar_W_m2: scenario.solar_W_m2,
-      radiation_reference_C: boundary?.ambient.radiation_surrounding_C ?? null,
       power_scale: scenario.power_scale,
       notes: scenario.notes,
       is_default: scenario.is_default,

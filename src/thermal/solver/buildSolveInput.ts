@@ -135,14 +135,48 @@ function finite(value: number | null | undefined): value is number {
 }
 
 /**
- * Every boundary-derived edge that touches `nodeId`. Screen 05 usually leaves
- * one; a surface modelled with convection and radiation in parallel leaves two,
- * and each then takes its own half of the boundary (06 `parallel_boundary_edges`).
+ * A node that only supplies a temperature: an ambient placeholder, or anything
+ * already pinned as a fixed-temperature boundary.
+ */
+function isReservoirNode(node: ThermalNode | undefined): boolean {
+  if (!node) return false;
+  return (
+    node.type === 'ambient' ||
+    node.boundary_role === 'placeholder' ||
+    node.boundary_type === 'fixed_temperature'
+  );
+}
+
+/**
+ * Every boundary-derived edge `nodeId` OWNS. Screen 05 usually leaves one; a
+ * surface modelled with convection and radiation in parallel leaves two, and
+ * each then takes its own half of the boundary (06 `parallel_boundary_edges`).
+ *
+ * Ownership, not adjacency, is the question. A convection edge runs between a
+ * surface and a reservoir, so it touches TWO nodes, and both of them can carry
+ * a port with an assignment — giving the fin surface a convection profile and
+ * the ambient node a reservoir profile is the obvious way to describe "the fins
+ * lose heat to 55 °C still air", and it is what a real project does.
+ *
+ * Adjacency then hands the same edge to both ports. The surface's port resolves
+ * it from h and area; the ambient port has neither, so it files a second record
+ * for the same edge with a null resistance, and `boundary_rth_unresolved` blocks
+ * a solve whose resistance was in fact fully determined. The h and the area live
+ * on the surface, so the surface owns the edge and the reservoir end never
+ * claims it.
+ *
+ * The reservoir test is deliberately one-sided: if BOTH ends are reservoirs
+ * (two fixed-temperature nodes tied by a convection edge) neither is filtered
+ * out, and the caller's first-claim rule decides — silently dropping the edge
+ * would hide a modelling error instead of reporting it.
  */
 function boundaryEdgesOf(network: ThermalNetwork, nodeId: string): ThermalEdge[] {
-  return Object.values(network.edges).filter(
-    (edge) => isBoundaryDerived(edge) && (edge.from === nodeId || edge.to === nodeId),
-  );
+  return Object.values(network.edges).filter((edge) => {
+    if (!isBoundaryDerived(edge)) return false;
+    if (edge.from !== nodeId && edge.to !== nodeId) return false;
+    const otherId = edge.from === nodeId ? edge.to : edge.from;
+    return !(isReservoirNode(network.nodes[nodeId]) && !isReservoirNode(network.nodes[otherId]));
+  });
 }
 
 export function buildSolveInput(options: BuildSolveInputOptions): SolveInput {
@@ -208,6 +242,12 @@ export function buildSolveInput(options: BuildSolveInputOptions): SolveInput {
   }
 
   // --- 3. per-port boundary conditions ------------------------------------
+  // One record per edge. Ownership already keeps a reservoir port off a
+  // surface's edge; this is the backstop for the case ownership cannot decide,
+  // where two ports genuinely describe the same edge and the second one is a
+  // modelling error worth naming rather than a duplicate worth solving twice.
+  const claimedEdges = new Map<string, string>();
+
   for (const assignment of boundarySet?.assignments ?? []) {
     if (!assignment.enabled) continue;
     const port = ports.find((entry) => entry.id === assignment.boundary_port_id);
@@ -266,7 +306,26 @@ export function buildSolveInput(options: BuildSolveInputOptions): SolveInput {
     if (!preview) continue;
 
     // An adiabatic port has already switched its edges off; they stay off.
-    const edges = boundaryEdgesOf(clone, node.id).filter((edge) => edge.enabled);
+    const owned = boundaryEdgesOf(clone, node.id).filter((edge) => edge.enabled);
+    const edges: ThermalEdge[] = [];
+    for (const edge of owned) {
+      const claimedBy = claimedEdges.get(edge.id);
+      if (claimedBy != null) {
+        notes.push(
+          issue(
+            'warning',
+            'boundary_edge_claimed_twice',
+            'boundary',
+            `Boundary edge "${edge.id}" is described by ports "${claimedBy}" and "${port.id}". The first assignment is used.`,
+            `邊界連線 "${edge.id}" 同時被邊界埠 "${claimedBy}" 與 "${port.id}" 描述，採用先指派的那一組。`,
+            { edge_id: edge.id, boundary_port_id: port.id, fix_in: '06' },
+          ),
+        );
+        continue;
+      }
+      claimedEdges.set(edge.id, port.id);
+      edges.push(edge);
+    }
     if (edges.length === 0) continue;
 
     const convectionEdges = edges.filter((edge) => edge.method === 'convection_hA');

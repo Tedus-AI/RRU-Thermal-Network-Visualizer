@@ -181,10 +181,24 @@ export interface BoundaryValidationState {
   infos: BoundaryValidationMessage[];
 }
 
+/**
+ * `radiation_surrounding_C` was retired here.
+ *
+ * It was never editable — Screen 06 has no input for it — and the linearized
+ * radiation coefficient does not take a sink temperature at all:
+ * `calculateLinearizedRadiationHrad` is `4·ε·σ·F·T_ref³`, where `T_ref` is the
+ * SURFACE reference guess. So the field was written on every profile, exported,
+ * and read by nothing. A stored value (one project carried -3 °C) looked like a
+ * radiating sky the model was using, and it was not.
+ *
+ * Removing it is not the same as deciding radiation needs no sink temperature.
+ * It does; that is a modelling change with its own input and its own place in
+ * the formula, and it should arrive as one rather than as a resurrected key
+ * whose value never reached an equation.
+ */
 export interface AmbientDefinition {
   external_ambient_C: number | null;
   internal_air_C?: number | null;
-  radiation_surrounding_C?: number | null;
   source: BoundaryDataSource;
   confidence: Confidence;
   provenance?: ProvenanceRecord;
@@ -268,7 +282,6 @@ export function createBoundarySet(input: {
       // Seeded from the scenario record, but unknown stays null — never 0.
       external_ambient_C: input.ambient_C ?? null,
       internal_air_C: null,
-      radiation_surrounding_C: null,
       source: 'manual',
       confidence: 'medium',
     },

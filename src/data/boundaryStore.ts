@@ -390,7 +390,6 @@ export const useBoundaryStore = create<BoundaryStoreState>((set, get) => ({
             area_m2: port.area_m2,
             emissivity: surface?.emissivity ?? null,
             viewFactor: null,
-            radiationTemperature_C: current.ambient.radiation_surrounding_C ?? current.ambient.external_ambient_C,
           },
           source: 'manual',
           confidence: 'medium',

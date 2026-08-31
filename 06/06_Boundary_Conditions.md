@@ -727,7 +727,6 @@ Required:
 - `emissivity`
 - `area_m2`
 - `viewFactor`
-- `radiationTemperature_C`
 
 Optional:
 
@@ -741,6 +740,20 @@ Rrad = 1 / (hrad * area_m2)
 ```
 
 Because actual surface temperature is not known until Screen 07 solve, the 06 value is a pre-solve input estimate.
+
+`radiationTemperature_C` was listed here as required and was never used: the
+linearized form above takes `Tref` — the SURFACE reference — and no sink
+temperature. Screen 06 offered no input for it either, so it was written on
+every profile from a hidden ambient field and read by nothing. It is retired
+rather than left present-but-ignored, because a stored number the reader can
+see in the parameter table but the solve never touches misrepresents what was
+modelled.
+
+A radiation sink temperature is still a real modelling gap — the linearized
+coefficient assumes the surroundings sit at the same temperature as the
+convective ambient, which an RRU facing open sky does not. Closing it means a
+different `hrad` form with the sink temperature in it and an input to state it,
+not restoring a key whose value never reached an equation.
 
 ### 9.4 Combined Convection + Radiation
 

@@ -94,7 +94,21 @@ export const HEAT_PATH_LABELS: Record<HeatPathType, { en: string; zh: string }> 
   },
 };
 
-/** How a Metal Base + Interface component introduces heat into the network. */
+/**
+ * How a component introduces heat into the network — junction, or body.
+ *
+ * This began as a Metal Base setting and the stored key is still
+ * `heat_path.parameters.source_model`, but the distinction was never about the
+ * metal face. Some parts have a silicon junction sitting behind a package
+ * resistance; others are an isothermal lump whose surface temperature, mounting
+ * pad temperature and body temperature are one number. A ferrite circulator on
+ * board vias is the second kind just as much as a filter body on a metal face,
+ * and the heat path it takes out is a separate question from whether it has a
+ * junction at all.
+ *
+ * `JunctionBased` remains the default for anything that does not say, so an old
+ * project keeps the chain it was solved with.
+ */
 export const METAL_BASE_SOURCE_MODELS = ['JunctionBased', 'SurfaceBodyBased'] as const;
 export type MetalBaseSourceModel = (typeof METAL_BASE_SOURCE_MODELS)[number];
 
@@ -105,14 +119,14 @@ export const METAL_BASE_SOURCE_MODEL_LABELS: Record<
   JunctionBased: {
     en: 'Junction-based',
     zh: '接面型',
-    description: 'Junction → Rjc → metal base → interface',
-    descriptionZh: '接面 → Rjc → 金屬底面 → 介面層',
+    description: 'Junction → Rjc → exit face → heat path',
+    descriptionZh: '接面 → Rjc → 散熱面 → 散熱路徑',
   },
   SurfaceBodyBased: {
     en: 'Surface / body-based',
     zh: '表面／本體型',
-    description: 'Distributed body loss → metal base → interface; no Rjc',
-    descriptionZh: '本體分布損耗 → 金屬底面 → 介面層；不使用 Rjc',
+    description: 'One isothermal body — the exit face IS the source; no Rjc',
+    descriptionZh: '單一等溫本體，散熱面即熱源；不使用 Rjc',
   },
 };
 
@@ -1188,6 +1202,26 @@ export function cavityFilterBodyPrefill(
 
 export function metalBaseSourceModel(spec: ThermalSpec): MetalBaseSourceModel {
   return metalBaseParameters(spec).source_model;
+}
+
+/**
+ * True when the part dissipates as one isothermal body, with no junction and no
+ * Rjc in front of the face heat leaves through.
+ *
+ * The alternative people reached for was Rjc = 0, and it does not work: a
+ * zero-resistance edge is not a valid element of `[G][T] = [P]` — its
+ * conductance is infinite — so the pre-solve check rejects it and the whole
+ * scenario stops. The intent behind it ("surface temperature = pad temperature
+ * = body temperature") is legitimate and is exactly what this flag says, so it
+ * is said as a model choice and the junction node is never built, rather than
+ * being built and then short-circuited.
+ *
+ * Applies to every heat path. Which face heat leaves through — a coin joint, an
+ * E-PAD, a case top, a metal land — is orthogonal to whether there is a
+ * junction behind it.
+ */
+export function isBodySourced(spec: ThermalSpec): boolean {
+  return metalBaseSourceModel(spec) === 'SurfaceBodyBased';
 }
 
 export function metalBaseContactGeometry(spec: ThermalSpec): MetalBaseContactGeometry {

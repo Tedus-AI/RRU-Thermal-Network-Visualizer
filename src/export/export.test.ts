@@ -300,7 +300,6 @@ function boundary(
     status,
     ambient: {
       external_ambient_C: 55,
-      radiation_surrounding_C: 50,
       source: 'Scenario',
       confidence: 'high',
     } as unknown as ScenarioBoundaryConditionSet['ambient'],
@@ -908,7 +907,7 @@ describe('Scenario & Boundary JSON (12 §14)', () => {
 
     expect(document.scenario.ambient_C).toBe(55);
     expect(document.scenario.wind_direction_deg).toBe(180);
-    expect(document.scenario.radiation_reference_C).toBe(50);
+    expect(document.scenario).not.toHaveProperty('radiation_reference_C');
     expect(document.boundary?.profiles).toHaveLength(1);
     expect(document.boundary?.sources[0]).toEqual({
       profile_id: 'PRF_1',

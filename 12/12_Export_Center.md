@@ -342,7 +342,6 @@ Export:
 - Wind
 - Wind Direction
 - Solar
-- Radiation Reference
 - Power Scale
 - Boundary Overrides
 - Boundary Models

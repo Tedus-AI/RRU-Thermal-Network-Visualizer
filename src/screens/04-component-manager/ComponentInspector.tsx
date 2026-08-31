@@ -42,6 +42,7 @@ import {
   cavityFilterBodyPrefill,
   componentTotalPowerW,
   heatPathPatch,
+  isBodySourced,
   metalBaseExposedAreaMm2,
   metalBaseParameters,
   normalizeModuleReferenceLocation,
@@ -399,8 +400,10 @@ export function ComponentInspector({
   // Rjc applies unless the dissipation is referenced to the surface itself.
   // This used to be `moduleSurface || ...`; ModuleSurface folded into
   // DirectMetal, and SurfaceBodyBased is the accurate test — a JunctionBased
-  // metal face (a flanged transistor) does have an Rjc.
-  const surfaceReferenced = metalBase && metalBaseModel.source_model === 'SurfaceBodyBased';
+  // metal face (a flanged transistor) does have an Rjc. The heat path is no
+  // longer part of the test: a ferrite circulator taken out through board vias
+  // is one isothermal body just as much as a filter bolted to a metal land.
+  const surfaceReferenced = isBodySourced(spec);
 
   // SOT and QFP are no longer offered, but a project that stored one keeps it:
   // it is appended as an off-list row so the select shows the truth instead of
@@ -665,60 +668,62 @@ export function ComponentInspector({
                     </p>
                   )}
 
-                  {metalBase && (
-                    <div className="rounded-md border border-line bg-surface-muted p-2.5">
-                      <FieldLabel
-                        label="Heat Source Reference"
-                        zh="熱源基準"
-                        tooltip="決定 Screen 05 是否建立 Junction 與 Rjc；這是物理模型，不由 Limit Type 推定。"
-                      />
-                      <div className="mt-1.5 grid grid-cols-2 gap-2" role="radiogroup">
-                        {METAL_BASE_SOURCE_MODELS.map((model) => {
-                          const label = METAL_BASE_SOURCE_MODEL_LABELS[model];
-                          const active = metalBaseModel.source_model === model;
-                          return (
-                            <label
-                              key={model}
-                              className={`cursor-pointer rounded-md border p-2 text-[11px] leading-relaxed ${
-                                active
-                                  ? 'border-accent-500 bg-accent-100 text-accent-700'
-                                  : 'border-line bg-surface text-ink-600'
-                              } ${readOnly ? 'cursor-default opacity-60' : ''}`}
-                            >
-                              <span className="flex items-center gap-1.5 font-bold">
-                                <input
-                                  type="radio"
-                                  name={`metal-base-source-${component.id}`}
-                                  value={model}
-                                  checked={active}
-                                  disabled={readOnly}
-                                  onChange={() =>
-                                    patchSpecPrefillingCavityFilter(
-                                      {
-                                        heat_path: {
-                                          ...spec.heat_path,
-                                          parameters: {
-                                            ...spec.heat_path.parameters,
-                                            source_model: model,
-                                          },
+                  {/* Offered on every heat path. Which face heat leaves through
+                      and whether there is a junction behind it are separate
+                      questions, and answering the second with "Rjc = 0" builds a
+                      zero-resistance edge the solver has to reject. */}
+                  <div className="rounded-md border border-line bg-surface-muted p-2.5">
+                    <FieldLabel
+                      label="Heat Source Reference"
+                      zh="熱源基準"
+                      tooltip="決定 Screen 05 是否建立 Junction 與 Rjc；這是物理模型，不由 Limit Type 推定。等溫本體（環形器、濾波器、模組）請選本體型，不要用 Rjc = 0 表達。"
+                    />
+                    <div className="mt-1.5 grid grid-cols-2 gap-2" role="radiogroup">
+                      {METAL_BASE_SOURCE_MODELS.map((model) => {
+                        const label = METAL_BASE_SOURCE_MODEL_LABELS[model];
+                        const active = metalBaseModel.source_model === model;
+                        return (
+                          <label
+                            key={model}
+                            className={`cursor-pointer rounded-md border p-2 text-[11px] leading-relaxed ${
+                              active
+                                ? 'border-accent-500 bg-accent-100 text-accent-700'
+                                : 'border-line bg-surface text-ink-600'
+                            } ${readOnly ? 'cursor-default opacity-60' : ''}`}
+                          >
+                            <span className="flex items-center gap-1.5 font-bold">
+                              <input
+                                type="radio"
+                                name={`metal-base-source-${component.id}`}
+                                value={model}
+                                checked={active}
+                                disabled={readOnly}
+                                onChange={() =>
+                                  patchSpecPrefillingCavityFilter(
+                                    {
+                                      heat_path: {
+                                        ...spec.heat_path,
+                                        parameters: {
+                                          ...spec.heat_path.parameters,
+                                          source_model: model,
                                         },
                                       },
-                                      ['heat_path.parameters.source_model'],
-                                    )
-                                  }
-                                />
-                                {label.en} / {label.zh}
-                              </span>
-                              <span className="mt-1 block text-[10px] text-ink-400">
-                                {label.description}
-                                <span className="block">{label.descriptionZh}</span>
-                              </span>
-                            </label>
-                          );
-                        })}
-                      </div>
+                                    },
+                                    ['heat_path.parameters.source_model'],
+                                  )
+                                }
+                              />
+                              {label.en} / {label.zh}
+                            </span>
+                            <span className="mt-1 block text-[10px] text-ink-400">
+                              {label.description}
+                              <span className="block">{label.descriptionZh}</span>
+                            </span>
+                          </label>
+                        );
+                      })}
                     </div>
-                  )}
+                  </div>
 
                   {/* The via array's k and process derate are the project's
                       (01 §4) — the template reads `materials.*`, so these were

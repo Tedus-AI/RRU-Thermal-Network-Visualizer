@@ -712,6 +712,62 @@ describe('Scenario boundary conditions feed the solve (07 §12)', () => {
     close(outcome.solution.node_temperatures_C.SRC, 32, 1e-9);
   });
 
+  it('lets the ambient port carry a reservoir without claiming the surface edge', () => {
+    // The natural way to describe "the fins lose heat to 20 °C still air" is a
+    // convection profile on the fin port AND a reservoir on the ambient port.
+    // The single convection edge touches both nodes, so adjacency handed it to
+    // both ports and the reservoir — which has no h and no area — filed a
+    // second, null-resistance record that blocked an otherwise complete solve.
+    const net = boundaryNetwork();
+    const ports = deriveBoundaryPorts(net);
+    const finPort = ports.find((port) => port.connected_node_id === 'FIN') as BoundaryPort;
+    const ambientPort = ports.find((port) => port.connected_node_id === 'AMB') as BoundaryPort;
+
+    const set = withConvection('SCN_RES', 20, 10, 0.5, finPort);
+    set.profiles.push({
+      id: 'P_RESERVOIR',
+      name: 'Outdoor air',
+      type: 'ambient_reservoir',
+      representation: 'fixed_temperature_reservoir',
+      parameters: { temperature_C: 20 },
+      source: 'manual',
+      confidence: 'high',
+    });
+    set.assignments.push({
+      id: 'A_RESERVOIR',
+      boundary_port_id: ambientPort.id,
+      profile_ids: ['P_RESERVOIR'],
+      assignment_mode: 'manual',
+      enabled: true,
+    });
+
+    const input = buildSolveInput({
+      materials: defaultMaterials(),
+      network: net,
+      boundarySet: set,
+      ports,
+      scenarioId: 'SCN_RES',
+    });
+
+    const records = input.boundary_edges.filter((entry) => entry.edge_id === 'E_BOUNDARY');
+    expect(records).toHaveLength(1);
+    expect(records[0].boundary_port_id).toBe(finPort.id);
+    close(records[0].R_C_per_W as number, 0.2, 1e-12);
+
+    const outcome = solveScenario({
+      materials: defaultMaterials(),
+      network: net,
+      boundarySet: set,
+      ports,
+      scenarioId: 'SCN_RES',
+    });
+    expect(outcome.checks.can_solve).toBe(true);
+    expect(outcome.checks.errors.map((entry) => entry.code)).not.toContain(
+      'boundary_rth_unresolved',
+    );
+    close(outcome.solution.node_temperatures_C.FIN, 22, 1e-9);
+  });
+
   it('never lets one scenario read another scenario boundary Rth', () => {
     const net = boundaryNetwork();
     const ports = deriveBoundaryPorts(net);

@@ -149,7 +149,6 @@ export function boundarySetFromMock(json: unknown): ScenarioBoundaryConditionSet
     ambient: {
       external_ambient_C: asNumber(ambient.externalAmbient_C),
       internal_air_C: asNumber(ambient.internalAir_C),
-      radiation_surrounding_C: asNumber(ambient.radiationSurrounding_C),
       source: asString(ambient.source, 'manual') as ScenarioBoundaryConditionSet['ambient']['source'],
       confidence: asString(ambient.confidence, 'medium') as Confidence,
       provenance: provenance.sourceLabel

@@ -447,4 +447,34 @@ describe('heat path migration', () => {
     const spec = migrate({ heat_path: { type: 'DirectMetal', parameters } }, 'Filter');
     expect(spec.heat_path.parameters).toEqual(parameters);
   });
+
+  // Rjc = 0 was the only way to say "one isothermal body" before the source
+  // model applied to every heat path — and it never worked, because a
+  // zero-resistance edge has infinite conductance and Screen 07 rejects it.
+  it('reads Rjc = 0 as a body source', () => {
+    const spec = migrate({
+      heat_path: { type: 'Board', parameters: {} },
+      r_jc_C_per_W: { value: 0, source: 'Manual' },
+    });
+    expect(spec.heat_path.parameters.source_model).toBe('SurfaceBodyBased');
+    // The stored 0 is left alone: it is no longer read, and an engineer who
+    // switches back to a junction should see the number they typed.
+    expect(spec.r_jc_C_per_W?.value).toBe(0);
+  });
+
+  it('leaves a stated source model alone even when Rjc is 0', () => {
+    const spec = migrate({
+      heat_path: { type: 'Board', parameters: { source_model: 'JunctionBased' } },
+      r_jc_C_per_W: 0,
+    });
+    expect(spec.heat_path.parameters.source_model).toBe('JunctionBased');
+  });
+
+  it('does not read a real Rjc as a body source', () => {
+    const spec = migrate({
+      heat_path: { type: 'Board', parameters: {} },
+      r_jc_C_per_W: 1.7,
+    });
+    expect(spec.heat_path.parameters.source_model).toBeUndefined();
+  });
 });
