@@ -80,7 +80,20 @@ interface NetworkStoreState {
   /** Applies a mutation, records history and invalidates the solver. */
   mutate: (
     recipe: (network: ThermalNetwork) => void,
-    options?: { skipHistory?: boolean; skipInvalidate?: boolean },
+    options?: {
+      skipHistory?: boolean;
+      skipInvalidate?: boolean;
+      /**
+       * Leave the unsaved-edits flag alone.
+       *
+       * For a value the tool DERIVED rather than the engineer authored, and
+       * which it recomputes on its own anyway — the auto-layout's node
+       * positions are the case this exists for. Marking the project dirty for
+       * one told auto-persist a write was due on every visit to Screen 05, and
+       * the save indicator dutifully said so.
+       */
+      skipDirty?: boolean;
+    },
   ) => void;
 
   upsertNode: (node: ThermalNode) => void;
@@ -395,7 +408,7 @@ export const useNetworkStore = create<NetworkStoreState>((set, get) => ({
 
     set({
       network: next,
-      dirty: true,
+      dirty: options.skipDirty ? get().dirty : true,
       validation,
       past: options.skipHistory ? get().past : [...get().past, before].slice(-HISTORY_LIMIT),
       future: options.skipHistory ? get().future : [],
