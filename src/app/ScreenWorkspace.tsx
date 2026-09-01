@@ -25,7 +25,13 @@ export function ScreenWorkspace({
 }: {
   /** English title — always primary (02 §3). */
   title: string;
-  /** Traditional Chinese title, shown beside it when there is room. */
+  /**
+   * Traditional Chinese title, shown beside it when there is room.
+   *
+   * Empty renders the title alone rather than a dangling separator, which is
+   * what a screen wants when its single title is already in the reader's
+   * language and the English half was only repeating it.
+   */
   titleZh: string;
   description?: string;
   descriptionZh?: string;
@@ -43,7 +49,7 @@ export function ScreenWorkspace({
         <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
           <h1 className="text-[21px] font-bold text-ink-900">
             {title}
-            <span className="ml-2 font-semibold text-ink-500">/ {titleZh}</span>
+            {titleZh && <span className="ml-2 font-semibold text-ink-500">/ {titleZh}</span>}
           </h1>
           {badge}
         </div>
