@@ -6,12 +6,32 @@
  * boundary opening as something a scenario can attach conditions to.
  */
 
-import type { ThermalNetwork, ThermalNode } from '../types';
+import type { ThermalEdge, ThermalNetwork, ThermalNode } from '../types';
 import type { BoundaryConditionType, BoundaryPort } from './types';
 
 /** Edge methods Screen 05 marks as "resolved by boundary conditions". */
 function isBoundaryDerived(method: string): boolean {
   return method === 'convection_hA' || method === 'radiation_hA';
+}
+
+/**
+ * The conduction step feeding a boundary node — the fin-root link.
+ *
+ * Exactly one edge should arrive at a fin surface from upstream, and it is not
+ * boundary-derived (that is the edge leaving toward ambient). Returning null
+ * when the shape is anything else leaves the topology alone rather than
+ * guessing which edge was meant.
+ *
+ * Shared so the Screen 05 projection and the Screen 07 solve clone can never
+ * disagree about WHICH edge carries the fin's conduction: if they picked
+ * differently, the graph would annotate one edge and the solver would resist on
+ * another, and the discrepancy would be invisible.
+ */
+export function finRootLinkOf(network: ThermalNetwork, nodeId: string): ThermalEdge | null {
+  const incoming = Object.values(network.edges).filter(
+    (edge) => edge.to === nodeId && edge.enabled && !isBoundaryDerived(edge.method),
+  );
+  return incoming.length === 1 ? incoming[0] : null;
 }
 
 function surfaceGroupFor(node: ThermalNode): string {

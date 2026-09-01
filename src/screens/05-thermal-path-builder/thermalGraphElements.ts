@@ -547,7 +547,11 @@ export function buildElements(
     if (hidden.has(edge.from) || hidden.has(edge.to)) continue;
     const scenarioBoundary = options.scenarioBoundaryEdges?.get(edge.id);
     const R = scenarioBoundary?.rth_C_per_W ?? activeRth(edge.rth);
-    const isothermal = edge.parameters?.ideal_link === true;
+    // The stored fin-root link is isothermal only until a scenario states fin
+    // geometry; from then on the active scenario gives it the fin's own
+    // conduction, and calling it "等溫" would deny a gradient the solver is
+    // applying. A projection therefore outranks the stored ideal_link flag.
+    const isothermal = edge.parameters?.ideal_link === true && scenarioBoundary == null;
     // A pipe branch carries every pipe at once, so it says how many. Without
     // it the number reads as one pipe's and nobody can check the division.
     const pipes = edge.parameters?.pipes;
@@ -556,7 +560,9 @@ export function buildElements(
         ? 'Rad'
         : scenarioBoundary.kind === 'convection'
           ? 'Conv'
-          : 'Boundary'
+          : scenarioBoundary.kind === 'fin_conduction'
+            ? 'Fin'
+            : 'Boundary'
       : (EDGE_SHORT[edge.type] ?? edge.type) +
         (edge.type === 'heat_pipe' && typeof pipes === 'number' && pipes > 1 ? ` ×${pipes}` : '');
     const label = options.showLabels
