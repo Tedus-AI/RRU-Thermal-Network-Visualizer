@@ -43,6 +43,7 @@ import {
   usesPlateGeometry,
 } from '@/thermal/boundary/calculations';
 import { isFinnedSurfacePort } from '@/thermal/boundary/boundaryPorts';
+import type { SurfaceAssumptionCheck } from '@/thermal/boundary/assumptionCheck';
 import {
   PLATE_ORIENTATIONS,
   PLATE_ORIENTATION_LABELS,
@@ -335,9 +336,15 @@ function InlineChecks({ messages }: { messages: BoundaryValidationMessage[] }) {
 function ApplicablePreview({
   preview,
   activeProfile,
+  assumptionCheck,
+  readOnly,
+  onApplySolvedSurface,
 }: {
   preview: BoundaryDerivedPreview | undefined;
   activeProfile: BoundaryConditionProfile;
+  assumptionCheck?: SurfaceAssumptionCheck | null;
+  readOnly: boolean;
+  onApplySolvedSurface: (surface_C: number) => void;
 }) {
   const showConvection =
     activeProfile.type === 'convection_to_ambient' ||
@@ -393,7 +400,12 @@ function ApplicablePreview({
           {preview?.completeness ?? 'blocked'}
         </Badge>
       </Row>
-      <AssumptionNotes assumptions={preview?.assumptions} />
+      <AssumptionNotes assumptions={preview?.assumptions} verified={assumptionCheck?.verdict === 'verified'} />
+      <SurfaceAssumptionResult
+        check={assumptionCheck}
+        readOnly={readOnly}
+        onApply={onApplySolvedSurface}
+      />
       <p className="mt-2 text-[10px] leading-relaxed text-ink-500">{T06.derived.disclaimer}</p>
     </section>
   );
@@ -408,10 +420,21 @@ function ApplicablePreview({
  * had no way to learn that the surface temperature under `h_rad` was a default,
  * let alone what it was set to.
  */
-function AssumptionNotes({ assumptions }: { assumptions?: BoundaryAssumption[] }) {
+function AssumptionNotes({
+  assumptions,
+  verified,
+}: {
+  assumptions?: BoundaryAssumption[];
+  /** A solve has since confirmed the assumption; it is history, not a caution. */
+  verified?: boolean;
+}) {
   if (!assumptions?.length) return null;
   return (
-    <ul className="mt-2 space-y-1 rounded border border-warn-500/40 bg-warn-100 p-2">
+    <ul
+      className={`mt-2 space-y-1 rounded border p-2 ${
+        verified ? 'border-ok-500/40 bg-ok-500/10' : 'border-warn-500/40 bg-warn-100'
+      }`}
+    >
       {assumptions.map((assumption) => {
         const copy = ASSUMPTION_COPY[assumption.kind];
         const value =
@@ -419,7 +442,10 @@ function AssumptionNotes({ assumptions }: { assumptions?: BoundaryAssumption[] }
             ? copy.format(assumption.value)
             : null;
         return (
-          <li key={assumption.kind} className="text-[10px] leading-relaxed text-warn-600">
+          <li
+            key={assumption.kind}
+            className={`text-[10px] leading-relaxed ${verified ? 'text-ok-600' : 'text-warn-600'}`}
+          >
             <span className="font-bold">
               {copy.en}
               {value ? ` (${value})` : ''}
@@ -429,6 +455,72 @@ function AssumptionNotes({ assumptions }: { assumptions?: BoundaryAssumption[] }
         );
       })}
     </ul>
+  );
+}
+
+/**
+ * The assumption, checked against the solve that followed it.
+ *
+ * This is the only place Screen 06 shows a number Screen 07 produced, and it is
+ * shown as a CHECK, never as an input: the screen's own fields keep the
+ * engineer's value until they press Apply. Nothing solved is written into the
+ * boundary set — a set that encoded a previous answer would make the next solve
+ * depend on the last one (06 §12.1).
+ */
+function SurfaceAssumptionResult({
+  check,
+  readOnly,
+  onApply,
+}: {
+  check?: SurfaceAssumptionCheck | null;
+  readOnly: boolean;
+  onApply: (surface_C: number) => void;
+}) {
+  if (!check) return null;
+
+  if (check.verdict === 'unavailable') {
+    return (
+      <p className="mt-1.5 text-[10px] leading-relaxed text-ink-400">
+        No current solve to check this against. Run Screen 07 and return here.
+        <span className="block">尚無可對照的求解結果；請先於 SCR07 求解後再回到此處。</span>
+      </p>
+    );
+  }
+
+  const verified = check.verdict === 'verified';
+  return (
+    <div
+      className={`mt-1.5 rounded border p-2 text-[10px] leading-relaxed ${
+        verified ? 'border-ok-500/40 bg-ok-500/10 text-ok-600' : 'border-accent-500/40 bg-accent-50 text-accent-700'
+      }`}
+    >
+      <p className="font-bold">
+        {verified
+          ? `Checked against Screen 07: the assumption holds (${formatNumber(check.r_error_pct, 1, '%')} on the boundary).`
+          : `Checked against Screen 07: the surface solved at ${formatNumber(check.solved_C, 1, '°C')}, not ${formatNumber(check.assumed_C, 1, '°C')}.`}
+      </p>
+      <p className="mt-0.5">
+        {`assumed ${formatNumber(check.assumed_C, 1, '°C')} → solved ${formatNumber(check.solved_C, 1, '°C')} ` +
+          `(${check.delta_C != null && check.delta_C > 0 ? '+' : ''}${formatNumber(check.delta_C, 1, 'K')}); ` +
+          `boundary ${formatRth(check.r_assumed_C_per_W)} → ${formatRth(check.r_solved_C_per_W)}`}
+      </p>
+      {!verified && (
+        <>
+          <p className="mt-0.5">
+            重新以求解出的表面溫度求值，邊界熱阻會改變 {formatNumber(check.r_error_pct, 1, '%')}。
+            套用後請重新求解：邊界改變後表面溫度會再動一次，需要再對照一輪。
+          </p>
+          <button
+            type="button"
+            disabled={readOnly || check.solved_C == null}
+            onClick={() => check.solved_C != null && onApply(check.solved_C)}
+            className="mt-1.5 rounded border border-accent-500/50 bg-surface px-2 py-1 text-[10px] font-bold text-accent-700 hover:border-accent-600 disabled:cursor-default disabled:opacity-40"
+          >
+            Use {formatNumber(check.solved_C, 1, '°C')} / 套用求解值
+          </button>
+        </>
+      )}
+    </div>
   );
 }
 
@@ -885,6 +977,7 @@ function PlateGeometryPanel({
 export function BoundaryInspector({
   port,
   status,
+  assumptionCheck,
   profiles,
   preferredProfileId,
   preview,
@@ -900,6 +993,8 @@ export function BoundaryInspector({
 }: {
   port: BoundaryPort;
   status: PortStatus;
+  /** Live check of this port's surface assumption against Screen 07's solve. */
+  assumptionCheck?: SurfaceAssumptionCheck | null;
   profiles: BoundaryConditionProfile[];
   preferredProfileId?: string | null;
   preview: BoundaryDerivedPreview | undefined;
@@ -1363,7 +1458,25 @@ export function BoundaryInspector({
             )}
 
             {!solarProfileInactive && (
-              <ApplicablePreview preview={preview} activeProfile={activeProfile} />
+              <ApplicablePreview
+                preview={preview}
+                activeProfile={activeProfile}
+                assumptionCheck={assumptionCheck}
+                readOnly={readOnly}
+                onApplySolvedSurface={(surface_C) =>
+                  onUpsertProfile({
+                    ...activeProfile,
+                    parameters: {
+                      ...activeProfile.parameters,
+                      surfaceReferenceTemperatureGuess_C: surface_C,
+                    },
+                    // What gets written is a STATED input the engineer chose,
+                    // not a solved value the set carries around: the source
+                    // says so, and Screen 07 will re-solve from it.
+                    source: 'manual',
+                  })
+                }
+              />
             )}
 
             <details className="mt-3 rounded border border-line bg-surface-muted px-2.5 py-2 text-[10px] text-ink-500">

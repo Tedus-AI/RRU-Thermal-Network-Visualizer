@@ -48,6 +48,10 @@ import { topologyVersionOf, useBoundaryStore } from '@/data/boundaryStore';
 import { useSolutionStore } from '@/data/solutionStore';
 import { surfaceGroupsOf } from '@/thermal/boundary/boundaryPorts';
 import {
+  checkSurfaceAssumption,
+  type SurfaceAssumptionCheck,
+} from '@/thermal/boundary/assumptionCheck';
+import {
   BOUNDARY_TYPE_LABELS,
   type BoundaryConditionProfile,
   type BoundaryConditionType,
@@ -189,6 +193,13 @@ export function BoundaryConditionsView() {
   const activeScenarioId = useScenarioStore((s) => s.activeScenarioId);
   const solverState = useSolverStore((s) => s.state);
 
+  // Read for ONE purpose: checking a surface-temperature assumption against
+  // the solve that followed it. Screen 06 still renders no solved temperature
+  // as an input, and nothing solved is ever written into the boundary set.
+  const solutions = useSolutionStore((s) => s.solutions);
+  const solutionKey = useSolutionStore((s) => s.activeKey);
+  const solutionSignature = useSolutionStore((s) => s.signature);
+
   const sets = useBoundaryStore((s) => s.sets);
   const activeKey = useBoundaryStore((s) => s.activeKey);
   const ports = useBoundaryStore((s) => s.ports);
@@ -269,6 +280,34 @@ export function BoundaryConditionsView() {
     () => projectScenarioBoundaryEdges(network, ports, set),
     [network, ports, set],
   );
+
+  /**
+   * Each port's surface-temperature assumption, checked against Screen 07.
+   *
+   * A stale solution is not consulted: it was produced from inputs that have
+   * since changed, so confirming an assumption with it would be confirming it
+   * against a different model (07 §38).
+   */
+  const assumptionChecks = useMemo(() => {
+    const checks = new Map<string, SurfaceAssumptionCheck>();
+    if (!set) return checks;
+    const solution = solutionKey ? (solutions[solutionKey] ?? null) : null;
+    const stale =
+      solution != null &&
+      solutionSignature != null &&
+      solution.metadata.input_signature !== solutionSignature;
+    const temperatures = solution && !stale ? solution.node_temperatures_C : null;
+
+    for (const port of ports) {
+      if (!port.dissipating) continue;
+      const check = checkSurfaceAssumption(port, profilesForPort(set, port.id), {
+        ambient_C: set.ambient.external_ambient_C,
+        solvedSurface_C: temperatures?.[port.connected_node_id] ?? null,
+      });
+      if (check) checks.set(port.id, check);
+    }
+    return checks;
+  }, [set, ports, solutions, solutionKey, solutionSignature]);
 
   useEffect(() => {
     if (!projectId) return;
@@ -858,7 +897,7 @@ export function BoundaryConditionsView() {
                   Boundary Ports / 邊界端口
                 </p>
                 {ports.map((port) => {
-                  const status = portStatus(set, port);
+                  const status = portStatus(set, port, assumptionChecks.get(port.id)?.verdict);
                   const label = PORT_STATUS_LABELS[status];
                   return (
                     <button
@@ -886,7 +925,8 @@ export function BoundaryConditionsView() {
               {selectedPort && set ? (
                 <BoundaryInspector
                   port={selectedPort}
-                  status={portStatus(set, selectedPort)}
+                  status={portStatus(set, selectedPort, assumptionChecks.get(selectedPort.id)?.verdict)}
+                  assumptionCheck={assumptionChecks.get(selectedPort.id) ?? null}
                   profiles={profilesForPort(set, selectedPort.id)}
                   preferredProfileId={preferredProfileId}
                   preview={set.derived_preview.find(

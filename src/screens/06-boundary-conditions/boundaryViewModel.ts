@@ -11,6 +11,7 @@ import type {
   BoundaryPort,
   ScenarioBoundaryConditionSet,
 } from '@/thermal/boundary/types';
+import type { SurfaceAssumptionVerdict } from '@/thermal/boundary/assumptionCheck';
 
 /** How each boundary type will be represented in the Screen 07 solve (06 §10.2). */
 export const REPRESENTATION_FOR: Record<
@@ -141,12 +142,27 @@ export function profilesForPort(
     .filter(Boolean) as BoundaryConditionProfile[];
 }
 
-/** Canvas status for one port — 06 §8.2 visual rules. */
-export type PortStatus = 'unassigned' | 'ok' | 'warning' | 'blocked' | 'adiabatic';
+/**
+ * Canvas status for one port — 06 §8.2 visual rules.
+ *
+ * `verified` is a `warning` whose assumption has since been checked against a
+ * solve and held. It is NOT stored: the boundary set's own completeness stays
+ * `warning`, because the set is scenario input and must not encode a result
+ * (06 §12.1). This is the screen saying "and I looked it up".
+ */
+export type PortStatus =
+  | 'unassigned'
+  | 'ok'
+  | 'verified'
+  | 'warning'
+  | 'blocked'
+  | 'adiabatic';
 
 export function portStatus(
   set: ScenarioBoundaryConditionSet | null,
   port: BoundaryPort,
+  /** Live check from Screen 07's solution; absent before any solve. */
+  verdict?: SurfaceAssumptionVerdict | null,
 ): PortStatus {
   if (!port.dissipating) {
     const ambient_C = set?.ambient.external_ambient_C;
@@ -162,13 +178,14 @@ export function portStatus(
   );
   if (!preview) return 'warning';
   if (preview.completeness === 'blocked') return 'blocked';
-  if (preview.completeness === 'warning') return 'warning';
+  if (preview.completeness === 'warning') return verdict === 'verified' ? 'verified' : 'warning';
   return 'ok';
 }
 
 export const PORT_STATUS_LABELS: Record<PortStatus, { label: string; zh: string; tone: string }> = {
   unassigned: { label: 'Unassigned', zh: '未指定', tone: 'neutral' },
   ok: { label: 'Ready', zh: '就緒', tone: 'ok' },
+  verified: { label: 'Verified', zh: '假設已驗證', tone: 'ok' },
   warning: { label: 'Assumption', zh: '含假設', tone: 'warn' },
   blocked: { label: 'Incomplete', zh: '不完整', tone: 'danger' },
   adiabatic: { label: 'Adiabatic', zh: '絕熱', tone: 'neutral' },
