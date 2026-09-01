@@ -32,8 +32,21 @@ import {
   type BoundaryValidationState,
 } from '@/thermal/boundary/types';
 import type { Confidence } from '@/thermal/types';
-import { FIN_GEOMETRY_KEYS, finArrayOf, usesFinGeometry } from '@/thermal/boundary/calculations';
+import {
+  FIN_GEOMETRY_KEYS,
+  PLATE_GEOMETRY_KEYS,
+  finArrayOf,
+  plateConvectionOf,
+  usesFinGeometry,
+  usesPlateGeometry,
+} from '@/thermal/boundary/calculations';
 import { isFinnedSurfacePort } from '@/thermal/boundary/boundaryPorts';
+import {
+  PLATE_ORIENTATIONS,
+  PLATE_ORIENTATION_LABELS,
+  type FlatPlateResult,
+  type PlateOrientation,
+} from '@/thermal/boundary/flatPlate';
 import {
   FIN_ASPECT_RATIO_BAND,
   FIN_TECHNOLOGIES,
@@ -616,6 +629,169 @@ function FinGeometryPanel({
   );
 }
 
+/**
+ * Plate geometry in, one coefficient out.
+ *
+ * Deliberately smaller than the fin panel. Only `h` is computed here, so only
+ * what `h` depends on is asked for — how far the buoyant layer runs, and which
+ * way the surface faces. The readout shows the Rayleigh number and the
+ * temperature difference behind the coefficient, because a natural-convection h
+ * that is quoted without the ΔT it was evaluated at is the kind of number that
+ * ends up copied onto a surface it does not describe.
+ */
+function PlateGeometryPanel({
+  profile,
+  result,
+  ambientTemperature_C,
+  readOnly,
+  onPatch,
+}: {
+  profile: BoundaryConditionProfile;
+  result: FlatPlateResult | null;
+  ambientTemperature_C: number | null;
+  readOnly: boolean;
+  onPatch: (key: string, value: number | string | boolean | null) => void;
+}) {
+  const stored = profile.parameters[PLATE_GEOMETRY_KEYS.orientation];
+  const orientation: PlateOrientation = (PLATE_ORIENTATIONS as readonly string[]).includes(
+    stored as string,
+  )
+    ? (stored as PlateOrientation)
+    : 'Vertical';
+  const horizontal = orientation !== 'Vertical';
+  const guessed = profile.parameters.surfaceReferenceTemperatureGuess_C == null;
+
+  return (
+    <div className="mb-2 rounded-md border border-line bg-surface p-2.5">
+      <div className="mb-2">
+        <FieldLabel
+          label="Surface Orientation"
+          zh="表面方位"
+          htmlFor="bc-plate-orientation"
+          tooltip="決定自然對流的關聯式與特徵長度：垂直面用高度，水平面用面積除以周長。"
+        />
+        <Select
+          id="bc-plate-orientation"
+          className="mt-1 h-8 !text-[12px]"
+          value={orientation}
+          disabled={readOnly}
+          items={PLATE_ORIENTATIONS.map((value) => ({
+            value,
+            label: `${PLATE_ORIENTATION_LABELS[value].en} / ${PLATE_ORIENTATION_LABELS[value].zh}`,
+          }))}
+          onChange={(event) => onPatch(PLATE_GEOMETRY_KEYS.orientation, event.target.value)}
+        />
+        <p className="mt-1 text-[10px] leading-relaxed text-ink-400">
+          {PLATE_ORIENTATION_LABELS[orientation].note}
+        </p>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <FieldLabel
+            label={horizontal ? 'Side A' : 'Height'}
+            zh={horizontal ? '邊長 A' : '高度'}
+            unit="mm"
+            htmlFor={`bc-plate-${PLATE_GEOMETRY_KEYS.height}`}
+            tooltip={
+              horizontal
+                ? '水平板的一個邊長；特徵長度為面積除以周長，所以兩邊都需要。'
+                : '浮力沿表面流動的距離，也就是這個面的垂直高度。寬度不影響 h：每一柱空氣各自上升。'
+            }
+            required
+          />
+          <NumberInput
+            id={`bc-plate-${PLATE_GEOMETRY_KEYS.height}`}
+            className="mt-1 h-8 !text-[12px]"
+            step="any"
+            value={
+              typeof profile.parameters[PLATE_GEOMETRY_KEYS.height] === 'number'
+                ? (profile.parameters[PLATE_GEOMETRY_KEYS.height] as number)
+                : ''
+            }
+            disabled={readOnly}
+            onChange={(event) =>
+              onPatch(
+                PLATE_GEOMETRY_KEYS.height,
+                event.target.value === '' ? null : Number(event.target.value),
+              )
+            }
+          />
+        </div>
+        {horizontal && (
+          <div>
+            <FieldLabel
+              label="Side B"
+              zh="邊長 B"
+              unit="mm"
+              htmlFor={`bc-plate-${PLATE_GEOMETRY_KEYS.width}`}
+              tooltip="水平板的另一個邊長。"
+              required
+            />
+            <NumberInput
+              id={`bc-plate-${PLATE_GEOMETRY_KEYS.width}`}
+              className="mt-1 h-8 !text-[12px]"
+              step="any"
+              value={
+                typeof profile.parameters[PLATE_GEOMETRY_KEYS.width] === 'number'
+                  ? (profile.parameters[PLATE_GEOMETRY_KEYS.width] as number)
+                  : ''
+              }
+              disabled={readOnly}
+              onChange={(event) =>
+                onPatch(
+                  PLATE_GEOMETRY_KEYS.width,
+                  event.target.value === '' ? null : Number(event.target.value),
+                )
+              }
+            />
+          </div>
+        )}
+      </div>
+
+      <div className="mt-2.5 rounded border border-line bg-surface-muted p-2">
+        <p className="mb-1.5 text-[10px] font-bold text-ink-600">
+          Derived from geometry / 由幾何算出
+          <span className="ml-1 font-normal text-ink-400">— 唯讀</span>
+        </p>
+        {result == null ? (
+          <p className="text-[11px] leading-relaxed text-warn-600">
+            {ambientTemperature_C == null
+              ? '缺少環境溫度，無法計算對流係數。'
+              : '幾何尚未填齊，或表面溫度假設不高於環境溫度，無法計算對流係數。'}
+          </p>
+        ) : (
+          <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
+            {[
+              ['特徵長度', `${result.characteristicLength_m.toFixed(4)} m`],
+              ['ΔT（假設）', `${result.deltaT_C.toFixed(1)} K`],
+              ['Ra', result.rayleigh.toExponential(2)],
+              ['Nu', result.nusselt.toFixed(1)],
+            ].map(([label, value]) => (
+              <div key={label} className="flex items-baseline justify-between gap-2">
+                <dt className="text-ink-400">{label}</dt>
+                <dd className="tabular font-semibold text-ink-800">{value}</dd>
+              </div>
+            ))}
+            <div className="col-span-2 mt-0.5 flex items-baseline justify-between gap-2 border-t border-line pt-1">
+              <dt className="text-ink-500">h_conv</dt>
+              <dd className="tabular font-bold text-ink-900">
+                {result.h_conv_W_m2K.toFixed(2)} W/m²K
+              </dd>
+            </div>
+          </dl>
+        )}
+        {result != null && guessed && (
+          <p className="mt-1.5 text-[10px] leading-relaxed text-ink-400">
+            ΔT 來自「表面溫度假設」（留白時以環境溫度 + 35 °C 預估）。h 隨 ΔT 約以四次方根變化，
+            所以這個假設偏個十度對 h 的影響在 5% 以內；真實表面溫度由 07 求解。
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function BoundaryInspector({
   port,
   status,
@@ -751,9 +927,26 @@ export function BoundaryInspector({
   // exposed wall keeps both modes: there, a stated h and area IS the right
   // description, and nothing about it has to be invented.
   const finGeometryForced = isFinnedSurfacePort(port);
+  const setPlateGeometryEnabled = (enabled: boolean) => {
+    if (!activeProfile) return;
+    // Seeds nothing. Unlike a fin array's base, a plate's characteristic length
+    // is not a dimension the project already holds — it is which way this
+    // particular surface faces and how far the plume runs along it, and only
+    // the person looking at the drawing knows that.
+    patchParameters({
+      [PLATE_GEOMETRY_KEYS.enabled]: enabled,
+      ...(enabled && activeProfile.parameters[PLATE_GEOMETRY_KEYS.orientation] == null
+        ? { [PLATE_GEOMETRY_KEYS.orientation]: 'Vertical' }
+        : {}),
+    });
+  };
+
   const finGeometryActive = activeProfile != null && usesFinGeometry(activeProfile, port);
   const finResult = activeProfile != null ? finArrayOf(activeProfile, port) : null;
   const finCapable = activeProfile != null && FIN_CAPABLE_TYPES.has(activeProfile.type);
+  const plateGeometryActive = activeProfile != null && usesPlateGeometry(activeProfile);
+  const plateResult =
+    activeProfile != null ? plateConvectionOf(activeProfile, ambientTemperature_C) : null;
   const finPanelShown = finCapable && (finGeometryForced || finGeometryActive);
   /** Saved before the geometry mode existed, and still what the solve uses. */
   const legacyManualInUse = finCapable && finGeometryForced && !finGeometryActive;
@@ -919,6 +1112,40 @@ export function BoundaryInspector({
                   </label>
                 )}
 
+                {/* A flat wall states its own area, emissivity and view factor
+                    — those are real properties of it. Only `h` is offered as a
+                    computed value, because it is the one nobody can state. */}
+                {finCapable && !finGeometryForced && !finGeometryActive && (
+                  <label className="mb-2 flex cursor-pointer items-start gap-2 rounded-md border border-line bg-surface-muted p-2">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5 size-3.5 accent-[var(--color-accent-600)]"
+                      checked={plateGeometryActive}
+                      disabled={readOnly}
+                      onChange={(event) => setPlateGeometryEnabled(event.target.checked)}
+                    />
+                    <span className="text-[11px] leading-relaxed">
+                      <span className="font-bold text-ink-800">
+                        Compute h from the plate / 由平板幾何計算 h
+                      </span>
+                      <span className="mt-0.5 block text-[10px] text-ink-400">
+                        自然對流係數由特徵長度、方位與表面溫度假設算出（Churchill–Chu 等標準關聯式）。
+                        面積、發射率、視角因子仍由你填 —— 平面表面的這三項是可以量、可以畫的。
+                      </span>
+                    </span>
+                  </label>
+                )}
+
+                {plateGeometryActive && !finGeometryActive && (
+                  <PlateGeometryPanel
+                    profile={activeProfile}
+                    result={plateResult}
+                    ambientTemperature_C={ambientTemperature_C}
+                    readOnly={readOnly}
+                    onPatch={patchParameter}
+                  />
+                )}
+
                 {/* On a finned port the panel is always here, even while a
                     stored h is still doing the solving. Showing the notice
                     without the fields it refers to would be a claim the screen
@@ -959,7 +1186,11 @@ export function BoundaryInspector({
                   ? TYPE_PARAMETERS[activeProfile.type].filter(
                       (parameter) => !FIN_DERIVED_PARAMETER_KEYS.has(parameter.key),
                     )
-                  : TYPE_PARAMETERS[activeProfile.type]
+                  : plateGeometryActive
+                    ? TYPE_PARAMETERS[activeProfile.type].filter(
+                        (parameter) => parameter.key !== 'h_W_m2K',
+                      )
+                    : TYPE_PARAMETERS[activeProfile.type]
                 ).map((parameter) => {
                   const inheritedOwner =
                     parameter.key === 'irradiance_W_m2'

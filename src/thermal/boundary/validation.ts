@@ -10,9 +10,16 @@
  * screen says so rather than quietly passing it to Screen 07.
  */
 
-import { buildDerivedPreview, finArrayOf, usesFinGeometry } from './calculations';
+import {
+  buildDerivedPreview,
+  finArrayOf,
+  plateConvectionOf,
+  usesFinGeometry,
+  usesPlateGeometry,
+} from './calculations';
 import { FIN_ASPECT_RATIO_BAND, finAspectRatioVerdict } from './finArray';
 import { isFinnedSurfacePort } from './boundaryPorts';
+import { OPEN_SURFACE_VIEW_FACTOR_FLOOR } from './flatPlate';
 import type {
   BoundaryConditionProfile,
   BoundaryDerivedPreview,
@@ -302,7 +309,21 @@ export function validateBoundarySet(input: BoundaryValidationInput): BoundaryVal
           }
           break;
         }
-        if (!positive(p.h_W_m2K)) {
+        // A plate-derived profile computes h, so it is not asked for one. What
+        // it does need is the geometry that produces it.
+        if (usesPlateGeometry(profile)) {
+          if (plateConvectionOf(profile, set.ambient.external_ambient_C) == null) {
+            errors.push(
+              message(
+                'error',
+                `PROFILE_PLATE_GEOMETRY_${id}`,
+                `"${profile.name}": the plate geometry is incomplete, so no convection coefficient can be computed. State the characteristic length, and the second side for a horizontal plate.`,
+                `「${profile.name}」的平板幾何不完整，無法計算對流係數。請填寫特徵長度；水平板另需第二邊長。`,
+                { profile_id: id },
+              ),
+            );
+          }
+        } else if (!positive(p.h_W_m2K)) {
           errors.push(
             message(
               'error',
@@ -353,6 +374,25 @@ export function validateBoundarySet(input: BoundaryValidationInput): BoundaryVal
                 `PROFILE_VIEWFACTOR_${id}`,
                 `"${profile.name}": view factor must be between 0 and 1.`,
                 `「${profile.name}」的視角因子必須介於 0 與 1。`,
+                { profile_id: id },
+              ),
+            );
+          } else if (
+            typeof p.viewFactor === 'number' &&
+            p.viewFactor < OPEN_SURFACE_VIEW_FACTOR_FLOOR
+          ) {
+            // An outer wall sees sky and ground across most of its hemisphere,
+            // so its view factor is near 1. A markedly low one is usually not a
+            // view factor at all but an area ratio pushed into the only field
+            // that would take it — worth naming, because it under-credits
+            // radiation by the same factor and can look reasonable next to a
+            // convection coefficient that is too high.
+            warnings.push(
+              message(
+                'warning',
+                `PROFILE_VIEWFACTOR_LOW_${id}`,
+                `"${profile.name}": a view factor of ${p.viewFactor} is low for a surface open to the environment, where it is usually near 1. Check that it is a view factor and not an area ratio.`,
+                `「${profile.name}」的視角因子 ${p.viewFactor} 對於面向開放環境的表面偏低（通常接近 1）。請確認它是視角因子，而不是被借用來表示面積比。`,
                 { profile_id: id },
               ),
             );
