@@ -23,6 +23,7 @@
 
 import type { MaterialDefaults } from '@/domain/materials';
 import { buildAllPreviews } from '../boundary/validation';
+import { finRootLinkOf } from '../boundary/boundaryPorts';
 import { edgeResistance } from '../rth';
 import { projectComponentMaster } from '../graph/componentProjection';
 import type { Component } from '@/domain/component';
@@ -177,21 +178,6 @@ function boundaryEdgesOf(network: ThermalNetwork, nodeId: string): ThermalEdge[]
     const otherId = edge.from === nodeId ? edge.to : edge.from;
     return !(isReservoirNode(network.nodes[nodeId]) && !isReservoirNode(network.nodes[otherId]));
   });
-}
-
-/**
- * The conduction step feeding a boundary node — the fin-root link.
- *
- * Exactly one edge should arrive at a fin surface from upstream, and it is not
- * boundary-derived (that is the edge leaving toward ambient). Returning null
- * when the shape is anything else leaves the topology alone rather than
- * guessing which edge was meant.
- */
-function finRootLinkOf(network: ThermalNetwork, nodeId: string): ThermalEdge | null {
-  const incoming = Object.values(network.edges).filter(
-    (edge) => edge.to === nodeId && edge.enabled && !isBoundaryDerived(edge),
-  );
-  return incoming.length === 1 ? incoming[0] : null;
 }
 
 export function buildSolveInput(options: BuildSolveInputOptions): SolveInput {

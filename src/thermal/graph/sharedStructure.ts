@@ -31,7 +31,7 @@ import type { BaseZone, NodeType, ThermalEdge, ThermalNetwork, ThermalNode } fro
  */
 export const ISOTHERMAL_FIN_LINK_RTH_C_PER_W = 1e-6;
 const ISOTHERMAL_FIN_LINK_REFERENCE =
-  'Isothermal fin-root link; fin efficiency is represented by Screen 06 effective area.';
+  'Isothermal fin-root link; carries the fin’s own conduction once Screen 06 states fin geometry.';
 
 export const STRUCTURE_PRESETS = ['SINGLE_MAIN_BASE', 'DUAL_HSK_BASE'] as const;
 export type StructurePreset = (typeof STRUCTURE_PRESETS)[number];

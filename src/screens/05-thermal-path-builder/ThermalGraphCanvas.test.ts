@@ -640,9 +640,13 @@ describe('scenario and ideal-link edge labels', () => {
           kind: 'combined' as const,
           rth_C_per_W: 0.02442,
           h_W_m2K: 12,
+          h_conv_W_m2K: 12,
+          h_rad_W_m2K: null,
           emissivity: 0.85,
           area_m2: 2,
           ambient_C: 55,
+          source: 'stated' as const,
+          fin: null,
           completeness: 'complete' as const,
           resolved: true,
         },
@@ -660,5 +664,45 @@ describe('scenario and ideal-link edge labels', () => {
     expect(rendered.data.lineStyle).toBe('solid');
     expect(edge.resolution).toBe('unresolved');
     expect(edge.rth.analytical).toBeNull();
+  });
+
+  it('gives the fin-root link its conduction instead of still calling it isothermal', () => {
+    const network = fanInNetwork(1);
+    const edge = network.edges.EDGE_PORT_TIM_1_HEAT_OUT_HSK_BASE;
+    // The stored topology is unchanged: it is still the near-zero ideal link.
+    edge.parameters = { ideal_link: true };
+    edge.rth = createRth(0.000001, 'Analytical', 'high');
+    const scenarioBoundaryEdges = new Map([
+      [
+        edge.id,
+        {
+          edge_id: edge.id,
+          boundary_port_id: 'BP_FIN',
+          scenario_id: 'SCN_45C',
+          kind: 'fin_conduction' as const,
+          rth_C_per_W: 0.0166,
+          h_W_m2K: null,
+          h_conv_W_m2K: null,
+          h_rad_W_m2K: null,
+          emissivity: null,
+          area_m2: 0.918,
+          ambient_C: 45,
+          source: 'fin_geometry' as const,
+          fin: { eta_fin: 0.93, effectiveness: 0.93, tipExcessRatio: 0.88, mLc: 0.47 },
+          completeness: 'complete' as const,
+          resolved: true,
+        },
+      ],
+    ]);
+
+    const rendered = buildElements(network, {
+      showPorts: true,
+      showLabels: true,
+      layoutMode: 'Free',
+      scenarioBoundaryEdges,
+    }).find((element) => element.data.id === edge.id)!;
+
+    expect(rendered.data.label).toBe('Fin 0.017 °C/W');
+    expect(edge.parameters?.ideal_link).toBe(true);
   });
 });

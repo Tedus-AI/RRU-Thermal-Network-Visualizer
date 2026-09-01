@@ -287,6 +287,95 @@ function SpreadingBreakdown({
   );
 }
 
+/**
+ * What the active scenario's boundary rests on, for one edge.
+ *
+ * Every row here is read from the SAME preview that produced the resistance in
+ * the last row, so `1/(h·A)` reproduces it. That was not previously true: the
+ * coefficients were read from the profile's stored `h_W_m2K` and `area_m2`,
+ * which a finned profile no longer uses, and the panel could show 8.00 W/m²·K
+ * over 0.890 m² next to 0.1263 °C/W — three numbers that cannot all be right.
+ */
+function BoundaryParametersPanel({ view }: { view?: ScenarioBoundaryEdgeView }) {
+  const dash = (unit: string) => <span className="text-ink-400">— {unit}</span>;
+  const finConduction = view?.kind === 'fin_conduction';
+
+  return (
+    <section className="mt-2 rounded-md border border-line bg-surface-muted p-2.5">
+      <p className="flex items-center gap-1 text-[11px] font-bold text-ink-700">
+        {finConduction ? 'Fin Conduction / 鰭片導熱' : 'Boundary Parameters / 邊界參數'}
+        <span className="font-semibold text-ink-400">(Screen 06)</span>
+      </p>
+
+      {finConduction ? (
+        <>
+          <Row label="Fin Efficiency η" zh="鰭片效率">
+            {view?.fin != null ? view.fin.eta_fin.toFixed(4) : dash('')}
+          </Row>
+          <Row label="Effectiveness η·process" zh="有效係數">
+            {view?.fin != null ? view.fin.effectiveness.toFixed(4) : dash('')}
+          </Row>
+          <Row label="Fin Parameter m·Lc" zh="鰭片參數">
+            {view?.fin != null ? view.fin.mLc.toFixed(4) : dash('')}
+          </Row>
+          <Row label="Tip / Root Excess" zh="尖端與根部溫升比">
+            {view?.fin != null ? view.fin.tipExcessRatio.toFixed(4) : dash('')}
+          </Row>
+          <Row label="Root → Mean Surface Rth" zh="根部至平均表面熱阻">
+            {view?.rth_C_per_W != null ? `${view.rth_C_per_W.toFixed(4)} °C/W` : dash('°C/W')}
+          </Row>
+        </>
+      ) : (
+        <>
+          <Row
+            label={view?.kind === 'radiation' ? 'Radiation h' : 'Convection h'}
+            zh={view?.kind === 'radiation' ? '輻射係數' : '對流係數'}
+          >
+            {view?.h_W_m2K != null ? `${view.h_W_m2K.toFixed(2)} W/m²·K` : dash('W/m²·K')}
+          </Row>
+          {/* Split out only where the edge really carries both mechanisms; on a
+              single-mechanism edge the row above already IS that mechanism. */}
+          {view?.kind === 'combined' && view.h_conv_W_m2K != null && view.h_rad_W_m2K != null && (
+            <Row label="├ h_conv + h_rad" zh="對流＋輻射分項">
+              {`${view.h_conv_W_m2K.toFixed(2)} + ${view.h_rad_W_m2K.toFixed(2)} W/m²·K`}
+            </Row>
+          )}
+          <Row label="Radiation ε" zh="輻射率">
+            {view?.source === 'fin_geometry' ? (
+              <span className="text-ink-400">
+                In h_rad / 已含於 h_rad
+              </span>
+            ) : view?.emissivity != null ? (
+              view.emissivity.toFixed(3)
+            ) : (
+              dash('')
+            )}
+          </Row>
+          <Row label="Effective Area" zh="有效面積">
+            {view?.area_m2 != null ? `${view.area_m2.toFixed(6)} m²` : dash('m²')}
+          </Row>
+          <Row label="Ambient Temperature" zh="環境溫度">
+            {view?.ambient_C != null ? `${view.ambient_C.toFixed(1)} °C` : dash('°C')}
+          </Row>
+          <Row label="Boundary Rth Preview" zh="邊界熱阻預覽">
+            {view?.rth_C_per_W != null ? `${view.rth_C_per_W.toFixed(4)} °C/W` : dash('°C/W')}
+          </Row>
+        </>
+      )}
+
+      {view != null && (
+        <p className="mt-1.5 text-[10px] leading-relaxed text-ink-400">
+          {view.source === 'fin_geometry'
+            ? 'Computed from the fin geometry, not from a stated h and area. The fin efficiency is NOT folded into h here — it sits on the fin-root link as the fin’s own conduction. / 由鰭片幾何計算，非直接填入的 h 與面積；鰭片效率不併入 h，而是以鰭片本體導熱掛在根部連結上。'
+            : view.source === 'plate_convection'
+              ? 'h computed from the plate geometry and an assumed surface temperature; it will shift once Screen 07 solves. / h 由平板幾何與假設表面溫度算出，SCR07 求解後會再變動。'
+              : 'h and area as stated on the Screen 06 profile. / h 與面積為 SCR06 設定檔直接填入之值。'}
+        </p>
+      )}
+    </section>
+  );
+}
+
 function isIsothermalLink(edge: ThermalEdge): boolean {
   return edge.parameters?.ideal_link === true;
 }
@@ -338,7 +427,11 @@ export function EdgeInspector({
   onReverse: () => void;
 }) {
   const [tab, setTab] = useState<Tab>('overview');
-  const isothermal = isIsothermalLink(edge);
+  // A scenario projection outranks the stored ideal_link flag: once fin
+  // geometry is stated the same step carries the fin's own conduction, and
+  // presenting it as an isothermal link would contradict the resistance shown
+  // one row above it.
+  const isothermal = isIsothermalLink(edge) && scenarioBoundary == null;
   const R = scenarioBoundary?.rth_C_per_W ?? activeRth(edge.rth);
   const formattedRth = formatRth(R, isothermal);
   const status = statusOf(edge, scenarioBoundary);
@@ -446,9 +539,11 @@ export function EdgeInspector({
                   }`}
                 >
                   {scenarioBoundary?.resolved
-                    ? `Active scenario boundary preview from Screen 06; the Screen 05 topology remains unchanged. / 已套用 SCR06 目前情境的邊界熱阻預覽，SCR05 拓樸本身未被改寫。`
+                    ? scenarioBoundary.kind === 'fin_conduction'
+                      ? 'The fin’s own conduction, from the Screen 06 fin geometry. The stored link is isothermal; the active scenario replaces it so the surface node reports the MEAN fin temperature instead of repeating the root’s. / 此為 SCR06 鰭片幾何算出的鰭片本體導熱；拓樸上仍存等溫連結，目前情境將其取代，使表面節點代表鰭片平均溫度而非根部溫度。'
+                      : `Active scenario boundary preview from Screen 06; the Screen 05 topology remains unchanged. / 已套用 SCR06 目前情境的邊界熱阻預覽，SCR05 拓樸本身未被改寫。`
                     : isothermal
-                      ? 'This is an intentionally near-zero solver link, not a missing resistance. Fin efficiency is represented by the Screen 06 effective area. / 此為刻意設定的近零等溫求解連結，並非漏填熱阻；鰭片效率由 SCR06 有效面積表示。'
+                      ? 'This is an intentionally near-zero solver link, not a missing resistance. It carries the fin’s conduction once Screen 06 states the fin geometry for this scenario. / 此為刻意設定的近零等溫求解連結，並非漏填熱阻；待 SCR06 於本情境填入鰭片幾何後，此連結即承載鰭片本體導熱。'
                       : edge.resolution_note}
                 </p>
               )}
@@ -459,48 +554,10 @@ export function EdgeInspector({
                   : 'Heat flow Q and ΔT are not shown here: Screen 05 has not run a solve (05 §22). / SCR05 尚未求解，因此不顯示 Q 與 ΔT。'}
               </p>
 
-              {(edge.method === 'convection_hA' || edge.method === 'radiation_hA') && (
-                <section className="mt-2 rounded-md border border-line bg-surface-muted p-2.5">
-                  <p className="flex items-center gap-1 text-[11px] font-bold text-ink-700">
-                    Boundary Parameters / 邊界參數
-                    <span className="font-semibold text-ink-400">(Screen 06)</span>
-                  </p>
-                  <Row label="Convection h" zh="對流係數">
-                    {scenarioBoundary?.h_W_m2K != null ? (
-                      `${scenarioBoundary.h_W_m2K.toFixed(2)} W/m²·K`
-                    ) : (
-                      <span className="text-ink-400">— W/m²·K</span>
-                    )}
-                  </Row>
-                  <Row label="Radiation ε" zh="輻射率">
-                    {scenarioBoundary?.emissivity != null ? (
-                      scenarioBoundary.emissivity.toFixed(3)
-                    ) : (
-                      <span className="text-ink-400">—</span>
-                    )}
-                  </Row>
-                  <Row label="Effective Area" zh="有效面積">
-                    {scenarioBoundary?.area_m2 != null ? (
-                      `${scenarioBoundary.area_m2.toFixed(6)} m²`
-                    ) : (
-                      <span className="text-ink-400">— m²</span>
-                    )}
-                  </Row>
-                  <Row label="Ambient Temperature" zh="環境溫度">
-                    {scenarioBoundary?.ambient_C != null ? (
-                      `${scenarioBoundary.ambient_C.toFixed(1)} °C`
-                    ) : (
-                      <span className="text-ink-400">— °C</span>
-                    )}
-                  </Row>
-                  <Row label="Boundary Rth Preview" zh="邊界熱阻預覽">
-                    {scenarioBoundary?.rth_C_per_W != null ? (
-                      `${scenarioBoundary.rth_C_per_W.toFixed(4)} °C/W`
-                    ) : (
-                      <span className="text-ink-400">— °C/W</span>
-                    )}
-                  </Row>
-                </section>
+              {(scenarioBoundary != null ||
+                edge.method === 'convection_hA' ||
+                edge.method === 'radiation_hA') && (
+                <BoundaryParametersPanel view={scenarioBoundary} />
               )}
             </div>
             <div>
