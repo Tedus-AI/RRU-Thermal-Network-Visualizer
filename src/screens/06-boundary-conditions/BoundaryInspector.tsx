@@ -442,9 +442,11 @@ const ASSUMPTION_COPY: Record<
     format: (value) => `${value.toFixed(1)} °C`,
   },
   plate_convection: {
-    en: 'h comes from the plate correlation, evaluated at that guess',
-    zh: 'h 由平板自然對流關聯式算出，並以上述表面溫度求值；表面溫度改變時 h 會跟著變。',
-    format: (value) => `${value.toFixed(1)} °C`,
+    // Stands alone. This fires whether or not the surface temperature was
+    // stated, so it must not refer to a line above it that may not be there.
+    en: 'h is computed from the plate correlation at an assumed surface temperature, not stated',
+    zh: 'h 由平板自然對流關聯式算出，並以此表面溫度求值。h_conv 與 h_rad 都隨它變動，SCR07 解出的實際表面溫度若與此不同，這裡的熱阻就會跟著改變。',
+    format: (value) => `assumed surface ${value.toFixed(1)} °C`,
   },
   solar_estimate: {
     en: 'Solar input is an estimate until the site is surveyed',
