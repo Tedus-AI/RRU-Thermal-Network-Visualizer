@@ -12,10 +12,22 @@ import type { BaseZone, NodeType, ThermalEdge, ThermalNetwork, ThermalNode } fro
 
 /**
  * HSK Base / Fin Root and Fin Surface are two display planes of one lumped
- * heat-sink boundary, not a separately specified series resistance. Fin
- * conduction efficiency belongs in Screen 06's effective area. A tiny positive
- * link keeps the solver matrix connected while remaining below the bottleneck
- * analyser's ideal-link threshold.
+ * heat-sink boundary, not a separately specified series resistance. A tiny
+ * positive link keeps the solver matrix connected while remaining below the
+ * bottleneck analyser's ideal-link threshold.
+ *
+ * This is the DEFAULT, and it is what a surface with no fin geometry keeps. It
+ * is also not a claim that a fin is isothermal — it is not; the classical
+ * profile is `θ(x)/θ_root = cosh(m(L−x))/cosh(m·L)`, and the fin's mean excess
+ * temperature is `tanh(m·Lc)/(m·Lc)`, which is the fin efficiency itself. The
+ * efficiency therefore carries the whole gradient, and while it lived only
+ * inside Screen 06's coefficient this link had nothing left to hold.
+ *
+ * Once fin geometry is stated, `buildSolveInput` splits the same total across
+ * the two edges and gives this one the fin's own conduction, as a scenario
+ * override on the solve clone. The stored topology keeps the isothermal value:
+ * the split depends on the scenario's boundary profile, and Screen 05 stays
+ * scenario-independent (06 §10.1).
  */
 export const ISOTHERMAL_FIN_LINK_RTH_C_PER_W = 1e-6;
 const ISOTHERMAL_FIN_LINK_REFERENCE =

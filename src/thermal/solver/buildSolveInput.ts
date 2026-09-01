@@ -179,6 +179,21 @@ function boundaryEdgesOf(network: ThermalNetwork, nodeId: string): ThermalEdge[]
   });
 }
 
+/**
+ * The conduction step feeding a boundary node — the fin-root link.
+ *
+ * Exactly one edge should arrive at a fin surface from upstream, and it is not
+ * boundary-derived (that is the edge leaving toward ambient). Returning null
+ * when the shape is anything else leaves the topology alone rather than
+ * guessing which edge was meant.
+ */
+function finRootLinkOf(network: ThermalNetwork, nodeId: string): ThermalEdge | null {
+  const incoming = Object.values(network.edges).filter(
+    (edge) => edge.to === nodeId && edge.enabled && !isBoundaryDerived(edge),
+  );
+  return incoming.length === 1 ? incoming[0] : null;
+}
+
 export function buildSolveInput(options: BuildSolveInputOptions): SolveInput {
   const { network, boundarySet, ports, scenarioId } = options;
   const powerScale = options.powerScale ?? 1;
@@ -299,6 +314,31 @@ export function buildSolveInput(options: BuildSolveInputOptions): SolveInput {
 
         default:
           break;
+      }
+    }
+
+    // --- the fin's own conduction ------------------------------------------
+    // Screen 05 leaves the root-to-fin-surface step isothermal, because until
+    // there was fin geometry there was nothing to put on it: the efficiency
+    // lived inside the boundary coefficient. With the geometry stated, the same
+    // total splits exactly into the fin's conduction and bare convection, and
+    // the intermediate node then sits at the MEAN FIN SURFACE temperature
+    // rather than repeating the root's under a name that promises a surface.
+    //
+    // Applied as a scenario override on the solve clone, never written back:
+    // the split is a function of this scenario's boundary profile, and Screen
+    // 05's topology stays scenario-independent (06 §10.1, Rule 9).
+    const finConduction = preview?.fin_array?.conductionResistance_C_per_W;
+    if (finConduction != null && finConduction > 0) {
+      const link = finRootLinkOf(clone, node.id);
+      if (link) {
+        link.scenario_overrides = {
+          ...link.scenario_overrides,
+          [scenarioId]: {
+            ...link.scenario_overrides?.[scenarioId],
+            R_C_per_W: finConduction,
+          },
+        };
       }
     }
 

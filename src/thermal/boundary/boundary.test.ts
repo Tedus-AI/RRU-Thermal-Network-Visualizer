@@ -245,7 +245,14 @@ describe('a surface described as a fin array', () => {
     expect(preview.fin_array?.area_m2).toBeCloseTo(0.918, 3);
     // The port's own 0.42 m² is the graph's guess at the surface; the geometry
     // is the real heat sink, so it wins.
-    expect(preview.r_combined_C_per_W).toBeCloseTo(preview.fin_array!.R_C_per_W, 9);
+    //
+    // The boundary carries BARE convection: the fin's own conduction is a
+    // separate step, applied to the root link by `buildSolveInput`. The two
+    // together are the total, which the next test pins.
+    expect(preview.r_combined_C_per_W).toBeCloseTo(
+      preview.fin_array!.surfaceResistance_C_per_W,
+      9,
+    );
     expect(preview.completeness).toBe('complete');
   });
 
@@ -391,6 +398,59 @@ describe('a surface described as a fin array', () => {
 
     expect(usesFinGeometry(radiation, finPort)).toBe(false);
     expect(usesFinGeometry(solar, finPort)).toBe(false);
+  });
+
+  // Splitting the fin result across two edges must not change what it sums to:
+  // the exact fin equation is `1/(h·A·eff)`, and the model still has to be that
+  // whichever way it is drawn.
+  it('splits the resistance without changing the total', () => {
+    const fin = finArrayOf(
+      profile({ type: 'combined_convection_radiation', parameters: FIN_GEOMETRY }),
+      port({ orientation: 'vertical_fins' }),
+    )!;
+
+    expect(fin.conductionResistance_C_per_W + fin.surfaceResistance_C_per_W).toBeCloseTo(
+      fin.R_C_per_W,
+      12,
+    );
+    // The fin gradient is the smaller part by far at eta = 0.93 — 7% of the way
+    // to ambient — which is exactly what a 93%-efficient fin means.
+    expect(fin.conductionResistance_C_per_W / fin.R_C_per_W).toBeCloseTo(1 - fin.eta_fin, 6);
+  });
+
+  // eta_fin is not merely a heat-transfer derate: it is the ratio of the fin's
+  // MEAN excess temperature to its root's, so the split puts the intermediate
+  // node exactly at the mean fin surface temperature.
+  it('places the surface node at the mean fin temperature', () => {
+    const fin = finArrayOf(
+      profile({ type: 'combined_convection_radiation', parameters: FIN_GEOMETRY }),
+      port({ orientation: 'vertical_fins' }),
+    )!;
+
+    const fractionOfRootExcess = fin.surfaceResistance_C_per_W / fin.R_C_per_W;
+    expect(fractionOfRootExcess).toBeCloseTo(fin.eta_fin, 9);
+
+    // And the tip is cooler still, on the classical cosh profile.
+    expect(fin.tipExcessRatio).toBeCloseTo(1 / Math.cosh(fin.mLc), 12);
+    expect(fin.tipExcessRatio).toBeLessThan(fin.eta_fin);
+    // 336 mm base, 55.86 mm fins: root 90 °C over 45 °C air puts the tip near
+    // 85 °C — a real gradient, and a modest one at this efficiency.
+    expect(45 + 45 * fin.tipExcessRatio).toBeCloseTo(85.3, 0);
+  });
+
+  // A perfectly conducting fin has no gradient, so the step must vanish rather
+  // than leave a small resistance nobody can account for.
+  it('leaves no conduction step for a fin that cannot drop any temperature', () => {
+    const ideal = finArrayOf(
+      profile({
+        type: 'combined_convection_radiation',
+        parameters: { ...FIN_GEOMETRY, finConductivity_W_mK: 1e9 },
+      }),
+      port({ orientation: 'vertical_fins' }),
+    )!;
+
+    expect(ideal.eta_fin).toBeGreaterThan(0.9999);
+    expect(ideal.conductionResistance_C_per_W).toBeLessThan(1e-5 * ideal.R_C_per_W);
   });
 
   it('leaves a manual h profile alone', () => {

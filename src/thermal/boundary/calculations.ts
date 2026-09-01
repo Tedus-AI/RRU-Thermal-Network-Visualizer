@@ -369,10 +369,12 @@ export function buildDerivedPreview(
     switch (profile.type) {
       case 'convection_to_ambient': {
         if (fin != null) {
-          // The efficiency belongs on this branch and nowhere else. Folding it
-          // into `h` or into the area is what made it invisible in the first
-          // place, so it is applied here, once, where it can be read back.
-          hconv = fin.h_conv_W_m2K * fin.effectiveness;
+          // Bare h. The fin efficiency is not folded in here: it is the fin's
+          // own conduction, and it goes on the root-to-surface step so the
+          // gradient it represents is visible instead of buried in a
+          // coefficient. `buildSolveInput` puts it there; the two together are
+          // exactly `fin.R_C_per_W`.
+          hconv = fin.h_conv_W_m2K;
           preview.r_conv_C_per_W = calculateConvectionRth(hconv, area);
           break;
         }
@@ -410,8 +412,10 @@ export function buildDerivedPreview(
           // the emissivity, the cavity effect and the envelope ratio inside it,
           // and asking for a view factor as well is what turned that field into
           // an area ratio in disguise.
-          hconv = fin.h_conv_W_m2K * fin.effectiveness;
-          hrad = fin.h_rad_W_m2K * fin.effectiveness;
+          //
+          // Bare, as above: the efficiency rides on the fin's conduction step.
+          hconv = fin.h_conv_W_m2K;
+          hrad = fin.h_rad_W_m2K;
           preview.h_rad_W_m2K = hrad;
           preview.r_conv_C_per_W = calculateConvectionRth(hconv, area);
           preview.r_rad_C_per_W = calculateRadiationRth(hrad, area);
