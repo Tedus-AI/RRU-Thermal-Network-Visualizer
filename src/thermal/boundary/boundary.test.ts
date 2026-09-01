@@ -1155,15 +1155,65 @@ describe('boundary validation (06 §12)', () => {
     expect(result.status).toBe('ready_for_07');
   });
 
-  it('warns when the topology changed after the set was saved', () => {
+  /**
+   * The stored version is a hash of the WHOLE graph, so it moves for any edit
+   * anywhere. On a real project, deleting a heat pipe from one component moved
+   * it, and the screen asked for a review of boundary assignments that the
+   * deletion could not have touched — the reader had set everything and was
+   * told to check it again for no reason.
+   *
+   * Severity now follows what the set actually depends on: its ports.
+   */
+  it('only notes a topology change that left every boundary port standing', () => {
     const result = validateBoundarySet({
-      set: setWith([]),
-      ports: [],
+      set: setWith([profile({ type: 'convection_to_ambient', parameters: { h_W_m2K: 12 } })], {
+        assignments: [
+          {
+            id: 'A1',
+            boundary_port_id: 'BP_TEST',
+            profile_ids: ['BCP_TEST'],
+            surface_group_id: 'SG_TEST',
+            assignment_mode: 'manual',
+            enabled: true,
+          },
+        ],
+      }),
+      ports: [port({ orientation: 'housing_wall' })],
       hasTopology: true,
       hasScenario: true,
-      topologyVersion: 99,
+      // 85 nodes / 84 edges — one edge fewer than the set was saved against.
+      topologyVersion: 85084,
     });
-    expect(result.warnings.map((warning) => warning.id)).toContain('STALE_TOPOLOGY');
+
+    expect(result.warnings.map((warning) => warning.id)).not.toContain('STALE_TOPOLOGY');
+    const note = result.infos.find((entry) => entry.id === 'STALE_TOPOLOGY')!;
+    // Unpacked, so a reader recognises their own edit rather than a bare number.
+    expect(note.message).toContain('85 nodes / 84 edges');
+    expect(note.suggested_action).toContain('Save Boundary Set');
+  });
+
+  it('still warns when the change orphaned a port the set describes', () => {
+    const result = validateBoundarySet({
+      set: setWith([profile({ type: 'convection_to_ambient', parameters: { h_W_m2K: 12 } })], {
+        assignments: [
+          {
+            id: 'A1',
+            boundary_port_id: 'BP_DELETED',
+            profile_ids: ['BCP_TEST'],
+            surface_group_id: 'SG_TEST',
+            assignment_mode: 'manual',
+            enabled: true,
+          },
+        ],
+      }),
+      ports: [port({ orientation: 'housing_wall' })],
+      hasTopology: true,
+      hasScenario: true,
+      topologyVersion: 85084,
+    });
+
+    const stale = result.warnings.find((warning) => warning.id === 'STALE_TOPOLOGY')!;
+    expect(stale.message).toContain('BP_DELETED');
   });
 });
 
