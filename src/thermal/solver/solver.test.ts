@@ -768,6 +768,82 @@ describe('Scenario boundary conditions feed the solve (07 §12)', () => {
     close(outcome.solution.node_temperatures_C.FIN, 22, 1e-9);
   });
 
+  // Screen 05 leaves the fin-root link isothermal because, until there was fin
+  // geometry, the efficiency lived inside the boundary coefficient. With the
+  // geometry stated the same total splits across the two edges — and the split
+  // must be exactly that: a split, not a change.
+  it('moves the fin efficiency onto the root link without changing the total', () => {
+    const net = boundaryNetwork();
+    const ports = deriveBoundaryPorts(net);
+    const finPort = ports.find((port) => port.connected_node_id === 'FIN') as BoundaryPort;
+
+    const set = ambientOnly('SCN_FIN', 45);
+    set.profiles = [
+      {
+        id: 'P_FIN',
+        name: 'Fin array',
+        type: 'combined_convection_radiation',
+        representation: 'single_combined_edge',
+        parameters: {
+          finGeometryEnabled: true,
+          finBaseLength_mm: 336,
+          finBaseWidth_mm: 275,
+          finHeight_mm: 55.86,
+          finGap_mm: 11.66,
+          finThickness_mm: 1.2,
+          finTechnology: 'Embedded',
+          finConductivity_W_mK: 200,
+        },
+        source: 'analytical',
+        confidence: 'high',
+      },
+    ];
+    set.assignments = [
+      {
+        id: 'A_FIN',
+        boundary_port_id: finPort.id,
+        boundary_edge_id: finPort.boundary_edge_id,
+        profile_ids: ['P_FIN'],
+        assignment_mode: 'manual',
+        enabled: true,
+      },
+    ];
+
+    const input = buildSolveInput({
+      materials: defaultMaterials(),
+      network: net,
+      boundarySet: set,
+      ports,
+      scenarioId: 'SCN_FIN',
+    });
+
+    const link = input.network.edges.E_SRC_FIN.scenario_overrides?.SCN_FIN?.R_C_per_W;
+    const boundary = input.boundary_edges.find((entry) => entry.edge_id === 'E_BOUNDARY')!
+      .R_C_per_W!;
+    // eta = 0.930, so the fin's own conduction is 7% of the root-to-ambient path.
+    close(link! + boundary, 0.13565, 1e-4);
+    close(link! / (link! + boundary), 1 - 0.93, 2e-3);
+
+    const outcome = solveScenario({
+      materials: defaultMaterials(),
+      network: net,
+      boundarySet: set,
+      ports,
+      scenarioId: 'SCN_FIN',
+    });
+    expect(outcome.checks.can_solve).toBe(true);
+
+    // The fin surface node now reports the MEAN fin temperature, which sits
+    // eta of the way from ambient to the root — not the root's own value.
+    const root = outcome.solution.node_temperatures_C.SRC;
+    const surface = outcome.solution.node_temperatures_C.FIN;
+    expect(surface).toBeLessThan(root);
+    close((surface - 45) / (root - 45), 0.93, 5e-3);
+
+    // And the stored topology still carries no scenario resistance at all.
+    expect(net.edges.E_SRC_FIN.scenario_overrides).toBeUndefined();
+  });
+
   it('never lets one scenario read another scenario boundary Rth', () => {
     const net = boundaryNetwork();
     const ports = deriveBoundaryPorts(net);

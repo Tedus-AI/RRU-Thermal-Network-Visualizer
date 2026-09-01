@@ -594,20 +594,46 @@ function FinGeometryPanel({
               ['鰭片數', `${result.fin_count} pcs`],
               ['散熱面積', `${number(result.area_m2, 4)} m²`],
               ['流阻比', number(result.aspect_ratio, 2)],
+              ['m·Lc', number(result.mLc, 3)],
+              ['尖端超溫比', number(result.tipExcessRatio, 3)],
             ].map(([label, value]) => (
               <div key={label} className="flex items-baseline justify-between gap-2">
                 <dt className="text-ink-400">{label}</dt>
                 <dd className="tabular font-semibold text-ink-800">{value}</dd>
               </div>
             ))}
-            <div className="col-span-2 mt-0.5 flex items-baseline justify-between gap-2 border-t border-line pt-1">
-              <dt className="text-ink-500">R = 1 / (h · A · eff)</dt>
-              <dd className="tabular font-bold text-ink-900">
-                {number(result.R_C_per_W, 4)} °C/W
-              </dd>
+            <div className="col-span-2 mt-0.5 border-t border-line pt-1">
+              <div className="flex items-baseline justify-between gap-2">
+                <dt className="text-ink-400">鰭片導熱（根部→表面）</dt>
+                <dd className="tabular font-semibold text-ink-800">
+                  {number(result.conductionResistance_C_per_W, 4)} °C/W
+                </dd>
+              </div>
+              <div className="flex items-baseline justify-between gap-2">
+                <dt className="text-ink-400">表面對流＋輻射</dt>
+                <dd className="tabular font-semibold text-ink-800">
+                  {number(result.surfaceResistance_C_per_W, 4)} °C/W
+                </dd>
+              </div>
+              <div className="mt-0.5 flex items-baseline justify-between gap-2 border-t border-line pt-1">
+                <dt className="text-ink-500">R = 1 / (h · A · eff)</dt>
+                <dd className="tabular font-bold text-ink-900">
+                  {number(result.R_C_per_W, 4)} °C/W
+                </dd>
+              </div>
             </div>
           </dl>
         )}
+        {result != null && (
+          <p className="mt-1.5 text-[10px] leading-relaxed text-ink-400">
+            鰭片不是等溫的：經典解為 θ(x)/θ_root = cosh(m(L−x))/cosh(mL)，尖端超溫為根部的{' '}
+            {(result.tipExcessRatio * 100).toFixed(0)}%，而<strong>平均</strong>超溫比恰好就是
+            η_fin = {number(result.eta_fin, 3)}。所以這道梯度沒有被忽略——它就是 η_fin 本身。
+            上面兩段熱阻即為它拆開後的形式：Screen 05 的「根部→鰭片表面」連結會帶入鰭片導熱那段，
+            使該節點顯示鰭片<strong>平均表面溫度</strong>而非根部溫度。
+          </p>
+        )}
+
         {/* The same honesty rule the retired radiation sink temperature was
             removed under: a value the screen shows but the solve never reads
             misrepresents what was modelled. Emissivity is still editable in

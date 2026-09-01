@@ -233,8 +233,41 @@ export interface FinArrayResult {
   /** Geometric wetted area: exposed base plus both faces of every fin. */
   area_m2: number;
   aspect_ratio: number;
-  /** `1 / (h_total · A · effectiveness)`. */
+  /** `1 / (h_total · A · effectiveness)` — the whole root-to-ambient path. */
   R_C_per_W: number;
+  /**
+   * `m·Lc`, the dimensionless fin parameter the whole temperature profile
+   * follows from. Small means a nearly isothermal fin; large means a tip that
+   * has stopped contributing.
+   */
+  mLc: number;
+  /**
+   * Tip excess temperature over root excess temperature, `1 / cosh(m·Lc)`.
+   *
+   * The classical straight-fin solution is
+   * `θ(x)/θ_root = cosh(m(L−x)) / cosh(m·L)`, so this is that profile read at
+   * the tip. Its companion — the MEAN of the same profile over the fin — works
+   * out to `tanh(m·Lc)/(m·Lc)`, which is `eta_fin` itself: the fin efficiency
+   * IS the mean excess-temperature ratio, not merely a heat-transfer derate.
+   */
+  tipExcessRatio: number;
+  /**
+   * The fin's own conduction, as a lumped resistance between the root and the
+   * fin's mean surface temperature.
+   *
+   * `R_C_per_W` is the exact fin result and is not changed by splitting it.
+   * What the split buys is that the intermediate node then sits at
+   * `T_amb + eta · θ_root`, which is the mean fin surface temperature — a
+   * quantity you could put a thermocouple on. Modelled as one isothermal step
+   * to the boundary, the same node reports the ROOT temperature under a name
+   * that promises a surface.
+   *
+   * Zero when `effectiveness` exceeds 1, where the excess is a process residual
+   * rather than a fin gradient and there is nothing to put on this step.
+   */
+  conductionResistance_C_per_W: number;
+  /** `1 / (h_total · A)` — convection alone, with the fin gradient taken out. */
+  surfaceResistance_C_per_W: number;
 }
 
 /**
@@ -310,6 +343,16 @@ export function finArrayBoundary(input: FinArrayInput): FinArrayResult | null {
   const conductance = h_total * area_m2 * effectiveness;
   if (!(conductance > 0)) return null;
 
+  const total = 1 / conductance;
+  const surfaceResistance = 1 / (h_total * area_m2);
+  // Never negative: an effectiveness above 1 is a process residual, not a fin
+  // gradient, so it stays on the boundary rather than becoming a conduction
+  // step that would have to conduct heat uphill.
+  const conductionResistance = Math.max(0, total - surfaceResistance);
+
+  const m = Math.sqrt((2 * h_total) / (k * (efficiencyThickness / 1000)));
+  const mLc = m * ((finHeight + efficiencyThickness / 2) / 1000);
+
   return {
     h_conv_W_m2K: h_conv,
     h_rad_W_m2K: h_rad,
@@ -323,7 +366,11 @@ export function finArrayBoundary(input: FinArrayInput): FinArrayResult | null {
     fin_area_m2,
     area_m2,
     aspect_ratio: finHeight / gap,
-    R_C_per_W: 1 / conductance,
+    R_C_per_W: total,
+    mLc,
+    tipExcessRatio: 1 / Math.cosh(mLc),
+    conductionResistance_C_per_W: conductionResistance,
+    surfaceResistance_C_per_W: total - conductionResistance,
   };
 }
 
