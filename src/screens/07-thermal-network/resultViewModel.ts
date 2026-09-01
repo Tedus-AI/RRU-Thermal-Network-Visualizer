@@ -270,3 +270,205 @@ export const STATUS_ZH: Record<string, string> = {
   WARNING: '有警告',
   FAILED: '求解失敗',
 };
+
+// --- result tree (one hierarchy in place of two flat tables) ----------------
+
+/**
+ * Node temperatures and edge heat flows as ONE tree, grouped by component.
+ *
+ * They were two tables, and that was the wrong cut. A node's temperature and
+ * the drop across the edge feeding it are the same question — "why is it this
+ * hot?" — and answering it meant reading a temperature in one table, copying
+ * the node id, and hunting for the edges that mention it in another. The tree
+ * puts the drop directly under the node it produced.
+ *
+ * Three levels: component → node → edge.
+ *
+ * An edge is listed exactly once, under the node whose temperature it actually
+ * explains — its DOWNSTREAM end, with two exceptions where that end explains
+ * nothing:
+ *
+ *   • the edge leaves the group, so the downstream node belongs to someone
+ *     else; anchoring there would pile every component's outflow under the
+ *     shared base and stop saying whose heat it was;
+ *   • the downstream node is a reservoir — ambient, or anything pinned to a
+ *     fixed temperature. Its temperature is an input, so no drop explains it,
+ *     and hanging the boundary resistance under "Ambient 45 °C" hides the one
+ *     row that says why the base is 35 K above it.
+ *
+ * In both cases it hangs under its upstream node and is marked `outgoing`.
+ */
+export const SHARED_STRUCTURE_GROUP_ID = '__shared__';
+export const UNGROUPED_GROUP_ID = '__manual__';
+
+export interface ResultTreeEdgeRow {
+  kind: 'edge';
+  id: string;
+  name: string;
+  /** True when the edge leaves the group — drawn as an outflow, not a drop. */
+  outgoing: boolean;
+  counterpart_name: string;
+  rth_C_per_W: number | null;
+  heat_flow_W: number | null;
+  delta_T_C: number | null;
+  /** `boundary_scenario` / `spreading_biot`, so a substituted Rth says so. */
+  rth_origin: EdgeSolutionResult['rth_origin'] | null;
+}
+
+export interface ResultTreeNodeRow {
+  kind: 'node';
+  id: string;
+  row: NodeResultRow;
+  edges: ResultTreeEdgeRow[];
+}
+
+export interface ResultTreeGroupRow {
+  kind: 'group';
+  id: string;
+  name: string;
+  subtitle: string;
+  /** Hottest node in the group — the number that decides whether to expand. */
+  peak_C: number | null;
+  power_W: number;
+  /** The tightest limit and margin in the group, or null when none is set. */
+  limit_C: number | null;
+  margin_C: number | null;
+  status: 'pass' | 'over' | 'na';
+  nodes: ResultTreeNodeRow[];
+}
+
+/** A node whose temperature is an input, so no drop upstream of it explains it. */
+function isReservoir(node: ThermalNode | undefined): boolean {
+  if (!node) return false;
+  return (
+    node.type === 'ambient' ||
+    node.boundary_role === 'placeholder' ||
+    node.boundary_type === 'fixed_temperature'
+  );
+}
+
+function groupIdOf(node: ThermalNode): string {
+  if (node.origin?.kind === 'template' && node.origin.component_id) return node.origin.component_id;
+  if (node.origin?.kind === 'shared_structure') return SHARED_STRUCTURE_GROUP_ID;
+  return UNGROUPED_GROUP_ID;
+}
+
+export function resultTree(
+  network: ThermalNetwork,
+  solution: ThermalSolution | null,
+  rows: NodeResultRow[],
+  components: ReadonlyArray<{ id: string; name: string; category: string; qty: number }>,
+): ResultTreeGroupRow[] {
+  const componentById = new Map(components.map((component) => [component.id, component]));
+  const groupOfNode = new Map<string, string>();
+  for (const row of rows) groupOfNode.set(row.node.id, groupIdOf(row.node));
+
+  // Edges first, so each node arrives with its own already attached.
+  const edgesByNode = new Map<string, ResultTreeEdgeRow[]>();
+  for (const edge of Object.values(network.edges)) {
+    if (!network.nodes[edge.from] || !network.nodes[edge.to]) continue;
+    const fromGroup = groupOfNode.get(edge.from);
+    const toGroup = groupOfNode.get(edge.to);
+    if (fromGroup == null && toGroup == null) continue;
+
+    const outgoing = fromGroup !== toGroup || isReservoir(network.nodes[edge.to]);
+    const anchor = outgoing ? edge.from : edge.to;
+    if (!groupOfNode.has(anchor)) continue;
+    const counterpart = anchor === edge.from ? edge.to : edge.from;
+    const result = solution?.edge_results[edge.id] ?? null;
+
+    (edgesByNode.get(anchor) ?? edgesByNode.set(anchor, []).get(anchor)!).push({
+      kind: 'edge',
+      id: edge.id,
+      name: EDGE_TREE_LABELS[edge.type] ?? edge.type,
+      outgoing,
+      counterpart_name: network.nodes[counterpart]?.name ?? counterpart,
+      rth_C_per_W: result?.active_rth_C_per_W ?? activeRthOf(edge),
+      heat_flow_W: result?.heat_flow_W ?? null,
+      delta_T_C: result?.delta_T_C ?? null,
+      rth_origin: result?.rth_origin ?? null,
+    });
+  }
+
+  const groups = new Map<string, ResultTreeGroupRow>();
+  for (const row of rows) {
+    const groupId = groupIdOf(row.node);
+    let group = groups.get(groupId);
+    if (!group) {
+      const component = componentById.get(groupId);
+      group = {
+        kind: 'group',
+        id: groupId,
+        name:
+          component?.name ??
+          (groupId === SHARED_STRUCTURE_GROUP_ID
+            ? 'Shared Structure / 共用結構'
+            : 'Manual Nodes / 手動節點'),
+        subtitle: component ? `${component.category} · ×${component.qty}` : '',
+        peak_C: null,
+        power_W: 0,
+        limit_C: null,
+        margin_C: null,
+        status: 'na',
+        nodes: [],
+      };
+      groups.set(groupId, group);
+    }
+
+    group.nodes.push({
+      kind: 'node',
+      id: row.node.id,
+      row,
+      edges: (edgesByNode.get(row.node.id) ?? []).sort((a, b) => a.id.localeCompare(b.id)),
+    });
+    group.power_W += row.power_W;
+    if (row.temperature_C != null && (group.peak_C == null || row.temperature_C > group.peak_C)) {
+      group.peak_C = row.temperature_C;
+    }
+    // The group carries the TIGHTEST margin under it, not an average: a
+    // component is over limit if any node inside it is, and averaging would
+    // hide exactly the node worth opening the group for.
+    if (row.margin_C != null && (group.margin_C == null || row.margin_C < group.margin_C)) {
+      group.margin_C = row.margin_C;
+      group.limit_C = row.limit_C;
+      group.status = row.status;
+    }
+  }
+
+  // Components in the order Screen 04 lists them, then the structural groups.
+  const order = new Map(components.map((component, index) => [component.id, index]));
+  return [...groups.values()].sort((a, b) => {
+    const rankA = order.get(a.id) ?? (a.id === SHARED_STRUCTURE_GROUP_ID ? 1e6 : 1e6 + 1);
+    const rankB = order.get(b.id) ?? (b.id === SHARED_STRUCTURE_GROUP_ID ? 1e6 : 1e6 + 1);
+    return rankA - rankB || a.name.localeCompare(b.name);
+  });
+}
+
+/**
+ * Every value of `EdgeType`, so a row never falls back to the raw id.
+ *
+ * The first draft listed made-up keys ('interface', 'conduction') and the tree
+ * printed `package_rjc` at the reader. These are the same names Screen 05 puts
+ * on the graph, so an edge reads identically whichever screen you found it on.
+ */
+const EDGE_TREE_LABELS: Record<string, string> = {
+  package_rjc: 'Rjc / 接面至外殼',
+  package_rjb: 'Rjb / 接面至板',
+  package_rja: 'Rja / 接面至環境',
+  conduction: 'Conduction / 熱傳導',
+  tim: 'TIM / 介面材料',
+  solder: 'Solder / 焊料',
+  thermal_via: 'Thermal Via / 導熱孔',
+  contact: 'Contact / 接觸',
+  spreading: 'Spreading / 擴散',
+  heat_pipe: 'Heat Pipe / 熱管',
+  convection: 'Convection / 對流',
+  radiation: 'Radiation / 輻射',
+  custom: 'Link / 連結',
+};
+
+/** The edge's own stored resistance, for the pre-solve view. */
+function activeRthOf(edge: { rth: { active_source: string; analytical?: number | null; manual?: number | null } }): number | null {
+  const value = edge.rth.active_source === 'Manual' ? edge.rth.manual : edge.rth.analytical;
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}

@@ -1,29 +1,33 @@
 /**
- * Solver KPI row — 07 §8.
+ * Solver KPI row — 07 §8, trimmed from seven cards to three.
  *
- * The six cards the specification requires, in its order: Solver Status,
- * Generated Heat, Rejected Heat, Energy Residual, Solved Nodes, Solved Edges.
- * Active Scenario is allowed as an extra (07 §8) and is shown as the seventh.
- * A Bottleneck KPI is explicitly forbidden and is not here.
+ * The specification names six and allows Active Scenario as a seventh. Four of
+ * those said something the screen was already saying somewhere else:
+ *
+ *   Solver Status  — the badge beside the page title says it, and the status
+ *                    overlay on the graph says it again.
+ *   Solved Nodes   — 85/85 and an 83×83 matrix are how the run went, not what
+ *   Solved Edges     it found; they belong with the other run metadata, which
+ *                    is now in the status overlay.
+ *   Active Scenario— named twice already in the header, in the scenario picker
+ *                    and in the badge row.
+ *
+ * What is left is the three numbers that decide whether to believe the answer:
+ * how much heat went in, how much came out, and whether they agree. Those are
+ * not available anywhere else on the screen, and reading them together is the
+ * whole check.
+ *
+ * The tile is Screen 06's — label and value on one line, Chinese and status
+ * beneath — which is about half the height of the old one.
  */
 
 import type { ReactNode } from 'react';
-import { Activity, CircleGauge, Flame, Layers, Share2, Snowflake, Wind } from 'lucide-react';
+import { CircleGauge, Flame, Snowflake } from 'lucide-react';
 
-import type { Tone } from '@/ui/primitives';
 import type { ThermalSolution } from '@/thermal/solver/solverTypes';
-import type { SolverState } from '@/thermal/types';
 
-import { STATUS_TONE, STATUS_ZH, num, percent } from './resultViewModel';
+import { num, percent } from './resultViewModel';
 import { T07 } from './tooltips';
-
-const TONE_TEXT: Record<Tone, string> = {
-  ok: 'text-ok-600',
-  warn: 'text-warn-600',
-  danger: 'text-danger-600',
-  neutral: 'text-ink-900',
-  accent: 'text-accent-600',
-};
 
 function KpiTile({
   icon,
@@ -31,7 +35,7 @@ function KpiTile({
   zh,
   value,
   status,
-  tone = 'neutral',
+  tone = 'text-ink-900',
   tooltip,
 }: {
   icon: ReactNode;
@@ -39,116 +43,76 @@ function KpiTile({
   zh: string;
   value: string;
   status?: string;
-  tone?: Tone;
+  tone?: string;
   tooltip: string;
 }) {
   return (
     <div
-      className="flex items-center gap-2.5 rounded-lg border border-line bg-surface px-3 py-2.5"
+      className="min-w-0 rounded-lg border border-line bg-surface px-2 py-2"
       title={`${label} / ${zh} — ${tooltip}`}
     >
-      <span className="shrink-0 text-ink-400">{icon}</span>
-      <span className="min-w-0">
-        <span className="block truncate text-[11px] font-semibold text-ink-700">{label}</span>
-        <span className="block truncate text-[10px] text-ink-400">{zh}</span>
-        <span className={`block truncate text-[15px] leading-tight font-bold tabular ${TONE_TEXT[tone]}`}>
-          {value}
-        </span>
-        {status && <span className="block truncate text-[10px] text-ink-400">{status}</span>}
+      <span className="flex min-w-0 items-baseline gap-1.5 text-[13px] font-semibold text-ink-900">
+        <span className="shrink-0 text-ink-400">{icon}</span>
+        <span className="min-w-0 flex-1 truncate">{label}</span>
+        <span className={`shrink-0 pl-2 font-bold tabular ${tone}`}>{value}</span>
+      </span>
+      <span className="mt-0.5 flex min-w-0 items-center gap-2 text-[11px] text-ink-400">
+        <span className="min-w-0 flex-1 truncate">{zh}</span>
+        {status && <span className="shrink-0 truncate text-[10px]">{status}</span>}
       </span>
     </div>
   );
 }
 
 export function SolverKpiBar({
-  state,
   solution,
   stale,
-  scenarioName,
 }: {
-  state: SolverState;
   solution: ThermalSolution | null;
   stale: boolean;
-  scenarioName: string;
 }) {
-  const balance = solution?.energy_balance ?? null;
   // A stale solution is not the current answer, so its numbers are not shown as
-  // if they were (07 §38). The cards fall back to "—" until a re-solve.
-  const live = stale ? null : solution;
-  const liveBalance = stale ? null : balance;
-
-  const residualTone: Tone =
-    liveBalance == null
-      ? 'neutral'
-      : liveBalance.grade === 'green'
-        ? 'ok'
-        : liveBalance.grade === 'warning'
-          ? 'warn'
-          : 'danger';
+  // if they were (07 §38). The cards fall back to N/A until a re-solve.
+  const balance = stale ? null : (solution?.energy_balance ?? null);
 
   return (
-    <div className="grid grid-cols-2 gap-2.5 md:grid-cols-4 xl:grid-cols-7">
+    <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-3">
       <KpiTile
-        icon={<Activity size={18} />}
-        label="Solver Status"
-        zh="求解狀態"
-        tooltip={T07.kpi.solverStatus}
-        value={stale ? 'DIRTY' : state}
-        status={STATUS_ZH[stale ? 'DIRTY' : state] ?? ''}
-        tone={STATUS_TONE[stale ? 'DIRTY' : state] ?? 'neutral'}
-      />
-      <KpiTile
-        icon={<Flame size={18} />}
+        icon={<Flame size={13} />}
         label="Generated Heat"
         zh="總發熱量"
         tooltip={T07.kpi.generatedHeat}
-        value={num(liveBalance?.generated_W, 1, 'W')}
+        value={num(balance?.generated_W, 1, 'W')}
         status={
-          liveBalance && liveBalance.solar_W > 0
-            ? `component ${liveBalance.component_W.toFixed(1)} + solar ${liveBalance.solar_W.toFixed(1)}`
-            : 'component dissipation / 元件發熱'
+          balance && balance.solar_W > 0
+            ? `component ${balance.component_W.toFixed(1)} + solar ${balance.solar_W.toFixed(1)}`
+            : '元件發熱'
         }
       />
       <KpiTile
-        icon={<Snowflake size={18} />}
+        icon={<Snowflake size={13} />}
         label="Rejected Heat"
         zh="排出熱量"
         tooltip={T07.kpi.rejectedHeat}
-        value={num(liveBalance?.rejected_W, 1, 'W')}
-        status="to fixed / boundary sinks"
+        value={num(balance?.rejected_W, 1, 'W')}
+        status="至固定溫度／邊界"
       />
       <KpiTile
-        icon={<CircleGauge size={18} />}
+        icon={<CircleGauge size={13} />}
         label="Energy Residual"
         zh="能量殘差"
         tooltip={T07.kpi.energyResidual}
-        value={liveBalance ? percent(liveBalance.error_pct) : 'N/A'}
-        status={liveBalance ? `${num(liveBalance.residual_W, 2, 'W')} residual` : undefined}
-        tone={residualTone}
-      />
-      <KpiTile
-        icon={<Layers size={18} />}
-        label="Solved Nodes"
-        zh="已求解節點"
-        tooltip={T07.kpi.solvedNodes}
-        value={live ? String(live.metadata.solved_nodes) : 'N/A'}
-        status={live ? `${live.metadata.fixed_nodes} fixed / 固定溫度` : undefined}
-      />
-      <KpiTile
-        icon={<Share2 size={18} />}
-        label="Solved Edges"
-        zh="已求解連線"
-        tooltip={T07.kpi.solvedEdges}
-        value={live ? String(live.metadata.solved_edges) : 'N/A'}
-        status={live ? `matrix ${live.metadata.matrix_size} × ${live.metadata.matrix_size}` : undefined}
-      />
-      <KpiTile
-        icon={<Wind size={18} />}
-        label="Active Scenario"
-        zh="目前情境"
-        tooltip="求解使用的情境。每個情境保留自己的解。"
-        value={scenarioName || 'N/A'}
-        status={solution ? `ambient ${num(solution.metadata.ambient_C, 1, '°C')}` : undefined}
+        value={balance ? percent(balance.error_pct) : 'N/A'}
+        status={balance ? `${num(balance.residual_W, 2, 'W')} 殘差` : undefined}
+        tone={
+          balance == null
+            ? 'text-ink-900'
+            : balance.grade === 'green'
+              ? 'text-ok-600'
+              : balance.grade === 'warning'
+                ? 'text-warn-600'
+                : 'text-danger-600'
+        }
       />
     </div>
   );

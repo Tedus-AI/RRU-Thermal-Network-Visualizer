@@ -43,6 +43,7 @@ import { ScreenWorkspace } from '@/app/ScreenWorkspace';
 import { projectPath } from '@/app/navigation';
 import { useShellActions } from '@/app/shellActions';
 import { Badge, Button, Modal, Skeleton } from '@/ui/primitives';
+import { FloatingPanel } from '@/ui/FloatingPanel';
 import { biTitle } from '@/ui/FieldLabel';
 import { toast } from '@/ui/toast';
 
@@ -69,16 +70,14 @@ import {
 } from './SolvedGraphCanvas';
 import { EnergyBalancePanel } from './EnergyBalancePanel';
 import { NodeResultInspector } from './NodeResultInspector';
-import { EdgeResultInspector, InspectorEmpty } from './EdgeResultInspector';
-import { SolverValidationPanel } from './SolverValidationPanel';
-import { HeatFlowTable, NodeTemperatureTable } from './ResultTables';
+import { EdgeResultInspector } from './EdgeResultInspector';
+import { SolverStatusOverlay } from './SolverStatusOverlay';
+import { ResultTree } from './ResultTree';
 import {
-  STATUS_ZH,
   allowedModes,
   edgeRows,
   nodeRows,
-  percent,
-  timeOf,
+  resultTree,
   type ResultMode,
 } from './resultViewModel';
 import { T07 } from './tooltips';
@@ -118,24 +117,12 @@ function Section({
   );
 }
 
-function StatusRow({ label, zh, value, tone = '' }: { label: string; zh: string; value: string; tone?: string }) {
-  return (
-    <div className="flex items-baseline justify-between gap-2 border-b border-line py-1.5 last:border-b-0">
-      <span className="min-w-0 text-[11px] font-semibold text-ink-700">
-        {label}
-        <span className="ml-1 font-normal text-ink-400">/ {zh}</span>
-      </span>
-      <span className={`shrink-0 text-[12px] font-bold tabular ${tone || 'text-ink-900'}`}>{value}</span>
-    </div>
-  );
-}
-
 function LoadingState() {
   return (
     <div className="flex flex-col gap-4 p-6">
-      <div className="grid grid-cols-7 gap-3">
-        {Array.from({ length: 7 }).map((_, index) => (
-          <Skeleton key={index} className="h-16" />
+      <div className="grid grid-cols-3 gap-3">
+        {Array.from({ length: 3 }).map((_, index) => (
+          <Skeleton key={index} className="h-12" />
         ))}
       </div>
       <Skeleton className="h-96" />
@@ -154,6 +141,7 @@ export function ThermalNetworkView() {
   const readOnly = useProjectStore((s) => s.isReadOnly());
 
   const network = useNetworkStore((s) => s.network);
+  const components = useComponentStore((s) => s.components);
   const scenarios = useScenarioStore((s) => s.scenarios);
   const activeScenarioId = useScenarioStore((s) => s.activeScenarioId);
   const solverState = useSolverStore((s) => s.state);
@@ -239,6 +227,10 @@ export function ThermalNetworkView() {
   const flows = useMemo(
     () => (network ? edgeRows(network, stale ? null : solution) : []),
     [network, solution, stale],
+  );
+  const tree = useMemo(
+    () => (network ? resultTree(network, stale ? null : solution, rows, components) : []),
+    [network, solution, stale, rows, components],
   );
 
   const issues: SolverIssue[] = useMemo(() => {
@@ -380,9 +372,8 @@ export function ThermalNetworkView() {
 
   return (
     <ScreenWorkspace
-      title="Thermal Network Solver"
-      titleZh="熱網路求解"
-      description="Solve the thermal network to obtain node temperatures, heat flows and energy balance. Topology comes from Screen 05 and boundary conditions from Screen 06; both stay read-only here."
+      title="熱網路求解"
+      titleZh=""
       descriptionZh="執行熱網路求解，以取得節點溫度、熱流與能量平衡。拓樸來自 05、邊界條件來自 06，在此皆為唯讀。"
       badge={
         <div className="flex flex-wrap items-center gap-2">
@@ -403,14 +394,7 @@ export function ThermalNetworkView() {
           {scenario && <Badge tone="neutral">{scenario.name}</Badge>}
         </div>
       }
-      metrics={
-        <SolverKpiBar
-          state={solverState}
-          solution={solution}
-          stale={stale}
-          scenarioName={scenario?.name ?? ''}
-        />
-      }
+      metrics={<SolverKpiBar solution={solution} stale={stale} />}
       actionBar={
         <div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-line bg-surface px-6 py-3">
           <Button
@@ -498,7 +482,7 @@ export function ThermalNetworkView() {
       )}
 
       {/* Row 1 — controls, solved graph, inspector */}
-      <div className="flex h-[calc(100vh-31rem)] min-h-[26rem] flex-col gap-3 lg:flex-row">
+      <div className="flex h-[calc(100vh-27rem)] min-h-[28rem] flex-col gap-3 lg:flex-row">
         <div className="flex w-full shrink-0 flex-col gap-3 overflow-y-auto pr-1 lg:h-full lg:w-[19rem]">
           <Section index={1} title="Solver Settings" zh="求解設定" className="shrink-0">
             <SolveControlPanel
@@ -595,6 +579,18 @@ export function ThermalNetworkView() {
               </ul>
             </div>
 
+            <SolverStatusOverlay
+              state={solverState}
+              stale={stale}
+              solution={solution}
+              issues={issues}
+              hasRun={Boolean(checks || solution)}
+              onFocus={focusIssue}
+              onNavigate={(screen) =>
+                navigate(projectPath(projectId, screen === '05' ? 'thermal-path' : 'boundary'))
+              }
+            />
+
             {solving && (
               <div className="absolute inset-0 z-20 flex items-center justify-center bg-surface/70">
                 <p className="text-[13px] font-semibold text-ink-700">Solving… / 求解中…</p>
@@ -610,64 +606,66 @@ export function ThermalNetworkView() {
           />
         </section>
 
-        <div className="flex w-full shrink-0 flex-col gap-3 overflow-y-auto pr-1 lg:h-full lg:w-[21rem]">
-          <Section index={3} title="Solver Status" zh="求解狀態" className="shrink-0">
-            <StatusRow
-              label="Status"
-              zh="狀態"
-              value={`${stale ? 'DIRTY' : solverState} · ${STATUS_ZH[stale ? 'DIRTY' : solverState] ?? ''}`}
-              tone={
-                stale || solverState === 'WARNING'
-                  ? 'text-warn-600'
-                  : solverState === 'SOLVED'
-                    ? 'text-ok-600'
-                    : solverState === 'FAILED'
-                      ? 'text-danger-600'
-                      : ''
-              }
-            />
-            <StatusRow label="Last Run" zh="上次求解" value={timeOf(solution?.solved_at)} />
-            <StatusRow
-              label="Solve Time"
-              zh="求解時間"
-              value={solution ? `${solution.metadata.solve_time_ms.toFixed(1)} ms` : '—'}
-            />
-            <StatusRow
-              label="Matrix"
-              zh="矩陣"
-              value={
-                solution ? `${solution.metadata.matrix_size} × ${solution.metadata.matrix_size}` : '—'
-              }
-            />
-            <StatusRow
-              label="Max Node Residual"
-              zh="最大節點失衡"
-              value={
-                solution ? `${solution.metadata.max_node_residual_W.toExponential(1)} W` : '—'
-              }
-            />
-            <StatusRow
-              label="Energy Residual"
-              zh="能量殘差"
-              value={solution ? percent(solution.energy_balance.error_pct) : '—'}
-              tone={
-                solution?.energy_balance.grade === 'green'
-                  ? 'text-ok-600'
-                  : solution?.energy_balance.grade === 'warning'
-                    ? 'text-warn-600'
-                    : solution
-                      ? 'text-danger-600'
-                      : ''
-              }
-            />
-          </Section>
+      </div>
 
-          <Section
-            index={4}
-            title={selectedEdge ? 'Edge Inspector' : 'Node Inspector'}
-            zh={selectedEdge ? '連線檢視' : '節點檢視'}
-            className="min-h-[14rem] flex-1"
-          >
+      {/* Row 2 — every result in one hierarchy */}
+      <Section
+        index={3}
+        title="Results"
+        zh="求解結果"
+        className="max-h-[32rem] shrink-0"
+        bodyClassName="p-0"
+        actions={
+          <span className="text-[11px] text-ink-400">
+            {tree.length} groups · {rows.length} nodes · {flows.length} edges
+          </span>
+        }
+      >
+        <div className="overflow-x-auto">
+          <ResultTree
+            groups={tree}
+            hasSolution={hasResult}
+            selectedNodeId={selectedNodeId}
+            selectedEdgeId={selectedEdgeId}
+            onSelectNode={(nodeId) => {
+              setSelectedEdgeId(null);
+              setSelectedNodeId(nodeId);
+              canvasRef.current?.center(nodeId);
+            }}
+            onSelectEdge={(edgeId) => {
+              setSelectedNodeId(null);
+              setSelectedEdgeId(edgeId);
+              canvasRef.current?.center(edgeId);
+            }}
+          />
+        </div>
+      </Section>
+
+      {/* The inspector floats: it is a read-only detail view, so it should
+          appear where the reader asked for it and be pushable out of the way,
+          not hold a permanent column the graph could have had. */}
+      {(selectedNode || selectedEdge) && (
+        <FloatingPanel
+          storageKey="tnv.07.inspector"
+          defaultWidth={460}
+          defaultHeight={640}
+          title={selectedEdge ? selectedEdge.id : (selectedNode?.name ?? '')}
+          subtitle={
+            selectedEdge
+              ? `${network.nodes[selectedEdge.from]?.name ?? selectedEdge.from} → ${network.nodes[selectedEdge.to]?.name ?? selectedEdge.to}`
+              : (selectedNode?.id ?? '')
+          }
+          badge={
+            <Badge tone="neutral">
+              {selectedEdge ? 'Edge / 連線' : 'Node / 節點'}
+            </Badge>
+          }
+          onClose={() => {
+            setSelectedNodeId(null);
+            setSelectedEdgeId(null);
+          }}
+        >
+          <div className="p-3">
             {selectedEdge ? (
               <EdgeResultInspector
                 edge={selectedEdge}
@@ -693,93 +691,10 @@ export function ThermalNetworkView() {
                   setSelectedEdgeId(edgeId);
                 }}
               />
-            ) : (
-              <InspectorEmpty />
-            )}
-          </Section>
-        </div>
-      </div>
-
-      {/* Row 2 — result tables and the solver message log */}
-      <div className="grid gap-3 xl:grid-cols-3">
-        <Section
-          index={5}
-          title="Node Temperature Results"
-          zh="節點溫度結果"
-          className="max-h-[22rem]"
-          bodyClassName="px-3 pb-3"
-          actions={<span className="text-[11px] text-ink-400">{rows.length} nodes</span>}
-        >
-          <NodeTemperatureTable
-            rows={rows}
-            hasSolution={Boolean(solution) && !stale}
-            selectedNodeId={selectedNodeId}
-            onSelect={(nodeId) => {
-              setSelectedEdgeId(null);
-              setSelectedNodeId(nodeId);
-              canvasRef.current?.center(nodeId);
-            }}
-          />
-          <p className="mt-2 text-[10px] text-ink-400">
-            Limits come from the component records. Rows follow node id order;
-            prioritising them is Screen 08's job.
-            <span className="block">限制值來自元件資料；本表依節點代號排列，排序與優先級屬於 08。</span>
-          </p>
-        </Section>
-
-        <Section
-          index={6}
-          title="Heat Flow Results"
-          zh="熱流結果"
-          className="max-h-[22rem]"
-          bodyClassName="px-3 pb-3"
-          actions={<span className="text-[11px] text-ink-400">{flows.length} edges</span>}
-        >
-          <HeatFlowTable
-            rows={flows}
-            selectedEdgeId={selectedEdgeId}
-            onSelect={(edgeId) => {
-              setSelectedNodeId(null);
-              setSelectedEdgeId(edgeId);
-              canvasRef.current?.center(edgeId);
-            }}
-          />
-          <p className="mt-2 text-[10px] text-ink-400">
-            A negative Q means heat flows against the drawn arrow. That is a valid
-            result, not an error.
-            <span className="block">Q 為負代表實際流向與圖示相反，屬合法結果。</span>
-          </p>
-        </Section>
-
-        <Section
-          index={7}
-          title="Solver Messages"
-          zh="求解訊息"
-          className="max-h-[22rem]"
-          actions={
-            <Badge
-              tone={
-                blocking > 0
-                  ? 'danger'
-                  : issues.some((entry) => entry.severity === 'warning')
-                    ? 'warn'
-                    : 'ok'
-              }
-            >
-              {blocking > 0 ? 'Blocked' : issues.length > 0 ? 'Review' : 'Clear'}
-            </Badge>
-          }
-        >
-          <SolverValidationPanel
-            issues={issues}
-            hasRun={Boolean(checks || solution)}
-            onFocus={focusIssue}
-            onNavigate={(screen) =>
-              navigate(projectPath(projectId, screen === '05' ? 'thermal-path' : 'boundary'))
-            }
-          />
-        </Section>
-      </div>
+            ) : null}
+          </div>
+        </FloatingPanel>
+      )}
 
       {confirmReset && (
         <Modal

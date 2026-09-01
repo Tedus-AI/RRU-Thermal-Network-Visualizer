@@ -310,14 +310,3 @@ export function EdgeResultInspector({
     </div>
   );
 }
-
-export function InspectorEmpty() {
-  return (
-    <div className="flex h-full flex-col items-center justify-center gap-1 px-4 text-center">
-      <p className="text-[12px] font-semibold text-ink-700">
-        Select a node or an edge to inspect it.
-      </p>
-      <p className="text-[11px] text-ink-400">點選圖上的節點或連線以檢視結果。</p>
-    </div>
-  );
-}
