@@ -55,3 +55,19 @@ export function currentSaveGeneration(): number {
 export function markSaveSettled(generation: number): void {
   useSaveStatus.getState().markSettled(generation);
 }
+
+/**
+ * Settle whatever is outstanding right now.
+ *
+ * For the paths that decide NOT to write: no project file to write into, the
+ * store already flushed by another route, no folder bound. They used to just
+ * return, and because the only `markSaveSettled` in the codebase lived inside
+ * the folder write, the indicator then read "Writing JSON…" forever — a claim
+ * that a write was in flight when nothing had been scheduled at all.
+ *
+ * Deciding not to write IS a resolution. It has to be reported like one.
+ */
+export function markSaveIdle(): void {
+  const state = useSaveStatus.getState();
+  state.markSettled(state.generation);
+}

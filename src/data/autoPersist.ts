@@ -23,7 +23,7 @@ import { useProjectStore } from './projectStore';
 import { useReportStore } from './reportStore';
 import { useScenarioStore } from './scenarioStore';
 import { useSolutionStore } from './solutionStore';
-import { markSavePending } from './saveStatus';
+import { markSaveIdle, markSavePending } from './saveStatus';
 
 /** A store that tracks unsaved edits and can flush them for a project. */
 interface PersistableStore {
@@ -83,9 +83,18 @@ export function startAutoPersist(): () => void {
         setTimeout(() => {
           timers.delete(name);
           const projectId = activeProjectId();
-          if (!projectId) return;
+          // Both bail-outs below settle the save indicator. Only the folder
+          // write clears it, so returning here used to leave "Writing JSON…"
+          // on screen with nothing on its way to disk.
+          if (!projectId) {
+            // A project that has never been created has no file. The edit is
+            // real and kept, but no write is pending against anything.
+            markSaveIdle();
+            return;
+          }
           // Re-check: another path may have flushed it in the meantime.
           if (store.getState().dirty) store.getState().save(projectId);
+          else markSaveIdle();
         }, FLUSH_MS),
       );
     }),
