@@ -444,9 +444,15 @@ export const useNetworkStore = create<NetworkStoreState>((set, get) => ({
 
   // Moving a node is layout, not physics: no solver invalidation.
   setNodePosition: (nodeId, position) =>
-    get().mutate((network) => void (network.layout.positions[nodeId] = position), {
-      skipInvalidate: true,
-    }),
+    get().mutate(
+      (network) => {
+        network.layout.positions[nodeId] = position;
+        // The graph is now arranged by hand, and the canvas stops re-spacing it
+        // on its own from here. Auto Layout clears this again.
+        network.layout.hand_placed = true;
+      },
+      { skipInvalidate: true },
+    ),
 
   addSubgraph: ({ nodes, edges, binding, zones }) =>
     get().mutate((network) => {

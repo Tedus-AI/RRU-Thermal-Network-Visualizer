@@ -139,6 +139,40 @@ describe('what counts as an unsaved edit', () => {
   });
 });
 
+/**
+ * The canvas re-lays the graph out when the stored positions are too tight for
+ * their edge labels, and writes the result back. That is right for a layout the
+ * tool produced. On a layout the engineer dragged into shape it threw their
+ * work away: the labels grow a little whenever a scenario's boundary edges
+ * arrive, which was enough to trigger it, and a page reload made it certain.
+ *
+ * `hand_placed` is how the canvas can tell the two apart.
+ */
+describe('whose arrangement the graph layout is', () => {
+  it('marks the layout hand-placed once a node is dragged', () => {
+    const store = useNetworkStore.getState();
+    const node = Object.keys(store.network!.nodes)[0];
+    expect(store.network!.layout.hand_placed).toBeFalsy();
+
+    store.setNodePosition(node, { x: 333, y: 444 });
+
+    expect(useNetworkStore.getState().network!.layout.hand_placed).toBe(true);
+  });
+
+  it('leaves it alone when the tool arranges its own picture', () => {
+    const store = useNetworkStore.getState();
+    const node = Object.keys(store.network!.nodes)[0];
+
+    store.mutate((net) => void (net.layout.positions[node] = { x: 1540, y: 358 }), {
+      skipHistory: true,
+      skipInvalidate: true,
+      skipDirty: true,
+    });
+
+    expect(useNetworkStore.getState().network!.layout.hand_placed).toBeFalsy();
+  });
+});
+
 describe('component subgraph rebuild (05 §40, AC-05-11)', () => {
   /**
    * "Modified" protects an object the new template STILL EMITS. An edit is an
@@ -386,6 +420,16 @@ describe('port connection (05 §16)', () => {
 
     useNetworkStore.getState().loadFor('OLD_TYPES');
     expect(useNetworkStore.getState().network!.nodes[hskId].type).toBe('heat_sink_base');
+  });
+
+  it('reads a file written before hand_placed existed as tool-arranged', () => {
+    const stored = structuredClone(useNetworkStore.getState().network!);
+    delete (stored.layout as { hand_placed?: boolean }).hand_placed;
+    saveNetwork('NO_FLAG', stored);
+
+    // False is the honest default: those positions came from the automatic
+    // layout, so the canvas may still re-space them.
+    expect(loadNetwork('NO_FLAG')!.layout.hand_placed).toBe(false);
   });
 
   it('wires a port to a shared node and creates an unresolved interface edge', () => {
