@@ -1336,22 +1336,28 @@ export function ThermalPathBuilderView() {
                   onConnect={handleConnect}
                   onContextMenu={(target, at) => setContextMenu({ ...target, x: at.x, y: at.y })}
                   onZoomChange={setZoom}
-                  onLayout={(positions) => {
+                  onLayout={(positions, { explicit }) => {
+                    const layout = useNetworkStore.getState().network?.layout;
                     // Cheap exit when the canvas reproduced what is already
                     // stored — which happens once the engineer has saved a
                     // layout — so the whole network is not cloned for nothing.
-                    const stored = useNetworkStore.getState().network?.layout.positions ?? {};
+                    const stored = layout?.positions ?? {};
                     const moved = Object.entries(positions).some(([id, at]) => {
                       const was = stored[id];
                       return !was || was.x !== at.x || was.y !== at.y;
                     });
-                    if (!moved) return;
+                    // An explicit Auto Layout still has the flag to clear, even
+                    // when it happened to land on the same coordinates.
+                    if (!moved && !(explicit && layout?.hand_placed)) return;
                     useNetworkStore.getState().mutate(
                       (net) => {
                         net.layout.positions = {
                           ...net.layout.positions,
                           ...positions,
                         };
+                        // The engineer handed the arrangement back to the tool,
+                        // which may re-space the graph again from here.
+                        if (explicit) net.layout.hand_placed = false;
                       },
                       // `skipDirty`: the canvas re-runs its layout on every
                       // mount and usually lands somewhere else than the stored

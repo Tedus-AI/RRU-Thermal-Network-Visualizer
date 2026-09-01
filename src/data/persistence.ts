@@ -403,6 +403,9 @@ export function loadNetwork(projectId: string): ThermalNetwork | null {
     layout: {
       mode: network.layout?.mode ?? 'Auto',
       positions: network.layout?.positions ?? {},
+      // Absent in files written before the flag existed, and false is right for
+      // them: their positions came from the automatic layout.
+      hand_placed: network.layout?.hand_placed ?? false,
     },
     flotherm_mappings: network.flotherm_mappings ?? {},
     solver_settings: network.solver_settings ?? { ...DEFAULT_SOLVER_SETTINGS },

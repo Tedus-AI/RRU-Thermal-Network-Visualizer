@@ -528,7 +528,17 @@ export interface ThermalNetwork {
   edges: Record<string, ThermalEdge>;
   templates: Record<string, ComponentTemplateBinding>;
   zones: Record<string, BaseZone>;
-  layout: { mode: string; positions: Record<string, { x: number; y: number }> };
+  layout: {
+    mode: string;
+    positions: Record<string, { x: number; y: number }>;
+    /**
+     * True once the engineer has dragged a node into place themselves.
+     *
+     * From then on the canvas stops re-spacing the graph on its own, and Auto
+     * Layout hands the arrangement back to the tool by clearing it.
+     */
+    hand_placed?: boolean;
+  };
   flotherm_mappings: Record<string, FlothermMapping>;
   solver_settings: SolverSettings;
   metadata?: Record<string, unknown>;

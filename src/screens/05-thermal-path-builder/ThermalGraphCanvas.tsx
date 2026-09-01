@@ -415,8 +415,17 @@ export const ThermalGraphCanvas = forwardRef<
       at: { x: number; y: number },
     ) => void;
     onZoomChange: (zoom: number) => void;
-    /** Positions produced by an automatic layout, for the store to remember. */
-    onLayout: (positions: Record<string, { x: number; y: number }>) => void;
+    /**
+     * Positions produced by an automatic layout, for the store to remember.
+     *
+     * `explicit` marks a layout the engineer asked for — Auto Layout, a mode
+     * change, Reset View — as opposed to one the canvas ran to place nodes it
+     * had no coordinates for.
+     */
+    onLayout: (
+      positions: Record<string, { x: number; y: number }>,
+      options: { explicit: boolean },
+    ) => void;
     /** Node the connect tool is waiting on a second click for. */
     pendingSourceRef: MutableRefObject<string | null>;
   }
@@ -677,8 +686,26 @@ export const ThermalGraphCanvas = forwardRef<
 
     const labels = layoutEdgeLabels(cy);
     const labelSpacingKey = `${signature}|${layoutModeRef.current}|${labels.join('\u0000')}`;
+    /**
+     * Re-spacing a graph the engineer has arranged themselves is not the
+     * canvas's call.
+     *
+     * This check re-lays the whole graph out when the stored positions are too
+     * tight for their edge labels, and `onLayout` then writes the result over
+     * whatever was stored. That is right for a layout the tool produced, and
+     * the Golden Demo relies on it. It is wrong for one a person dragged into
+     * shape: the labels grow a little whenever a scenario's boundary edges
+     * arrive, which produced a fresh key, which re-arranged the graph and threw
+     * their positions away — silently, since that write is deliberately not an
+     * edit. A page reload made it certain, because the key lives in a ref that
+     * starts empty on every mount.
+     *
+     * Auto Layout clears `hand_placed`, so the tool takes the arrangement back
+     * the moment the engineer asks it to.
+     */
     const needsLabelRoom =
       showLabels &&
+      !network.layout.hand_placed &&
       labelSpacingSignature.current !== labelSpacingKey &&
       edgeLabelsNeedRoom(cy, layoutModeRef.current);
     if ((unpositioned.length > 0 || needsLabelRoom) && cy.nodes().length > 0) {
@@ -691,7 +718,7 @@ export const ThermalGraphCanvas = forwardRef<
       );
       layout.one('layoutstop', () => {
         positionViewBuses(cy, true);
-        handlers.current.onLayout(renderedDomainPositions(cy));
+        handlers.current.onLayout(renderedDomainPositions(cy), { explicit: false });
         refit();
       });
       layout.run();
@@ -806,7 +833,7 @@ export const ThermalGraphCanvas = forwardRef<
         const layout = layoutElements(cy).layout(layoutOptions(mode, layoutEdgeLabels(cy)));
         layout.one('layoutstop', () => {
           positionViewBuses(cy, true);
-          handlers.current.onLayout(renderedDomainPositions(cy));
+          handlers.current.onLayout(renderedDomainPositions(cy), { explicit: true });
           cy.fit(undefined, 40);
         });
         layout.run();
