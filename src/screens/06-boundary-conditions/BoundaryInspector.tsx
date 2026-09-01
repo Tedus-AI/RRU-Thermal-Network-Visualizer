@@ -23,6 +23,8 @@ import { dataSourceItemsZh } from '@/ui/dataSourceLabels';
 
 import {
   BOUNDARY_TYPE_LABELS,
+  type BoundaryAssumption,
+  type BoundaryAssumptionKind,
   type BoundaryConditionProfile,
   type BoundaryConditionType,
   type BoundaryDataSource,
@@ -391,10 +393,72 @@ function ApplicablePreview({
           {preview?.completeness ?? 'blocked'}
         </Badge>
       </Row>
+      <AssumptionNotes assumptions={preview?.assumptions} />
       <p className="mt-2 text-[10px] leading-relaxed text-ink-500">{T06.derived.disclaimer}</p>
     </section>
   );
 }
+
+/**
+ * Why a fully-filled port still reads `warning`.
+ *
+ * `warning` is not "you missed a field" — that is `blocked`. It means the
+ * numbers above stand on an assumption. Without this the badge was the only
+ * thing said, and a port with every input supplied looked broken; the reader
+ * had no way to learn that the surface temperature under `h_rad` was a default,
+ * let alone what it was set to.
+ */
+function AssumptionNotes({ assumptions }: { assumptions?: BoundaryAssumption[] }) {
+  if (!assumptions?.length) return null;
+  return (
+    <ul className="mt-2 space-y-1 rounded border border-warn-500/40 bg-warn-100 p-2">
+      {assumptions.map((assumption) => {
+        const copy = ASSUMPTION_COPY[assumption.kind];
+        const value =
+          assumption.value != null && Number.isFinite(assumption.value)
+            ? copy.format(assumption.value)
+            : null;
+        return (
+          <li key={assumption.kind} className="text-[10px] leading-relaxed text-warn-600">
+            <span className="font-bold">
+              {copy.en}
+              {value ? ` (${value})` : ''}
+            </span>
+            <span className="block">{copy.zh}</span>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+const ASSUMPTION_COPY: Record<
+  BoundaryAssumptionKind,
+  { en: string; zh: string; format: (value: number) => string }
+> = {
+  surface_temperature_guess: {
+    en: 'Surface temperature is a pre-solve guess, not a stated value',
+    zh: '表面溫度為求解前的預設猜值（環境溫度 + 35 °C），非填入值。h_rad 依此線性化；SCR07 求解後可回填實際表面溫度再重算。',
+    format: (value) => `${value.toFixed(1)} °C`,
+  },
+  plate_convection: {
+    // Stands alone. This fires whether or not the surface temperature was
+    // stated, so it must not refer to a line above it that may not be there.
+    en: 'h is computed from the plate correlation at an assumed surface temperature, not stated',
+    zh: 'h 由平板自然對流關聯式算出，並以此表面溫度求值。h_conv 與 h_rad 都隨它變動，SCR07 解出的實際表面溫度若與此不同，這裡的熱阻就會跟著改變。',
+    format: (value) => `assumed surface ${value.toFixed(1)} °C`,
+  },
+  solar_estimate: {
+    en: 'Solar input is an estimate until the site is surveyed',
+    zh: '日照輸入在現場實測前皆為估計值。',
+    format: (value) => `${value.toFixed(2)} W`,
+  },
+  external_cfd_placeholder: {
+    en: 'External CFD placeholder — metadata only, nothing is computed',
+    zh: '外部 CFD 佔位符：僅記錄資訊，不參與計算（SCR03 尚未啟用）。',
+    format: (value) => String(value),
+  },
+};
 
 function AmbientReferenceSummary({
   port,

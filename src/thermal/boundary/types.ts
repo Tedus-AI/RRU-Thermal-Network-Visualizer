@@ -153,6 +153,28 @@ export interface ExternalHeatLoad {
   inject_in_screen_07: boolean;
 }
 
+/**
+ * What a `warning` completeness is actually resting on.
+ *
+ * `warning` never meant "a field is missing" — that is `blocked`. It means the
+ * result stands on an assumption. But the screen only ever showed the word
+ * "Assumption", so a port with every field filled in looked broken, and the
+ * honest answer ("your surface temperature is a guess until Screen 07 runs")
+ * was nowhere on the page. Naming the assumption is the whole point of the
+ * state; carrying it as data is what lets the screen say it.
+ */
+export type BoundaryAssumptionKind =
+  | 'surface_temperature_guess'
+  | 'plate_convection'
+  | 'solar_estimate'
+  | 'external_cfd_placeholder';
+
+export interface BoundaryAssumption {
+  kind: BoundaryAssumptionKind;
+  /** The number the assumption stands on, where it has one (°C for a guess). */
+  value?: number | null;
+}
+
 export interface BoundaryDerivedPreview {
   boundary_port_id: string;
   profile_ids: string[];
@@ -175,6 +197,8 @@ export interface BoundaryDerivedPreview {
    * length the coefficient rests on rather than only the coefficient.
    */
   plate_convection?: FlatPlateResult | null;
+  /** Populated exactly when `completeness` is `warning`; see the type above. */
+  assumptions?: BoundaryAssumption[];
   completeness: 'complete' | 'warning' | 'blocked';
   /** 06 §8.3 — the label that keeps a preview from reading as a result. */
   disclaimer: 'pre_solve_boundary_input_only';

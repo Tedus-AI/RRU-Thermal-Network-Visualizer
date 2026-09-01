@@ -595,6 +595,102 @@ describe('a flat wall whose h is computed from the plate', () => {
   });
 });
 
+describe('named assumptions behind a warning', () => {
+  it('names the pre-solve surface guess a filled-in radiation port rests on', () => {
+    const preview = buildDerivedPreview(
+      port({ orientation: 'housing_wall' }),
+      [
+        profile({
+          type: 'radiation_to_surroundings',
+          parameters: { emissivity: 0.9, viewFactor: 0.95, area_m2: 0.1405 },
+        }),
+      ],
+      { ambient_C: 45 },
+    );
+
+    // Nothing is missing here — every field the profile needs is supplied — so
+    // the warning is about the ONE thing the engineer did not state.
+    expect(preview.completeness).toBe('warning');
+    expect(preview.r_rad_C_per_W).toBeGreaterThan(0);
+    expect(preview.assumptions).toEqual([
+      { kind: 'surface_temperature_guess', value: 80 },
+    ]);
+  });
+
+  it('discharges the assumption once the surface temperature is stated', () => {
+    const preview = buildDerivedPreview(
+      port({ orientation: 'housing_wall' }),
+      [
+        profile({
+          type: 'radiation_to_surroundings',
+          parameters: {
+            emissivity: 0.9,
+            viewFactor: 0.95,
+            area_m2: 0.1405,
+            surfaceReferenceTemperatureGuess_C: 72,
+          },
+        }),
+      ],
+      { ambient_C: 45 },
+    );
+
+    expect(preview.completeness).toBe('complete');
+    expect(preview.assumptions).toBeUndefined();
+  });
+
+  /**
+   * A real Cavity Filter exposed surface: ambient 45, ε 0.8, F 0.9,
+   * A 0.143724 m², a STATED surface guess of 85 °C, and a 336 mm vertical
+   * plate. It warns — but not for the reason the stated guess would suggest,
+   * and reading the warning as "the surface temperature is a default" is
+   * exactly the misreading this test pins down.
+   */
+  it('blames the plate correlation, not the guess, when the guess was stated', () => {
+    const preview = buildDerivedPreview(
+      port({ orientation: 'housing_wall', area_m2: 0.143724 }),
+      [
+        profile({
+          type: 'combined_convection_radiation',
+          parameters: {
+            emissivity: 0.8,
+            viewFactor: 0.9,
+            area_m2: 0.143724,
+            surfaceReferenceTemperatureGuess_C: 85,
+            plateGeometryEnabled: true,
+            plateOrientation: 'Vertical',
+            plateHeight_mm: 336,
+          },
+        }),
+      ],
+      { ambient_C: 45 },
+    );
+
+    expect(preview.completeness).toBe('warning');
+    // Exactly one assumption, and it is the computed h — the guess was given.
+    expect(preview.assumptions).toEqual([{ kind: 'plate_convection', value: 85 }]);
+
+    // The four numbers this port puts on screen, to four decimals. They pin
+    // both correlations at once: Churchill-Chu at Ra 8.10e7 for h_conv, and
+    // 4εFσT³ at 358.15 K for h_rad.
+    expect(preview.plate_convection?.h_conv_W_m2K).toBeCloseTo(4.9662, 4);
+    expect(preview.h_rad_W_m2K).toBeCloseTo(7.5024, 4);
+    expect(preview.r_conv_C_per_W).toBeCloseTo(1.4010, 4);
+    expect(preview.r_rad_C_per_W).toBeCloseTo(0.9274, 4);
+    expect(preview.r_combined_C_per_W).toBeCloseTo(0.5580, 4);
+  });
+
+  it('leaves a blocked port without assumptions, so the missing input stands alone', () => {
+    const preview = buildDerivedPreview(
+      port({ orientation: 'housing_wall', area_m2: null }),
+      [profile({ type: 'radiation_to_surroundings', parameters: { emissivity: 0.9 } })],
+      { ambient_C: 45 },
+    );
+
+    expect(preview.completeness).toBe('blocked');
+    expect(preview.assumptions).toBeUndefined();
+  });
+});
+
 describe('derived preview (06 §8.3)', () => {
   it('carries the pre-solve disclaimer on every preview', () => {
     const preview = buildDerivedPreview(port(), []);

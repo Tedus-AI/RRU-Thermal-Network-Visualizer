@@ -119,6 +119,14 @@ export interface FlatPlateResult {
   h_conv_W_m2K: number;
   /** The temperature difference the coefficient was evaluated at. */
   deltaT_C: number;
+  /**
+   * The surface temperature that difference came from — stated, or guessed.
+   *
+   * Carried because it is the assumption the whole correlation rests on, and a
+   * screen that shows only the resulting `h` gives a reader no way to see what
+   * it would take to be wrong.
+   */
+  surfaceTemperature_C: number;
 }
 
 /**
@@ -155,6 +163,7 @@ export function flatPlateConvection(input: FlatPlateInput): FlatPlateResult | nu
     nusselt,
     h_conv_W_m2K: (nusselt * air.conductivity) / length,
     deltaT_C: deltaT,
+    surfaceTemperature_C: surface,
   };
 }
 

@@ -58,6 +58,73 @@ function preview(overrides: Partial<BoundaryDerivedPreview> = {}): BoundaryDeriv
   };
 }
 
+describe('why a filled-in port still says Assumption', () => {
+  it('names the assumption and its value instead of only the badge', () => {
+    const suppressSsrLayoutWarning = vi.spyOn(console, 'error').mockImplementation(() => {});
+    let html = '';
+    try {
+      html = renderToStaticMarkup(
+        <BoundaryInspector
+          port={port({ orientation: 'housing_wall' })}
+          status="warning"
+          profiles={[
+            profile({
+              id: 'BCP_RAD',
+              name: 'Cavity filter exposed surface',
+              type: 'radiation_to_surroundings',
+              parameters: { emissivity: 0.9, viewFactor: 0.95, area_m2: 0.1405 },
+            }),
+          ]}
+          preview={preview({
+            profile_ids: ['BCP_RAD'],
+            r_conv_C_per_W: undefined,
+            r_combined_C_per_W: 0.9274,
+            r_rad_C_per_W: 0.9274,
+            h_rad_W_m2K: 7.502,
+            completeness: 'warning',
+            assumptions: [{ kind: 'surface_temperature_guess', value: 80 }],
+          })}
+          validation={validation}
+          ambientTemperature_C={45}
+          readOnly={false}
+          {...callbacks}
+        />,
+      );
+    } finally {
+      suppressSsrLayoutWarning.mockRestore();
+    }
+
+    // The reader's actual question — "everything is filled in, so what is the
+    // warning about?" — is answered on the page, with the number it stands on.
+    expect(html).toContain('Surface temperature is a pre-solve guess');
+    expect(html).toContain('80.0 °C');
+  });
+
+  it('says nothing when the preview carries no assumptions', () => {
+    const suppressSsrLayoutWarning = vi.spyOn(console, 'error').mockImplementation(() => {});
+    let html = '';
+    try {
+      html = renderToStaticMarkup(
+        <BoundaryInspector
+          port={port({ orientation: 'housing_wall' })}
+          status="ok"
+          profiles={[profile()]}
+          preview={preview()}
+          validation={validation}
+          ambientTemperature_C={45}
+          readOnly={false}
+          {...callbacks}
+        />,
+      );
+    } finally {
+      suppressSsrLayoutWarning.mockRestore();
+    }
+
+    expect(html).toContain('Calculated Preview');
+    expect(html).not.toContain('pre-solve guess');
+  });
+});
+
 describe('BoundaryInspector simplification', () => {
   it('renders Ambient Reference as one inherited-temperature summary without setup tabs', () => {
     const html = renderToStaticMarkup(

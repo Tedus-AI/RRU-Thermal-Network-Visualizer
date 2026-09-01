@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import {
   CircleCheck,
+  Eye,
   Maximize,
   Maximize2,
   Minimize2,
@@ -25,12 +26,15 @@ function ToolButton({
   label,
   zh,
   icon,
+  badge,
   onClick,
 }: {
   active?: boolean;
   label: string;
   zh: string;
   icon: ReactNode;
+  /** Count shown as a corner pip; omitted or 0 renders nothing. */
+  badge?: number;
   onClick: () => void;
 }) {
   return (
@@ -40,13 +44,21 @@ function ToolButton({
       aria-pressed={active}
       aria-label={`${label} / ${zh}`}
       title={`${label} / ${zh}`}
-      className={`flex size-8 shrink-0 items-center justify-center rounded-md border transition-colors ${
+      className={`relative flex size-8 shrink-0 items-center justify-center rounded-md border transition-colors ${
         active
           ? 'border-accent-500 bg-accent-100 text-accent-700'
           : 'border-transparent text-ink-500 hover:bg-surface-muted hover:text-ink-900'
       }`}
     >
       {icon}
+      {badge != null && badge > 0 && (
+        <span
+          aria-hidden
+          className="absolute -top-0.5 -right-0.5 flex min-w-3.5 items-center justify-center rounded-full bg-accent-600 px-1 text-[9px] leading-[0.9rem] font-bold text-white tabular"
+        >
+          {badge}
+        </span>
+      )}
     </button>
   );
 }
@@ -69,6 +81,9 @@ export function BoundaryGraphToolbar({
   onValidate,
   onTogglePorts,
   onToggleLabels,
+  componentVisibilityOpen,
+  hiddenComponentCount,
+  onToggleComponentVisibility,
   onToggleFullscreen,
 }: {
   tool: CanvasTool;
@@ -85,6 +100,9 @@ export function BoundaryGraphToolbar({
   onValidate: () => void;
   onTogglePorts: () => void;
   onToggleLabels: () => void;
+  componentVisibilityOpen: boolean;
+  hiddenComponentCount: number;
+  onToggleComponentVisibility: () => void;
   onToggleFullscreen: () => void;
 }) {
   return (
@@ -169,7 +187,20 @@ export function BoundaryGraphToolbar({
           onClick={onToggleLabels}
         />
       </div>
-      <div className="ml-1 flex shrink-0 items-center border-l border-line pl-1">
+      <div className="ml-1 flex shrink-0 items-center gap-0.5 border-l border-line pl-1">
+        {/* Not gated on fullscreen, unlike Screen 05: there the component
+            palette down the left carries the same toggles, and here the left
+            column is the boundary port list. */}
+        <span data-component-visibility-toggle>
+          <ToolButton
+            active={componentVisibilityOpen}
+            label="Component Visibility"
+            zh="元件顯示"
+            icon={<Eye size={14} />}
+            badge={hiddenComponentCount}
+            onClick={onToggleComponentVisibility}
+          />
+        </span>
         <ToolButton
           active={fullscreen}
           label={fullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
