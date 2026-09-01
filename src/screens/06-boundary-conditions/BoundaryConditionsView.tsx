@@ -44,7 +44,7 @@ import { useComponentStore } from '@/data/componentStore';
 import { useNetworkStore } from '@/data/networkStore';
 import { useScenarioStore } from '@/data/scenarioStore';
 import { useSolverStore } from '@/data/solverStore';
-import { useBoundaryStore } from '@/data/boundaryStore';
+import { topologyVersionOf, useBoundaryStore } from '@/data/boundaryStore';
 import { useSolutionStore } from '@/data/solutionStore';
 import { surfaceGroupsOf } from '@/thermal/boundary/boundaryPorts';
 import {
@@ -254,6 +254,17 @@ export function BoundaryConditionsView() {
   );
 
   const set = activeKey ? (sets[activeKey] ?? null) : null;
+  /**
+   * The saved topology stamp is behind the live graph.
+   *
+   * Saving is the ONLY thing that re-stamps it, so with the button gated on
+   * `dirty` alone an acknowledged topology change could never be acknowledged:
+   * auto-persist had already flushed the set, `dirty` was false, the button was
+   * grey, and the note asking the reader to press it stayed on screen forever.
+   */
+  const topologyStale =
+    set != null && network != null && set.network_topology_version !== topologyVersionOf(network);
+
   const scenarioBoundaryEdges = useMemo(
     () => projectScenarioBoundaryEdges(network, ports, set),
     [network, ports, set],
@@ -757,8 +768,15 @@ export function BoundaryConditionsView() {
           <div className="ml-auto flex gap-2">
             <Button
               icon={<Save size={15} />}
-              disabled={readOnly || !dirty}
-              title={biTitle('Save boundary set', '儲存邊界條件')}
+              disabled={readOnly || (!dirty && !topologyStale)}
+              title={
+                topologyStale && !dirty
+                  ? biTitle(
+                      'Save boundary set — records that the current topology was reviewed',
+                      '儲存邊界條件 — 記錄目前拓樸已檢查',
+                    )
+                  : biTitle('Save boundary set', '儲存邊界條件')
+              }
               onClick={handleSave}
             >
               Save Boundary Set

@@ -8,6 +8,7 @@ import { useComponentStore } from './componentStore';
 import { useScenarioStore } from './scenarioStore';
 import { useSolverStore } from './solverStore';
 import { startAutoPersist } from './autoPersist';
+import { useSaveStatus } from './saveStatus';
 
 class MemoryStorage {
   private map = new Map<string, string>();
@@ -44,6 +45,50 @@ afterEach(() => {
   useScenarioStore.getState().clear();
   vi.unstubAllGlobals();
   vi.useRealTimers();
+});
+
+/**
+ * "Writing JSON…" is a claim that a write is on its way to disk. The only
+ * `markSaveSettled` in the codebase lives inside the folder write, so every
+ * path that decides NOT to write used to leave that claim standing forever —
+ * which is what a real session hit: the badge went green after a reload, then
+ * stuck as soon as a screen change marked a store dirty and the flush found
+ * nothing to do.
+ */
+describe('the save indicator never claims a write that is not coming', () => {
+  it('clears when the flush finds the store already written by another path', async () => {
+    await seedDemoProject();
+    useProjectStore.getState().openProject(DEMO_PROJECT_ID);
+    useComponentStore.getState().loadFor(DEMO_PROJECT_ID);
+
+    vi.useFakeTimers();
+    stop = startAutoPersist();
+
+    useComponentStore.setState({ dirty: true });
+    expect(useSaveStatus.getState().pending).toBe(true);
+
+    // Something else flushed it before the debounce elapsed.
+    useComponentStore.setState({ dirty: false });
+    await vi.advanceTimersByTimeAsync(600);
+
+    expect(useSaveStatus.getState().pending).toBe(false);
+  });
+
+  it('clears when there is no project file to write into', async () => {
+    await seedDemoProject();
+    useProjectStore.getState().openProject(DEMO_PROJECT_ID);
+    useComponentStore.getState().loadFor(DEMO_PROJECT_ID);
+
+    vi.useFakeTimers();
+    stop = startAutoPersist();
+
+    useComponentStore.setState({ dirty: true });
+    // A project that has never been created has nowhere to write.
+    useProjectStore.setState({ isNew: true });
+    await vi.advanceTimersByTimeAsync(600);
+
+    expect(useSaveStatus.getState().pending).toBe(false);
+  });
 });
 
 describe('startAutoPersist', () => {

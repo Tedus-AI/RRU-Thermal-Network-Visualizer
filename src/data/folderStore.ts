@@ -17,7 +17,7 @@ import { collectProject, serializeProjectFile } from './projectFile';
 import { clearOwnedStorage } from './buildStamp';
 import { hydrateFromFolder } from './workspace';
 import { isSyncSuspended, withSyncSuspended } from './syncSuspend';
-import { currentSaveGeneration, markSaveSettled } from './saveStatus';
+import { currentSaveGeneration, markSaveIdle, markSaveSettled } from './saveStatus';
 import { useProjectStore } from './projectStore';
 import {
   clearStoredHandle,
@@ -322,9 +322,19 @@ export function startFolderAutoSync(): () => void {
   started = true;
 
   const stop = onStorageWrite(() => {
-    if (isSyncSuspended()) return;
+    // No mirror will be scheduled on any of these paths, and `mirror` is the
+    // only thing that settles the save indicator — so say so here rather than
+    // leaving it reading "Writing JSON…" against a folder that is not bound,
+    // is suspended, or has no project selected.
+    if (isSyncSuspended()) {
+      markSaveIdle();
+      return;
+    }
     const { status } = useFolderStore.getState();
-    if (status !== 'connected' || !activeProjectId) return;
+    if (status !== 'connected' || !activeProjectId) {
+      markSaveIdle();
+      return;
+    }
 
     if (timer) clearTimeout(timer);
     timer = setTimeout(() => {
