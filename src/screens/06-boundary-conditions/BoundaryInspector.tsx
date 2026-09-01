@@ -346,6 +346,10 @@ function ApplicablePreview({
   readOnly: boolean;
   onApplySolvedSurface: (surface_C: number) => void;
 }) {
+  const dischargedByCheck =
+    preview?.completeness === 'warning' &&
+    assumptionCheck?.verdict === 'verified' &&
+    assumptionCheck.covers_every_assumption;
   const showConvection =
     activeProfile.type === 'convection_to_ambient' ||
     activeProfile.type === 'combined_convection_radiation';
@@ -390,17 +394,30 @@ function ApplicablePreview({
       <Row label="Input Completeness" zh="輸入完整度">
         <Badge
           tone={
-            preview?.completeness === 'complete'
+            preview?.completeness === 'complete' || dischargedByCheck
               ? 'ok'
               : preview?.completeness === 'warning'
                 ? 'warn'
                 : 'danger'
           }
         >
-          {preview?.completeness ?? 'blocked'}
+          {/* The STORED completeness stays `warning` — the set is scenario
+              input and must not encode a result. This row reports what the
+              screen knows, which after a solve includes the check; a bare
+              `warning` beside a green "the assumption holds" was the screen
+              contradicting itself. */}
+          {dischargedByCheck ? 'verified' : (preview?.completeness ?? 'blocked')}
         </Badge>
       </Row>
-      <AssumptionNotes assumptions={preview?.assumptions} verified={assumptionCheck?.verdict === 'verified'} />
+      <AssumptionNotes
+        assumptions={preview?.assumptions}
+        // Only when the check covers everything this port is assuming. A
+        // confirmed surface temperature says nothing about a solar estimate
+        // sitting beside it, and colouring both green would claim it did.
+        verified={
+          assumptionCheck?.verdict === 'verified' && assumptionCheck.covers_every_assumption
+        }
+      />
       <SurfaceAssumptionResult
         check={assumptionCheck}
         readOnly={readOnly}
@@ -1463,19 +1480,26 @@ export function BoundaryInspector({
                 activeProfile={activeProfile}
                 assumptionCheck={assumptionCheck}
                 readOnly={readOnly}
-                onApplySolvedSurface={(surface_C) =>
+                onApplySolvedSurface={(surface_C) => {
+                  // The profile that OWNS the assumption, which is not
+                  // necessarily the tab that happens to be open. Writing to the
+                  // open one put the temperature on a profile that never reads
+                  // it and left the real assumption exactly as it was.
+                  const owner =
+                    profiles.find((entry) => entry.id === assumptionCheck?.profile_id) ?? null;
+                  if (!owner) return;
                   onUpsertProfile({
-                    ...activeProfile,
+                    ...owner,
                     parameters: {
-                      ...activeProfile.parameters,
+                      ...owner.parameters,
                       surfaceReferenceTemperatureGuess_C: surface_C,
                     },
                     // What gets written is a STATED input the engineer chose,
                     // not a solved value the set carries around: the source
                     // says so, and Screen 07 will re-solve from it.
                     source: 'manual',
-                  })
-                }
+                  });
+                }}
               />
             )}
 

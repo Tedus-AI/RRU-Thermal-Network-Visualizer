@@ -50,6 +50,7 @@ import { surfaceGroupsOf } from '@/thermal/boundary/boundaryPorts';
 import {
   checkSurfaceAssumption,
   type SurfaceAssumptionCheck,
+  type SurfaceAssumptionVerdict,
 } from '@/thermal/boundary/assumptionCheck';
 import {
   BOUNDARY_TYPE_LABELS,
@@ -164,6 +165,18 @@ function SidebarSection({
 }
 
 type BoundaryPanelId = 'surface' | 'conditions' | 'summary' | 'fixed';
+
+/**
+ * The verdict a port's BADGE may act on.
+ *
+ * A confirmed surface temperature says nothing about a solar estimate or a
+ * deferred CFD placeholder sitting on the same port, so a port only leaves the
+ * warning state when the check covers everything it is assuming.
+ */
+function verdictOf(check?: SurfaceAssumptionCheck): SurfaceAssumptionVerdict | undefined {
+  if (!check) return undefined;
+  return check.covers_every_assumption ? check.verdict : 'off';
+}
 
 function LoadingState() {
   return (
@@ -287,15 +300,31 @@ export function BoundaryConditionsView() {
    * A stale solution is not consulted: it was produced from inputs that have
    * since changed, so confirming an assumption with it would be confirming it
    * against a different model (07 §38).
+   *
+   * TWO tests, because the signature alone does not catch it. `solutionStore`
+   * recomputes its signature in `loadFor`, in `save`, and where Screen 07, 10
+   * and 11 ask it to — never when Screen 06 edits a boundary. So after an edit
+   * the signature still equalled the stored solution's, `stale` read false, and
+   * the old temperatures were checked against the NEW boundary.
+   *
+   * That was not theoretical: pressing Apply, which is itself a boundary edit,
+   * flipped the port straight to "Verified (0.0 %)" — the new guess compared
+   * with itself through temperatures that predated it — while the panel was
+   * telling the reader to re-solve.
+   *
+   * `solverStore` is the lifecycle that actually tracks this: every boundary
+   * mutation calls `invalidate('boundary_changed')`, so DIRTY appears the
+   * moment an edit lands. The signature test stays as the second line.
    */
   const assumptionChecks = useMemo(() => {
     const checks = new Map<string, SurfaceAssumptionCheck>();
     if (!set) return checks;
     const solution = solutionKey ? (solutions[solutionKey] ?? null) : null;
     const stale =
-      solution != null &&
-      solutionSignature != null &&
-      solution.metadata.input_signature !== solutionSignature;
+      solverState === 'DIRTY' ||
+      (solution != null &&
+        solutionSignature != null &&
+        solution.metadata.input_signature !== solutionSignature);
     const temperatures = solution && !stale ? solution.node_temperatures_C : null;
 
     for (const port of ports) {
@@ -307,7 +336,7 @@ export function BoundaryConditionsView() {
       if (check) checks.set(port.id, check);
     }
     return checks;
-  }, [set, ports, solutions, solutionKey, solutionSignature]);
+  }, [set, ports, solutions, solutionKey, solutionSignature, solverState]);
 
   useEffect(() => {
     if (!projectId) return;
@@ -897,7 +926,7 @@ export function BoundaryConditionsView() {
                   Boundary Ports / 邊界端口
                 </p>
                 {ports.map((port) => {
-                  const status = portStatus(set, port, assumptionChecks.get(port.id)?.verdict);
+                  const status = portStatus(set, port, verdictOf(assumptionChecks.get(port.id)));
                   const label = PORT_STATUS_LABELS[status];
                   return (
                     <button
@@ -925,7 +954,7 @@ export function BoundaryConditionsView() {
               {selectedPort && set ? (
                 <BoundaryInspector
                   port={selectedPort}
-                  status={portStatus(set, selectedPort, assumptionChecks.get(selectedPort.id)?.verdict)}
+                  status={portStatus(set, selectedPort, verdictOf(assumptionChecks.get(selectedPort.id)))}
                   assumptionCheck={assumptionChecks.get(selectedPort.id) ?? null}
                   profiles={profilesForPort(set, selectedPort.id)}
                   preferredProfileId={preferredProfileId}
