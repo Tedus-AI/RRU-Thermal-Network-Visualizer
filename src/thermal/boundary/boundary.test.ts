@@ -410,6 +410,131 @@ describe('a surface described as a fin array', () => {
   });
 });
 
+describe('a flat wall whose h is computed from the plate', () => {
+  const PLATE = {
+    plateGeometryEnabled: true,
+    plateOrientation: 'Vertical',
+    plateHeight_mm: 336,
+    emissivity: 0.8,
+    viewFactor: 1,
+    area_m2: 0.1405,
+  };
+  const wall = (overrides: BoundaryConditionProfile['parameters'] = {}) =>
+    profile({
+      type: 'combined_convection_radiation',
+      parameters: { ...PLATE, ...overrides },
+    });
+
+  it('computes the coefficient instead of reading a stated one', () => {
+    // A stated h of 6.23 — the fin channel's, which is where it gets copied
+    // from — must not be what the preview uses.
+    const preview = buildDerivedPreview(
+      port({ orientation: 'housing_wall', area_m2: 0.1405 }),
+      [wall({ h_W_m2K: 6.23, surfaceReferenceTemperatureGuess_C: 80 })],
+      { ambient_C: 45 },
+    );
+
+    expect(preview.plate_convection?.h_conv_W_m2K).toBeCloseTo(4.79, 1);
+    expect(preview.r_conv_C_per_W).toBeCloseTo(
+      1 / (preview.plate_convection!.h_conv_W_m2K * 0.1405),
+      9,
+    );
+  });
+
+  // The one number the plate mode replaces, against the one it must not touch.
+  it('leaves area, emissivity and view factor alone', () => {
+    const preview = buildDerivedPreview(
+      port({ orientation: 'housing_wall', area_m2: 0.1405 }),
+      [wall({ surfaceReferenceTemperatureGuess_C: 80 })],
+      { ambient_C: 45 },
+    );
+
+    // eps 0.8, F 1.0 at the same 80 C guess the convection used.
+    expect(preview.h_rad_W_m2K).toBeCloseTo(4 * 0.8 * SIGMA * 1 * (80 + 273.15) ** 3, 9);
+    expect(preview.r_rad_C_per_W).toBeCloseTo(1 / (preview.h_rad_W_m2K! * 0.1405), 9);
+  });
+
+  it('reports the geometry as incomplete rather than falling back to a stated h', () => {
+    const set = setWith(
+      [wall({ plateHeight_mm: null, h_W_m2K: 6.23 })],
+      {
+        assignments: [
+          {
+            id: 'A1',
+            boundary_port_id: 'BP_TEST',
+            profile_ids: ['BCP_TEST'],
+            assignment_mode: 'manual',
+            enabled: true,
+          },
+        ],
+      },
+    );
+    const result = validateBoundarySet({
+      set,
+      ports: [port({ orientation: 'housing_wall' })],
+      hasTopology: true,
+      hasScenario: true,
+      topologyVersion: 1,
+    });
+
+    expect(result.errors.map((entry) => entry.id)).toContain('PROFILE_PLATE_GEOMETRY_BCP_TEST');
+  });
+
+  // An outer wall sees sky and ground across most of its hemisphere. A low
+  // view factor there is usually an area ratio in disguise, and it under-credits
+  // radiation by the same factor that a copied fin h over-credits convection —
+  // which is why the pair can look reasonable together.
+  it('questions a view factor that is low for an open surface', () => {
+    const set = setWith(
+      [wall({ viewFactor: 0.3 })],
+      {
+        assignments: [
+          {
+            id: 'A1',
+            boundary_port_id: 'BP_TEST',
+            profile_ids: ['BCP_TEST'],
+            assignment_mode: 'manual',
+            enabled: true,
+          },
+        ],
+      },
+    );
+    const result = validateBoundarySet({
+      set,
+      ports: [port({ orientation: 'housing_wall' })],
+      hasTopology: true,
+      hasScenario: true,
+      topologyVersion: 1,
+    });
+
+    expect(result.warnings.map((entry) => entry.id)).toContain('PROFILE_VIEWFACTOR_LOW_BCP_TEST');
+  });
+
+  it('does not compute a plate coefficient for a fin-derived surface', () => {
+    const preview = buildDerivedPreview(
+      port({ orientation: 'vertical_fins' }),
+      [
+        profile({
+          type: 'combined_convection_radiation',
+          parameters: {
+            ...PLATE,
+            finGeometryEnabled: true,
+            finBaseLength_mm: 336,
+            finBaseWidth_mm: 275,
+            finHeight_mm: 55.86,
+            finGap_mm: 11.66,
+            finThickness_mm: 1.2,
+          },
+        }),
+      ],
+      { ambient_C: 45 },
+    );
+
+    expect(preview.fin_array).not.toBeUndefined();
+    expect(preview.plate_convection ?? null).toBeNull();
+  });
+});
+
 describe('derived preview (06 §8.3)', () => {
   it('carries the pre-solve disclaimer on every preview', () => {
     const preview = buildDerivedPreview(port(), []);

@@ -16,6 +16,7 @@
 
 import type { Confidence } from '../types';
 import type { FinArrayResult } from './finArray';
+import type { FlatPlateResult } from './flatPlate';
 
 export const BOUNDARY_CONDITION_TYPES = [
   'ambient_reservoir',
@@ -167,6 +168,13 @@ export interface BoundaryDerivedPreview {
    * than only the resistance it ended at.
    */
   fin_array?: FinArrayResult | null;
+  /**
+   * Present when the profile computed its convection coefficient from the
+   * plate instead of stating one. Carries the Rayleigh and Nusselt numbers it
+   * went through, so the screen can show what temperature difference and what
+   * length the coefficient rests on rather than only the coefficient.
+   */
+  plate_convection?: FlatPlateResult | null;
   completeness: 'complete' | 'warning' | 'blocked';
   /** 06 §8.3 — the label that keeps a preview from reading as a result. */
   disclaimer: 'pre_solve_boundary_input_only';

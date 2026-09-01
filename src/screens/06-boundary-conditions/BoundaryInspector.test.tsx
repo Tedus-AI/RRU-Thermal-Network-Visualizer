@@ -177,6 +177,90 @@ describe('BoundaryInspector simplification', () => {
     expect(html).not.toMatch(/<input[^>]+id="bc-param-area_m2"/);
   });
 
+  // A flat wall's h is the one number on its form nobody can state, so it is
+  // offered as a computed value there — and only there.
+  it('offers the plate coefficient on a flat wall and not on a fin stack', () => {
+    const suppressSsrLayoutWarning = vi.spyOn(console, 'error').mockImplementation(() => {});
+    let flat = '';
+    let finned = '';
+    try {
+      flat = renderToStaticMarkup(
+        <BoundaryInspector
+          port={port({ orientation: 'housing_wall' })}
+          status="ok"
+          profiles={[profile()]}
+          preview={preview()}
+          validation={validation}
+          ambientTemperature_C={45}
+          readOnly={false}
+          {...callbacks}
+        />,
+      );
+      finned = renderToStaticMarkup(
+        <BoundaryInspector
+          port={port({ orientation: 'vertical_fins' })}
+          status="ok"
+          profiles={[profile()]}
+          preview={preview()}
+          validation={validation}
+          ambientTemperature_C={45}
+          readOnly={false}
+          {...callbacks}
+        />,
+      );
+    } finally {
+      suppressSsrLayoutWarning.mockRestore();
+    }
+
+    expect(flat).toContain('Compute h from the plate');
+    expect(finned).not.toContain('Compute h from the plate');
+  });
+
+  it('replaces the h field with the plate readout once enabled', () => {
+    const suppressSsrLayoutWarning = vi.spyOn(console, 'error').mockImplementation(() => {});
+    let html = '';
+    try {
+      html = renderToStaticMarkup(
+        <BoundaryInspector
+          port={port({ orientation: 'housing_wall', area_m2: 0.1405 })}
+          status="ok"
+          profiles={[
+            {
+              ...profile(),
+              type: 'combined_convection_radiation',
+              parameters: {
+                plateGeometryEnabled: true,
+                plateOrientation: 'Vertical',
+                plateHeight_mm: 336,
+                surfaceReferenceTemperatureGuess_C: 80,
+                emissivity: 0.8,
+                viewFactor: 1,
+                area_m2: 0.1405,
+              },
+            },
+          ]}
+          preview={preview()}
+          validation={validation}
+          ambientTemperature_C={45}
+          readOnly={false}
+          {...callbacks}
+        />,
+      );
+    } finally {
+      suppressSsrLayoutWarning.mockRestore();
+    }
+
+    // The coefficient is shown, not asked for.
+    expect(html).not.toMatch(/<input[^>]+id="bc-param-h_W_m2K"/);
+    expect(html).toMatch(/<input[^>]+id="bc-plate-plateHeight_mm"/);
+    expect(html).toContain('4.79 W/m²K');
+    // A vertical plate does not need the second side.
+    expect(html).not.toMatch(/<input[^>]+id="bc-plate-plateWidth_mm"/);
+    // Area, emissivity and view factor stay stated — they are real properties.
+    expect(html).toMatch(/id="bc-param-emissivity"/);
+    expect(html).toMatch(/id="bc-param-viewFactor"/);
+  });
+
   it('shows Chinese labels in the data-source selector', () => {
     const suppressSsrLayoutWarning = vi.spyOn(console, 'error').mockImplementation(() => {});
     let html = '';

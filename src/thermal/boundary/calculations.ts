@@ -13,6 +13,12 @@ import {
   type FinTechnology,
 } from './finArray';
 import { isFinnedSurfacePort } from './boundaryPorts';
+import {
+  flatPlateConvection,
+  PLATE_ORIENTATIONS,
+  type FlatPlateResult,
+  type PlateOrientation,
+} from './flatPlate';
 import type {
   BoundaryConditionProfile,
   BoundaryDerivedPreview,
@@ -158,6 +164,56 @@ export const FIN_GEOMETRY_KEYS = {
 } as const;
 
 /**
+ * Parameter keys a profile carries when its convection coefficient is computed
+ * from the plate rather than stated.
+ *
+ * Only `h` is derived here. A flat surface's area, emissivity and view factor
+ * are real, statable properties of it, so they stay where they are — the split
+ * is deliberately different from a fin array's, where the geometry sets all
+ * four because none of the four exists without it.
+ */
+export const PLATE_GEOMETRY_KEYS = {
+  enabled: 'plateGeometryEnabled',
+  orientation: 'plateOrientation',
+  height: 'plateHeight_mm',
+  width: 'plateWidth_mm',
+} as const;
+
+export function usesPlateGeometry(profile: BoundaryConditionProfile): boolean {
+  return profile.parameters[PLATE_GEOMETRY_KEYS.enabled] === true;
+}
+
+/**
+ * The plate convection this profile describes, or null when it states its own
+ * `h` instead.
+ *
+ * The surface-temperature guess is the same one the radiation term already
+ * uses, so a single stated assumption drives both halves of the boundary and
+ * they cannot drift apart.
+ */
+export function plateConvectionOf(
+  profile: BoundaryConditionProfile,
+  ambient_C: number | null,
+): FlatPlateResult | null {
+  if (!usesPlateGeometry(profile)) return null;
+  const stored = profile.parameters[PLATE_GEOMETRY_KEYS.orientation];
+  const orientation: PlateOrientation =
+    typeof stored === 'string' && (PLATE_ORIENTATIONS as readonly string[]).includes(stored)
+      ? (stored as PlateOrientation)
+      : 'Vertical';
+
+  return flatPlateConvection({
+    orientation,
+    height_mm: parameter(profile, PLATE_GEOMETRY_KEYS.height),
+    width_mm: parameter(profile, PLATE_GEOMETRY_KEYS.width),
+    surfaceTemperature_C:
+      parameter(profile, 'surfaceReferenceTemperatureGuess_C') ??
+      (ambient_C != null ? ambient_C + DEFAULT_SURFACE_GUESS_OFFSET_C : null),
+    ambientTemperature_C: ambient_C,
+  });
+}
+
+/**
  * Whether this profile is described as a fin array.
  *
  * On a finned port the answer is always yes and the flag is not consulted: a
@@ -296,6 +352,8 @@ export function buildDerivedPreview(
     // point is that the wetted area is not a number anyone retypes.
     const fin = finArrayOf(profile, port);
     if (fin != null) preview.fin_array = fin;
+    const plate = fin != null ? null : plateConvectionOf(profile, options.ambient_C);
+    if (plate != null) preview.plate_convection = plate;
     const area = fin?.area_m2 ?? parameter(profile, 'area_m2') ?? port.area_m2;
 
     // Fin mode with the geometry half-filled has no resistance yet. Answering
@@ -318,7 +376,11 @@ export function buildDerivedPreview(
           preview.r_conv_C_per_W = calculateConvectionRth(hconv, area);
           break;
         }
-        hconv = parameter(profile, 'h_W_m2K');
+        hconv = plate?.h_conv_W_m2K ?? parameter(profile, 'h_W_m2K');
+        // The plate coefficient rests on a surface temperature nobody has
+        // solved for yet, so it is an assumption in exactly the sense the
+        // radiation term already is, and is labelled the same way.
+        if (plate != null) assumed = true;
         preview.r_conv_C_per_W = calculateConvectionRth(hconv, area);
         if (preview.r_conv_C_per_W == null) missing = true;
         break;
@@ -355,7 +417,8 @@ export function buildDerivedPreview(
           preview.r_rad_C_per_W = calculateRadiationRth(hrad, area);
           break;
         }
-        hconv = parameter(profile, 'h_W_m2K');
+        hconv = plate?.h_conv_W_m2K ?? parameter(profile, 'h_W_m2K');
+        if (plate != null) assumed = true;
         const guess =
           parameter(profile, 'surfaceReferenceTemperatureGuess_C') ??
           (options.ambient_C != null ? options.ambient_C + DEFAULT_SURFACE_GUESS_OFFSET_C : null);
