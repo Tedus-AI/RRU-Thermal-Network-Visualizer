@@ -145,6 +145,74 @@ describe('checking a surface assumption against the solve', () => {
     ).toBeNull();
   });
 
+  /**
+   * A port can carry several profiles, and the one open in the inspector is not
+   * necessarily the one holding the assumption. Applying to the open tab wrote
+   * the temperature onto a profile that never reads it.
+   */
+  it('names the profile that actually owns the assumption', () => {
+    const solar: BoundaryConditionProfile = {
+      id: 'BCP_SOLAR',
+      name: 'Solar',
+      type: 'solar_load',
+      representation: 'single_combined_edge',
+      parameters: {
+        irradiance_W_m2: 800,
+        receivingArea_m2: 0.14,
+        absorptivity: 0.7,
+        projectedAreaFactor: 1,
+        shadingFactor: 1,
+      },
+      source: 'manual',
+      confidence: 'medium',
+    };
+
+    const check = checkSurfaceAssumption(port(), [solar, profile(85)], {
+      ambient_C: AMBIENT,
+      solvedSurface_C: 79.2,
+    })!;
+
+    expect(check.profile_id).toBe('BCP_CAVITY');
+  });
+
+  /**
+   * Confirming the surface temperature says nothing about a solar estimate on
+   * the same port. Reporting the port clear would discharge an assumption
+   * nothing had checked.
+   */
+  it('does not claim to cover an assumption it never looked at', () => {
+    const solar: BoundaryConditionProfile = {
+      id: 'BCP_SOLAR',
+      name: 'Solar',
+      type: 'solar_load',
+      representation: 'single_combined_edge',
+      parameters: {
+        irradiance_W_m2: 800,
+        receivingArea_m2: 0.14,
+        absorptivity: 0.7,
+        projectedAreaFactor: 1,
+        shadingFactor: 1,
+      },
+      source: 'manual',
+      confidence: 'medium',
+    };
+
+    const alone = checkSurfaceAssumption(port(), [profile(79.2)], {
+      ambient_C: AMBIENT,
+      solvedSurface_C: 79.2,
+    })!;
+    expect(alone.verdict).toBe('verified');
+    expect(alone.covers_every_assumption).toBe(true);
+
+    const withSolar = checkSurfaceAssumption(port(), [profile(79.2), solar], {
+      ambient_C: AMBIENT,
+      solvedSurface_C: 79.2,
+    })!;
+    // The temperature still checks out — but the port is assuming more.
+    expect(withSolar.verdict).toBe('verified');
+    expect(withSolar.covers_every_assumption).toBe(false);
+  });
+
   it('never reads the solved value back into the profile it was given', () => {
     const original = profile(85);
     const snapshot = JSON.stringify(original);

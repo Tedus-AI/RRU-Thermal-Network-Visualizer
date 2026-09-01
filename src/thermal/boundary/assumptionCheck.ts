@@ -62,6 +62,24 @@ export type SurfaceAssumptionVerdict = 'verified' | 'off' | 'unavailable';
 
 export interface SurfaceAssumptionCheck {
   boundary_port_id: string;
+  /**
+   * The profile whose surface temperature this is about.
+   *
+   * A port can carry several profiles, and the one the reader has open in the
+   * inspector is not necessarily the one holding the assumption. Applying the
+   * solved value to the open tab instead wrote it onto a profile that does not
+   * read it, leaving the real assumption untouched.
+   */
+  profile_id: string;
+  /**
+   * True when EVERY assumption on this port is one this check covers.
+   *
+   * A port can also be assuming something the solve says nothing about — a
+   * solar estimate, a deferred CFD placeholder. Confirming the surface
+   * temperature does not confirm those, so the port only leaves the warning
+   * state when there is nothing else left standing.
+   */
+  covers_every_assumption: boolean;
   /** The temperature the boundary was evaluated at — stated or defaulted. */
   assumed_C: number;
   /** What Screen 07 solved for this surface, or null when there is no result. */
@@ -103,11 +121,22 @@ export function checkSurfaceAssumption(
   options: { ambient_C: number | null; solvedSurface_C: number | null },
 ): SurfaceAssumptionCheck | null {
   const atAssumed = buildDerivedPreview(port, profiles, { ambient_C: options.ambient_C });
-  const assumption = atAssumed.assumptions?.find((entry) =>
-    TEMPERATURE_DEPENDENT.has(entry.kind),
-  );
+  const assumptions = atAssumed.assumptions ?? [];
+  const assumption = assumptions.find((entry) => TEMPERATURE_DEPENDENT.has(entry.kind));
   if (!assumption || !finite(assumption.value)) return null;
 
+  // Which profile is actually assuming a surface temperature. Probed one at a
+  // time, because the port's preview is an aggregate and does not say.
+  const owner = profiles.find((profile) =>
+    buildDerivedPreview(port, [profile], { ambient_C: options.ambient_C }).assumptions?.some(
+      (entry) => TEMPERATURE_DEPENDENT.has(entry.kind),
+    ),
+  );
+  if (!owner) return null;
+
+  const covers_every_assumption = assumptions.every((entry) =>
+    TEMPERATURE_DEPENDENT.has(entry.kind),
+  );
   const assumed_C = assumption.value;
   const solved_C = finite(options.solvedSurface_C) ? options.solvedSurface_C : null;
   const r_assumed = combined(atAssumed);
@@ -115,6 +144,8 @@ export function checkSurfaceAssumption(
   if (solved_C == null) {
     return {
       boundary_port_id: port.id,
+      profile_id: owner.id,
+      covers_every_assumption,
       assumed_C,
       solved_C: null,
       delta_C: null,
@@ -143,6 +174,8 @@ export function checkSurfaceAssumption(
 
   return {
     boundary_port_id: port.id,
+    profile_id: owner.id,
+    covers_every_assumption,
     assumed_C,
     solved_C,
     delta_C: solved_C - assumed_C,
