@@ -12,7 +12,7 @@
  * bottleneck rank. Every number here is an input.
  */
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -65,6 +65,7 @@ import {
   type GraphSelection,
 } from '@/screens/05-thermal-path-builder/ThermalGraphCanvas';
 import type { CanvasTool } from '@/screens/05-thermal-path-builder/GraphToolbar';
+import { FullscreenComponentVisibilityPanel } from '@/screens/05-thermal-path-builder/FullscreenComponentVisibilityPanel';
 import { BoundaryGraphToolbar } from './BoundaryGraphToolbar';
 import { BoundaryValidationOverlay } from './BoundaryValidationOverlay';
 import { projectScenarioBoundaryEdges } from '@/screens/05-thermal-path-builder/scenarioBoundaryProjection';
@@ -159,7 +160,6 @@ function SidebarSection({
 }
 
 type BoundaryPanelId = 'surface' | 'conditions' | 'summary' | 'fixed';
-const EMPTY_HIDDEN_COMPONENTS = new Set<string>();
 
 function LoadingState() {
   return (
@@ -185,6 +185,7 @@ export function BoundaryConditionsView() {
   const readOnly = useProjectStore((s) => s.isReadOnly());
 
   const network = useNetworkStore((s) => s.network);
+  const components = useComponentStore((s) => s.components);
   const activeScenarioId = useScenarioStore((s) => s.activeScenarioId);
   const solverState = useSolverStore((s) => s.state);
 
@@ -211,8 +212,46 @@ export function BoundaryConditionsView() {
   const [showPorts, setShowPorts] = useState(true);
   const [showLabels, setShowLabels] = useState(true);
   const [fullscreen, setFullscreen] = useState(false);
+  const [componentVisibilityOpen, setComponentVisibilityOpen] = useState(false);
+  /**
+   * Components switched off in the graph. Not persisted, for the same reason as
+   * on Screen 05: it is a way of reading a crowded graph, not a property of the
+   * project, and a filter that survived a reload would eventually be mistaken
+   * for a missing component.
+   *
+   * Unlike Screen 05 this is not gated on fullscreen. Screen 05 has a component
+   * palette down the left that already carries the same toggles; Screen 06's
+   * left column is the boundary port list, so without this panel there is no
+   * way at all to thin out the graph while assigning conditions.
+   */
+  const [hiddenComponentIds, setHiddenComponentIds] = useState<ReadonlySet<string>>(
+    () => new Set<string>(),
+  );
+  const toggleComponentVisible = useCallback((componentId: string) => {
+    setHiddenComponentIds((current) => {
+      const next = new Set(current);
+      if (!next.delete(componentId)) next.add(componentId);
+      return next;
+    });
+  }, []);
   const canvasRef = useRef<CanvasHandle | null>(null);
   const pendingSourceRef = useRef<string | null>(null);
+
+  // Only components the topology actually drew can be filtered: an unmodeled
+  // component has no node in this graph, so offering it would be a toggle that
+  // visibly does nothing.
+  const modeledIds = useMemo(
+    () => new Set(Object.keys(network?.templates ?? {})),
+    [network?.templates],
+  );
+  const modeledComponents = useMemo(
+    () => components.filter((component) => modeledIds.has(component.id)),
+    [components, modeledIds],
+  );
+  const hiddenModeledComponentIds = useMemo(
+    () => new Set([...hiddenComponentIds].filter((componentId) => modeledIds.has(componentId))),
+    [hiddenComponentIds, modeledIds],
+  );
 
   const set = activeKey ? (sets[activeKey] ?? null) : null;
   const scenarioBoundaryEdges = useMemo(
@@ -920,9 +959,21 @@ export function BoundaryConditionsView() {
             onValidate={handleValidate}
             onTogglePorts={() => setShowPorts((value) => !value)}
             onToggleLabels={() => setShowLabels((value) => !value)}
+            componentVisibilityOpen={componentVisibilityOpen}
+            hiddenComponentCount={hiddenModeledComponentIds.size}
+            onToggleComponentVisibility={() => setComponentVisibilityOpen((value) => !value)}
             onToggleFullscreen={() => setFullscreen((value) => !value)}
           />
           <div className="relative min-h-0 flex-1">
+            {componentVisibilityOpen && (
+              <FullscreenComponentVisibilityPanel
+                components={modeledComponents}
+                hiddenIds={hiddenModeledComponentIds}
+                onToggleVisible={toggleComponentVisible}
+                onShowAll={() => setHiddenComponentIds(new Set())}
+                onClose={() => setComponentVisibilityOpen(false)}
+              />
+            )}
             <ThermalGraphCanvas
               ref={canvasRef}
               network={network!}
@@ -932,7 +983,7 @@ export function BoundaryConditionsView() {
               showLabels={showLabels}
               layoutMode={layoutMode}
               readOnly
-              hiddenComponentIds={EMPTY_HIDDEN_COMPONENTS}
+              hiddenComponentIds={hiddenComponentIds}
               scenarioBoundaryEdges={scenarioBoundaryEdges}
               onSelect={selectGraphObject}
               onNodeMoved={() => undefined}

@@ -20,6 +20,8 @@ import {
   type PlateOrientation,
 } from './flatPlate';
 import type {
+  BoundaryAssumption,
+  BoundaryAssumptionKind,
   BoundaryConditionProfile,
   BoundaryDerivedPreview,
   BoundaryPort,
@@ -342,7 +344,12 @@ export function buildDerivedPreview(
 
   if (profiles.length === 0) return preview;
 
-  let assumed = false;
+  const assumptions: BoundaryAssumption[] = [];
+  /** Records an assumption once per port, keeping the first value seen. */
+  const assume = (kind: BoundaryAssumptionKind, value?: number | null) => {
+    if (assumptions.some((entry) => entry.kind === kind)) return;
+    assumptions.push({ kind, value: value ?? null });
+  };
   let missing = false;
   let hconv: number | null = null;
   let hrad: number | null = null;
@@ -382,7 +389,12 @@ export function buildDerivedPreview(
         // The plate coefficient rests on a surface temperature nobody has
         // solved for yet, so it is an assumption in exactly the sense the
         // radiation term already is, and is labelled the same way.
-        if (plate != null) assumed = true;
+        if (plate != null) {
+          assume('plate_convection', plate.surfaceTemperature_C);
+          if (parameter(profile, 'surfaceReferenceTemperatureGuess_C') == null) {
+            assume('surface_temperature_guess', plate.surfaceTemperature_C);
+          }
+        }
         preview.r_conv_C_per_W = calculateConvectionRth(hconv, area);
         if (preview.r_conv_C_per_W == null) missing = true;
         break;
@@ -392,7 +404,9 @@ export function buildDerivedPreview(
         const guess =
           parameter(profile, 'surfaceReferenceTemperatureGuess_C') ??
           (options.ambient_C != null ? options.ambient_C + DEFAULT_SURFACE_GUESS_OFFSET_C : null);
-        if (parameter(profile, 'surfaceReferenceTemperatureGuess_C') == null) assumed = true;
+        if (parameter(profile, 'surfaceReferenceTemperatureGuess_C') == null) {
+          assume('surface_temperature_guess', guess);
+        }
 
         hrad = calculateLinearizedRadiationHrad({
           emissivity: parameter(profile, 'emissivity'),
@@ -422,11 +436,13 @@ export function buildDerivedPreview(
           break;
         }
         hconv = plate?.h_conv_W_m2K ?? parameter(profile, 'h_W_m2K');
-        if (plate != null) assumed = true;
+        if (plate != null) assume('plate_convection', plate.surfaceTemperature_C);
         const guess =
           parameter(profile, 'surfaceReferenceTemperatureGuess_C') ??
           (options.ambient_C != null ? options.ambient_C + DEFAULT_SURFACE_GUESS_OFFSET_C : null);
-        if (parameter(profile, 'surfaceReferenceTemperatureGuess_C') == null) assumed = true;
+        if (parameter(profile, 'surfaceReferenceTemperatureGuess_C') == null) {
+          assume('surface_temperature_guess', guess);
+        }
 
         hrad = calculateLinearizedRadiationHrad({
           emissivity: parameter(profile, 'emissivity'),
@@ -449,7 +465,8 @@ export function buildDerivedPreview(
           shadingFactor: parameter(profile, 'shadingFactor'),
         });
         if (preview.q_solar_W == null) missing = true;
-        else assumed = true; // solar inputs are estimates until the site is surveyed
+        // Solar inputs are estimates until the site is surveyed.
+        else assume('solar_estimate', preview.q_solar_W);
         break;
       }
 
@@ -473,7 +490,7 @@ export function buildDerivedPreview(
 
       case 'external_cfd_placeholder': {
         // Metadata only while Screen 03 is deferred; nothing is computed.
-        assumed = true;
+        assume('external_cfd_placeholder');
         break;
       }
     }
@@ -491,6 +508,10 @@ export function buildDerivedPreview(
     });
   }
 
-  preview.completeness = missing ? 'blocked' : assumed ? 'warning' : 'complete';
+  preview.completeness = missing ? 'blocked' : assumptions.length > 0 ? 'warning' : 'complete';
+  // Only attached on the state they explain. A blocked port's assumptions are
+  // not the reason it is blocked, and showing them there would compete with
+  // the missing input that actually needs filling in.
+  if (preview.completeness === 'warning') preview.assumptions = assumptions;
   return preview;
 }

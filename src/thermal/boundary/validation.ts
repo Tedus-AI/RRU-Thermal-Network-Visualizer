@@ -605,14 +605,19 @@ export function validateBoundarySet(input: BoundaryValidationInput): BoundaryVal
   }
 
   // --- Informational notes ----------------------------------------------
+  // Named per port. These lines used to carry no port at all, so a project with
+  // two finished surfaces showed two identical rows and the panel read as if
+  // something were wrong twice over rather than as two ports each being fine.
+  const portNameById = new Map(input.ports.map((port) => [port.id, port.name]));
   for (const preview of set.derived_preview) {
+    const portName = portNameById.get(preview.boundary_port_id) ?? preview.boundary_port_id;
     if (preview.r_combined_C_per_W != null || preview.r_conv_C_per_W != null) {
       infos.push(
         message(
           'info',
           `PREVIEW_RTH_${preview.boundary_port_id}`,
-          'Boundary Rth preview calculated (pre-solve boundary input only).',
-          '已計算邊界熱阻預覽（僅為求解前的邊界輸入）。',
+          `${portName}: boundary Rth preview calculated (pre-solve boundary input only).`,
+          `${portName}：已計算邊界熱阻預覽（僅為求解前的邊界輸入）。`,
           { boundary_port_id: preview.boundary_port_id },
         ),
       );
