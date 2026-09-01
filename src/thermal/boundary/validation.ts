@@ -64,6 +64,18 @@ function isHeatRejectionProfile(profile: BoundaryConditionProfile): boolean {
   ].includes(profile.type);
 }
 
+/**
+ * "85 nodes / 84 edges", from the packed version `topologyVersionOf` produces.
+ *
+ * Worth unpacking rather than printing the raw number: it is what lets a reader
+ * recognise their own edit — one edge fewer IS the heat pipe they just removed
+ * — instead of being told only that something, somewhere, moved.
+ */
+function describeTopology(version: number): string {
+  if (!Number.isFinite(version) || version <= 0) return 'unknown';
+  return `${Math.floor(version / 1000)} nodes / ${version % 1000} edges`;
+}
+
 function isSolarActive(set: ScenarioBoundaryConditionSet): boolean {
   return set.site.solar_enabled && (set.site.solar_irradiance_W_m2 ?? 0) > 0;
 }
@@ -107,15 +119,45 @@ export function validateBoundarySet(input: BoundaryValidationInput): BoundaryVal
     return { status: 'blocked', errors, warnings, infos };
   }
 
+  // --- topology drift ------------------------------------------------------
+  // The stored version is a shape hash of the WHOLE graph, so it moves for any
+  // edit anywhere — deleting a heat pipe on one component moved it, and the
+  // screen then asked for a review of boundary assignments that the deletion
+  // could not possibly have touched. A warning that fires on unrelated edits
+  // teaches the reader to dismiss it, which is the opposite of its job.
+  //
+  // What the boundary set actually depends on is its PORTS. So the severity is
+  // decided by whether any port it describes is gone: that orphans an
+  // assignment and is worth stopping for. Everything else is a note saying the
+  // graph moved and how to clear it.
   if (set.network_topology_version !== input.topologyVersion) {
-    warnings.push(
-      message(
-        'warning',
-        'STALE_TOPOLOGY',
-        'The thermal graph topology has changed since this boundary set was saved. Review boundary assignments before continuing to Screen 07.',
-        '拓樸在此邊界條件儲存後已變更，請重新檢查指派後再進入 07。',
-      ),
-    );
+    const livePortIds = new Set(input.ports.map((port) => port.id));
+    const orphaned = set.assignments
+      .filter((assignment) => assignment.enabled && !livePortIds.has(assignment.boundary_port_id))
+      .map((assignment) => assignment.boundary_port_id);
+    const drift = `${describeTopology(set.network_topology_version)} → ${describeTopology(input.topologyVersion)}`;
+
+    if (orphaned.length > 0) {
+      warnings.push(
+        message(
+          'warning',
+          'STALE_TOPOLOGY',
+          `The thermal graph changed since this boundary set was saved (${drift}), and ${orphaned.length} boundary port(s) it describes no longer exist: ${orphaned.join(', ')}. Review boundary assignments before continuing to Screen 07.`,
+          `拓樸在此邊界條件儲存後已變更（${drift}），且其中 ${orphaned.length} 個邊界端口已不存在：${orphaned.join('、')}。請重新檢查指派後再進入 07。`,
+          { suggested_action: 'Reassign or remove the orphaned boundary conditions, then save the boundary set.' },
+        ),
+      );
+    } else {
+      infos.push(
+        message(
+          'info',
+          'STALE_TOPOLOGY',
+          `The thermal graph changed since this boundary set was saved (${drift}), but every boundary port it describes still exists, so no assignment is affected.`,
+          `拓樸在此邊界條件儲存後已變更（${drift}），但其描述的邊界端口都還在，指派不受影響。`,
+          { suggested_action: 'Save Boundary Set to record that this topology was reviewed.' },
+        ),
+      );
+    }
   }
 
   const profileById = new Map(set.profiles.map((profile) => [profile.id, profile]));
