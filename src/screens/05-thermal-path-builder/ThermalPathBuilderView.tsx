@@ -1336,7 +1336,16 @@ export function ThermalPathBuilderView() {
                   onConnect={handleConnect}
                   onContextMenu={(target, at) => setContextMenu({ ...target, x: at.x, y: at.y })}
                   onZoomChange={setZoom}
-                  onLayout={(positions) =>
+                  onLayout={(positions) => {
+                    // Cheap exit when the canvas reproduced what is already
+                    // stored — which happens once the engineer has saved a
+                    // layout — so the whole network is not cloned for nothing.
+                    const stored = useNetworkStore.getState().network?.layout.positions ?? {};
+                    const moved = Object.entries(positions).some(([id, at]) => {
+                      const was = stored[id];
+                      return !was || was.x !== at.x || was.y !== at.y;
+                    });
+                    if (!moved) return;
                     useNetworkStore.getState().mutate(
                       (net) => {
                         net.layout.positions = {
@@ -1344,9 +1353,18 @@ export function ThermalPathBuilderView() {
                           ...positions,
                         };
                       },
-                      { skipHistory: true, skipInvalidate: true },
-                    )
-                  }
+                      // `skipDirty`: the canvas re-runs its layout on every
+                      // mount and usually lands somewhere else than the stored
+                      // coordinates, so this fired on every visit to Screen 05
+                      // — marking the project dirty and flashing "Writing
+                      // JSON…" when the engineer had touched nothing.
+                      //
+                      // Dragging a node is a different path (`onNodeMoved` →
+                      // `setNodePosition`) and still counts as an edit; this
+                      // one is the tool arranging its own picture.
+                      { skipHistory: true, skipInvalidate: true, skipDirty: true },
+                    );
+                  }}
                   pendingSourceRef={pendingSourceRef}
                 />
                 <Legend />

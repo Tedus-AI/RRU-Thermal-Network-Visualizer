@@ -85,6 +85,60 @@ beforeEach(() => {
   useSolverStore.getState().reset();
 });
 
+/**
+ * The auto-layout is the tool arranging its own picture, not the engineer's
+ * edit. Screen 05's canvas re-runs it on every mount and usually lands
+ * somewhere other than the stored coordinates, so writing it marked the project
+ * dirty on every visit — and the save indicator, correctly, said a write was
+ * due. Measured at ~200 ms of "Writing JSON…" per visit to Screen 05 and
+ * nowhere else, with nothing actually written.
+ */
+describe('what counts as an unsaved edit', () => {
+  it('leaves the project clean when only the derived layout moved', () => {
+    const store = useNetworkStore.getState();
+    const node = Object.keys(store.network!.nodes)[0];
+    expect(useNetworkStore.getState().dirty).toBe(false);
+
+    store.mutate((net) => void (net.layout.positions[node] = { x: 1540, y: 358 }), {
+      skipHistory: true,
+      skipInvalidate: true,
+      skipDirty: true,
+    });
+
+    expect(useNetworkStore.getState().network!.layout.positions[node]).toEqual({ x: 1540, y: 358 });
+    expect(useNetworkStore.getState().dirty).toBe(false);
+  });
+
+  it('still counts a node the engineer dragged', () => {
+    const store = useNetworkStore.getState();
+    const node = Object.keys(store.network!.nodes)[0];
+    expect(useNetworkStore.getState().dirty).toBe(false);
+
+    // A drag goes through setNodePosition, which passes no skipDirty.
+    store.setNodePosition(node, { x: 12, y: 34 });
+
+    expect(useNetworkStore.getState().dirty).toBe(true);
+  });
+
+  it('does not clear a dirty flag that was already set', () => {
+    const store = useNetworkStore.getState();
+    const node = Object.keys(store.network!.nodes)[0];
+    store.setNodePosition(node, { x: 12, y: 34 });
+    expect(useNetworkStore.getState().dirty).toBe(true);
+
+    // An unsaved edit is still unsaved after the canvas re-arranges itself.
+    useNetworkStore
+      .getState()
+      .mutate((net) => void (net.layout.positions[node] = { x: 99, y: 99 }), {
+        skipHistory: true,
+        skipInvalidate: true,
+        skipDirty: true,
+      });
+
+    expect(useNetworkStore.getState().dirty).toBe(true);
+  });
+});
+
 describe('component subgraph rebuild (05 §40, AC-05-11)', () => {
   /**
    * "Modified" protects an object the new template STILL EMITS. An edit is an
