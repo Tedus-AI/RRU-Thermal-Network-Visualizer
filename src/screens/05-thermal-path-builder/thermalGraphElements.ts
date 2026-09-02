@@ -55,7 +55,7 @@ const PARALLEL_LABEL_FLOW_PADDING_PX = 56;
  */
 const HSK_BUS_BRANCH_FAN_PX = 36;
 
-interface HskBusBranch {
+export interface HskBusBranch {
   busId: string;
   edgeId: string;
   terminalId: string;
@@ -83,7 +83,7 @@ interface HskBusParallelSet {
   edgeIds: string[];
 }
 
-interface HskBusGroup {
+export interface HskBusGroup {
   id: string;
   sharedId: string;
   outletId: string;
@@ -157,7 +157,8 @@ export function hiddenNodeIds(
   return hidden;
 }
 
-function hskBusGroups(
+/** Shared with Screen 07, which draws the same bus over the solved graph. */
+export function hskBusGroups(
   network: ThermalNetwork,
   layoutMode: string,
   hidden: ReadonlySet<string>,
@@ -331,7 +332,8 @@ export function parallelBusRankShift(
   return Math.max(0, requiredGap - currentGap);
 }
 
-function storedBusGeometry(
+/** Shared with Screen 07. */
+export function storedBusGeometry(
   network: ThermalNetwork,
   group: HskBusGroup,
   axis: 'vertical' | 'horizontal',
