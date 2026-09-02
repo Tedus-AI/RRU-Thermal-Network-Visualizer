@@ -13,6 +13,7 @@ import {
 } from '../resistance/calculators';
 import type { ThermalEdge, ThermalNetwork, ThermalNode } from '../types';
 import { readLinkedInput } from './networkBuilder';
+import { SOURCE_AREA_OVERRIDE_KEY } from './hskBaseConnection';
 
 function followsComponentPower(node: ThermalNode): boolean {
   if (node.metadata?.component_power_linked === true) return true;
@@ -71,6 +72,23 @@ function updateLinkedEdge(
     if (value == null) delete perDevice[parameter];
     else perDevice[parameter] = value;
   }
+
+  // An embedded heat pipe lies in a groove machined flush with the face the
+  // part sits on, so the aluminium branch spreads through only what the copper
+  // leaves behind. That area cannot be read back off the graph — the link
+  // points at the FULL contact face, which is what the copper and the aluminium
+  // share — so the mount records it on the edge, and it has to win here for the
+  // same reason `refreshHskBaseConnectionEdges` already lets it win.
+  //
+  // Without this, resolving the link quietly restored the whole footprint on
+  // the solver's own clone: Screen 05 showed the carved-out area and Screen 07
+  // solved the full one, which is the exact failure the override exists to
+  // prevent — just reached down a second path.
+  const overrideArea = edge.metadata?.[SOURCE_AREA_OVERRIDE_KEY];
+  if (typeof overrideArea === 'number' && Number.isFinite(overrideArea) && overrideArea > 0) {
+    perDevice.source_area_mm2 = overrideArea;
+  }
+
   const parameters = scaleParametersForDevices(
     edge.method,
     perDevice,
