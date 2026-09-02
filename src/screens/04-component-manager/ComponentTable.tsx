@@ -210,7 +210,6 @@ export function ComponentTable({
                     <Icon size={14} aria-hidden />
                     <span className="text-[12px] font-medium whitespace-nowrap">
                       {meta.label}
-                      <span className="ml-1 font-normal text-ink-400">{meta.zh}</span>
                     </span>
                   </span>
                 </td>
@@ -240,7 +239,7 @@ export function ComponentTable({
                   <button
                     type="button"
                     title={component.name}
-                    className="block max-w-full truncate font-medium hover:text-accent-700 hover:underline"
+                    className="mx-auto block max-w-full truncate font-medium hover:text-accent-700 hover:underline"
                     onClick={() => onSelect(component.id)}
                   >
                     {component.name}
