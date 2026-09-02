@@ -24,7 +24,13 @@ import {
 import cytoscape, { type Core, type ElementDefinition, type StylesheetCSS } from 'cytoscape';
 import dagre from 'cytoscape-dagre';
 
-import { busStylesheet, GROUP_COLORS, labelBox, nodeGroup } from '@/ui/graphStyles';
+import {
+  busStylesheet,
+  GROUP_COLORS,
+  labelBox,
+  NODE_TEXT_STYLE,
+  nodeGroup,
+} from '@/ui/graphStyles';
 import {
   parallelBranchLabel,
   solvedBusElements,
@@ -107,10 +113,18 @@ function edgeLabelsOf(cy: Core): string[] {
 }
 
 const EDGE_NEUTRAL = '#94a3b8';
-const DELTA_RAMP = ['#e0f2fe', '#7dd3fc', '#fbbf24', '#f97316', '#dc2626'] as const;
-const RTH_RAMP = ['#bbf7d0', '#86efac', '#fde68a', '#fb923c', '#ef4444'] as const;
+/**
+ * Both ramps used to open on a tint — `#bbf7d0`, `#e0f2fe` — which is a fine
+ * fill colour and a bad LINE colour: a 2 px stroke of it on white is close to
+ * invisible, so the cheapest edges in the graph were the ones you could not
+ * see. These start at a saturated green instead and keep the same
+ * green → amber → red reading.
+ */
+const DELTA_RAMP = ['#0284c7', '#0ea5e9', '#d97706', '#ea580c', '#dc2626'] as const;
+const RTH_RAMP = ['#15803d', '#65a30d', '#ca8a04', '#ea580c', '#dc2626'] as const;
 
-function stylesheet(): StylesheetCSS[] {
+/** Exported so a test can hold it to the metrics `labelBox` measures against. */
+export function solvedStylesheet(): StylesheetCSS[] {
   return [
     // The bus is the same picture as on Screen 05, so it is the same rules.
     ...busStylesheet(),
@@ -128,9 +142,8 @@ function stylesheet(): StylesheetCSS[] {
         'text-wrap': 'wrap',
         'text-valign': 'center',
         'text-halign': 'center',
-        'font-size': 10,
-        'font-weight': 600,
-        'text-max-width': '150px',
+        // Exactly what `labelBox` measured this node's box against.
+        ...NODE_TEXT_STYLE,
       },
     },
     { selector: 'node.fixed', style: { 'border-style': 'dashed', 'border-width': 2.5 } },
@@ -163,9 +176,13 @@ function stylesheet(): StylesheetCSS[] {
         'font-weight': 600,
         color: '#334155',
         'text-background-color': '#ffffff',
-        'text-background-opacity': 0.9,
+        // Opaque, and above the bus: the bar and its junctions paint at
+        // z-index 1 and 8, so a branch label landing near where they meet was
+        // read through them.
+        'text-background-opacity': 1,
         'text-background-padding': '2px',
         'text-rotation': 'autorotate',
+        'z-index': 10,
       },
     },
     {
@@ -466,7 +483,7 @@ export const SolvedGraphCanvas = forwardRef<
 
     const cy = cytoscape({
       container: containerRef.current,
-      style: stylesheet(),
+      style: solvedStylesheet(),
       minZoom: 0.15,
       maxZoom: 3,
       boxSelectionEnabled: false,

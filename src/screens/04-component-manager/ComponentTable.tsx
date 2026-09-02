@@ -7,6 +7,7 @@
 
 import { AlertTriangle, CircleCheck, CircleSlash, XCircle } from 'lucide-react';
 import { ColumnLabel } from '@/ui/FieldLabel';
+import { ColumnResizer, useColumnWidths } from '@/ui/ResizableColumns';
 import {
   HEAT_PATH_LABELS,
   HEAT_PATH_PATCH_FIELDS,
@@ -40,6 +41,57 @@ const STATUS_META: Record<
 const CELL =
   'tabular h-7 w-full rounded border border-transparent bg-transparent px-1.5 text-[12px] hover:border-line-strong focus:border-accent-500 focus:bg-surface focus:outline-none disabled:hover:border-transparent';
 
+/**
+ * The columns, in render order, with the width each starts at.
+ *
+ * `tbody` still writes its cells by hand — they are fifteen different editors,
+ * not one repeated cell — so this list's ORDER has to match theirs. It exists
+ * so the header, the colgroup and the remembered widths cannot drift apart.
+ */
+const COLUMNS: ReadonlyArray<{
+  id: string;
+  label: string;
+  zh: string;
+  unit?: string;
+  tooltip?: Parameters<typeof tip>[0];
+  highlight?: boolean;
+  width: number;
+}> = [
+  { id: 'on', label: 'On', zh: ZH.Enabled, width: 56 },
+  { id: 'status', label: 'Status', zh: ZH.Status, width: 96 },
+  { id: 'category', label: 'Category', zh: ZH.Category, width: 96 },
+  { id: 'component', label: 'Component', zh: ZH.Component, width: 210 },
+  { id: 'qty', label: 'Qty', zh: ZH.Qty, tooltip: 'Qty', width: 64 },
+  { id: 'power', label: 'Power', unit: 'W', zh: ZH.Power, tooltip: 'Power', width: 84 },
+  {
+    id: 'total_power',
+    label: 'Total Power',
+    unit: 'W',
+    zh: ZH['Total Power'],
+    tooltip: 'Total Power',
+    highlight: true,
+    width: 96,
+  },
+  { id: 'limit_type', label: 'Limit Type', zh: ZH['Limit Type'], tooltip: 'Limit Type', width: 96 },
+  { id: 'limit', label: 'Limit', unit: '°C', zh: ZH.Limit, tooltip: 'Limit', width: 80 },
+  { id: 'rjc', label: 'Rjc', unit: '°C/W', zh: ZH.Rjc, tooltip: 'Rjc', width: 84 },
+  { id: 'package', label: 'Package', zh: ZH.Package, tooltip: 'Package', width: 150 },
+  { id: 'heat_path', label: 'Heat Path', zh: ZH['Heat Path'], tooltip: 'Heat Path', width: 140 },
+  { id: 'tim', label: 'TIM', zh: ZH.TIM, tooltip: 'TIM', width: 110 },
+  {
+    id: 'thermal_profile',
+    label: 'Thermal Profile',
+    zh: ZH['Thermal Profile'],
+    tooltip: 'Thermal Profile',
+    width: 110,
+  },
+  { id: 'source', label: 'Source', zh: ZH.Source, tooltip: 'Source', width: 160 },
+];
+
+const COLUMN_DEFAULTS = Object.fromEntries(
+  COLUMNS.map((column) => [column.id, column.width]),
+);
+
 function num(value: number | null | undefined, digits = 2): string {
   return value == null ? '—' : value.toFixed(digits);
 }
@@ -65,65 +117,46 @@ export function ComponentTable({
     fields: string[],
   ) => onPatch(component.id, { thermal_spec: { ...component.thermal_spec, ...spec } }, fields);
 
+  const { widths, startResize } = useColumnWidths('04.components', COLUMN_DEFAULTS);
+
   return (
     <div className="overflow-x-auto rounded-lg border border-line">
-      <table className="w-full min-w-[1250px] border-collapse text-left">
+      {/* `table-fixed` so the colgroup widths are authoritative: under the
+          default auto layout a width is only a suggestion and a dragged column
+          springs back the moment the content disagrees. */}
+      <table
+        className="table-fixed border-collapse text-center"
+        style={{ width: COLUMNS.reduce((total, column) => total + (widths[column.id] ?? 0), 0) }}
+      >
+        <colgroup>
+          {COLUMNS.map((column) => (
+            <col key={column.id} style={{ width: widths[column.id] }} />
+          ))}
+        </colgroup>
         <thead className="bg-surface-muted">
           <tr className="border-b border-line text-[11px] font-semibold text-ink-700">
-            <th scope="col" className="px-2 py-2">
-              <ColumnLabel label="On" zh={ZH.Enabled} />
-            </th>
-            <th scope="col" className="px-2 py-2">
-              <ColumnLabel label="Status" zh={ZH.Status} />
-            </th>
-            <th scope="col" className="px-2 py-2">
-              <ColumnLabel label="Category" zh={ZH.Category} />
-            </th>
-            <th scope="col" className="px-2 py-2">
-              <ColumnLabel label="Component" zh={ZH.Component} />
-            </th>
-            <th scope="col" className="px-2 py-2 text-right">
-              <ColumnLabel label="Qty" zh={ZH.Qty} tooltip={tip('Qty')} />
-            </th>
-            <th scope="col" className="px-2 py-2 text-right">
-              <ColumnLabel label="Power" unit="W" zh={ZH.Power} tooltip={tip('Power')} />
-            </th>
-            <th scope="col" className="bg-accent-50 px-2 py-2 text-right">
-              <ColumnLabel
-                label="Total Power"
-                unit="W"
-                zh={ZH['Total Power']}
-                tooltip={tip('Total Power')}
-              />
-            </th>
-            <th scope="col" className="px-2 py-2">
-              <ColumnLabel label="Limit Type" zh={ZH['Limit Type']} tooltip={tip('Limit Type')} />
-            </th>
-            <th scope="col" className="px-2 py-2 text-right">
-              <ColumnLabel label="Limit" unit="°C" zh={ZH.Limit} tooltip={tip('Limit')} />
-            </th>
-            <th scope="col" className="px-2 py-2 text-right">
-              <ColumnLabel label="Rjc" unit="°C/W" zh={ZH.Rjc} tooltip={tip('Rjc')} />
-            </th>
-            <th scope="col" className="px-2 py-2">
-              <ColumnLabel label="Package" zh={ZH.Package} tooltip={tip('Package')} />
-            </th>
-            <th scope="col" className="px-2 py-2">
-              <ColumnLabel label="Heat Path" zh={ZH['Heat Path']} tooltip={tip('Heat Path')} />
-            </th>
-            <th scope="col" className="px-2 py-2">
-              <ColumnLabel label="TIM" zh={ZH.TIM} tooltip={tip('TIM')} />
-            </th>
-            <th scope="col" className="px-2 py-2">
-              <ColumnLabel
-                label="Thermal Profile"
-                zh={ZH['Thermal Profile']}
-                tooltip={tip('Thermal Profile')}
-              />
-            </th>
-            <th scope="col" className="px-2 py-2">
-              <ColumnLabel label="Source" zh={ZH.Source} tooltip={tip('Source')} />
-            </th>
+            {COLUMNS.map((column) => (
+              <th
+                key={column.id}
+                scope="col"
+                className={`relative px-2 py-2 ${column.highlight ? 'bg-accent-50' : ''}`}
+              >
+                <div className="flex justify-center">
+                  <ColumnLabel
+                    label={column.label}
+                    unit={column.unit}
+                    zh={column.zh}
+                    tooltip={column.tooltip ? tip(column.tooltip) : undefined}
+                  />
+                </div>
+                <ColumnResizer
+                  id={column.id}
+                  labelEn={column.label}
+                  labelZh={column.zh}
+                  onResize={startResize}
+                />
+              </th>
+            ))}
           </tr>
         </thead>
         <tbody>
@@ -203,7 +236,7 @@ export function ComponentTable({
                 </td>
                 {/* A wrapped name turns one row into two and breaks the scan
                     down the column, so it stays on one line and elides. */}
-                <td className="max-w-[14rem] px-2 py-1.5 whitespace-nowrap">
+                <td className="px-2 py-1.5">
                   <button
                     type="button"
                     title={component.name}
@@ -213,12 +246,12 @@ export function ComponentTable({
                     {component.name}
                   </button>
                 </td>
-                <td className="px-2 py-1.5 text-right">
+                <td className="px-2 py-1.5">
                   <input
                     type="number"
                     aria-label={`Qty for ${component.name}`}
                     onClick={(event) => event.stopPropagation()}
-                    className={`${CELL} w-14 text-right`}
+                    className={`${CELL} w-full text-center`}
                     value={component.qty}
                     disabled={readOnly}
                     onChange={(event) =>
@@ -226,13 +259,13 @@ export function ComponentTable({
                     }
                   />
                 </td>
-                <td className="px-2 py-1.5 text-right">
+                <td className="px-2 py-1.5">
                   <input
                     type="number"
                     step="0.01"
                     aria-label={`Power for ${component.name}`}
                     onClick={(event) => event.stopPropagation()}
-                    className={`${CELL} w-20 text-right`}
+                    className={`${CELL} w-full text-center`}
                     value={component.power_W.value ?? ''}
                     placeholder="—"
                     disabled={readOnly}
@@ -251,7 +284,7 @@ export function ComponentTable({
                   />
                 </td>
                 {/* Qty × Power — a dissipation summary, never edge heat flow Q. */}
-                <td className="tabular bg-accent-50/60 px-2 py-1.5 text-right font-semibold">
+                <td className="tabular bg-accent-50/60 px-2 py-1.5 font-semibold">
                   {componentTotalPowerW(component).toFixed(2)}
                 </td>
                 <td className="px-2 py-1.5">
@@ -286,12 +319,12 @@ export function ComponentTable({
                     ))}
                   </select>
                 </td>
-                <td className="px-2 py-1.5 text-right">
+                <td className="px-2 py-1.5">
                   <input
                     type="number"
                     aria-label={`Limit for ${component.name}`}
                     onClick={(event) => event.stopPropagation()}
-                    className={`${CELL} w-16 text-right`}
+                    className={`${CELL} w-full text-center`}
                     value={spec.limit_C?.value ?? ''}
                     placeholder="—"
                     disabled={readOnly}
@@ -310,13 +343,13 @@ export function ComponentTable({
                   />
                 </td>
                 {/* Unknown Rjc shows N/A, never 0 (04 §11, AC-04-06). */}
-                <td className="px-2 py-1.5 text-right">
+                <td className="px-2 py-1.5">
                   <input
                     type="number"
                     step="0.01"
                     aria-label={`Rjc for ${component.name}`}
                     onClick={(event) => event.stopPropagation()}
-                    className={`${CELL} w-16 text-right`}
+                    className={`${CELL} w-full text-center`}
                     value={surfaceReferenced ? '' : (spec.r_jc_C_per_W?.value ?? '')}
                     placeholder="N/A"
                     disabled={readOnly || surfaceReferenced}

@@ -298,6 +298,27 @@ export function labelBox(label: string): { w: number; h: number } {
  * One definition, so the bar cannot end up teal on one screen and grey on the
  * other.
  */
+/**
+ * The four properties `labelBox` measures against.
+ *
+ * Every canvas that sizes its nodes with `labelBox` must render their text with
+ * exactly these, or the box is measured in one font and painted in another and
+ * the text runs outside the border. Screen 07 declared its own `font-size` and
+ * `text-max-width` and no family at all, so it measured in `system-ui` at 140px
+ * and painted in Cytoscape's Helvetica default at 150px. On a machine where
+ * those two metrics agree — this container's — nothing showed; on Windows,
+ * where they are Segoe UI and Arial, the longer part names overhung the box.
+ *
+ * Exported as one object so the coupling is structural rather than a comment
+ * asking the next person to remember.
+ */
+export const NODE_TEXT_STYLE = {
+  'font-size': NODE_FONT_SIZE,
+  'font-weight': 600,
+  'font-family': NODE_FONT_FAMILY,
+  'text-max-width': `${NODE_TEXT_MAX_W}px`,
+} as const;
+
 export function busStylesheet(): StylesheetCSS[] {
   return [
     {
@@ -428,10 +449,7 @@ export function cytoscapeStylesheet(): StylesheetCSS[] {
         // These three and `text-max-width` are what `labelBox` measures
         // against. Changing one here without changing it there puts the text
         // back outside the border.
-        'font-size': NODE_FONT_SIZE,
-        'font-weight': 600,
-        'font-family': NODE_FONT_FAMILY,
-        'text-max-width': `${NODE_TEXT_MAX_W}px`,
+        ...NODE_TEXT_STYLE,
       },
     },
     {
