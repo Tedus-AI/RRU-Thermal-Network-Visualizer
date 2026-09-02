@@ -289,8 +289,125 @@ export function labelBox(label: string): { w: number; h: number } {
   };
 }
 
+/**
+ * The view-only HSK bus: the bar, its junctions, the parallel annotations and
+ * the trunk.
+ *
+ * Exported on its own because Screen 07's solved canvas has its own stylesheet
+ * — different node colours, different edge widths — but draws the SAME bus.
+ * One definition, so the bar cannot end up teal on one screen and grey on the
+ * other.
+ */
+export function busStylesheet(): StylesheetCSS[] {
+  return [
+    {
+      selector: 'node.hsk-bus',
+      style: {
+        shape: 'rectangle',
+        width: 'data(w)',
+        height: 'data(h)',
+        label: '',
+        'background-color': HSK_BUS_COLOR,
+        'border-width': 0,
+        events: 'no',
+        'z-index': 1,
+      },
+    },
+    {
+      selector: 'node.hsk-bus-junction',
+      style: {
+        shape: 'ellipse',
+        width: 'data(w)',
+        height: 'data(h)',
+        label: '',
+        'background-color': HSK_BUS_COLOR,
+        'border-width': 0,
+        events: 'no',
+        'z-index': 8,
+      },
+    },
+    {
+      selector: 'node.hsk-bus-parallel-note',
+      style: {
+        width: 1,
+        height: 1,
+        shape: 'ellipse',
+        'background-opacity': 0,
+        'border-width': 0,
+        label: 'data(label)',
+        color: HSK_BUS_COLOR,
+        'font-size': 9,
+        'font-weight': 700,
+        'text-halign': 'right',
+        'text-valign': 'center',
+        'text-margin-x': 10,
+        'text-background-color': '#ffffff',
+        'text-background-opacity': 0.92,
+        'text-background-padding': '2px',
+        'min-zoomed-font-size': 7,
+        events: 'no',
+        'z-index': 9,
+      },
+    },
+    {
+      selector: 'node.hsk-bus-parallel-label',
+      style: {
+        width: 1,
+        height: 1,
+        shape: 'ellipse',
+        'background-opacity': 0,
+        'border-width': 0,
+        label: 'data(label)',
+        color: '#475569',
+        'font-size': 9,
+        'font-weight': 500,
+        'text-wrap': 'wrap',
+        'text-valign': 'center',
+        'text-halign': 'center',
+        'text-background-color': '#ffffff',
+        'text-background-opacity': 0.94,
+        'text-background-padding': '2px',
+        'min-zoomed-font-size': 7,
+        events: 'no',
+        'z-index': 9,
+      },
+    },
+    {
+      selector: 'node.hsk-bus-parallel-label.flow-horizontal.label-negative',
+      style: { 'text-margin-y': -20 },
+    },
+    {
+      selector: 'node.hsk-bus-parallel-label.flow-horizontal.label-positive',
+      style: { 'text-margin-y': 20 },
+    },
+    {
+      selector: 'node.hsk-bus-parallel-label.flow-vertical.label-negative',
+      style: { 'text-margin-x': -42 },
+    },
+    {
+      selector: 'node.hsk-bus-parallel-label.flow-vertical.label-positive',
+      style: { 'text-margin-x': 42 },
+    },
+    {
+      selector: 'edge.hsk-bus-trunk',
+      style: {
+        width: 2,
+        'curve-style': 'straight',
+        'line-color': HSK_BUS_COLOR,
+        'target-arrow-shape': 'none',
+        label: '',
+        events: 'no',
+        'z-index': 2,
+      },
+    },
+    // Cast as the sibling stylesheets do: these use `style`, which is
+    // `StylesheetStyle`, and the app types the array as `StylesheetCSS[]`.
+  ] as unknown as StylesheetCSS[];
+}
+
 export function cytoscapeStylesheet(): StylesheetCSS[] {
   return [
+    ...busStylesheet(),
     {
       selector: 'node',
       style: {
@@ -337,32 +454,6 @@ export function cytoscapeStylesheet(): StylesheetCSS[] {
       selector: 'node.connect-source',
       style: { 'border-color': '#1d4ed8', 'border-width': 3, 'border-style': 'double' },
     },
-    {
-      selector: 'node.hsk-bus',
-      style: {
-        shape: 'rectangle',
-        width: 'data(w)',
-        height: 'data(h)',
-        label: '',
-        'background-color': HSK_BUS_COLOR,
-        'border-width': 0,
-        events: 'no',
-        'z-index': 1,
-      },
-    },
-    {
-      selector: 'node.hsk-bus-junction',
-      style: {
-        shape: 'ellipse',
-        width: 'data(w)',
-        height: 'data(h)',
-        label: '',
-        'background-color': HSK_BUS_COLOR,
-        'border-width': 0,
-        events: 'no',
-        'z-index': 8,
-      },
-    },
     /*
       The parallel combination, annotated on the bus where two branches rejoin.
 
@@ -371,69 +462,7 @@ export function cytoscapeStylesheet(): StylesheetCSS[] {
       clickable, and must not be dragged. `text-halign: right` puts the text
       beside the bar rather than on either branch.
     */
-    {
-      selector: 'node.hsk-bus-parallel-note',
-      style: {
-        width: 1,
-        height: 1,
-        shape: 'ellipse',
-        'background-opacity': 0,
-        'border-width': 0,
-        label: 'data(label)',
-        color: HSK_BUS_COLOR,
-        'font-size': 9,
-        'font-weight': 700,
-        'text-halign': 'right',
-        'text-valign': 'center',
-        'text-margin-x': 10,
-        'text-background-color': '#ffffff',
-        'text-background-opacity': 0.92,
-        'text-background-padding': '2px',
-        'min-zoomed-font-size': 7,
-        events: 'no',
-        'z-index': 9,
-      },
-    },
     /* Only parallel fan labels leave their original straight edge. */
-    {
-      selector: 'node.hsk-bus-parallel-label',
-      style: {
-        width: 1,
-        height: 1,
-        shape: 'ellipse',
-        'background-opacity': 0,
-        'border-width': 0,
-        label: 'data(label)',
-        color: '#475569',
-        'font-size': 9,
-        'font-weight': 500,
-        'text-wrap': 'wrap',
-        'text-valign': 'center',
-        'text-halign': 'center',
-        'text-background-color': '#ffffff',
-        'text-background-opacity': 0.94,
-        'text-background-padding': '2px',
-        'min-zoomed-font-size': 7,
-        events: 'no',
-        'z-index': 9,
-      },
-    },
-    {
-      selector: 'node.hsk-bus-parallel-label.flow-horizontal.label-negative',
-      style: { 'text-margin-y': -20 },
-    },
-    {
-      selector: 'node.hsk-bus-parallel-label.flow-horizontal.label-positive',
-      style: { 'text-margin-y': 20 },
-    },
-    {
-      selector: 'node.hsk-bus-parallel-label.flow-vertical.label-negative',
-      style: { 'text-margin-x': -42 },
-    },
-    {
-      selector: 'node.hsk-bus-parallel-label.flow-vertical.label-positive',
-      style: { 'text-margin-x': 42 },
-    },
     {
       selector: 'edge',
       style: {
@@ -470,18 +499,6 @@ export function cytoscapeStylesheet(): StylesheetCSS[] {
       // The label is rendered by its offset view-only anchor instead, so the
       // original diagonal branch stays fully visible.
       style: { label: '' },
-    },
-    {
-      selector: 'edge.hsk-bus-trunk',
-      style: {
-        width: 2,
-        'curve-style': 'straight',
-        'line-color': HSK_BUS_COLOR,
-        'target-arrow-shape': 'none',
-        label: '',
-        events: 'no',
-        'z-index': 2,
-      },
     },
     {
       selector: 'edge.layout-only',

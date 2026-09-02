@@ -24,12 +24,20 @@ import {
 import cytoscape, { type Core, type ElementDefinition, type StylesheetCSS } from 'cytoscape';
 import dagre from 'cytoscape-dagre';
 
-import { GROUP_COLORS, labelBox, nodeGroup } from '@/ui/graphStyles';
+import { busStylesheet, GROUP_COLORS, labelBox, nodeGroup } from '@/ui/graphStyles';
+import {
+  parallelBranchLabel,
+  solvedBusElements,
+} from './solvedBusElements';
+import { positionViewBuses } from '@/screens/05-thermal-path-builder/busLayout';
 import {
   marqueeRect,
+  WHEEL_ZOOM_STEP,
+  wheelNotches,
   zoomRegionViewport,
   type ViewportBox,
 } from '@/ui/graphViewport';
+import { layoutOptions } from '@/screens/05-thermal-path-builder/ThermalGraphCanvas';
 import type { ThermalNetwork } from '@/thermal/types';
 import type { ThermalSolution } from '@/thermal/solver/solverTypes';
 
@@ -52,13 +60,12 @@ export interface GraphDisplayOptions {
   showLimits: boolean;
   showBoundary: boolean;
   /** Dims everything not attached to the selection — 07 §27 "Focus Path". */
-  focusSelection: boolean;
 }
 
 export interface SolvedGraphHandle {
   fit: () => void;
   zoomBy: (delta: number) => void;
-  relayout: () => void;
+  relayout: (mode: string) => void;
   center: (elementId: string) => void;
 }
 
@@ -71,12 +78,42 @@ export interface SolvedGraphHandle {
  */
 export type SolvedCanvasTool = 'select' | 'zoom-box';
 
+/**
+ * What a layout is allowed to move: the real graph, never the bus.
+ *
+ * The bar, its junctions and its annotations are a picture OF the positions
+ * dagre produces. Handing them to dagre as though they were nodes would have it
+ * solve for their placement too, and the bar would end up in a rank of its own.
+ */
+function layoutSubject(cy: Core) {
+  return cy.elements().filter((element) => {
+    if (element.isNode()) return !element.hasClass('view-only');
+    return (
+      element.hasClass('layout-only') ||
+      (!element.hasClass('view-only') && !element.hasClass('routed-port-edge'))
+    );
+  });
+}
+
+function edgeLabelsOf(cy: Core): string[] {
+  const labels: string[] = [];
+  layoutSubject(cy)
+    .edges()
+    .forEach((edge) => {
+      const label = edge.data('label');
+      if (typeof label === 'string' && label.trim()) labels.push(label);
+    });
+  return labels;
+}
+
 const EDGE_NEUTRAL = '#94a3b8';
 const DELTA_RAMP = ['#e0f2fe', '#7dd3fc', '#fbbf24', '#f97316', '#dc2626'] as const;
 const RTH_RAMP = ['#bbf7d0', '#86efac', '#fde68a', '#fb923c', '#ef4444'] as const;
 
 function stylesheet(): StylesheetCSS[] {
   return [
+    // The bus is the same picture as on Screen 05, so it is the same rules.
+    ...busStylesheet(),
     {
       selector: 'node',
       style: {
@@ -100,6 +137,15 @@ function stylesheet(): StylesheetCSS[] {
     { selector: 'node.over-limit', style: { 'border-color': '#dc2626', 'border-width': 3 } },
     { selector: 'node:selected', style: { 'border-color': '#1d4ed8', 'border-width': 3.5 } },
     { selector: '.dimmed', style: { opacity: 0.18 } },
+    {
+      selector: 'edge.routed-port-edge',
+      style: { 'curve-style': 'straight' },
+    },
+    {
+      // Present for Dagre's ranking only; the engineer sees the routed branch.
+      selector: 'edge.layout-only',
+      style: { visibility: 'hidden', events: 'no', label: '' },
+    },
     {
       selector: 'edge',
       style: {
@@ -141,6 +187,7 @@ function buildElements(
   mode: ResultMode,
   display: GraphDisplayOptions,
   scenarioId: string,
+  layoutMode: string,
   scales: { temperature: Scale; delta: Scale; rth: Scale; maxFlow: number },
 ): ElementDefinition[] {
   const elements: ElementDefinition[] = [];
@@ -204,6 +251,16 @@ function buildElements(
 
   const presentNodes = new Set(elements.map((element) => element.data.id as string));
 
+  // The bus: the dozen component-to-base edges collect onto one bar instead of
+  // drawing as a dozen long diagonals with their labels rotated along them.
+  const bus = solvedBusElements(network, solution, {
+    layoutMode,
+    showLabels: display.showLabels,
+    mode,
+  });
+  elements.push(...bus.elements);
+  for (const element of bus.elements) presentNodes.add(element.data.id as string);
+
   for (const edge of Object.values(network.edges)) {
     if (!presentNodes.has(edge.from) || !presentNodes.has(edge.to)) continue;
 
@@ -266,6 +323,62 @@ function buildElements(
         break;
     }
 
+    const branch = bus.routed.get(edge.id);
+    if (branch && bus.axis) {
+      // Routed through the bus: terminal → junction, and the trunk carries it
+      // the rest of the way. Two branches off one terminal are fanned apart and
+      // too close together for a label between them, so a parallel branch hands
+      // its text to an anchor beside the bar.
+      const parallel = bus.parallelEdgeIds.has(edge.id);
+      if (parallel && label) {
+        elements.push(
+          parallelBranchLabel(
+            branch,
+            label,
+            bus.axis,
+            network.layout.positions[branch.terminalId],
+            null,
+            display.showLabels,
+          ),
+        );
+      }
+      const terminalIsSource = edge.from === branch.terminalId;
+      elements.push({
+        group: 'edges',
+        data: {
+          id: edge.id,
+          source: terminalIsSource ? edge.from : branch.junctionId,
+          target: terminalIsSource ? branch.junctionId : edge.to,
+          label: parallel ? '' : label,
+          color,
+          width,
+          srcArrow: reverse ? 'triangle' : 'none',
+          tgtArrow: reverse ? 'none' : 'triangle',
+          lineStyle: !enabled ? 'dotted' : R == null && solved ? 'dashed' : 'solid',
+        },
+        classes: 'routed-port-edge',
+      });
+      // Dagre never sees the routed branch, so without this the base has no
+      // edge tying it to the components at all: it drops out of their ranking
+      // and every chain lays itself out as though it were a graph of its own.
+      // Invisible, and excluded from the picture the engineer reads.
+      elements.push({
+        group: 'edges',
+        data: {
+          id: `${branch.junctionId}_LAYOUT`,
+          source: edge.from,
+          target: edge.to,
+          color: '#000000',
+          width: 1,
+          label: '',
+          lineStyle: 'solid',
+        },
+        classes: 'layout-only',
+        selectable: false,
+      });
+      continue;
+    }
+
     elements.push({
       group: 'edges',
       data: {
@@ -297,6 +410,7 @@ export const SolvedGraphCanvas = forwardRef<
     selectedNodeId: string | null;
     selectedEdgeId: string | null;
     tool: SolvedCanvasTool;
+    layoutMode: string;
     onSelectNode: (nodeId: string | null) => void;
     onSelectEdge: (edgeId: string | null) => void;
     onZoomChange: (zoom: number) => void;
@@ -311,6 +425,7 @@ export const SolvedGraphCanvas = forwardRef<
     selectedNodeId,
     selectedEdgeId,
     tool,
+    layoutMode,
     onSelectNode,
     onSelectEdge,
     onZoomChange,
@@ -342,8 +457,8 @@ export const SolvedGraphCanvas = forwardRef<
   }, [solution]);
 
   const elements = useMemo(
-    () => buildElements(network, solution, mode, display, scenarioId, scales),
-    [network, solution, mode, display, scenarioId, scales],
+    () => buildElements(network, solution, mode, display, scenarioId, layoutMode, scales),
+    [network, solution, mode, display, scenarioId, layoutMode, scales],
   );
 
   useEffect(() => {
@@ -354,10 +469,34 @@ export const SolvedGraphCanvas = forwardRef<
       style: stylesheet(),
       minZoom: 0.15,
       maxZoom: 3,
-      wheelSensitivity: 0.2,
       boxSelectionEnabled: false,
+      // Cytoscape's own wheel zoom is off so the hand-rolled one below is the
+      // only thing acting on a notch. Left on, the two stacked and a single
+      // notch moved this canvas 7.9% against Screen 05's 3.0%.
+      userZoomingEnabled: false,
     });
     cyRef.current = cy;
+
+    /**
+     * The wheel, by hand, so a notch is worth the same here as on Screens 05
+     * and 06. Cytoscape's `wheelSensitivity` scales the raw delta instead, and
+     * the raw delta depends on the mouse and the operating system — the same
+     * flick moved this canvas noticeably further than the other two.
+     */
+    const container = containerRef.current;
+    const onWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      const notches = wheelNotches(event);
+      if (notches === 0) return;
+      const bounds = container.getBoundingClientRect();
+      cy.zoom({
+        // Wheel down is a positive delta and means zoom out.
+        level: cy.zoom() * WHEEL_ZOOM_STEP ** -notches,
+        // The point under the cursor stays under the cursor.
+        renderedPosition: { x: event.clientX - bounds.left, y: event.clientY - bounds.top },
+      });
+    };
+    container.addEventListener('wheel', onWheel, { passive: false });
 
     cy.on('tap', 'node', (event) => {
       handlers.current.onSelectNode(event.target.id() as string);
@@ -390,6 +529,7 @@ export const SolvedGraphCanvas = forwardRef<
 
     return () => {
       observer.disconnect();
+      container.removeEventListener('wheel', onWheel);
       cy.destroy();
       cyRef.current = null;
     };
@@ -415,8 +555,12 @@ export const SolvedGraphCanvas = forwardRef<
     const structureChanged = signature !== signatureRef.current;
     signatureRef.current = signature;
 
+    // The bus is drawn FROM the domain positions, so it is never laid out and
+    // never counted as missing one — it is placed by `positionViewBuses` once
+    // the nodes it spans have settled.
     const missing: string[] = [];
     cy.nodes().forEach((node) => {
+      if (node.hasClass('view-only')) return;
       const known = positionsRef.current[node.id() as string];
       if (known) node.position({ ...known });
       else missing.push(node.id() as string);
@@ -425,9 +569,11 @@ export const SolvedGraphCanvas = forwardRef<
     const snapshot = () => {
       positionsRef.current = {};
       cy.nodes().forEach((node) => {
+        if (node.hasClass('view-only')) return;
         const position = node.position();
         positionsRef.current[node.id() as string] = { x: position.x, y: position.y };
       });
+      positionViewBuses(cy);
     };
 
     const refit = () => {
@@ -441,13 +587,9 @@ export const SolvedGraphCanvas = forwardRef<
     if (missing.length > 0 && cy.nodes().length > 0) {
       // Layout applies positions asynchronously; reading them before
       // `layoutstop` yields zeros and stacks the whole graph on one point.
-      const layout = cy.layout({
-        name: 'dagre',
-        rankDir: 'LR',
-        nodeSep: 30,
-        rankSep: 90,
-        animate: false,
-      } as unknown as cytoscape.LayoutOptions);
+      const layout = layoutSubject(cy).layout(
+        layoutOptions(layoutMode, edgeLabelsOf(cy)) as unknown as cytoscape.LayoutOptions,
+      );
       layout.one('layoutstop', () => {
         snapshot();
         refit();
@@ -459,7 +601,7 @@ export const SolvedGraphCanvas = forwardRef<
     snapshot();
     if (hadElements && !structureChanged) cy.viewport({ zoom, pan });
     else refit();
-  }, [elements]);
+  }, [elements, layoutMode]);
 
   // --- selection + focus ---------------------------------------------------
   useEffect(() => {
@@ -478,10 +620,7 @@ export const SolvedGraphCanvas = forwardRef<
     if (!selected || selected.length === 0) return;
     selected.select();
 
-    if (!display.focusSelection) return;
-    const neighbourhood = selected.closedNeighborhood();
-    cy.elements().difference(neighbourhood).addClass('dimmed');
-  }, [selectedNodeId, selectedEdgeId, elements, display.focusSelection]);
+  }, [selectedNodeId, selectedEdgeId, elements]);
 
   useEffect(() => {
     const cy = cyRef.current;
@@ -531,22 +670,24 @@ export const SolvedGraphCanvas = forwardRef<
         cy.zoom({ level: cy.zoom() + delta, renderedPosition: { x: 0, y: 0 } });
         cy.center();
       },
-      relayout: () => {
+      relayout: (mode) => {
         const cy = cyRef.current;
         if (!cy || cy.nodes().length === 0) return;
-        const layout = cy.layout({
-          name: 'dagre',
-          rankDir: 'LR',
-          nodeSep: 30,
-          rankSep: 90,
-          animate: false,
-        } as unknown as cytoscape.LayoutOptions);
+        // The same options Screen 05 uses, so a mode means the same thing on
+        // both — including the rank separation widening to fit the longest
+        // edge label, which is what keeps a label off the boxes either side.
+        const labels = edgeLabelsOf(cy);
+        const layout = layoutSubject(cy).layout(
+          layoutOptions(mode, labels) as unknown as cytoscape.LayoutOptions,
+        );
         layout.one('layoutstop', () => {
           positionsRef.current = {};
           cy.nodes().forEach((node) => {
+            if (node.hasClass('view-only')) return;
             const position = node.position();
             positionsRef.current[node.id() as string] = { x: position.x, y: position.y };
           });
+          positionViewBuses(cy, true);
           cy.fit(undefined, 40);
         });
         layout.run();

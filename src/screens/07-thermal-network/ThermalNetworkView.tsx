@@ -30,6 +30,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
   ArrowRight,
+  ChevronDown,
   Network,
   Play,
   RefreshCw,
@@ -167,12 +168,13 @@ export function ThermalNetworkView() {
   const [tool, setTool] = useState<SolvedCanvasTool>('select');
   const [zoom, setZoom] = useState(1);
   const [fullscreen, setFullscreen] = useState(false);
+  const [layoutMode, setLayoutMode] = useState('Auto');
+  const [legendOpen, setLegendOpen] = useState(false);
   const [display, setDisplay] = useState<GraphDisplayOptions>({
     showLabels: true,
     showPower: true,
     showLimits: false,
     showBoundary: true,
-    focusSelection: false,
   });
   const canvasRef = useRef<SolvedGraphHandle | null>(null);
 
@@ -574,13 +576,17 @@ export function ThermalNetworkView() {
               display={display}
               tool={tool}
               zoom={zoom}
+              layoutMode={layoutMode}
               fullscreen={fullscreen}
               onMode={setMode}
               onDisplay={(patch) => setDisplay((current) => ({ ...current, ...patch }))}
               onTool={setTool}
-              onFit={() => canvasRef.current?.fit()}
               onZoom={(delta) => canvasRef.current?.zoomBy(delta)}
-              onRelayout={() => canvasRef.current?.relayout()}
+              onLayoutMode={(next) => {
+                setLayoutMode(next);
+                canvasRef.current?.relayout(next);
+              }}
+              onRelayout={() => canvasRef.current?.relayout(layoutMode)}
               onToggleFullscreen={() => setFullscreen((value) => !value)}
             />
           </header>
@@ -596,17 +602,33 @@ export function ThermalNetworkView() {
               selectedNodeId={selectedNodeId}
               selectedEdgeId={selectedEdgeId}
               tool={tool}
+              layoutMode={layoutMode}
               onSelectNode={setSelectedNodeId}
               onSelectEdge={setSelectedEdgeId}
               onZoomChange={setZoom}
             />
 
-            {/* Legend — 07 §21 and §22 both require one. */}
-            <div className="absolute top-3 left-3 z-10 max-w-[13rem] rounded-md border border-line bg-surface/95 p-2 shadow-sm">
-              <p className="mb-1 text-[10px] font-bold text-ink-700">
+            {/* Legend — 07 §21 and §22 both require one.
+
+                Collapsible, and collapsed by default, as on Screen 05: it is an
+                overlay in the corner the graph starts in, so left open it sits
+                on the first two nodes. A scale you have read once does not need
+                to keep covering the picture it describes. */}
+            <div className="absolute top-3 left-3 z-10 w-[13rem] rounded-md border border-line bg-surface/95 p-2 shadow-sm">
+              <button
+                type="button"
+                onClick={() => setLegendOpen((value) => !value)}
+                aria-expanded={legendOpen}
+                title={biTitle('Legend', '圖例')}
+                className="flex w-full items-center gap-1.5 text-[10px] font-bold text-ink-700"
+              >
                 Legend <span className="font-normal text-ink-400">/ 圖例</span>
-              </p>
-              <ul className="flex flex-col gap-0.5">
+                <ChevronDown
+                  size={12}
+                  className={`ml-auto text-ink-400 ${legendOpen ? '' : '-rotate-90'}`}
+                />
+              </button>
+              <ul className={`mt-1 flex-col gap-0.5 ${legendOpen ? 'flex' : 'hidden'}`}>
                 {legend.map((entry) => (
                   <li
                     key={`${entry.color}-${entry.label}`}
