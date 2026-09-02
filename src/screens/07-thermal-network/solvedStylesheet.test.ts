@@ -37,6 +37,28 @@ describe('what the node boxes were measured against', () => {
     }
   });
 
+  /**
+   * The label has to sit BESIDE the line, not on it.
+   *
+   * Screen 07's edge labels carry an opaque white background, so that they stay
+   * readable where they cross the bus. Centred on the edge, that background
+   * then erases the stretch of line it names — and here the line's colour and
+   * thickness ARE the result, so covering it covers data. Screen 05 solved this
+   * with a perpendicular margin; Screen 07 shipped without one.
+   */
+  it('holds Screen 07 edge labels clear of the line they name', () => {
+    const sheet = solvedStylesheet();
+    for (const selector of ['edge', 'edge.routed-port-edge']) {
+      const rule = sheet.find((entry) => entry.selector === selector) as
+        | { selector: string; style: Record<string, unknown> }
+        | undefined;
+      expect(rule, `${selector} rule`).toBeDefined();
+      const margin = rule!.style['text-margin-y'] as number;
+      // Enough to clear half a 9px label in its padded box.
+      expect(Math.abs(margin), `${selector} text-margin-y`).toBeGreaterThanOrEqual(9);
+    }
+  });
+
   /** A tint is a fill colour; as a 2 px stroke on white it is not a line. */
   it('keeps every result-ramp line dark enough to see on white', () => {
     const sheet = solvedStylesheet();

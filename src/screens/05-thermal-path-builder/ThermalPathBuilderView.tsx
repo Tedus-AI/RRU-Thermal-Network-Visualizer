@@ -70,7 +70,7 @@ import {
   type NewZoneDraft,
 } from './SharedStructurePanel';
 import { GraphToolbar, type CanvasTool } from './GraphToolbar';
-import { FullscreenComponentVisibilityPanel } from './FullscreenComponentVisibilityPanel';
+import { ComponentVisibilityPanel } from '@/ui/ComponentVisibilityPanel';
 import { ThermalGraphCanvas, type CanvasHandle, type GraphSelection } from './ThermalGraphCanvas';
 import { NodeInspector } from './NodeInspector';
 import { EdgeInspector } from './EdgeInspector';
@@ -1282,7 +1282,7 @@ export function ThermalPathBuilderView() {
 
           <div className="relative min-h-0 flex-1">
             {fullscreen && componentVisibilityOpen && (
-              <FullscreenComponentVisibilityPanel
+              <ComponentVisibilityPanel
                 components={modeledComponents}
                 hiddenIds={hiddenModeledComponentIds}
                 onToggleVisible={toggleComponentVisible}

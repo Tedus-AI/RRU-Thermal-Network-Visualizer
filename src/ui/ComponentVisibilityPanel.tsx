@@ -4,24 +4,32 @@ import { useMemo, useState } from 'react';
 import { powerWOf, type Component } from '@/domain/component';
 
 /**
- * View-only component filtering for the fullscreen graph.
+ * View-only component filtering, over a graph canvas.
  *
- * The regular palette contains template and readiness controls that do not
- * belong over the enlarged canvas. This compact panel deliberately exposes
- * only the existing visibility filter and never mutates Screen 05 topology.
+ * A fully wired RRU draws fifty nodes converging on one bus, and reading one
+ * part's chain means being able to put the other nine away for a moment. This
+ * panel does that and nothing else: it never mutates topology, never touches
+ * the solver input, and never changes a KPI — Screen 07 in particular still
+ * solves and reports the whole network while a component is switched off here.
+ *
+ * `placement` exists because the two screens have different corners free.
+ * Screen 05 opens it top-left over its fullscreen canvas; Screen 07's top-left
+ * already carries the legend, so it opens bottom-left there.
  */
-export function FullscreenComponentVisibilityPanel({
+export function ComponentVisibilityPanel({
   components,
   hiddenIds,
   onToggleVisible,
   onShowAll,
   onClose,
+  placement = 'top-left',
 }: {
   components: Component[];
   hiddenIds: ReadonlySet<string>;
   onToggleVisible: (componentId: string) => void;
   onShowAll: () => void;
   onClose: () => void;
+  placement?: 'top-left' | 'bottom-left';
 }) {
   const [query, setQuery] = useState('');
   const visibleComponents = useMemo(() => {
@@ -38,7 +46,9 @@ export function FullscreenComponentVisibilityPanel({
     <section
       data-fullscreen-component-panel
       aria-label="Component Visibility / 元件顯示"
-      className="absolute top-3 left-3 z-20 flex max-h-[calc(100%-1.5rem)] w-[min(20rem,calc(100%-1.5rem))] flex-col overflow-hidden rounded-lg border border-line-strong bg-surface shadow-xl"
+      className={`absolute left-3 z-20 flex max-h-[calc(100%-1.5rem)] w-[min(20rem,calc(100%-1.5rem))] flex-col overflow-hidden rounded-lg border border-line-strong bg-surface shadow-xl ${
+        placement === 'bottom-left' ? 'bottom-3' : 'top-3'
+      }`}
     >
       <header className="flex shrink-0 items-center gap-2 border-b border-line px-3 py-2.5">
         <div className="min-w-0 flex-1">

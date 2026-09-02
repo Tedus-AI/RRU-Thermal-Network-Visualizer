@@ -69,7 +69,7 @@ import {
   type GraphSelection,
 } from '@/screens/05-thermal-path-builder/ThermalGraphCanvas';
 import type { CanvasTool } from '@/screens/05-thermal-path-builder/GraphToolbar';
-import { FullscreenComponentVisibilityPanel } from '@/screens/05-thermal-path-builder/FullscreenComponentVisibilityPanel';
+import { ComponentVisibilityPanel } from '@/ui/ComponentVisibilityPanel';
 import { BoundaryGraphToolbar } from './BoundaryGraphToolbar';
 import { BoundaryValidationOverlay } from './BoundaryValidationOverlay';
 import { projectScenarioBoundaryEdges } from '@/screens/05-thermal-path-builder/scenarioBoundaryProjection';
@@ -1036,7 +1036,7 @@ export function BoundaryConditionsView() {
           />
           <div className="relative min-h-0 flex-1">
             {componentVisibilityOpen && (
-              <FullscreenComponentVisibilityPanel
+              <ComponentVisibilityPanel
                 components={modeledComponents}
                 hiddenIds={hiddenModeledComponentIds}
                 onToggleVisible={toggleComponentVisible}
