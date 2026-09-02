@@ -167,12 +167,12 @@ export function ThermalNetworkView() {
   const [tool, setTool] = useState<SolvedCanvasTool>('select');
   const [zoom, setZoom] = useState(1);
   const [fullscreen, setFullscreen] = useState(false);
+  const [layoutMode, setLayoutMode] = useState('Auto');
   const [display, setDisplay] = useState<GraphDisplayOptions>({
     showLabels: true,
     showPower: true,
     showLimits: false,
     showBoundary: true,
-    focusSelection: false,
   });
   const canvasRef = useRef<SolvedGraphHandle | null>(null);
 
@@ -574,13 +574,17 @@ export function ThermalNetworkView() {
               display={display}
               tool={tool}
               zoom={zoom}
+              layoutMode={layoutMode}
               fullscreen={fullscreen}
               onMode={setMode}
               onDisplay={(patch) => setDisplay((current) => ({ ...current, ...patch }))}
               onTool={setTool}
-              onFit={() => canvasRef.current?.fit()}
               onZoom={(delta) => canvasRef.current?.zoomBy(delta)}
-              onRelayout={() => canvasRef.current?.relayout()}
+              onLayoutMode={(next) => {
+                setLayoutMode(next);
+                canvasRef.current?.relayout(next);
+              }}
+              onRelayout={() => canvasRef.current?.relayout(layoutMode)}
               onToggleFullscreen={() => setFullscreen((value) => !value)}
             />
           </header>

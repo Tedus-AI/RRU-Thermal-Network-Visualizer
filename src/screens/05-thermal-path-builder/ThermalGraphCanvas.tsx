@@ -24,6 +24,8 @@ import type { CanvasTool } from './GraphToolbar';
 import { canvasInteractionPolicy } from './canvasInteraction';
 import {
   marqueeRect,
+  WHEEL_ZOOM_STEP,
+  wheelNotches,
   zoomRegionViewport,
   type ViewportBox,
 } from '@/ui/graphViewport';
@@ -48,35 +50,6 @@ export interface CanvasHandle {
   positions: () => Record<string, { x: number; y: number }>;
 }
 
-/**
- * Zoom per wheel notch, as a multiplier. 1.03 is 3% a notch.
- *
- * This is the one number to change if the wheel feels too slow or too abrupt;
- * a browser's own zoom steps are nearer 1.10.
- */
-const WHEEL_ZOOM_STEP = 1.03;
-
-/**
- * One wheel notch, in notches, whatever the device reports.
- *
- * `deltaMode` is pixels on most mice, lines on some, pages on a few, and a
- * trackpad sends a stream of small pixel deltas rather than one notch — so the
- * delta is normalised to pixels first and a notch defined as 100 of them. A
- * trackpad flick then zooms smoothly instead of in jumps, and a mouse notch is
- * exactly one step.
- */
-function wheelNotches(event: WheelEvent): number {
-  const perLine = 16;
-  const perPage = 400;
-  const pixels =
-    event.deltaMode === 1
-      ? event.deltaY * perLine
-      : event.deltaMode === 2
-        ? event.deltaY * perPage
-        : event.deltaY;
-  return pixels / 100;
-}
-
 const EDGE_LABEL_FLOW_PADDING_PX = 28;
 const MAX_LABEL_AWARE_RANK_SEP_PX = 260;
 
@@ -93,7 +66,12 @@ export function labelAwareRankSep(mode: string, labels: readonly string[]): numb
   );
 }
 
-function layoutOptions(mode: string, labels: readonly string[] = []) {
+/**
+ * Screen 07's solved canvas imports this so a layout mode means the same thing
+ * on both. Two dagre configurations that drifted apart would make the same
+ * graph read differently depending on which screen the engineer was on.
+ */
+export function layoutOptions(mode: string, labels: readonly string[] = []) {
   switch (mode) {
     case 'TopBottom':
       return {

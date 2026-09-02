@@ -8,16 +8,10 @@
  * 07 §27 forbids a Bottleneck Ranking control. There is none.
  */
 
-import {
-  Crosshair,
-  LayoutGrid,
-  Maximize,
-  Maximize2,
-  Minimize2,
-  Minus,
-  Plus,
-  Scan,
-} from 'lucide-react';
+import { Maximize2, Minimize2, Minus, Plus, Scan, Workflow } from 'lucide-react';
+
+import { Select } from '@/ui/primitives';
+import { LAYOUT_MODES } from '@/screens/05-thermal-path-builder/GraphToolbar';
 
 import { biTitle } from '@/ui/FieldLabel';
 import { RESULT_MODES, type ResultMode } from './resultViewModel';
@@ -68,12 +62,13 @@ export function ResultModeToolbar({
   display,
   tool,
   zoom,
+  layoutMode,
   fullscreen,
   onMode,
   onDisplay,
   onTool,
-  onFit,
   onZoom,
+  onLayoutMode,
   onRelayout,
   onToggleFullscreen,
 }: {
@@ -82,12 +77,13 @@ export function ResultModeToolbar({
   display: GraphDisplayOptions;
   tool: SolvedCanvasTool;
   zoom: number;
+  layoutMode: string;
   fullscreen: boolean;
   onMode: (mode: ResultMode) => void;
   onDisplay: (patch: Partial<GraphDisplayOptions>) => void;
   onTool: (tool: SolvedCanvasTool) => void;
-  onFit: () => void;
   onZoom: (delta: number) => void;
+  onLayoutMode: (mode: string) => void;
   onRelayout: () => void;
   onToggleFullscreen: () => void;
 }) {
@@ -143,17 +139,21 @@ export function ResultModeToolbar({
       </div>
 
       <div className="ml-auto flex items-center gap-1">
-        <IconButton
-          label="Focus selection"
-          zh="聚焦所選路徑"
-          active={display.focusSelection}
-          onClick={() => onDisplay({ focusSelection: !display.focusSelection })}
-        >
-          <Crosshair size={13} />
+        {/* Auto Layout and its mode, as on Screen 05: the button re-runs the
+            layout, the select says which one. Both fit afterwards, which is
+            why there is no separate Fit button here. */}
+        <IconButton label="Auto Layout" zh="自動排列" onClick={onRelayout}>
+          <Workflow size={13} />
         </IconButton>
-        <IconButton label="Auto layout" zh="自動排版" onClick={onRelayout}>
-          <LayoutGrid size={13} />
-        </IconButton>
+        <div className="w-[5.75rem] shrink-0">
+          <Select
+            aria-label="Layout mode / 版面模式"
+            className="h-7 !text-[11px]"
+            value={layoutMode}
+            items={LAYOUT_MODES}
+            onChange={(event) => onLayoutMode(event.target.value)}
+          />
+        </div>
         <IconButton
           label="Zoom to Region"
           zh="框選放大"
@@ -172,9 +172,6 @@ export function ResultModeToolbar({
         </span>
         <IconButton label="Zoom in" zh="放大" onClick={() => onZoom(0.15)}>
           <Plus size={13} />
-        </IconButton>
-        <IconButton label="Fit Whole Network" zh="全網路顯示" onClick={onFit}>
-          <Maximize size={13} />
         </IconButton>
         <IconButton
           label={fullscreen ? 'Exit Fullscreen' : 'Fullscreen'}

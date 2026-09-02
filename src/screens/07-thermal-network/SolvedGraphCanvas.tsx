@@ -27,9 +27,12 @@ import dagre from 'cytoscape-dagre';
 import { GROUP_COLORS, labelBox, nodeGroup } from '@/ui/graphStyles';
 import {
   marqueeRect,
+  WHEEL_ZOOM_STEP,
+  wheelNotches,
   zoomRegionViewport,
   type ViewportBox,
 } from '@/ui/graphViewport';
+import { layoutOptions } from '@/screens/05-thermal-path-builder/ThermalGraphCanvas';
 import type { ThermalNetwork } from '@/thermal/types';
 import type { ThermalSolution } from '@/thermal/solver/solverTypes';
 
@@ -52,13 +55,12 @@ export interface GraphDisplayOptions {
   showLimits: boolean;
   showBoundary: boolean;
   /** Dims everything not attached to the selection — 07 §27 "Focus Path". */
-  focusSelection: boolean;
 }
 
 export interface SolvedGraphHandle {
   fit: () => void;
   zoomBy: (delta: number) => void;
-  relayout: () => void;
+  relayout: (mode: string) => void;
   center: (elementId: string) => void;
 }
 
@@ -354,10 +356,34 @@ export const SolvedGraphCanvas = forwardRef<
       style: stylesheet(),
       minZoom: 0.15,
       maxZoom: 3,
-      wheelSensitivity: 0.2,
       boxSelectionEnabled: false,
+      // Cytoscape's own wheel zoom is off so the hand-rolled one below is the
+      // only thing acting on a notch. Left on, the two stacked and a single
+      // notch moved this canvas 7.9% against Screen 05's 3.0%.
+      userZoomingEnabled: false,
     });
     cyRef.current = cy;
+
+    /**
+     * The wheel, by hand, so a notch is worth the same here as on Screens 05
+     * and 06. Cytoscape's `wheelSensitivity` scales the raw delta instead, and
+     * the raw delta depends on the mouse and the operating system — the same
+     * flick moved this canvas noticeably further than the other two.
+     */
+    const container = containerRef.current;
+    const onWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      const notches = wheelNotches(event);
+      if (notches === 0) return;
+      const bounds = container.getBoundingClientRect();
+      cy.zoom({
+        // Wheel down is a positive delta and means zoom out.
+        level: cy.zoom() * WHEEL_ZOOM_STEP ** -notches,
+        // The point under the cursor stays under the cursor.
+        renderedPosition: { x: event.clientX - bounds.left, y: event.clientY - bounds.top },
+      });
+    };
+    container.addEventListener('wheel', onWheel, { passive: false });
 
     cy.on('tap', 'node', (event) => {
       handlers.current.onSelectNode(event.target.id() as string);
@@ -390,6 +416,7 @@ export const SolvedGraphCanvas = forwardRef<
 
     return () => {
       observer.disconnect();
+      container.removeEventListener('wheel', onWheel);
       cy.destroy();
       cyRef.current = null;
     };
@@ -478,10 +505,7 @@ export const SolvedGraphCanvas = forwardRef<
     if (!selected || selected.length === 0) return;
     selected.select();
 
-    if (!display.focusSelection) return;
-    const neighbourhood = selected.closedNeighborhood();
-    cy.elements().difference(neighbourhood).addClass('dimmed');
-  }, [selectedNodeId, selectedEdgeId, elements, display.focusSelection]);
+  }, [selectedNodeId, selectedEdgeId, elements]);
 
   useEffect(() => {
     const cy = cyRef.current;
@@ -531,16 +555,20 @@ export const SolvedGraphCanvas = forwardRef<
         cy.zoom({ level: cy.zoom() + delta, renderedPosition: { x: 0, y: 0 } });
         cy.center();
       },
-      relayout: () => {
+      relayout: (mode) => {
         const cy = cyRef.current;
         if (!cy || cy.nodes().length === 0) return;
-        const layout = cy.layout({
-          name: 'dagre',
-          rankDir: 'LR',
-          nodeSep: 30,
-          rankSep: 90,
-          animate: false,
-        } as unknown as cytoscape.LayoutOptions);
+        // The same options Screen 05 uses, so a mode means the same thing on
+        // both — including the rank separation widening to fit the longest
+        // edge label, which is what keeps a label off the boxes either side.
+        const labels: string[] = [];
+        cy.edges().forEach((edge) => {
+          const label = edge.data('label');
+          if (typeof label === 'string' && label.trim()) labels.push(label);
+        });
+        const layout = cy.layout(
+          layoutOptions(mode, labels) as unknown as cytoscape.LayoutOptions,
+        );
         layout.one('layoutstop', () => {
           positionsRef.current = {};
           cy.nodes().forEach((node) => {

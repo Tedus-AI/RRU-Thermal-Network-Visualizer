@@ -10,6 +10,37 @@
 /** Anything smaller than this is a click that slipped, not a chosen region. */
 export const MIN_MARQUEE_PX = 12;
 
+/**
+ * Zoom per wheel notch, as a multiplier. 1.03 is 3% a notch.
+ *
+ * This is the one number to change if the wheel feels too slow or too abrupt;
+ * a browser's own zoom steps are nearer 1.10. Cytoscape's built-in
+ * `wheelSensitivity` is not equivalent — it scales the raw delta, so the step
+ * an engineer gets depends on their mouse and their OS.
+ */
+export const WHEEL_ZOOM_STEP = 1.03;
+
+/**
+ * One wheel notch, in notches, whatever the device reports.
+ *
+ * `deltaMode` is pixels on most mice, lines on some, pages on a few, and a
+ * trackpad sends a stream of small pixel deltas rather than one notch — so the
+ * delta is normalised to pixels first and a notch defined as 100 of them. A
+ * trackpad flick then zooms smoothly instead of in jumps, and a mouse notch is
+ * exactly one step.
+ */
+export function wheelNotches(event: WheelEvent): number {
+  const perLine = 16;
+  const perPage = 400;
+  const pixels =
+    event.deltaMode === 1
+      ? event.deltaY * perLine
+      : event.deltaMode === 2
+        ? event.deltaY * perPage
+        : event.deltaY;
+  return pixels / 100;
+}
+
 export interface ViewportBox {
   x1: number;
   y1: number;
