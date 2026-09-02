@@ -97,11 +97,23 @@ export function num(
 }
 
 /** Resistances span four decades, so the precision follows the magnitude. */
+/**
+ * A resistance, at three decimals.
+ *
+ * Four was one digit more than anyone reads and it cost the graph real width:
+ * `0.1945 °C/W` beside a node is a wider label than `0.194 °C/W`, and on the
+ * branches into the bus that difference is the gap between a label that fits
+ * and one that crowds the bar.
+ *
+ * Below a milli-degree per watt, three decimals would print `0.000` — a number
+ * that reads as "no resistance here" when the truth is "smaller than this shows".
+ * Those say so instead.
+ */
 export function rth(value: number | null | undefined): string {
   if (value == null || !Number.isFinite(value)) return 'N/A';
   if (value >= 100) return value.toFixed(1);
-  if (value >= 1) return value.toFixed(3);
-  return value.toFixed(4);
+  if (value > 0 && value < 0.0005) return '<0.001';
+  return value.toFixed(3);
 }
 
 export function signed(value: number | null | undefined, digits = 1, unit = ''): string {
