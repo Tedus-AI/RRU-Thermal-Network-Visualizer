@@ -46,6 +46,7 @@ import { Badge, Button, Modal, Skeleton } from '@/ui/primitives';
 import { FloatingPanel } from '@/ui/FloatingPanel';
 import { biTitle } from '@/ui/FieldLabel';
 import { ResizableSidebar } from '@/ui/ResizableSidebar';
+import { ResizablePane } from '@/ui/ResizablePane';
 import { toast } from '@/ui/toast';
 
 import { useProjectStore } from '@/data/projectStore';
@@ -616,17 +617,27 @@ export function ThermalNetworkView() {
 
       </div>
 
-      {/* Row 2 — every result in one hierarchy */}
-      <Section
-        index={3}
-        title="Results"
-        zh="求解結果"
-        className="max-h-[32rem] shrink-0"
-        bodyClassName="p-0"
-        actions={
-          <span className="text-[11px] text-ink-400">
-            {tree.length} groups · {rows.length} nodes · {flows.length} edges
-          </span>
+      {/* Row 2 — every result in one hierarchy.
+          Sized by the reader: at 32rem it took half the screen from the graph
+          it reports on, and how much of it is worth showing depends on how many
+          groups are expanded. */}
+      <ResizablePane
+        id="07.results"
+        defaultHeight={320}
+        labelEn="results"
+        labelZh="求解結果"
+        header={
+          <>
+            <span className="flex size-5 shrink-0 items-center justify-center rounded bg-accent-600 text-[11px] font-bold text-white tabular">
+              3
+            </span>
+            <h2 className="min-w-0 truncate text-[13px] font-bold text-ink-900">
+              Results <span className="font-semibold text-ink-400">/ 求解結果</span>
+            </h2>
+            <span className="ml-auto shrink-0 text-[11px] text-ink-400">
+              {tree.length} groups · {rows.length} nodes · {flows.length} edges
+            </span>
+          </>
         }
       >
         <div className="overflow-x-auto">
@@ -647,7 +658,7 @@ export function ThermalNetworkView() {
             }}
           />
         </div>
-      </Section>
+      </ResizablePane>
 
       {/* The inspector floats: it is a read-only detail view, so it should
           appear where the reader asked for it and be pushable out of the way,
