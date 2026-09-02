@@ -45,6 +45,7 @@ import { useShellActions } from '@/app/shellActions';
 import { Badge, Button, Modal, Skeleton } from '@/ui/primitives';
 import { FloatingPanel } from '@/ui/FloatingPanel';
 import { biTitle } from '@/ui/FieldLabel';
+import { ResizableSidebar } from '@/ui/ResizableSidebar';
 import { toast } from '@/ui/toast';
 
 import { useProjectStore } from '@/data/projectStore';
@@ -483,7 +484,14 @@ export function ThermalNetworkView() {
 
       {/* Row 1 — controls, solved graph, inspector */}
       <div className="flex h-[calc(100vh-27rem)] min-h-[28rem] flex-col gap-3 lg:flex-row">
-        <div className="flex w-full shrink-0 flex-col gap-3 overflow-y-auto pr-1 lg:h-full lg:w-[19rem]">
+        <ResizableSidebar
+          id="07"
+          defaultWidth={304}
+          labelEn="solver panels"
+          labelZh="求解面板"
+          shortEn="Solver"
+          shortZh="求解"
+        >
           <Section index={1} title="Solver Settings" zh="求解設定" className="shrink-0">
             <SolveControlPanel
               state={stale ? 'DIRTY' : solverState}
@@ -514,7 +522,7 @@ export function ThermalNetworkView() {
               onEditBoundary={() => navigate(projectPath(projectId, 'boundary'))}
             />
           </Section>
-        </div>
+        </ResizableSidebar>
 
         <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-line bg-surface">
           <header className="shrink-0 border-b border-line px-3.5 py-2.5">

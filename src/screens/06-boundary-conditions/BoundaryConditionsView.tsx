@@ -18,8 +18,6 @@ import {
   ArrowLeft,
   ArrowRight,
   ChevronDown,
-  ChevronLeft,
-  ChevronRight,
   CircleCheck,
   Copy,
   Save,
@@ -37,6 +35,7 @@ import { projectPath } from '@/app/navigation';
 import { useShellActions } from '@/app/shellActions';
 import { Badge, Button, Modal, Skeleton } from '@/ui/primitives';
 import { biTitle } from '@/ui/FieldLabel';
+import { ResizableSidebar } from '@/ui/ResizableSidebar';
 import { toast } from '@/ui/toast';
 
 import { useProjectStore } from '@/data/projectStore';
@@ -222,7 +221,6 @@ export function BoundaryConditionsView() {
   const [selectedPortId, setSelectedPortId] = useState<string | null>(null);
   const [preferredProfileId, setPreferredProfileId] = useState<string | null>(null);
   const [warningConfirm, setWarningConfirm] = useState<number | null>(null);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [openPanels, setOpenPanels] = useState<Record<BoundaryPanelId, boolean>>({
     surface: true,
     conditions: true,
@@ -377,7 +375,7 @@ export function BoundaryConditionsView() {
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => canvasRef.current?.fit());
     return () => window.cancelAnimationFrame(frame);
-  }, [fullscreen, sidebarCollapsed]);
+  }, [fullscreen]);
 
   const handleSave = () => {
     if (!projectId || readOnly || !set) return;
@@ -867,30 +865,15 @@ export function BoundaryConditionsView() {
           fullscreen ? 'fixed inset-0 z-30 min-h-0 bg-canvas p-3' : ''
         }`}
       >
-        {!fullscreen && sidebarCollapsed && (
-          <button
-            type="button"
-            title={biTitle('Expand boundary panels', '展開邊界條件面板')}
-            aria-label={biTitle('Expand boundary panels', '展開邊界條件面板')}
-            onClick={() => setSidebarCollapsed(false)}
-            className="hidden min-h-24 shrink-0 items-start justify-center rounded-lg border border-line bg-surface pt-3 text-ink-500 hover:text-accent-600 lg:flex lg:w-10"
+        {!fullscreen && (
+          <ResizableSidebar
+            id="06"
+            defaultWidth={469}
+            labelEn="boundary panels"
+            labelZh="邊界條件面板"
+            shortEn="Boundary"
+            shortZh="邊界"
           >
-            <ChevronRight size={16} />
-          </button>
-        )}
-
-        {!fullscreen && !sidebarCollapsed && (
-          <aside className="relative flex w-full shrink-0 flex-col gap-2 overflow-y-auto pr-1 lg:w-[29.333rem]">
-            <button
-              type="button"
-              title={biTitle('Collapse boundary panels', '向左收合邊界條件面板')}
-              aria-label={biTitle('Collapse boundary panels', '向左收合邊界條件面板')}
-              onClick={() => setSidebarCollapsed(true)}
-              className="absolute top-2 right-3 z-10 hidden size-6 items-center justify-center rounded-full border border-line bg-surface text-ink-400 shadow-sm hover:text-accent-600 lg:flex"
-            >
-              <ChevronLeft size={13} />
-            </button>
-
             <SidebarSection
               id="boundary-panel-surface"
               index={1}
@@ -1020,7 +1003,7 @@ export function BoundaryConditionsView() {
                 onRemove={removeProfile}
               />
             </SidebarSection>
-          </aside>
+          </ResizableSidebar>
         )}
 
         <section

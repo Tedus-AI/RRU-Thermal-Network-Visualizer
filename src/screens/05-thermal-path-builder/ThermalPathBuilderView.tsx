@@ -15,8 +15,6 @@ import {
   ArrowLeft,
   ArrowRight,
   Boxes,
-  ChevronLeft,
-  ChevronRight,
   ChevronDown,
   CircleCheck,
   CircleSlash,
@@ -32,6 +30,7 @@ import { ScreenWorkspace } from '@/app/ScreenWorkspace';
 import { projectPath } from '@/app/navigation';
 import { useShellActions } from '@/app/shellActions';
 import { Badge, Button, Modal, Select, Skeleton, TextInput } from '@/ui/primitives';
+import { ResizableSidebar } from '@/ui/ResizableSidebar';
 import { FieldLabel } from '@/ui/FieldLabel';
 import { FloatingPanel } from '@/ui/FloatingPanel';
 import { toast } from '@/ui/toast';
@@ -275,7 +274,6 @@ export function ThermalPathBuilderView() {
   const [zoom, setZoom] = useState(1);
   const [showPorts, setShowPorts] = useState(true);
   const [showLabels, setShowLabels] = useState(true);
-  const [paletteCollapsed, setPaletteCollapsed] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const [componentVisibilityOpen, setComponentVisibilityOpen] = useState(false);
   /**
@@ -1143,29 +1141,15 @@ export function ThermalPathBuilderView() {
       >
         {/* The palettes scroll inside their own column so the canvas keeps a
             stable viewport — a graph editor cannot live in a page that scrolls. */}
-        {!fullscreen && paletteCollapsed && (
-          <button
-            type="button"
-            onClick={() => setPaletteCollapsed(false)}
-            aria-label="Expand component tools / 展開元件工具"
-            title="Expand component tools / 展開元件工具"
-            className="flex h-9 w-full shrink-0 items-center justify-center gap-1 rounded-lg border border-line bg-surface text-[11px] font-semibold text-ink-500 hover:border-ink-400 hover:text-ink-900 lg:h-full lg:w-10 lg:flex-col"
+        {!fullscreen && (
+          <ResizableSidebar
+            id="05"
+            defaultWidth={304}
+            labelEn="component tools"
+            labelZh="元件工具"
+            shortEn="Tools"
+            shortZh="工具"
           >
-            <ChevronRight size={15} />
-            <span className="hidden [writing-mode:vertical-rl] lg:block">Tools / 工具</span>
-          </button>
-        )}
-        {!fullscreen && !paletteCollapsed && (
-          <div className="relative flex w-full shrink-0 flex-col gap-3 overflow-y-auto pr-1 lg:h-full lg:w-[19rem]">
-            <button
-              type="button"
-              onClick={() => setPaletteCollapsed(true)}
-              aria-label="Collapse component tools / 收合元件工具"
-              title="Collapse component tools / 收合元件工具"
-              className="absolute top-2 right-9 z-10 flex size-6 items-center justify-center rounded-full border border-line-strong bg-surface text-ink-500 shadow-sm hover:border-ink-400 hover:text-ink-900"
-            >
-              <ChevronLeft size={14} />
-            </button>
             <Collapsible
               title="Components"
               zh="元件"
@@ -1252,7 +1236,7 @@ export function ThermalPathBuilderView() {
                 Start Blank
               </Button>
             </div>
-          </div>
+          </ResizableSidebar>
         )}
 
         <div
