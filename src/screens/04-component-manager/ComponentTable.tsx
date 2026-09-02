@@ -38,8 +38,20 @@ const STATUS_META: Record<
   DISABLED: { label: 'Disabled', zh: '停用', icon: CircleSlash, className: 'text-ink-400' },
 };
 
-const CELL =
-  'tabular h-7 w-full rounded border border-transparent bg-transparent px-1.5 text-[12px] hover:border-line-strong focus:border-accent-500 focus:bg-surface focus:outline-none disabled:hover:border-transparent';
+const CELL_BASE =
+  'tabular h-7 w-full rounded border border-transparent bg-transparent text-[12px] hover:border-line-strong focus:border-accent-500 focus:bg-surface focus:outline-none disabled:hover:border-transparent';
+
+/**
+ * A number editor: centred, and without the spin-button gutter that would
+ * otherwise pull the value 8px off the column's centre line.
+ */
+export const NUMBER_CELL = `${CELL_BASE} px-1.5 cell-number text-center`;
+
+/**
+ * A dropdown: centred for real. `.cell-select` supplies the arrow and the
+ * symmetric padding, so it must not be given `px-*` as well.
+ */
+export const SELECT_CELL = `${CELL_BASE} cell-select text-center`;
 
 /**
  * The columns, in render order, with the width each starts at.
@@ -76,7 +88,10 @@ const COLUMNS: ReadonlyArray<{
   { id: 'limit', label: 'Limit', unit: '°C', zh: ZH.Limit, tooltip: 'Limit', width: 80 },
   { id: 'rjc', label: 'Rjc', unit: '°C/W', zh: ZH.Rjc, tooltip: 'Rjc', width: 84 },
   { id: 'package', label: 'Package', zh: ZH.Package, tooltip: 'Package', width: 150 },
-  { id: 'heat_path', label: 'Heat Path', zh: ZH['Heat Path'], tooltip: 'Heat Path', width: 140 },
+  // Wide enough for the two nine-character path labels plus the arrow well on
+  // either side. The sixteen-character one fits no sane column, so that one is
+  // read from the hover title or the open dropdown.
+  { id: 'heat_path', label: 'Heat Path', zh: ZH['Heat Path'], tooltip: 'Heat Path', width: 172 },
   { id: 'tim', label: 'TIM', zh: ZH.TIM, tooltip: 'TIM', width: 110 },
   {
     id: 'thermal_profile',
@@ -216,7 +231,7 @@ export function ComponentTable({
                 <td className="px-2 py-1.5">
                   <select
                     aria-label={`Category for ${component.name}`}
-                    className={`${CELL} w-24`}
+                    className={SELECT_CELL}
                     onClick={(event) => event.stopPropagation()}
                     value={component.category}
                     disabled={readOnly}
@@ -250,7 +265,7 @@ export function ComponentTable({
                     type="number"
                     aria-label={`Qty for ${component.name}`}
                     onClick={(event) => event.stopPropagation()}
-                    className={`${CELL} w-full text-center`}
+                    className={NUMBER_CELL}
                     value={component.qty}
                     disabled={readOnly}
                     onChange={(event) =>
@@ -264,7 +279,7 @@ export function ComponentTable({
                     step="0.01"
                     aria-label={`Power for ${component.name}`}
                     onClick={(event) => event.stopPropagation()}
-                    className={`${CELL} w-full text-center`}
+                    className={NUMBER_CELL}
                     value={component.power_W.value ?? ''}
                     placeholder="—"
                     disabled={readOnly}
@@ -291,7 +306,7 @@ export function ComponentTable({
                     aria-label={`Limit type for ${component.name}`}
                     onClick={(event) => event.stopPropagation()}
                     // Amber while the type is still this tool's guess.
-                    className={`${CELL} w-24 ${spec.limit_type_confirmed ? '' : 'text-warn-600'}`}
+                    className={`${SELECT_CELL} ${spec.limit_type_confirmed ? '' : 'text-warn-600'}`}
                     title={
                       spec.limit_type_confirmed
                         ? undefined
@@ -323,7 +338,7 @@ export function ComponentTable({
                     type="number"
                     aria-label={`Limit for ${component.name}`}
                     onClick={(event) => event.stopPropagation()}
-                    className={`${CELL} w-full text-center`}
+                    className={NUMBER_CELL}
                     value={spec.limit_C?.value ?? ''}
                     placeholder="—"
                     disabled={readOnly}
@@ -348,7 +363,7 @@ export function ComponentTable({
                     step="0.01"
                     aria-label={`Rjc for ${component.name}`}
                     onClick={(event) => event.stopPropagation()}
-                    className={`${CELL} w-full text-center`}
+                    className={NUMBER_CELL}
                     value={surfaceReferenced ? '' : (spec.r_jc_C_per_W?.value ?? '')}
                     placeholder="N/A"
                     disabled={readOnly || surfaceReferenced}
@@ -379,10 +394,12 @@ export function ComponentTable({
                     aria-label={`Heat path for ${component.name}`}
                     onClick={(event) => event.stopPropagation()}
                     // Amber while the path is still this tool's guess.
-                    className={`${CELL} w-28 ${spec.heat_path_confirmed ? '' : 'text-warn-600'}`}
+                    className={`${SELECT_CELL} ${spec.heat_path_confirmed ? '' : 'text-warn-600'}`}
+                    // The longest path label is sixteen characters wide and no
+                    // sane column fits it, so hovering spells it out.
                     title={
                       spec.heat_path_confirmed
-                        ? undefined
+                        ? HEAT_PATH_LABELS[spec.heat_path.type].zh
                         : `推定值（${spec.heat_path.type}），它決定整條熱阻鏈，請確認。`
                     }
                     value={spec.heat_path.type}
@@ -408,7 +425,7 @@ export function ComponentTable({
                   <select
                     aria-label={`TIM for ${component.name}`}
                     onClick={(event) => event.stopPropagation()}
-                    className={`${CELL} w-24`}
+                    className={SELECT_CELL}
                     value={spec.tim.tim_id ?? ''}
                     disabled={readOnly}
                     onChange={(event) =>

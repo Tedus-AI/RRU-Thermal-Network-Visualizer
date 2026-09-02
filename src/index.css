@@ -83,4 +83,41 @@
     scrollbar-width: thin;
     scrollbar-color: var(--color-line-strong) transparent;
   }
+
+  /*
+   * A centred <select> in a table column.
+   *
+   * `text-align: center` on a select centres the option text over the content
+   * box MINUS the well the browser reserves for its own arrow, so the text
+   * still lands left of the column's centre line — about 8px on a 12px font,
+   * which is plainly visible once the header above it is centred. Drawing the
+   * arrow ourselves and padding both sides by the same amount puts the text on
+   * the centre line, and gives the control the same shape on Windows as here
+   * instead of whatever arrow the platform draws.
+   */
+  .cell-select {
+    appearance: none;
+    padding-left: 18px;
+    padding-right: 18px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%2364748b' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 4.5 6 7.5 9 4.5'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 4px center;
+    background-size: 12px 12px;
+  }
+
+  /*
+   * Chromium keeps room for the spin buttons inside a number input's content
+   * box even while they are not painted, which biases a centred value the same
+   * 8px to the left and makes the column read as ragged. Arrow keys still step
+   * the value; only the tiny click targets go.
+   */
+  .cell-number {
+    appearance: textfield;
+  }
+
+  .cell-number::-webkit-inner-spin-button,
+  .cell-number::-webkit-outer-spin-button {
+    appearance: none;
+    margin: 0;
+  }
 }
