@@ -28,6 +28,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { ComponentVisibilityPanel } from '@/ui/ComponentVisibilityPanel';
+import { useRememberedFlag } from '@/ui/rememberedFlag';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -171,7 +172,10 @@ export function ThermalNetworkView() {
   const [zoom, setZoom] = useState(1);
   const [fullscreen, setFullscreen] = useState(false);
   const [layoutMode, setLayoutMode] = useState('Auto');
-  const [legendOpen, setLegendOpen] = useState(false);
+  // Collapsed until the reader says otherwise, and then remembered: it is an
+  // overlay in the corner the graph starts in, so left open it sits on the
+  // first two nodes — but re-collapsing it on every visit is its own annoyance.
+  const [legendOpen, setLegendOpen] = useRememberedFlag('07.legend', false);
   const [componentVisibilityOpen, setComponentVisibilityOpen] = useState(false);
   /**
    * Components switched off in the visibility panel. Deliberately component
