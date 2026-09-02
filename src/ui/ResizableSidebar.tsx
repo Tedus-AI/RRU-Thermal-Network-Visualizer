@@ -20,21 +20,18 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { ChevronRight } from 'lucide-react';
 
-/**
- * Deliberately OUTSIDE the `tnv.` namespace.
- *
- * `syncBuildStamp` clears every `tnv.` key when the running build changes,
- * because project data written against an older schema cannot be trusted. A
- * panel width has no schema and belongs to the person, not the project — losing
- * it on every deploy is exactly the annoyance this feature exists to remove.
- */
-const SIDEBAR_STORAGE_PREFIX = 'tnvui.sidebar.';
+import {
+  clampPanelSize,
+  PANEL_CLICK_SLOP_PX,
+  readPanelSize,
+  writePanelSize,
+} from './panelSize';
 
 /** Narrower than this and the panels inside start wrapping into unreadability. */
 export const SIDEBAR_MIN_PX = 240;
 export const SIDEBAR_MAX_PX = 760;
 /** Pointer movement under this is a click, not a drag. */
-export const SIDEBAR_CLICK_SLOP_PX = 4;
+export const SIDEBAR_CLICK_SLOP_PX = PANEL_CLICK_SLOP_PX;
 /** The panel must never eat the canvas it exists to annotate. */
 export const SIDEBAR_MAX_VIEWPORT_FRACTION = 0.6;
 
@@ -44,35 +41,21 @@ export interface SidebarState {
 }
 
 export function clampSidebarWidth(width: number, viewportWidth: number): number {
-  const ceiling = Math.max(
-    SIDEBAR_MIN_PX,
-    Math.min(SIDEBAR_MAX_PX, Math.round(viewportWidth * SIDEBAR_MAX_VIEWPORT_FRACTION)),
-  );
-  if (!Number.isFinite(width)) return SIDEBAR_MIN_PX;
-  return Math.min(Math.max(Math.round(width), SIDEBAR_MIN_PX), ceiling);
+  return clampPanelSize(width, {
+    min: SIDEBAR_MIN_PX,
+    max: SIDEBAR_MAX_PX,
+    viewport: viewportWidth,
+    fraction: SIDEBAR_MAX_VIEWPORT_FRACTION,
+  });
 }
 
 export function readSidebarState(key: string, defaultWidth: number): SidebarState {
-  try {
-    const raw = window.localStorage.getItem(key);
-    if (raw) {
-      const parsed = JSON.parse(raw) as Partial<SidebarState>;
-      if (typeof parsed.width === 'number' && Number.isFinite(parsed.width)) {
-        return { width: parsed.width, collapsed: parsed.collapsed === true };
-      }
-    }
-  } catch {
-    // A corrupt or unavailable store just means "no remembered size".
-  }
-  return { width: defaultWidth, collapsed: false };
+  const { size, collapsed } = readPanelSize(`sidebar.${key}`, defaultWidth);
+  return { width: size, collapsed };
 }
 
 function writeSidebarState(key: string, state: SidebarState): void {
-  try {
-    window.localStorage.setItem(key, JSON.stringify(state));
-  } catch {
-    // Storage being unavailable must not break the panel.
-  }
+  writePanelSize(`sidebar.${key}`, { size: state.width, collapsed: state.collapsed });
 }
 
 /** True while the layout is side-by-side, which is the only time width means anything. */
@@ -113,7 +96,7 @@ export function ResizableSidebar({
   shortZh: string;
   children: ReactNode;
 }) {
-  const storageKey = `${SIDEBAR_STORAGE_PREFIX}${id}`;
+  const storageKey = id;
   const [state, setState] = useState<SidebarState>(() => readSidebarState(storageKey, defaultWidth));
   const sideBySide = useSideBySide();
   const [dragging, setDragging] = useState(false);
@@ -146,7 +129,7 @@ export function ResizableSidebar({
     const active = gesture.current;
     if (!active) return;
     const dx = event.clientX - active.startX;
-    if (!active.moved && Math.abs(dx) < SIDEBAR_CLICK_SLOP_PX) return;
+    if (!active.moved && Math.abs(dx) < PANEL_CLICK_SLOP_PX) return;
     active.moved = true;
     setState((current) => ({
       ...current,
