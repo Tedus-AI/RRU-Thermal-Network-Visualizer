@@ -71,6 +71,7 @@ import {
 } from './SharedStructurePanel';
 import { GraphToolbar, type CanvasTool } from './GraphToolbar';
 import { ComponentVisibilityPanel } from '@/ui/ComponentVisibilityPanel';
+import { useRememberedFlag } from '@/ui/rememberedFlag';
 import { ThermalGraphCanvas, type CanvasHandle, type GraphSelection } from './ThermalGraphCanvas';
 import { NodeInspector } from './NodeInspector';
 import { EdgeInspector } from './EdgeInspector';
@@ -183,7 +184,7 @@ function LegendSwatch({ entry }: { entry: LegendEntry }) {
  * once the vocabulary is familiar.
  */
 function Legend() {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useRememberedFlag('05.legend', false);
 
   return (
     <div className="absolute top-3 left-3 z-10 w-[11.5rem] rounded-md border border-line bg-surface/95 px-3 py-2.5 shadow-sm">
