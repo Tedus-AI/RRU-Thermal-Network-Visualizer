@@ -23,6 +23,11 @@ import { cytoscapeStylesheet, edgeLabelFlowLength } from '@/ui/graphStyles';
 import type { CanvasTool } from './GraphToolbar';
 import { canvasInteractionPolicy } from './canvasInteraction';
 import {
+  marqueeRect,
+  zoomRegionViewport,
+  type ViewportBox,
+} from '@/ui/graphViewport';
+import {
   buildElements,
   busGeometry,
   parallelBusRankShift,
@@ -42,9 +47,6 @@ export interface CanvasHandle {
   /** Positions currently rendered, so the view can persist them (05 §30). */
   positions: () => Record<string, { x: number; y: number }>;
 }
-
-/** Anything smaller than this is a click that slipped, not a chosen region. */
-const MIN_MARQUEE_PX = 12;
 
 /**
  * Zoom per wheel notch, as a multiplier. 1.03 is 3% a notch.
@@ -768,43 +770,20 @@ export const ThermalGraphCanvas = forwardRef<
     }
   }, [tool, readOnly, pendingSourceRef]);
 
-  /**
-   * Zoom the viewport onto a region the engineer drew, in container pixels.
-   *
-   * Rendered pixels map to model space as `model = (rendered - pan) / zoom`, so
-   * the level that makes the region fill the viewport is whichever of the two
-   * axes runs out of room first, and the pan is then whatever puts the region's
-   * centre in the middle of the canvas.
-   */
-  const zoomToRegion = (box: { x1: number; y1: number; x2: number; y2: number }) => {
+  /** Zoom the viewport onto a region the engineer drew, in container pixels. */
+  const zoomToRegion = (box: ViewportBox) => {
     const cy = cyRef.current;
     if (!cy) return;
-    const width = Math.abs(box.x2 - box.x1);
-    const height = Math.abs(box.y2 - box.y1);
-    if (width < MIN_MARQUEE_PX || height < MIN_MARQUEE_PX) return;
-
-    const pan = cy.pan();
-    const zoom = cy.zoom();
-    const modelWidth = width / zoom;
-    const modelHeight = height / zoom;
-    const centerModel = {
-      x: (Math.min(box.x1, box.x2) + width / 2 - pan.x) / zoom,
-      y: (Math.min(box.y1, box.y2) + height / 2 - pan.y) / zoom,
-    };
-
-    const viewWidth = cy.width();
-    const viewHeight = cy.height();
-    if (viewWidth === 0 || viewHeight === 0) return;
-
-    const wanted = Math.min(viewWidth / modelWidth, viewHeight / modelHeight);
-    const next = Math.min(Math.max(wanted, cy.minZoom()), cy.maxZoom());
-    cy.viewport({
-      zoom: next,
-      pan: {
-        x: viewWidth / 2 - centerModel.x * next,
-        y: viewHeight / 2 - centerModel.y * next,
-      },
+    const next = zoomRegionViewport({
+      box,
+      current: { zoom: cy.zoom(), pan: cy.pan() },
+      viewWidth: cy.width(),
+      viewHeight: cy.height(),
+      minZoom: cy.minZoom(),
+      maxZoom: cy.maxZoom(),
     });
+    if (!next) return;
+    cy.viewport(next);
     handlers.current.onZoomChange(cy.zoom());
   };
 
@@ -855,14 +834,7 @@ export const ThermalGraphCanvas = forwardRef<
     [],
   );
 
-  const marqueeRect = marquee
-    ? {
-        left: Math.min(marquee.x1, marquee.x2),
-        top: Math.min(marquee.y1, marquee.y2),
-        width: Math.abs(marquee.x2 - marquee.x1),
-        height: Math.abs(marquee.y2 - marquee.y1),
-      }
-    : null;
+  const rect = marqueeRect(marquee);
 
   return (
     <div className="relative size-full">
@@ -908,11 +880,11 @@ export const ThermalGraphCanvas = forwardRef<
             setMarquee(null);
           }}
         >
-          {marqueeRect && (
+          {rect && (
             <div
               aria-hidden
               className="absolute border-2 border-accent-600 bg-accent-500/15"
-              style={marqueeRect}
+              style={rect}
             />
           )}
         </div>

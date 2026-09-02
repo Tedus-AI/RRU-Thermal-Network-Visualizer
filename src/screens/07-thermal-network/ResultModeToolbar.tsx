@@ -8,11 +8,20 @@
  * 07 §27 forbids a Bottleneck Ranking control. There is none.
  */
 
-import { Crosshair, LayoutGrid, Maximize, Minus, Plus } from 'lucide-react';
+import {
+  Crosshair,
+  LayoutGrid,
+  Maximize,
+  Maximize2,
+  Minimize2,
+  Minus,
+  Plus,
+  Scan,
+} from 'lucide-react';
 
 import { biTitle } from '@/ui/FieldLabel';
 import { RESULT_MODES, type ResultMode } from './resultViewModel';
-import type { GraphDisplayOptions } from './SolvedGraphCanvas';
+import type { GraphDisplayOptions, SolvedCanvasTool } from './SolvedGraphCanvas';
 import { T07 } from './tooltips';
 
 function IconButton({
@@ -57,20 +66,30 @@ export function ResultModeToolbar({
   mode,
   hasResult,
   display,
+  tool,
+  zoom,
+  fullscreen,
   onMode,
   onDisplay,
+  onTool,
   onFit,
   onZoom,
   onRelayout,
+  onToggleFullscreen,
 }: {
   mode: ResultMode;
   hasResult: boolean;
   display: GraphDisplayOptions;
+  tool: SolvedCanvasTool;
+  zoom: number;
+  fullscreen: boolean;
   onMode: (mode: ResultMode) => void;
   onDisplay: (patch: Partial<GraphDisplayOptions>) => void;
+  onTool: (tool: SolvedCanvasTool) => void;
   onFit: () => void;
   onZoom: (delta: number) => void;
   onRelayout: () => void;
+  onToggleFullscreen: () => void;
 }) {
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
@@ -135,14 +154,35 @@ export function ResultModeToolbar({
         <IconButton label="Auto layout" zh="自動排版" onClick={onRelayout}>
           <LayoutGrid size={13} />
         </IconButton>
+        <IconButton
+          label="Zoom to Region"
+          zh="框選放大"
+          active={tool === 'zoom-box'}
+          onClick={() => onTool(tool === 'zoom-box' ? 'select' : 'zoom-box')}
+        >
+          <Scan size={13} />
+        </IconButton>
         <IconButton label="Zoom out" zh="縮小" onClick={() => onZoom(-0.15)}>
           <Minus size={13} />
         </IconButton>
+        {/* The level itself, so "why does this look wrong" has an answer that
+            is not a guess. Same readout as Screens 05 and 06. */}
+        <span className="w-10 text-center text-[11px] font-semibold tabular text-ink-700">
+          {Math.round(zoom * 100)}%
+        </span>
         <IconButton label="Zoom in" zh="放大" onClick={() => onZoom(0.15)}>
           <Plus size={13} />
         </IconButton>
-        <IconButton label="Fit graph" zh="全覽" onClick={onFit}>
+        <IconButton label="Fit Whole Network" zh="全網路顯示" onClick={onFit}>
           <Maximize size={13} />
+        </IconButton>
+        <IconButton
+          label={fullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
+          zh={fullscreen ? '離開全螢幕' : '全螢幕檢視'}
+          active={fullscreen}
+          onClick={onToggleFullscreen}
+        >
+          {fullscreen ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
         </IconButton>
       </div>
     </div>

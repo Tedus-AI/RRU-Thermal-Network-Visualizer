@@ -68,6 +68,7 @@ import {
   SolvedGraphCanvas,
   legendFor,
   type GraphDisplayOptions,
+  type SolvedCanvasTool,
   type SolvedGraphHandle,
 } from './SolvedGraphCanvas';
 import { EnergyBalancePanel } from './EnergyBalancePanel';
@@ -163,6 +164,9 @@ export function ThermalNetworkView() {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [confirmReset, setConfirmReset] = useState(false);
+  const [tool, setTool] = useState<SolvedCanvasTool>('select');
+  const [zoom, setZoom] = useState(1);
+  const [fullscreen, setFullscreen] = useState(false);
   const [display, setDisplay] = useState<GraphDisplayOptions>({
     showLabels: true,
     showPower: true,
@@ -244,6 +248,21 @@ export function ThermalNetworkView() {
   const canSolve = checks ? checks.can_solve : true;
 
   // --- actions -------------------------------------------------------------
+
+  useEffect(() => {
+    if (!fullscreen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setFullscreen(false);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [fullscreen]);
+
+  // The canvas measures itself off its container, which just changed size.
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => canvasRef.current?.fit());
+    return () => window.cancelAnimationFrame(frame);
+  }, [fullscreen]);
 
   const handleSave = () => {
     if (!projectId || readOnly) return;
@@ -484,7 +503,12 @@ export function ThermalNetworkView() {
       )}
 
       {/* Row 1 — controls, solved graph, inspector */}
-      <div className="flex h-[calc(100vh-27rem)] min-h-[28rem] flex-col gap-3 lg:flex-row">
+      <div
+        className={`flex h-[calc(100vh-27rem)] min-h-[28rem] flex-col gap-3 lg:flex-row ${
+          fullscreen ? 'fixed inset-0 z-30 h-auto min-h-0 bg-canvas p-3' : ''
+        }`}
+      >
+        {!fullscreen && (
         <ResizableSidebar
           id="07"
           defaultWidth={304}
@@ -524,8 +548,13 @@ export function ThermalNetworkView() {
             />
           </Section>
         </ResizableSidebar>
+        )}
 
-        <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-line bg-surface">
+        <section
+          className={`flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden border border-line bg-surface ${
+            fullscreen ? 'rounded-none' : 'rounded-lg'
+          }`}
+        >
           <header className="shrink-0 border-b border-line px-3.5 py-2.5">
             <div className="mb-2 flex items-center gap-2">
               <h2 className="text-[13px] font-bold text-ink-900">
@@ -543,11 +572,16 @@ export function ThermalNetworkView() {
               mode={mode}
               hasResult={hasResult}
               display={display}
+              tool={tool}
+              zoom={zoom}
+              fullscreen={fullscreen}
               onMode={setMode}
               onDisplay={(patch) => setDisplay((current) => ({ ...current, ...patch }))}
+              onTool={setTool}
               onFit={() => canvasRef.current?.fit()}
               onZoom={(delta) => canvasRef.current?.zoomBy(delta)}
               onRelayout={() => canvasRef.current?.relayout()}
+              onToggleFullscreen={() => setFullscreen((value) => !value)}
             />
           </header>
 
@@ -561,8 +595,10 @@ export function ThermalNetworkView() {
               scenarioId={activeScenarioId ?? ''}
               selectedNodeId={selectedNodeId}
               selectedEdgeId={selectedEdgeId}
+              tool={tool}
               onSelectNode={setSelectedNodeId}
               onSelectEdge={setSelectedEdgeId}
+              onZoomChange={setZoom}
             />
 
             {/* Legend — 07 §21 and §22 both require one. */}

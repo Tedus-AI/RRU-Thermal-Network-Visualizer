@@ -13,11 +13,23 @@
  * a fit that waits until the container really has a size.
  */
 
-import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef } from 'react';
+import {
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import cytoscape, { type Core, type ElementDefinition, type StylesheetCSS } from 'cytoscape';
 import dagre from 'cytoscape-dagre';
 
 import { GROUP_COLORS, labelBox, nodeGroup } from '@/ui/graphStyles';
+import {
+  marqueeRect,
+  zoomRegionViewport,
+  type ViewportBox,
+} from '@/ui/graphViewport';
 import type { ThermalNetwork } from '@/thermal/types';
 import type { ThermalSolution } from '@/thermal/solver/solverTypes';
 
@@ -49,6 +61,15 @@ export interface SolvedGraphHandle {
   relayout: () => void;
   center: (elementId: string) => void;
 }
+
+/**
+ * What the pointer does on this canvas.
+ *
+ * Screen 05's canvas carries a longer list because it edits topology; here
+ * nothing is editable, so the only choice is between panning the view and
+ * dragging out a region to zoom into.
+ */
+export type SolvedCanvasTool = 'select' | 'zoom-box';
 
 const EDGE_NEUTRAL = '#94a3b8';
 const DELTA_RAMP = ['#e0f2fe', '#7dd3fc', '#fbbf24', '#f97316', '#dc2626'] as const;
@@ -275,8 +296,10 @@ export const SolvedGraphCanvas = forwardRef<
     scenarioId: string;
     selectedNodeId: string | null;
     selectedEdgeId: string | null;
+    tool: SolvedCanvasTool;
     onSelectNode: (nodeId: string | null) => void;
     onSelectEdge: (edgeId: string | null) => void;
+    onZoomChange: (zoom: number) => void;
   }
 >(function SolvedGraphCanvas(
   {
@@ -287,8 +310,10 @@ export const SolvedGraphCanvas = forwardRef<
     scenarioId,
     selectedNodeId,
     selectedEdgeId,
+    tool,
     onSelectNode,
     onSelectEdge,
+    onZoomChange,
   },
   ref,
 ) {
@@ -298,8 +323,12 @@ export const SolvedGraphCanvas = forwardRef<
   const positionsRef = useRef<Record<string, { x: number; y: number }>>({});
   const signatureRef = useRef('');
 
-  const handlers = useRef({ onSelectNode, onSelectEdge });
-  handlers.current = { onSelectNode, onSelectEdge };
+  // Marquee zoom, in container pixels. `null` while no drag is in progress.
+  const [marquee, setMarquee] = useState<ViewportBox | null>(null);
+  const marqueeStart = useRef<{ x: number; y: number } | null>(null);
+
+  const handlers = useRef({ onSelectNode, onSelectEdge, onZoomChange });
+  handlers.current = { onSelectNode, onSelectEdge, onZoomChange };
 
   const scales = useMemo(() => {
     const temperatures = Object.values(solution?.node_temperatures_C ?? {});
@@ -343,6 +372,10 @@ export const SolvedGraphCanvas = forwardRef<
       handlers.current.onSelectNode(null);
       handlers.current.onSelectEdge(null);
     });
+
+    // The toolbar shows the zoom level, so every route that changes it — the
+    // wheel included — has to report, not just the buttons.
+    cy.on('zoom', () => handlers.current.onZoomChange(cy.zoom()));
 
     const observer = new ResizeObserver((entries) => {
       const rect = entries[0]?.contentRect;
@@ -450,10 +483,48 @@ export const SolvedGraphCanvas = forwardRef<
     cy.elements().difference(neighbourhood).addClass('dimmed');
   }, [selectedNodeId, selectedEdgeId, elements, display.focusSelection]);
 
+  useEffect(() => {
+    const cy = cyRef.current;
+    if (!cy) return;
+    // While a region is being drawn the overlay owns the pointer, so panning
+    // would fight it. Leaving the tool also drops any half-drawn rectangle.
+    cy.userPanningEnabled(tool !== 'zoom-box');
+    if (tool !== 'zoom-box') {
+      marqueeStart.current = null;
+      setMarquee(null);
+    }
+  }, [tool]);
+
+  /** Zoom the viewport onto a region the engineer drew, in container pixels. */
+  const zoomToRegion = (box: ViewportBox) => {
+    const cy = cyRef.current;
+    if (!cy) return;
+    const next = zoomRegionViewport({
+      box,
+      current: { zoom: cy.zoom(), pan: cy.pan() },
+      viewWidth: cy.width(),
+      viewHeight: cy.height(),
+      minZoom: cy.minZoom(),
+      maxZoom: cy.maxZoom(),
+    });
+    if (!next) return;
+    cy.viewport(next);
+    handlers.current.onZoomChange(cy.zoom());
+  };
+
   useImperativeHandle(
     ref,
     (): SolvedGraphHandle => ({
-      fit: () => cyRef.current?.fit(undefined, 40),
+      // `resize` first: a caller fitting right after the container changed size
+      // — the fullscreen toggle — would otherwise fit to the old dimensions,
+      // because Cytoscape caches them until it is told to re-measure.
+      fit: () => {
+        const cy = cyRef.current;
+        if (!cy) return;
+        cy.resize();
+        cy.fit(undefined, 40);
+        handlers.current.onZoomChange(cy.zoom());
+      },
       zoomBy: (delta) => {
         const cy = cyRef.current;
         if (!cy) return;
@@ -491,7 +562,63 @@ export const SolvedGraphCanvas = forwardRef<
     [],
   );
 
-  return <div ref={containerRef} className="size-full" data-testid="solved-graph-canvas" />;
+  const rect = marqueeRect(marquee);
+
+  return (
+    <div className="relative size-full">
+      <div ref={containerRef} className="size-full" data-testid="solved-graph-canvas" />
+      {tool === 'zoom-box' && (
+        <div
+          data-testid="solved-zoom-marquee-layer"
+          className="absolute inset-0 z-10 cursor-crosshair"
+          onPointerDown={(event) => {
+            const bounds = event.currentTarget.getBoundingClientRect();
+            const point = { x: event.clientX - bounds.left, y: event.clientY - bounds.top };
+            marqueeStart.current = point;
+            setMarquee({ x1: point.x, y1: point.y, x2: point.x, y2: point.y });
+            event.currentTarget.setPointerCapture(event.pointerId);
+          }}
+          onPointerMove={(event) => {
+            const start = marqueeStart.current;
+            if (!start) return;
+            const bounds = event.currentTarget.getBoundingClientRect();
+            setMarquee({
+              x1: start.x,
+              y1: start.y,
+              x2: event.clientX - bounds.left,
+              y2: event.clientY - bounds.top,
+            });
+          }}
+          onPointerUp={(event) => {
+            const start = marqueeStart.current;
+            marqueeStart.current = null;
+            const bounds = event.currentTarget.getBoundingClientRect();
+            if (start) {
+              zoomToRegion({
+                x1: start.x,
+                y1: start.y,
+                x2: event.clientX - bounds.left,
+                y2: event.clientY - bounds.top,
+              });
+            }
+            setMarquee(null);
+          }}
+          onPointerCancel={() => {
+            marqueeStart.current = null;
+            setMarquee(null);
+          }}
+        >
+          {rect && (
+            <div
+              aria-hidden
+              className="absolute border-2 border-accent-600 bg-accent-500/15"
+              style={rect}
+            />
+          )}
+        </div>
+      )}
+    </div>
+  );
 });
 
 /** Legend rows for the active mode — 07 §21, §22 both require one. */
