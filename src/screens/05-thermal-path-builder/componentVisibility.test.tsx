@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { createComponent, type Component } from '@/domain/component';
 
-import { FullscreenComponentVisibilityPanel } from './FullscreenComponentVisibilityPanel';
+import { ComponentVisibilityPanel } from '@/ui/ComponentVisibilityPanel';
 import { GraphToolbar } from './GraphToolbar';
 
 function component(id: string, name: string): Component {
@@ -72,7 +72,7 @@ describe('fullscreen component visibility controls', () => {
     const before = JSON.stringify(components);
 
     const html = renderToStaticMarkup(
-      <FullscreenComponentVisibilityPanel
+      <ComponentVisibilityPanel
         components={components}
         hiddenIds={hiddenIds}
         onToggleVisible={vi.fn()}

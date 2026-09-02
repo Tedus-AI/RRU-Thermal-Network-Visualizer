@@ -8,7 +8,7 @@
  * 07 §27 forbids a Bottleneck Ranking control. There is none.
  */
 
-import { Maximize2, Minimize2, Minus, Plus, Scan, Workflow } from 'lucide-react';
+import { Eye, Maximize2, Minimize2, Minus, Plus, Scan, Workflow } from 'lucide-react';
 
 import { Select } from '@/ui/primitives';
 import { LAYOUT_MODES } from '@/screens/05-thermal-path-builder/GraphToolbar';
@@ -22,12 +22,15 @@ function IconButton({
   label,
   zh,
   active,
+  badge,
   onClick,
   children,
 }: {
   label: string;
   zh: string;
   active?: boolean;
+  /** A count worth seeing without opening the control — as on Screen 05. */
+  badge?: number;
   onClick: () => void;
   children: React.ReactNode;
 }) {
@@ -38,13 +41,18 @@ function IconButton({
       aria-label={biTitle(label, zh)}
       aria-pressed={active}
       onClick={onClick}
-      className={`flex size-7 items-center justify-center rounded border text-ink-500 transition-colors ${
+      className={`relative flex size-7 items-center justify-center rounded border text-ink-500 transition-colors ${
         active
           ? 'border-accent-600 bg-accent-100 text-accent-700'
           : 'border-line-strong hover:bg-surface-muted'
       }`}
     >
       {children}
+      {badge != null && badge > 0 && (
+        <span className="absolute -top-1 -right-1 min-w-4 rounded-full bg-accent-600 px-1 text-center text-[9px] leading-4 font-bold text-white shadow-sm">
+          {badge > 99 ? '99+' : badge}
+        </span>
+      )}
     </button>
   );
 }
@@ -64,6 +72,9 @@ export function ResultModeToolbar({
   zoom,
   layoutMode,
   fullscreen,
+  componentVisibilityOpen,
+  hiddenComponentCount,
+  onToggleComponentVisibility,
   onMode,
   onDisplay,
   onTool,
@@ -79,6 +90,9 @@ export function ResultModeToolbar({
   zoom: number;
   layoutMode: string;
   fullscreen: boolean;
+  componentVisibilityOpen: boolean;
+  hiddenComponentCount: number;
+  onToggleComponentVisibility: () => void;
   onMode: (mode: ResultMode) => void;
   onDisplay: (patch: Partial<GraphDisplayOptions>) => void;
   onTool: (tool: SolvedCanvasTool) => void;
@@ -172,6 +186,18 @@ export function ResultModeToolbar({
         </span>
         <IconButton label="Zoom in" zh="放大" onClick={() => onZoom(0.15)}>
           <Plus size={13} />
+        </IconButton>
+        {/* Reading one part's chain means being able to put the other nine
+            away for a moment — the same filter Screens 05 and 06 offer, and
+            the badge says how many are currently away. */}
+        <IconButton
+          label="Component Visibility"
+          zh="元件顯示"
+          active={componentVisibilityOpen}
+          badge={hiddenComponentCount}
+          onClick={onToggleComponentVisibility}
+        >
+          <Eye size={13} />
         </IconButton>
         <IconButton
           label={fullscreen ? 'Exit Fullscreen' : 'Fullscreen'}

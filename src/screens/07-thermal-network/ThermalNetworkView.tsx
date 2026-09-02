@@ -25,7 +25,9 @@
  *      §31 put them.
  */
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+
+import { ComponentVisibilityPanel } from '@/ui/ComponentVisibilityPanel';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -170,6 +172,24 @@ export function ThermalNetworkView() {
   const [fullscreen, setFullscreen] = useState(false);
   const [layoutMode, setLayoutMode] = useState('Auto');
   const [legendOpen, setLegendOpen] = useState(false);
+  const [componentVisibilityOpen, setComponentVisibilityOpen] = useState(false);
+  /**
+   * Components switched off in the visibility panel. Deliberately component
+   * state and not persisted, as on Screen 05: it is a way of reading a crowded
+   * graph, not a property of the project, and a filter that survived a reload
+   * would eventually be mistaken for a missing component. Nothing here reaches
+   * the solver, the KPIs or the result tree — the solution stays whole.
+   */
+  const [hiddenComponentIds, setHiddenComponentIds] = useState<ReadonlySet<string>>(
+    () => new Set<string>(),
+  );
+  const toggleComponentVisible = useCallback((componentId: string) => {
+    setHiddenComponentIds((current) => {
+      const next = new Set(current);
+      if (!next.delete(componentId)) next.add(componentId);
+      return next;
+    });
+  }, []);
   const [display, setDisplay] = useState<GraphDisplayOptions>({
     showLabels: true,
     showPower: true,
@@ -223,6 +243,21 @@ export function ThermalNetworkView() {
     else if (hasResult && mode === 'node_type' && solution) setMode('temperature');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasResult]);
+
+  // Only components this network actually models can be filtered — the panel
+  // must not offer to hide something that was never drawn.
+  const modeledIds = useMemo(
+    () => new Set(Object.keys(network?.templates ?? {})),
+    [network?.templates],
+  );
+  const modeledComponents = useMemo(
+    () => components.filter((component) => modeledIds.has(component.id)),
+    [components, modeledIds],
+  );
+  const hiddenModeledComponentIds = useMemo(
+    () => new Set([...hiddenComponentIds].filter((id) => modeledIds.has(id))),
+    [hiddenComponentIds, modeledIds],
+  );
 
   const settings: SolverSettings = network?.solver_settings ?? DEFAULT_SOLVER_SETTINGS;
   const powerScale = scenario?.power_scale ?? 1;
@@ -578,6 +613,9 @@ export function ThermalNetworkView() {
               zoom={zoom}
               layoutMode={layoutMode}
               fullscreen={fullscreen}
+              componentVisibilityOpen={componentVisibilityOpen}
+              hiddenComponentCount={hiddenModeledComponentIds.size}
+              onToggleComponentVisibility={() => setComponentVisibilityOpen((value) => !value)}
               onMode={setMode}
               onDisplay={(patch) => setDisplay((current) => ({ ...current, ...patch }))}
               onTool={setTool}
@@ -603,10 +641,24 @@ export function ThermalNetworkView() {
               selectedEdgeId={selectedEdgeId}
               tool={tool}
               layoutMode={layoutMode}
+              hiddenComponentIds={hiddenComponentIds}
               onSelectNode={setSelectedNodeId}
               onSelectEdge={setSelectedEdgeId}
               onZoomChange={setZoom}
             />
+
+            {/* Bottom-left, because the legend already holds the top-left
+                corner and the two must never stack on one another. */}
+            {componentVisibilityOpen && (
+              <ComponentVisibilityPanel
+                components={modeledComponents}
+                hiddenIds={hiddenModeledComponentIds}
+                onToggleVisible={toggleComponentVisible}
+                onShowAll={() => setHiddenComponentIds(new Set())}
+                onClose={() => setComponentVisibilityOpen(false)}
+                placement="bottom-left"
+              />
+            )}
 
             {/* Legend — 07 §21 and §22 both require one.
 

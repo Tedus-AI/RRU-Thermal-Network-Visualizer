@@ -77,12 +77,18 @@ function parallelNote(
 export function solvedBusElements(
   network: ThermalNetwork,
   solution: ThermalSolution | null,
-  options: { layoutMode: string; showLabels: boolean; mode: string },
+  options: {
+    layoutMode: string;
+    showLabels: boolean;
+    mode: string;
+    /** Node ids the reader has filtered out; their branches leave the bar. */
+    hidden?: ReadonlySet<string>;
+  },
 ): SolvedBusView {
   const axis = busAxis(options.layoutMode);
   if (axis == null) return EMPTY;
 
-  const groups = hskBusGroups(network, options.layoutMode, new Set<string>());
+  const groups = hskBusGroups(network, options.layoutMode, options.hidden ?? new Set<string>());
   if (groups.length === 0) return EMPTY;
 
   const elements: ElementDefinition[] = [];

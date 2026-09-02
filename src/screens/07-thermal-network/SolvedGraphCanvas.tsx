@@ -36,6 +36,7 @@ import {
   solvedBusElements,
 } from './solvedBusElements';
 import { positionViewBuses } from '@/screens/05-thermal-path-builder/busLayout';
+import { hiddenNodeIds } from '@/screens/05-thermal-path-builder/thermalGraphElements';
 import {
   marqueeRect,
   WHEEL_ZOOM_STEP,
@@ -151,8 +152,10 @@ export function solvedStylesheet(): StylesheetCSS[] {
     { selector: 'node:selected', style: { 'border-color': '#1d4ed8', 'border-width': 3.5 } },
     { selector: '.dimmed', style: { opacity: 0.18 } },
     {
+      // A branch runs straight from its terminal to the bar, so its label
+      // reads better upright than rotated along it — as on Screen 05.
       selector: 'edge.routed-port-edge',
-      style: { 'curve-style': 'straight' },
+      style: { 'curve-style': 'straight', 'text-rotation': 'none', 'text-margin-y': -11 },
     },
     {
       // Present for Dagre's ranking only; the engineer sees the routed branch.
@@ -182,6 +185,12 @@ export function solvedStylesheet(): StylesheetCSS[] {
         'text-background-opacity': 1,
         'text-background-padding': '2px',
         'text-rotation': 'autorotate',
+        // Beside the line, not on it. An opaque label centred on the edge
+        // erases the stretch of line it names — and on this screen the line's
+        // own colour and thickness ARE the result, so hiding it hides data.
+        // 11px clears the label's half-height (a 9px font in a ~15px box with
+        // its padding) with a few pixels to spare.
+        'text-margin-y': -11,
         'z-index': 10,
       },
     },
@@ -206,12 +215,17 @@ function buildElements(
   scenarioId: string,
   layoutMode: string,
   scales: { temperature: Scale; delta: Scale; rth: Scale; maxFlow: number },
+  hiddenComponentIds: ReadonlySet<string>,
 ): ElementDefinition[] {
   const elements: ElementDefinition[] = [];
   const solved = mode === 'temperature' || mode === 'heat_flow' || mode === 'delta_t';
+  // A view filter only: the solution was computed over the whole network and
+  // every KPI still reports it. Shared structure has no component behind it, so
+  // the base and the fins never vanish.
+  const hidden = hiddenNodeIds(network, hiddenComponentIds);
 
   for (const node of Object.values(network.nodes)) {
-    if (node.disabled) continue;
+    if (node.disabled || hidden.has(node.id)) continue;
 
     const group = nodeGroup(node);
     const role = GROUP_COLORS[group];
@@ -274,6 +288,7 @@ function buildElements(
     layoutMode,
     showLabels: display.showLabels,
     mode,
+    hidden,
   });
   elements.push(...bus.elements);
   for (const element of bus.elements) presentNodes.add(element.data.id as string);
@@ -428,6 +443,7 @@ export const SolvedGraphCanvas = forwardRef<
     selectedEdgeId: string | null;
     tool: SolvedCanvasTool;
     layoutMode: string;
+    hiddenComponentIds: ReadonlySet<string>;
     onSelectNode: (nodeId: string | null) => void;
     onSelectEdge: (edgeId: string | null) => void;
     onZoomChange: (zoom: number) => void;
@@ -443,6 +459,7 @@ export const SolvedGraphCanvas = forwardRef<
     selectedEdgeId,
     tool,
     layoutMode,
+    hiddenComponentIds,
     onSelectNode,
     onSelectEdge,
     onZoomChange,
@@ -474,8 +491,18 @@ export const SolvedGraphCanvas = forwardRef<
   }, [solution]);
 
   const elements = useMemo(
-    () => buildElements(network, solution, mode, display, scenarioId, layoutMode, scales),
-    [network, solution, mode, display, scenarioId, layoutMode, scales],
+    () =>
+      buildElements(
+        network,
+        solution,
+        mode,
+        display,
+        scenarioId,
+        layoutMode,
+        scales,
+        hiddenComponentIds,
+      ),
+    [network, solution, mode, display, scenarioId, layoutMode, scales, hiddenComponentIds],
   );
 
   useEffect(() => {
