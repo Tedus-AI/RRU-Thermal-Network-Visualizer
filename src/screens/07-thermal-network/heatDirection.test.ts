@@ -144,3 +144,129 @@ describe('ΔT is written as the fall it is', () => {
     expect(rows.some((row) => row.zh.includes('正負號'))).toBe(false);
   });
 });
+
+/**
+ * The other half of the same report: Screen 07's braces.
+ *
+ * 05 and 07 draw the identical brace from the identical module, so what the
+ * shared tests pin about 05 holds here too. What is 07's own is that the value
+ * follows the result MODE, that its branches are named the way 05's are, and
+ * that the numbers are the SOLVED ones — 07 re-solves a spreading edge at the
+ * scenario's real Biot number, so its branch reads 0.322 where 05 reads ≥0.057.
+ */
+describe("Screen 07's brace over a parallel pair", () => {
+  const SPREAD = 'EDGE_SPREAD';
+  const PIPE = 'EDGE_PIPE';
+
+  function pairNetwork(): ThermalNetwork {
+    const node = (id: string) => ({
+      id,
+      name: id,
+      type: 'custom',
+      power_W: 0,
+      limit_C: null,
+      component_ref: null,
+      disabled: false,
+    });
+    return {
+      nodes: { TIM: node('TIM'), BASE: node('BASE') },
+      edges: {
+        [SPREAD]: {
+          id: SPREAD,
+          from: 'TIM',
+          to: 'BASE',
+          type: 'spreading',
+          method: 'spreading_disc',
+          enabled: true,
+          parameters: {},
+          rth: { analytical: 0.056823, active_source: 'Analytical', provenance: {} },
+        },
+        [PIPE]: {
+          id: PIPE,
+          from: 'TIM',
+          to: 'BASE',
+          type: 'heat_pipe',
+          method: 'direct_rth',
+          enabled: true,
+          parameters: { pipes: 2 },
+          rth: { analytical: 0.065, active_source: 'Analytical', provenance: {} },
+        },
+      },
+      templates: {},
+      layout: { positions: { TIM: { x: 0, y: 0 }, BASE: { x: 400, y: 0 } } },
+    } as unknown as ThermalNetwork;
+  }
+
+  /** The real solve: the spreading edge re-solved at Bi = 0.106. */
+  function pairSolution(): ThermalSolution {
+    const result = (id: string, R: number, Q: number) => ({
+      edge_id: id,
+      from: 'TIM',
+      to: 'BASE',
+      heat_flow_W: Q,
+      delta_T_C: 1.8931,
+      actual_direction: 'forward',
+      active_rth_C_per_W: R,
+      active_rth_source: 'Analytical',
+      rth_origin: id === SPREAD ? 'spreading_biot' : 'edge',
+    });
+    return {
+      node_temperatures_C: { TIM: 88.98, BASE: 87.09 },
+      edge_results: {
+        [SPREAD]: result(SPREAD, 0.32220417417963326, 5.875453189057279),
+        [PIPE]: result(PIPE, 0.065, 29.124546810942974),
+      },
+    } as unknown as ThermalSolution;
+  }
+
+  const build = (mode: ResultMode) =>
+    buildElements(
+      pairNetwork(),
+      pairSolution(),
+      mode,
+      DISPLAY,
+      'SCN_001',
+      'TopBottom',
+      { ...SCALES, rth: buildScale([0.065, 0.3222]), delta: buildScale([1.8931]), maxFlow: 29.12 },
+      new Set<string>(),
+    );
+
+  const braceLabel = (mode: ResultMode) =>
+    build(mode).find((element) => String(element.classes ?? '').includes('parallel-brace'))?.data
+      .label;
+
+  it('combines the SOLVED resistances, and names both branches', () => {
+    // 1/(1/0.32220 + 1/0.065) = 0.054088 — not 0.030, which is the 05 floor.
+    expect(braceLabel('rth')).toBe('Spreading ∥ Heat Pipe ×2\n∥ 0.054 °C/W');
+  });
+
+  it('adds the flows in Heat Flow, and says so in the connector', () => {
+    expect(braceLabel('heat_flow')).toBe('Spreading + Heat Pipe ×2\n∑ 35.0 W');
+  });
+
+  it('names the one ΔT the pair shares', () => {
+    expect(braceLabel('delta_t')).toBe('Spreading, Heat Pipe ×2\nshared ↓1.9 °C');
+  });
+
+  /** Nothing combinable, nothing to say — and no stray °C/W in a °C graph. */
+  it('draws no brace where there is no combinable quantity', () => {
+    for (const mode of ['temperature', 'node_type', 'rth_source'] as ResultMode[]) {
+      expect(braceLabel(mode), mode).toBeUndefined();
+    }
+  });
+
+  /**
+   * The second half of the report: the branches themselves were two bare
+   * numbers with nothing saying which was the pipe.
+   */
+  it('names each branch of the pair, as Screen 05 does', () => {
+    const elements = build('rth');
+    const labelOf = (id: string) =>
+      elements.find((element) => element.data.id === id)!.data.label;
+
+    // One line each, not the bar's two: a pair between two boxes has only the
+    // gap between them to write in, and two stacked lines collided there.
+    expect(labelOf(SPREAD)).toBe('Spreading 0.322 °C/W');
+    expect(labelOf(PIPE)).toBe('Heat Pipe ×2 0.065 °C/W');
+  });
+});

@@ -3,7 +3,7 @@
 import type { ElementDefinition } from 'cytoscape';
 
 import { activeRth } from '@/thermal/rth';
-import type { ThermalEdge, ThermalNetwork } from '@/thermal/types';
+import type { ThermalNetwork } from '@/thermal/types';
 import {
   GROUP_COLORS,
   HSK_BUS_COLOR,
@@ -12,43 +12,20 @@ import {
   labelBox,
   nodeGroup,
 } from '@/ui/graphStyles';
+import {
+  branchShortName,
+  floorPrefix,
+  isSpreadingFloor,
+  parallelBraceElement,
+  parallelBranchGeometry,
+  parallelPairNames,
+  parallelPairs,
+} from './parallelPairs';
+
+// Re-exported from where it now lives, so the screens that draw these
+// branches keep one import path for the whole family.
+export { branchShortName } from './parallelPairs';
 import type { ScenarioBoundaryEdgeView } from './scenarioBoundaryProjection';
-
-const EDGE_SHORT: Record<string, string> = {
-  package_rjc: 'Rjc',
-  package_rjb: 'Rjb',
-  package_rja: 'Rja',
-  conduction: 'Cond',
-  tim: 'TIM',
-  solder: 'Solder',
-  thermal_via: 'Via',
-  contact: 'Contact',
-  spreading: 'Spreading',
-  heat_pipe: 'Heat Pipe',
-  convection: 'Conv',
-  radiation: 'Rad',
-  custom: 'Custom',
-};
-
-/**
- * What a branch is called on the graph — "Spreading", "Heat Pipe ×2".
- *
- * Two lines converging on the same bar are indistinguishable without it: the
- * pair of numbers alone says nothing about WHICH route is which, and the whole
- * point of drawing the pair is that the reader can see where the heat prefers
- * to go. The pipe count rides on the name because `R` is already the combined
- * value for all of them, and a lone 0.065 beside a 0.13 datasheet figure is a
- * discrepancy the reader would otherwise have to work out.
- *
- * Shared with Screen 07, which draws the same branches over the solved graph.
- */
-export function branchShortName(edge: ThermalEdge): string {
-  const base = EDGE_SHORT[edge.type] ?? edge.type;
-  const pipes = edge.parameters?.pipes;
-  return edge.type === 'heat_pipe' && typeof pipes === 'number' && pipes > 1
-    ? `${base} ×${pipes}`
-    : base;
-}
 
 const HSK_BUS_MIN_BRANCHES = 4;
 const HSK_BUS_PREFIX = 'VIEW_HSK_BUS_';
@@ -515,7 +492,11 @@ export function buildElements(
           border: HSK_BUS_COLOR,
           text: HSK_BUS_COLOR,
           label: options.showLabels
-            ? `∥ ${combined != null ? `${combined.toFixed(3)} °C/W` : '—'}`
+            ? `∥ ${
+                combined != null
+                  ? `${floorPrefix(network, set.edgeIds)}${combined.toFixed(3)} °C/W`
+                  : '—'
+              }`
             : '',
         },
         classes: 'view-only hsk-bus-parallel-note',
@@ -564,6 +545,18 @@ export function buildElements(
     });
   }
 
+  // Pairs the bar is not drawing, indexed within their own pair: Cytoscape fans
+  // the two apart in this order, and their labels have to be pushed off their
+  // own curves in opposite directions or both land in the same gap.
+  const busLessPairs = parallelPairs(network, hidden, routedBranches);
+  const busLessPairIndex = new Map(
+    busLessPairs.flatMap((pair) =>
+      pair.edgeIds.map(
+        (id, index) => [id, parallelBranchGeometry(index, pair.edgeIds.length)] as const,
+      ),
+    ),
+  );
+
   for (const edge of Object.values(network.edges)) {
     if (!network.nodes[edge.from] || !network.nodes[edge.to]) continue;
     if (hidden.has(edge.from) || hidden.has(edge.to)) continue;
@@ -585,10 +578,13 @@ export function buildElements(
             ? 'Fin'
             : 'Boundary'
       : branchShortName(edge);
+    // `≥` on a Bi → ∞ spreading edge: this screen has no boundary condition, so
+    // the number is the floor the model cannot go below, not the answer.
+    const floor = isSpreadingFloor(edge) ? '≥' : '';
     const label = options.showLabels
       ? isothermal
         ? 'Isothermal / 等溫'
-        : `${short} ${R != null ? `${R.toFixed(3)} °C/W` : '—'}`
+        : `${short} ${R != null ? `${floor}${R.toFixed(3)} °C/W` : '—'}`
       : '';
     const routed = routedBranches.get(edge.id);
 
@@ -598,8 +594,8 @@ export function buildElements(
         ? R != null
           ? parallelEdgeIds.has(edge.id)
             ? // Name above number: on one line this is wider than the branch.
-              `${short}\n${R.toFixed(3)} °C/W`
-            : `${R.toFixed(3)} °C/W`
+              `${short}\n${floor}${R.toFixed(3)} °C/W`
+            : `${floor}${R.toFixed(3)} °C/W`
           : `${short} —`
         : '';
       const geometry = busGeometries.get(routed.busId);
@@ -680,8 +676,36 @@ export function buildElements(
         label,
         color: edgeColor(edge),
         lineStyle: scenarioBoundary?.resolved ? 'solid' : edgeLineStyle(edge),
+        ...busLessPairIndex.get(edge.id),
       },
+      classes: busLessPairIndex.has(edge.id) ? 'parallel-pair-branch' : undefined,
     });
+  }
+
+  /*
+     The combination, for a pair the BUS did not draw.
+
+     The bar writes this out where four or more branches fan onto it — but a bar
+     only forms at four, so filtering the palette down to one component
+     dissolved it and took the combination with it. That is the wrong way round:
+     the pair belongs to the network, not to the bar drawn over it, and one
+     part's own chain is exactly what a reader opens the filter to look at.
+
+     Screen 07 draws the identical brace from the identical module, so the two
+     screens cannot answer this differently.
+  */
+  if (options.showLabels) {
+    for (const pair of busLessPairs) {
+      const combined = parallelRth(network, pair.edgeIds);
+      const names = parallelPairNames(network, pair.edgeIds);
+      const value =
+        combined != null
+          ? `${floorPrefix(network, pair.edgeIds)}${combined.toFixed(3)} °C/W`
+          : '—';
+      elements.push(
+        parallelBraceElement(pair, names ? `${names}\n∥ ${value}` : `∥ ${value}`, HSK_BUS_COLOR),
+      );
+    }
   }
 
   return elements;
