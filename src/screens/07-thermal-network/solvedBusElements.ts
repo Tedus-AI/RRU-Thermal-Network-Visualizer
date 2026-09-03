@@ -19,10 +19,10 @@ import type { ElementDefinition } from 'cytoscape';
 import type { ThermalNetwork } from '@/thermal/types';
 import type { ThermalSolution } from '@/thermal/solver/solverTypes';
 import { HSK_BUS_COLOR, labelBox } from '@/ui/graphStyles';
+import { signed } from './resultViewModel';
 import {
   busAxis,
   hskBusGroups,
-  parallelRth,
   storedBusGeometry,
   type HskBusBranch,
 } from '@/screens/05-thermal-path-builder/thermalGraphElements';
@@ -47,19 +47,70 @@ const EMPTY: SolvedBusView = {
 };
 
 /**
- * What the note where the branches rejoin should say.
+ * The resistance this screen is SHOWING for one edge.
  *
- * The combined resistance is the arithmetic people get wrong — 0.130 beside
- * 0.050 is 0.036, not 0.180 — so it is worth writing wherever it is known. In
- * the flow modes the reader is looking at watts, and the total through the set
- * is the number that answers "how much went this way", so that is written
- * instead. Null in either case rather than a guess.
+ * Exactly what the branch label beside it shows, and nothing else — the solved
+ * value, or a scenario override, or nothing.
+ *
+ * Not `activeRth`, the edge's own stored number. Screen 05 must build every
+ * spreading edge at Bi → ∞ because the far-face h is scenario data, and Screen
+ * 07 re-solves it against the scenario's real boundary, so the two differ —
+ * sometimes fivefold. Reading the stored one put the FLOOR into the combination
+ * while the branches showed the solved value: 0.322 ∥ 0.065 printed as 0.030,
+ * which is 0.057 ∥ 0.065.
+ *
+ * And falling back to it when nothing is solved has the same fault in a quieter
+ * form: the branches read "Rth N/A" while the note underneath them confidently
+ * reads 0.042. A combination the reader cannot check against the two numbers
+ * beside it is worse than no combination.
  */
-function parallelNote(
+function shownRth(
+  network: ThermalNetwork,
+  solution: ThermalSolution | null,
+  edgeId: string,
+  scenarioId: string,
+): number | null {
+  const solved = solution?.edge_results?.[edgeId]?.active_rth_C_per_W;
+  if (solved != null && Number.isFinite(solved) && solved > 0) return solved;
+  const override = scenarioId
+    ? network.edges[edgeId]?.scenario_overrides?.[scenarioId]?.R_C_per_W
+    : undefined;
+  return override != null && Number.isFinite(override) && override > 0 ? override : null;
+}
+
+/** Conductances add: the pair is worth less than either branch, never more. */
+export function solvedParallelRth(
+  network: ThermalNetwork,
+  solution: ThermalSolution | null,
+  edgeIds: readonly string[],
+  scenarioId: string,
+): number | null {
+  let conductance = 0;
+  for (const id of edgeIds) {
+    const R = shownRth(network, solution, id, scenarioId);
+    if (R == null) return null;
+    conductance += 1 / R;
+  }
+  return conductance > 0 ? 1 / conductance : null;
+}
+
+/**
+ * What the note where the branches rejoin should say, IN THIS MODE.
+ *
+ * It used to print a resistance whatever the toolbar was showing, so a reader
+ * in Temperature mode — with every other number on the graph in °C — met one
+ * stray °C/W. A combination is only meaningful for the quantity being drawn:
+ * resistances combine in parallel, flows add, and the two branches of a pair
+ * share one ΔT by definition (they span the same node pair), which is worth
+ * saying rather than leaving to be inferred. Temperature, Node Type and Rth
+ * Source have no combinable quantity at all, so they get no note.
+ */
+export function parallelNote(
   network: ThermalNetwork,
   solution: ThermalSolution | null,
   edgeIds: readonly string[],
   mode: string,
+  scenarioId: string,
 ): string {
   if (mode === 'heat_flow') {
     let total = 0;
@@ -68,9 +119,19 @@ function parallelNote(
       if (!result || !Number.isFinite(result.heat_flow_W)) return '∥ —';
       total += Math.abs(result.heat_flow_W);
     }
-    return `∥ ${total.toFixed(1)} W`;
+    return `∑ ${total.toFixed(1)} W`;
   }
-  const combined = parallelRth(network, edgeIds);
+
+  if (mode === 'delta_t') {
+    // Same two nodes, so one ΔT — printing it once is the point.
+    const first = edgeIds[0] ? solution?.edge_results?.[edgeIds[0]] : undefined;
+    if (!first || !Number.isFinite(first.delta_T_C)) return '';
+    return `shared ${signed(first.delta_T_C, 1, '°C')}`;
+  }
+
+  if (mode !== 'rth') return '';
+
+  const combined = solvedParallelRth(network, solution, edgeIds, scenarioId);
   return `∥ ${combined != null ? `${combined.toFixed(3)} °C/W` : '—'}`;
 }
 
@@ -81,6 +142,8 @@ export function solvedBusElements(
     layoutMode: string;
     showLabels: boolean;
     mode: string;
+    /** The active scenario, so a per-scenario resistance override is honoured. */
+    scenarioId: string;
     /** Node ids the reader has filtered out; their branches leave the bar. */
     hidden?: ReadonlySet<string>;
   },
@@ -166,7 +229,7 @@ export function solvedBusElements(
           border: HSK_BUS_COLOR,
           text: HSK_BUS_COLOR,
           label: options.showLabels
-            ? parallelNote(network, solution, set.edgeIds, options.mode)
+            ? parallelNote(network, solution, set.edgeIds, options.mode, options.scenarioId)
             : '',
         },
         classes: 'view-only hsk-bus-parallel-note',
