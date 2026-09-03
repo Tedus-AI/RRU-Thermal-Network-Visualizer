@@ -30,6 +30,7 @@ import {
   requestPermission,
   storeHandle,
   supportsFolderBinding,
+  deleteFile,
   writeTextFile,
   type DirectoryHandle,
   type FolderEntry,
@@ -85,6 +86,17 @@ interface FolderStoreState {
    * a project other than the active one — seeding the demo makes two.
    */
   mirrorAll: () => Promise<number>;
+  /**
+   * Removes the project's own file from the folder, and forgets its name.
+   *
+   * Deleting a project cleared every browser-side collection but left the JSON
+   * on disk, so the next hydrate read it straight back in — the delete looked
+   * like it worked until the folder was re-read, and the file counted against
+   * the engineer's own directory in the meantime. Only the file this project
+   * was loaded from is touched; nothing else in the folder is the app's to
+   * remove. Returns false when the file is still there afterwards.
+   */
+  deleteProjectFile: (projectId: string) => Promise<boolean>;
   listFiles: () => Promise<FolderEntry[]>;
   readFile: (filename: string) => Promise<string | null>;
 }
@@ -269,6 +281,25 @@ export const useFolderStore = create<FolderStoreState>((set, get) => ({
       if (await get().mirror(project.project_id)) written += 1;
     }
     return written;
+  },
+
+  deleteProjectFile: async (projectId) => {
+    const { handle, projectFilenames } = get();
+    const filename = projectFilenames[projectId] ?? mirrorFilename(projectId);
+    // Forget the name either way: the project is gone from the cache, so a
+    // later save must never resurrect it under the name it used to hold.
+    const remaining = { ...projectFilenames };
+    delete remaining[projectId];
+    set({ projectFilenames: remaining });
+    if (!handle) return false;
+    const removed = await deleteFile(handle, filename);
+    if (!removed) {
+      set({
+        status: 'error',
+        lastError: `Deleted the project, but could not remove "${filename}" from the folder`,
+      });
+    }
+    return removed;
   },
 
   listFiles: async () => {

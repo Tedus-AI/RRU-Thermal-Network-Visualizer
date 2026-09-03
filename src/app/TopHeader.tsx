@@ -33,6 +33,7 @@ import {
 import type { SolverState } from '@/thermal/types';
 import { loadComponents, purgeProject } from '@/data/persistence';
 import { useComponentLibraryStore } from '@/data/componentLibraryStore';
+import { useFolderStore } from '@/data/folderStore';
 import { ComponentLibraryManager } from '@/screens/04-component-manager/ComponentLibraryManager';
 
 /**
@@ -427,9 +428,24 @@ export function TopHeader() {
                   setConfirmDelete(null);
                   purgeProject(id);
                   const remaining = useProjectStore.getState().refreshProjects();
-                  toast.success(`Deleted ${name}. / 已刪除 ${name}。`);
                   const next = remaining.find((project) => project.project_id !== id);
                   navigate(next ? projectPath(next.project_id, 'info') : '/project/new/info');
+                  // The folder is the other half of the delete. Clearing only
+                  // the browser cache left the JSON on disk, so the next
+                  // hydrate read the project straight back in: the delete
+                  // looked like it worked right up until the folder was
+                  // re-read. Awaited after navigating, because the file write
+                  // is slow and the engineer should not sit on a modal for it.
+                  void useFolderStore
+                    .getState()
+                    .deleteProjectFile(id)
+                    .then((removed) => {
+                      if (removed) toast.success(`Deleted ${name}. / 已刪除 ${name}。`);
+                      else
+                        toast.error(
+                          `Deleted ${name} here, but its file is still in the folder. / 已刪除 ${name}，但資料夾中的檔案仍在。`,
+                        );
+                    });
                 }}
               >
                 Delete / 刪除
