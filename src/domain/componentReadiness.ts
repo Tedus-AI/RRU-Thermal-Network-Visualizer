@@ -11,6 +11,7 @@ import {
   isHeatSource,
   metalBaseExposedAreaMm2,
   metalBaseParameters,
+  mountSpec,
   normalizeModuleReferenceLocation,
   powerWOf,
   sourceAreaMm2,
@@ -180,6 +181,41 @@ export function validateComponent(component: Component): ComponentIssue[] {
         field: `geometry.${String(key)}`,
         message: `${label} must be a positive number.`,
         message_zh: `${labelZh}必須為正數。`,
+      });
+    }
+  }
+
+  /**
+   * An embedded pipe has to say HOW MANY.
+   *
+   * The count is read twice, and it moves both answers in the same direction:
+   * the branch is `R_one_pipe / pipes`, and the copper it carves out of the
+   * contact face is `L x W x pipes`, which is the area the aluminium branch
+   * does NOT get to spread through. Left blank it silently became one pipe —
+   * a number nobody stated, quietly halving the pipe's conductance and handing
+   * the aluminium a face twice the size it has.
+   *
+   * So it is an error rather than a warning: not stating it does not leave the
+   * model incomplete, it leaves the model CONFIDENTLY WRONG.
+   */
+  const mount = mountSpec(spec);
+  if (mount.type === 'EmbeddedHeatPipe') {
+    const pipes = mount.heat_pipe_count;
+    if (pipes == null) {
+      issues.push({
+        severity: 'error',
+        field: 'mount.heat_pipe_count',
+        message:
+          'Embedded heat pipe: state how many pipes. The count sets both the branch resistance (R per pipe ÷ pipes) and the copper carved out of the contact face.',
+        message_zh:
+          '埋入式熱管必須填寫熱管數量：它同時決定支路熱阻（單支 R ÷ 支數）與從貼合面挖去的銅面積。',
+      });
+    } else if (!Number.isFinite(pipes) || pipes < 1 || !Number.isInteger(pipes)) {
+      issues.push({
+        severity: 'error',
+        field: 'mount.heat_pipe_count',
+        message: 'Heat pipe count must be a whole number of at least 1.',
+        message_zh: '熱管數量必須是大於等於 1 的整數。',
       });
     }
   }

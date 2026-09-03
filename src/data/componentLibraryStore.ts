@@ -158,6 +158,14 @@ interface LibraryState {
    */
   loadWithFolder: () => Promise<void>;
   saveComponent: (component: Component) => LibraryEntry;
+  /**
+   * Files a whole table into the catalogue at once.
+   *
+   * Returns what it did rather than what it was asked to do, so the caller can
+   * report it honestly — the same part twice under one name is one entry, not
+   * two, and the count has to say so.
+   */
+  saveAll: (components: Component[]) => { saved: number; overwritten: string[] };
   rename: (id: string, name: string) => void;
   setNotes: (id: string, notes: string) => void;
   remove: (id: string) => void;
@@ -170,6 +178,27 @@ interface LibraryState {
 /** Same identity rule `saveComponent` uses, so a rename cannot fork an entry. */
 function sameName(a: string, b: string): boolean {
   return a.trim().toLowerCase() === b.trim().toLowerCase();
+}
+
+/**
+ * Which of these parts the catalogue already holds.
+ *
+ * Names them rather than counting them: "3 will be overwritten" tells an
+ * engineer nothing about whether the three are the ones they meant. Exported so
+ * the confirmation can be shown BEFORE anything is written — an overwrite here
+ * replaces a whole thermal spec, and there is no undo.
+ */
+export function libraryOverwrites(
+  entries: LibraryEntry[],
+  components: Component[],
+): string[] {
+  const names: string[] = [];
+  for (const component of components) {
+    const derived = toLibraryEntry(component);
+    const hit = entries.find((e) => e.id === derived.id || sameName(e.name, derived.name));
+    if (hit && !names.includes(hit.name)) names.push(hit.name);
+  }
+  return names;
 }
 
 export const useComponentLibraryStore = create<LibraryState>((set, get) => ({
@@ -204,6 +233,30 @@ export const useComponentLibraryStore = create<LibraryState>((set, get) => ({
     set({ entries });
     void mirrorToFolder(entries);
     return entry;
+  },
+
+  saveAll: (components) => {
+    const overwritten = libraryOverwrites(get().entries, components);
+    let entries = get().entries;
+    const seen = new Set<string>();
+    for (const component of components) {
+      const derived = toLibraryEntry(component);
+      const existing = entries.find(
+        (e) => e.id === derived.id || sameName(e.name, derived.name),
+      );
+      const entry = existing ? { ...derived, id: existing.id } : derived;
+      // Two rows of the same part name file as one entry, and the LAST one
+      // wins — the same answer `saveComponent` would give run twice.
+      seen.add(entry.id);
+      entries = mergeLibraries(
+        entries.filter((e) => e.id !== entry.id),
+        [entry],
+      );
+    }
+    write(entries);
+    set({ entries });
+    void mirrorToFolder(entries);
+    return { saved: seen.size, overwritten };
   },
 
   /**

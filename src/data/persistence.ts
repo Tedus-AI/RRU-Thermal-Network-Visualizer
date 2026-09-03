@@ -271,6 +271,50 @@ export function deleteProject(projectId: string): void {
   writeCollection(PROJECTS_KEY, collection);
 }
 
+/**
+ * Every collection that stores one bucket per project.
+ *
+ * Each of these is `{ [projectId]: … }`, which is what makes a purge uniform:
+ * the project's row leaves all of them and no other project's does.
+ */
+const PER_PROJECT_KEYS = [
+  SCENARIOS_KEY,
+  COMPONENTS_KEY,
+  COMPONENT_REVISIONS_KEY,
+  NETWORKS_KEY,
+  NETWORK_REVIEW_KEY,
+  BOUNDARY_KEY,
+  SOLUTIONS_KEY,
+  ANALYSES_KEY,
+  DISTRIBUTIONS_KEY,
+  PROPOSALS_KEY,
+  SNAPSHOTS_KEY,
+  REPORT_CONFIGS_KEY,
+  REPORT_PAYLOADS_KEY,
+  EXPORT_STAMPS_KEY,
+] as const;
+
+/**
+ * Deletes a project AND everything stored under it.
+ *
+ * `deleteProject` alone removes the project document and leaves its components,
+ * network, boundary sets, solutions, analyses and report payloads behind. They
+ * are keyed by a project id nothing can reach any more, so they are pure
+ * ballast: invisible, un-openable, and counting against the browser's storage
+ * quota until it fills. A delete the engineer asked for has to mean all of it.
+ *
+ * Report TEMPLATES are deliberately left alone — they are not per-project.
+ */
+export function purgeProject(projectId: string): void {
+  for (const key of PER_PROJECT_KEYS) {
+    const collection = readCollection(key);
+    if (!(projectId in collection)) continue;
+    delete collection[projectId];
+    writeCollection(key, collection);
+  }
+  deleteProject(projectId);
+}
+
 export function projectIdExists(projectId: string): boolean {
   return projectId in readCollection(PROJECTS_KEY);
 }

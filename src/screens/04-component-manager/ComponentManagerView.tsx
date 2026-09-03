@@ -20,7 +20,7 @@ import { toast } from '@/ui/toast';
 
 import { useProjectStore } from '@/data/projectStore';
 import { useComponentStore } from '@/data/componentStore';
-import { useComponentLibraryStore } from '@/data/componentLibraryStore';
+import { libraryOverwrites, useComponentLibraryStore } from '@/data/componentLibraryStore';
 import { useNetworkStore } from '@/data/networkStore';
 import { useScenarioStore } from '@/data/scenarioStore';
 import { useSolverStore } from '@/data/solverStore';
@@ -99,7 +99,8 @@ export function ComponentManagerView() {
   // picker beside it must not go on offering a part that is no longer there.
   const libraryEntries = useComponentLibraryStore((s) => s.entries);
   const [showBulk, setShowBulk] = useState(false);
-  const [showDelete, setShowDelete] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Component | null>(null);
+  const [libraryOverwriteConfirm, setLibraryOverwriteConfirm] = useState<string[] | null>(null);
   const [warningConfirm, setWarningConfirm] = useState<number | null>(null);
 
   useEffect(() => {
@@ -323,6 +324,14 @@ export function ComponentManagerView() {
             selectedId={selectedId}
             onSelect={setSelectedId}
             onPatch={patchComponent}
+            onDuplicate={(component) => {
+              const copy = useComponentStore.getState().duplicateComponent(component.id);
+              if (copy) {
+                setSelectedId(copy.id);
+                toast.success(`Duplicated as "${copy.name}" / 已複製`);
+              }
+            }}
+            onDelete={setDeleteTarget}
             readOnly={readOnly}
           />
 
@@ -335,15 +344,19 @@ export function ComponentManagerView() {
               onAdd={() => setShowAdd(true)}
               onAddFromLibrary={() => setShowLibrary(true)}
               onManageLibrary={() => setShowLibraryManager(true)}
-              onDuplicate={() => {
-                if (!selected) return;
-                const copy = useComponentStore.getState().duplicateComponent(selected.id);
-                if (copy) {
-                  setSelectedId(copy.id);
-                  toast.success(`Duplicated as "${copy.name}" / 已複製`);
+              onSaveAllToLibrary={() => {
+                const overwrites = libraryOverwrites(
+                  useComponentLibraryStore.getState().entries,
+                  visible,
+                );
+                // Nothing to warn about means nothing to ask about.
+                if (overwrites.length === 0) {
+                  const { saved } = useComponentLibraryStore.getState().saveAll(visible);
+                  toast.success(`Saved ${saved} to the library / 已存入元件庫 ${saved} 筆`);
+                  return;
                 }
+                setLibraryOverwriteConfirm(overwrites);
               }}
-              onDelete={() => setShowDelete(true)}
               onBulkEdit={() => setShowBulk(true)}
             />
             <p className="text-[12px] text-ink-400">
@@ -507,21 +520,67 @@ export function ComponentManagerView() {
         />
       )}
 
-      {showDelete && selected && (
+      {/*
+        An overwrite here replaces a whole thermal spec — Rjc, geometry, heat
+        path, mount, TIM — with this project's version of the part, for every
+        future project that pulls it from the catalogue. So the parts that would
+        change are NAMED before anything is written, not counted after.
+      */}
+      {libraryOverwriteConfirm && (
         <Modal
-          title="Delete Component? / 刪除元件？"
-          description={`"${selected.name}" will be removed from this project. Any thermal network mapping that referenced it becomes orphaned and the network will need review — this screen never rewrites topology.`}
-          onClose={() => setShowDelete(false)}
+          title="Overwrite these library entries? / 覆蓋這些元件庫項目？"
+          description={`${libraryOverwriteConfirm.length} of the ${visible.length} components shown are already in the library. Saving replaces the stored thermal spec with this project's version. / 目前顯示的 ${visible.length} 筆元件中，有 ${libraryOverwriteConfirm.length} 筆已存在於元件庫；存入會以本專案的版本取代已儲存的熱學規格。`}
+          onClose={() => setLibraryOverwriteConfirm(null)}
           footer={
             <>
-              <Button onClick={() => setShowDelete(false)}>Cancel / 取消</Button>
+              <Button onClick={() => setLibraryOverwriteConfirm(null)}>Cancel / 取消</Button>
               <Button
                 variant="danger"
                 onClick={() => {
-                  useComponentStore.getState().deleteComponent(selected.id);
-                  setSelectedId(null);
-                  setShowDelete(false);
-                  toast.warning(`"${selected.name}" deleted / 已刪除`);
+                  const { saved, overwritten } = useComponentLibraryStore
+                    .getState()
+                    .saveAll(visible);
+                  setLibraryOverwriteConfirm(null);
+                  toast.success(
+                    `Saved ${saved} to the library, ${overwritten.length} overwritten / 已存入元件庫 ${saved} 筆，覆蓋 ${overwritten.length} 筆`,
+                  );
+                }}
+              >
+                Overwrite / 覆蓋
+              </Button>
+            </>
+          }
+        >
+          <ul className="max-h-56 overflow-y-auto rounded-md border border-line">
+            {libraryOverwriteConfirm.map((name) => (
+              <li
+                key={name}
+                className="border-b border-line px-3 py-1.5 text-[12px] text-ink-700 last:border-b-0"
+              >
+                {name}
+              </li>
+            ))}
+          </ul>
+        </Modal>
+      )}
+
+      {deleteTarget && (
+        <Modal
+          title="Delete Component? / 刪除元件？"
+          description={`"${deleteTarget.name}" will be removed from this project. Any thermal network mapping that referenced it becomes orphaned and the network will need review — this screen never rewrites topology. / 「${deleteTarget.name}」將從本專案移除；引用它的熱網路對應會成為孤兒並需要重新檢視，本畫面不會改寫拓樸。`}
+          onClose={() => setDeleteTarget(null)}
+          footer={
+            <>
+              <Button onClick={() => setDeleteTarget(null)}>Cancel / 取消</Button>
+              <Button
+                variant="danger"
+                onClick={() => {
+                  const { id, name } = deleteTarget;
+                  useComponentStore.getState().deleteComponent(id);
+                  // Only clear the inspector if it was showing the part that went.
+                  setSelectedId((current) => (current === id ? null : current));
+                  setDeleteTarget(null);
+                  toast.warning(`"${name}" deleted / 已刪除`);
                 }}
               >
                 Delete / 刪除

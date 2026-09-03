@@ -5,7 +5,7 @@
  * the inspector so a mis-click cannot silently change a thermal spec.
  */
 
-import { AlertTriangle, CircleCheck, CircleSlash, XCircle } from 'lucide-react';
+import { AlertTriangle, CircleCheck, CircleSlash, Copy, Trash2, XCircle } from 'lucide-react';
 import { ColumnLabel } from '@/ui/FieldLabel';
 import { ColumnResizer, useColumnWidths } from '@/ui/ResizableColumns';
 import {
@@ -69,6 +69,11 @@ const COLUMNS: ReadonlyArray<{
   highlight?: boolean;
   width: number;
 }> = [
+  // Per-row Duplicate and Delete. They used to sit under the table and act on
+  // "the selected row", but selecting a row is what opens the inspector, so
+  // reaching them meant a floating panel over the thing being worked on. On the
+  // row itself they need no selection at all.
+  { id: 'actions', label: '', zh: '', width: 62 },
   { id: 'on', label: 'On', zh: ZH.Enabled, width: 56 },
   { id: 'status', label: 'Status', zh: ZH.Status, width: 96 },
   { id: 'category', label: 'Category', zh: ZH.Category, width: 96 },
@@ -111,17 +116,64 @@ function num(value: number | null | undefined, digits = 2): string {
   return value == null ? '—' : value.toFixed(digits);
 }
 
+/**
+ * One of the two icons at the head of every row.
+ *
+ * Icon-only, with the name of the part in the tooltip so the row it acts on is
+ * never in doubt — a bare "Delete" on fifty identical-looking rows is exactly
+ * the tooltip that does not help.
+ */
+function RowAction({
+  icon: Icon,
+  label,
+  zh,
+  disabled,
+  danger,
+  onClick,
+}: {
+  icon: typeof Copy;
+  label: string;
+  zh: string;
+  disabled?: boolean;
+  danger?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      title={`${label} / ${zh}`}
+      aria-label={`${label} / ${zh}`}
+      onClick={(event) => {
+        event.stopPropagation();
+        onClick();
+      }}
+      className={`flex size-6 items-center justify-center rounded transition-colors disabled:cursor-not-allowed disabled:opacity-30 ${
+        danger
+          ? 'text-ink-400 hover:bg-danger-100 hover:text-danger-600'
+          : 'text-ink-400 hover:bg-surface-muted hover:text-accent-700'
+      }`}
+    >
+      <Icon size={13} />
+    </button>
+  );
+}
+
 export function ComponentTable({
   components,
   selectedId,
   onSelect,
   onPatch,
+  onDuplicate,
+  onDelete,
   readOnly,
 }: {
   components: Component[];
   selectedId: string | null;
   onSelect: (id: string) => void;
   onPatch: (id: string, patch: Partial<Component>, fields: string[]) => void;
+  onDuplicate: (component: Component) => void;
+  onDelete: (component: Component) => void;
   readOnly: boolean;
 }) {
   // The TIM column offers the project's own materials, so it has to read them.
@@ -177,7 +229,7 @@ export function ComponentTable({
         <tbody>
           {components.length === 0 && (
             <tr>
-              <td colSpan={15} className="px-3 py-6 text-center text-[13px] text-ink-400">
+              <td colSpan={16} className="px-3 py-6 text-center text-[13px] text-ink-400">
                 No components match the current filters. / 沒有符合篩選條件的元件。
               </td>
             </tr>
@@ -206,6 +258,27 @@ export function ComponentTable({
                         : 'bg-surface hover:bg-surface-muted'
                 }`}
               >
+                {/* Both stop the click reaching the row, which would open the
+                    inspector over the table the reader is working down. */}
+                <td className="px-1 py-1.5">
+                  <div className="flex items-center justify-center gap-0.5">
+                    <RowAction
+                      icon={Copy}
+                      label={`Duplicate ${component.name}`}
+                      zh={`複製 ${component.name}`}
+                      disabled={readOnly}
+                      onClick={() => onDuplicate(component)}
+                    />
+                    <RowAction
+                      icon={Trash2}
+                      label={`Delete ${component.name}`}
+                      zh={`刪除 ${component.name}`}
+                      disabled={readOnly}
+                      danger
+                      onClick={() => onDelete(component)}
+                    />
+                  </div>
+                </td>
                 <td className="px-2 py-1.5">
                   <input
                     type="checkbox"

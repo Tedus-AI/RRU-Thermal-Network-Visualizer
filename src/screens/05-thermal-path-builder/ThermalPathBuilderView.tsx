@@ -1288,6 +1288,7 @@ export function ThermalPathBuilderView() {
                 hiddenIds={hiddenModeledComponentIds}
                 onToggleVisible={toggleComponentVisible}
                 onShowAll={() => setHiddenComponentIds(new Set())}
+                onHideAll={() => setHiddenComponentIds(new Set(modeledComponents.map((c) => c.id)))}
                 onClose={() => setComponentVisibilityOpen(false)}
               />
             )}

@@ -21,6 +21,7 @@ export function ComponentVisibilityPanel({
   hiddenIds,
   onToggleVisible,
   onShowAll,
+  onHideAll,
   onClose,
   placement = 'top-left',
 }: {
@@ -28,6 +29,8 @@ export function ComponentVisibilityPanel({
   hiddenIds: ReadonlySet<string>;
   onToggleVisible: (componentId: string) => void;
   onShowAll: () => void;
+  /** Puts every component away at once — the other half of the same button. */
+  onHideAll: () => void;
   onClose: () => void;
   placement?: 'top-left' | 'bottom-left';
 }) {
@@ -132,13 +135,27 @@ export function ComponentVisibilityPanel({
         <span className="text-[10px] text-ink-500">
           {hiddenIds.size} hidden / 已隱藏 {hiddenIds.size} 個
         </span>
+        {/*
+          One button, two directions: with nothing hidden it puts everything
+          away, and once anything is hidden it brings everything back. A
+          disabled "Show all" was dead half the time and gave no way to clear
+          the canvas down to one chain, which is the thing the panel is for.
+
+          The label names what the NEXT click does, so the button never has to
+          be read together with the count beside it.
+        */}
         <button
           type="button"
-          onClick={onShowAll}
-          disabled={hiddenIds.size === 0}
+          onClick={hiddenIds.size === 0 ? onHideAll : onShowAll}
+          disabled={components.length === 0}
+          title={
+            hiddenIds.size === 0
+              ? 'Hide every component / 全部取消顯示'
+              : 'Show every component / 全部顯示'
+          }
           className="rounded border border-line-strong bg-surface px-2 py-1 text-[10px] font-semibold text-ink-700 hover:border-ink-400 disabled:cursor-default disabled:opacity-40"
         >
-          Show all / 全部顯示
+          {hiddenIds.size === 0 ? 'Hide all / 全部取消' : 'Show all / 全部顯示'}
         </button>
       </footer>
     </section>
