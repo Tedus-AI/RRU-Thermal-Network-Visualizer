@@ -4,6 +4,10 @@ import { LIBRARY_FILE_FORMAT, serializeLibrary } from './componentLibraryFile';
 import { useComponentLibraryStore, toLibraryEntry, type LibraryEntry } from './componentLibraryStore';
 import { createComponent, emptyThermalSpec, type Component } from '@/domain/component';
 
+const LIB_PROJECT = { id: 'PRJ_A', name: 'Project A' };
+
+const PROJECT = { id: 'PRJ_A', name: 'Project A' };
+
 function component(name: string, patch: Partial<Component> = {}): Component {
   return {
     ...createComponent({
@@ -25,6 +29,8 @@ function entry(patch: Partial<LibraryEntry> = {}): LibraryEntry {
   return {
     id: 'LIB_PA',
     name: 'Final PA',
+    source_project_id: 'PRJ_A',
+    source_project_name: 'Project A',
     category: 'RF',
     default_power_W: 45,
     thermal_spec: emptyThermalSpec(),
@@ -75,7 +81,7 @@ afterEach(() => {
  */
 describe('renaming a library entry', () => {
   it('changes the label', () => {
-    store().saveComponent(component('Final PA'));
+    store().saveComponent(component('Final PA'), PROJECT);
     const [saved] = store().entries;
     store().rename(saved.id, 'Final PA (Rev B)');
     expect(store().entries[0].name).toBe('Final PA (Rev B)');
@@ -88,14 +94,14 @@ describe('renaming a library entry', () => {
    * next time the two merged.
    */
   it('keeps the id, which is what merging matches on', () => {
-    store().saveComponent(component('Final PA'));
+    store().saveComponent(component('Final PA'), PROJECT);
     const before = store().entries[0].id;
     store().rename(before, 'Final PA (Rev B)');
     expect(store().entries[0].id).toBe(before);
   });
 
   it('refuses to blank a name', () => {
-    store().saveComponent(component('Final PA'));
+    store().saveComponent(component('Final PA'), PROJECT);
     const { id } = store().entries[0];
     store().rename(id, '   ');
     expect(store().entries[0].name).toBe('Final PA');
@@ -104,11 +110,11 @@ describe('renaming a library entry', () => {
   // The derived id no longer matches the name, so a re-save has to find the
   // entry some other way or the catalogue forks into two copies of one part.
   it('does not fork the entry when the renamed part is saved again', () => {
-    store().saveComponent(component('Final PA'));
+    store().saveComponent(component('Final PA'), PROJECT);
     const { id } = store().entries[0];
     store().rename(id, 'Final PA Rev B');
 
-    store().saveComponent(component('Final PA Rev B', { power_W: { value: 52, source: 'Manual' } }));
+    store().saveComponent(component('Final PA Rev B', { power_W: { value: 52, source: 'Manual' } }), PROJECT);
     expect(store().entries).toHaveLength(1);
     expect(store().entries[0].id).toBe(id);
     expect(store().entries[0].default_power_W).toBe(52);
@@ -117,14 +123,14 @@ describe('renaming a library entry', () => {
 
 describe('removing an entry', () => {
   it('takes it out of the catalogue', () => {
-    store().saveComponent(component('Final PA'));
-    store().saveComponent(component('FPGA'));
+    store().saveComponent(component('Final PA'), PROJECT);
+    store().saveComponent(component('FPGA'), PROJECT);
     store().remove(store().entries.find((e) => e.name === 'FPGA')!.id);
     expect(store().entries.map((e) => e.name)).toEqual(['Final PA']);
   });
 
   it('survives a reload, because the write is what persists', () => {
-    store().saveComponent(component('Final PA'));
+    store().saveComponent(component('Final PA'), PROJECT);
     store().remove(store().entries[0].id);
     store().load();
     expect(store().entries).toEqual([]);
@@ -186,7 +192,7 @@ describe('toLibraryEntry', () => {
     subject.architecture_prep.preferred_base_zone = 'RF_LEFT';
     subject.architecture_prep.template_preference = 'BOTTOM_COOL_COIN';
 
-    const saved = toLibraryEntry(subject);
+    const saved = toLibraryEntry(subject, LIB_PROJECT);
     expect(saved.template_preference).toBe('BOTTOM_COOL_COIN');
     expect(saved).not.toHaveProperty('preferred_base_zone');
     expect(JSON.stringify(saved)).not.toContain('RF_LEFT');

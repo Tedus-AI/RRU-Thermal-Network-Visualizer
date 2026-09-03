@@ -56,6 +56,8 @@ import {
 import { normalizeHeatPath } from '@/importers/component/normalizeComponent';
 import { toLibraryEntry, fromLibraryEntry } from '@/data/componentLibraryStore';
 
+const LIB_PROJECT = { id: 'PRJ_A', name: 'Project A' };
+
 function base(overrides: Partial<Component> = {}): Component {
   return {
     ...createComponent({
@@ -594,7 +596,7 @@ describe('component library (04 §26, AC-04-11)', () => {
       },
     };
 
-    const entry = toLibraryEntry(component);
+    const entry = toLibraryEntry(component, LIB_PROJECT);
     const serialized = JSON.stringify(entry);
 
     expect(entry.thermal_spec.r_jc_C_per_W?.value).toBe(0.35);
@@ -607,7 +609,7 @@ describe('component library (04 §26, AC-04-11)', () => {
   });
 
   it('rehydrates into a project component with a clean, unmapped state', () => {
-    const entry = toLibraryEntry(readyPA());
+    const entry = toLibraryEntry(readyPA(), LIB_PROJECT);
     const rehydrated = fromLibraryEntry(entry, { id: 'CMP_NEW', qty: 2 });
 
     expect(rehydrated.qty).toBe(2);

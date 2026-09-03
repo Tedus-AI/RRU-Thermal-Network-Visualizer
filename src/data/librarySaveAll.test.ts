@@ -21,6 +21,8 @@ import {
   type LibraryEntry,
 } from './componentLibraryStore';
 
+const PROJECT = { id: 'PRJ_A', name: 'Project A' };
+
 const store = new Map<string, string>();
 
 beforeEach(() => {
@@ -53,30 +55,30 @@ function component(name: string, powerW: number): Component {
 
 describe('saving the whole table to the library', () => {
   it('names nothing when the catalogue is empty', () => {
-    expect(libraryOverwrites([], [component('XCZU67DR', 35)])).toEqual([]);
+    expect(libraryOverwrites([], [component('XCZU67DR', 35)], PROJECT)).toEqual([]);
   });
 
   it('names a part the catalogue already holds', () => {
-    const held: LibraryEntry[] = [toLibraryEntry(component('XCZU67DR', 20))];
+    const held: LibraryEntry[] = [toLibraryEntry(component('XCZU67DR', 20), PROJECT)];
 
-    expect(libraryOverwrites(held, [component('XCZU67DR', 35), component('Si5518', 2)])).toEqual([
+    expect(libraryOverwrites(held, [component('XCZU67DR', 35), component('Si5518', 2)], PROJECT)).toEqual([
       'XCZU67DR',
     ]);
   });
 
   /** The same rule `saveComponent` uses, so warning and write cannot disagree. */
   it('matches on the name however it was typed', () => {
-    const held: LibraryEntry[] = [toLibraryEntry(component('XCZU67DR', 20))];
+    const held: LibraryEntry[] = [toLibraryEntry(component('XCZU67DR', 20), PROJECT)];
 
-    expect(libraryOverwrites(held, [component('  xczu67dr  ', 35)])).toEqual(['XCZU67DR']);
+    expect(libraryOverwrites(held, [component('  xczu67dr  ', 35)], PROJECT)).toEqual(['XCZU67DR']);
   });
 
   it('files every part, and reports what it overwrote', () => {
-    useComponentLibraryStore.getState().saveAll([component('XCZU67DR', 20)]);
+    useComponentLibraryStore.getState().saveAll([component('XCZU67DR', 20)], PROJECT);
 
     const result = useComponentLibraryStore
       .getState()
-      .saveAll([component('XCZU67DR', 35), component('Si5518', 2)]);
+      .saveAll([component('XCZU67DR', 35), component('Si5518', 2)], PROJECT);
 
     expect(result.saved).toBe(2);
     expect(result.overwritten).toEqual(['XCZU67DR']);
@@ -93,7 +95,7 @@ describe('saving the whole table to the library', () => {
     // the catalogue now holds.
     const result = useComponentLibraryStore
       .getState()
-      .saveAll([component('DDR', 1), component('DDR', 2)]);
+      .saveAll([component('DDR', 1), component('DDR', 2)], PROJECT);
 
     expect(result.saved).toBe(1);
     expect(useComponentLibraryStore.getState().entries).toHaveLength(1);

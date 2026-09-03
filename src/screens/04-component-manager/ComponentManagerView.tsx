@@ -20,7 +20,12 @@ import { toast } from '@/ui/toast';
 
 import { useProjectStore } from '@/data/projectStore';
 import { useComponentStore } from '@/data/componentStore';
-import { libraryOverwrites, useComponentLibraryStore } from '@/data/componentLibraryStore';
+import {
+  libraryOverwrites,
+  UNASSIGNED_LIBRARY_PROJECT,
+  UNASSIGNED_LIBRARY_PROJECT_LABEL,
+  useComponentLibraryStore,
+} from '@/data/componentLibraryStore';
 import { useNetworkStore } from '@/data/networkStore';
 import { useScenarioStore } from '@/data/scenarioStore';
 import { useSolverStore } from '@/data/solverStore';
@@ -98,6 +103,18 @@ export function ComponentManagerView() {
   // Subscribed, not read once: the manager can rename or delete entries, and the
   // picker beside it must not go on offering a part that is no longer there.
   const libraryEntries = useComponentLibraryStore((s) => s.entries);
+  /**
+   * Whose answer a catalogue save records. The catalogue holds one row per part
+   * PER PROJECT, so two projects can disagree about the same part's wattage or
+   * thermal spec without one silently replacing the other.
+   */
+  const libraryProject = useMemo(
+    () => ({
+      id: draft?.project_id ?? UNASSIGNED_LIBRARY_PROJECT,
+      name: draft?.project_name || draft?.project_id || UNASSIGNED_LIBRARY_PROJECT_LABEL,
+    }),
+    [draft?.project_id, draft?.project_name],
+  );
   const [showBulk, setShowBulk] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Component | null>(null);
   const [libraryOverwriteConfirm, setLibraryOverwriteConfirm] = useState<string[] | null>(null);
@@ -348,10 +365,11 @@ export function ComponentManagerView() {
                 const overwrites = libraryOverwrites(
                   useComponentLibraryStore.getState().entries,
                   visible,
+                  libraryProject,
                 );
                 // Nothing to warn about means nothing to ask about.
                 if (overwrites.length === 0) {
-                  const { saved } = useComponentLibraryStore.getState().saveAll(visible);
+                  const { saved } = useComponentLibraryStore.getState().saveAll(visible, libraryProject);
                   toast.success(`Saved ${saved} to the library / 已存入元件庫 ${saved} 筆`);
                   return;
                 }
@@ -394,7 +412,7 @@ export function ComponentManagerView() {
             onGoToField={(nextTab, fieldId) => goToIssue(selected.id, nextTab, fieldId)}
             onPatch={patchComponent}
             onSaveToLibrary={(component) => {
-              useComponentLibraryStore.getState().saveComponent(component);
+              useComponentLibraryStore.getState().saveComponent(component, libraryProject);
               toast.success(`"${component.name}" saved to the component library / 已存入元件庫`);
             }}
           />
@@ -539,7 +557,7 @@ export function ComponentManagerView() {
                 onClick={() => {
                   const { saved, overwritten } = useComponentLibraryStore
                     .getState()
-                    .saveAll(visible);
+                    .saveAll(visible, libraryProject);
                   setLibraryOverwriteConfirm(null);
                   toast.success(
                     `Saved ${saved} to the library, ${overwritten.length} overwritten / 已存入元件庫 ${saved} 筆，覆蓋 ${overwritten.length} 筆`,
