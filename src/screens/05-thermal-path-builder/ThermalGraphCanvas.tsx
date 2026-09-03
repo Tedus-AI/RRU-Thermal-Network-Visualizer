@@ -239,6 +239,22 @@ export const ThermalGraphCanvas = forwardRef<
   // Read inside effects without making the layout re-run on every mode change.
   const layoutModeRef = useRef(layoutMode);
   layoutModeRef.current = layoutMode;
+  /**
+   * A layout run over a FILTERED graph must not be written back.
+   *
+   * `renderedDomainPositions` reports the nodes currently drawn, and the store
+   * merges them over what it holds. With components hidden that is a SUBSET:
+   * the visible parts get fresh, compact coordinates while the hidden ones keep
+   * their old ones, so showing everything again lands two differently-scaled
+   * arrangements on top of each other. That is the pile-up — and why Auto
+   * Layout, which re-lays the whole graph, clears it.
+   *
+   * Screens 06 and 07 never had it because their canvases never persist
+   * positions at all. The filter is a way of READING the graph, so the same
+   * rule applies here: it may move what is drawn, never what is stored.
+   */
+  const filteredRef = useRef(false);
+  filteredRef.current = hiddenComponentIds.size > 0;
   const fittedRef = useRef(false);
   // Signature of the last rendered element set, so a pure attribute change keeps
   // the engineer's viewport while an added or removed object brings it into view.
@@ -495,7 +511,9 @@ export const ThermalGraphCanvas = forwardRef<
       );
       layout.one('layoutstop', () => {
         positionViewBuses(cy, true);
-        handlers.current.onLayout(renderedDomainPositions(cy), { explicit: false });
+        if (!filteredRef.current) {
+          handlers.current.onLayout(renderedDomainPositions(cy), { explicit: false });
+        }
         refit();
       });
       layout.run();
@@ -587,7 +605,11 @@ export const ThermalGraphCanvas = forwardRef<
         const layout = layoutElements(cy).layout(layoutOptions(mode, layoutEdgeLabels(cy)));
         layout.one('layoutstop', () => {
           positionViewBuses(cy, true);
-          handlers.current.onLayout(renderedDomainPositions(cy), { explicit: true });
+          // Tidies the view either way; only an unfiltered run is the whole
+          // graph, and only the whole graph is an arrangement worth keeping.
+          if (!filteredRef.current) {
+            handlers.current.onLayout(renderedDomainPositions(cy), { explicit: true });
+          }
           cy.fit(undefined, 40);
         });
         layout.run();
