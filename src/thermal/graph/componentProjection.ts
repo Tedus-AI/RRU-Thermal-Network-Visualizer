@@ -1,7 +1,7 @@
 /** Projects Screen 04 master values onto a clone without mutating Screen 05. */
 
 import type { Component } from '@/domain/component';
-import { powerWOf } from '@/domain/component';
+import { mountFootprintMm2, mountSpec, powerWOf } from '@/domain/component';
 import { valueOf } from '@/domain/sourcedValue';
 
 import { defaultMaterials, type MaterialDefaults } from '@/domain/materials';
@@ -47,6 +47,29 @@ function representedDevices(
   return 1;
 }
 
+/**
+ * The aluminium an embedded pipe leaves behind, mm² — or null if it does not apply.
+ *
+ * `fullAreaMm2` is the whole contact face the link resolved to; the copper is
+ * `contact_L × contact_W × pipes`, one groove per pipe. Pipes covering the face
+ * completely leave nothing to spread through, and that is a real arrangement as
+ * well as what a mistyped width looks like, so it returns 0 and the branch goes
+ * unresolved rather than silently falling back to the full face.
+ */
+function embeddedPipeCarveOutMm2(
+  component: Component,
+  fullAreaMm2: EdgeParameters['source_area_mm2'],
+): number | null {
+  const mount = mountSpec(component.thermal_spec);
+  if (mount.type !== 'EmbeddedHeatPipe') return null;
+  if (typeof fullAreaMm2 !== 'number' || !Number.isFinite(fullAreaMm2) || fullAreaMm2 <= 0) {
+    return null;
+  }
+  const copper = mountFootprintMm2(mount);
+  if (copper == null) return null;
+  return Math.max(0, fullAreaMm2 - copper);
+}
+
 function updateLinkedEdge(
   network: ThermalNetwork,
   edge: ThermalEdge,
@@ -75,18 +98,34 @@ function updateLinkedEdge(
 
   // An embedded heat pipe lies in a groove machined flush with the face the
   // part sits on, so the aluminium branch spreads through only what the copper
-  // leaves behind. That area cannot be read back off the graph — the link
-  // points at the FULL contact face, which is what the copper and the aluminium
-  // share — so the mount records it on the edge, and it has to win here for the
-  // same reason `refreshHskBaseConnectionEdges` already lets it win.
+  // leaves behind. The link points at the FULL contact face, which is what the
+  // copper and the aluminium share, so resolving it would restore the whole
+  // footprint and let Screen 05 show the carved-out area while Screen 07 solved
+  // the full one.
   //
-  // Without this, resolving the link quietly restored the whole footprint on
-  // the solver's own clone: Screen 05 showed the carved-out area and Screen 07
-  // solved the full one, which is the exact failure the override exists to
-  // prevent — just reached down a second path.
-  const overrideArea = edge.metadata?.[SOURCE_AREA_OVERRIDE_KEY];
-  if (typeof overrideArea === 'number' && Number.isFinite(overrideArea) && overrideArea > 0) {
-    perDevice.source_area_mm2 = overrideArea;
+  // Recomputed from the component's mount AS IT STANDS wherever the mount can
+  // say, and only otherwise read back from the number the edge was built with.
+  // The stored one is written once, when the port is connected, and then
+  // re-applied faithfully for ever — so an edge that arrives carrying a stale
+  // area (an older build, an imported save, a hand-edited file) keeps it, and
+  // correcting the pipe width in Screen 04 changed the picture everywhere
+  // except the one number it was supposed to change. On the STARKCORE FPGA a
+  // stale 315 mm² against the true 770 reads 0.418 °C/W where the mount says
+  // 0.322: a 30 % error in that part's dominant path, from data already fixed
+  // upstream.
+  const carveOut = embeddedPipeCarveOutMm2(component, perDevice.source_area_mm2);
+  if (carveOut != null) {
+    perDevice.source_area_mm2 = carveOut;
+  } else {
+    // The mount could not answer — no embedded pipe, or no footprint stated.
+    // Then the number the edge was built with is all there is, and keeping it
+    // is the safe direction: a carve-out that is too SMALL over-estimates the
+    // resistance, while restoring the full face under-estimates it, and an
+    // optimistic thermal answer is the one that ships a part over its limit.
+    const stored = edge.metadata?.[SOURCE_AREA_OVERRIDE_KEY];
+    if (typeof stored === 'number' && Number.isFinite(stored) && stored > 0) {
+      perDevice.source_area_mm2 = stored;
+    }
   }
 
   const parameters = scaleParametersForDevices(

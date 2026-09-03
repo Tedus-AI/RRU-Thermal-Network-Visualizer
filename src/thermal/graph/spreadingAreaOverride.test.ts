@@ -21,7 +21,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { defaultMaterials } from '@/domain/materials';
-import { createComponent, type Component } from '@/domain/component';
+import { createComponent, emptyMount, type Component } from '@/domain/component';
 
 import { computeRth } from '../resistance/calculators';
 import type { ThermalNetwork } from '../types';
@@ -34,6 +34,24 @@ const ALUMINIUM_AREA = PACKAGE_AREA - GROOVE_AREA;
 
 const SPREADING_EDGE = 'EDGE_PORT_CMP_FPGA_TIM_HEAT_OUT_HSK_BASE';
 const TIM_EDGE = 'EDGE_CMP_FPGA_LID_TIM';
+
+/** The real mount: two flattened pipes, 35 x 6.5 mm each, in the base. */
+function embeddedPipeComponent(): Component {
+  const base = component();
+  return {
+    ...base,
+    thermal_spec: {
+      ...base.thermal_spec,
+      mount: {
+        ...emptyMount('EmbeddedHeatPipe'),
+        contact_L_mm: 35,
+        contact_W_mm: 6.5,
+        heat_pipe_count: 2,
+        heat_pipe_R_C_per_W: 0.13,
+      },
+    },
+  };
+}
 
 function component(): Component {
   return createComponent({
@@ -164,5 +182,79 @@ describe('the spreading area a mount dictates', () => {
     expect(carved).toBeGreaterThan(whole);
     expect(carved).toBeCloseTo(0.3223, 3);
     expect(whole).toBeCloseTo(0.2803, 3);
+  });
+});
+
+/**
+ * The number on the edge is where the port connection LEFT it, and nothing
+ * rewrote it afterwards. So an edge that arrives carrying a stale carve-out —
+ * from an older build, an imported save, a hand-edited file — kept it for ever,
+ * and correcting the pipe width in Screen 04 changed the picture everywhere
+ * except the one number it was supposed to change.
+ *
+ * Reported from a real project: Screen 07 read `Spreading 0.418 °C/W` where the
+ * mount as stated gives 0.322. 0.418 is exactly what 315 mm² produces at the
+ * scenario's Bi = 0.1061, and 315 is 1225 − 910 — a groove 910 mm² wide, which
+ * is 35 x 13 mm twice. The mount says 35 x 6.5 twice, so 455 of copper and 770
+ * of aluminium. A 30 % error in that part's dominant path.
+ */
+describe('a carve-out the edge was built with, after the mount moved on', () => {
+  const staleNetwork = () => {
+    const net = network();
+    net.edges[SPREADING_EDGE].metadata![SOURCE_AREA_OVERRIDE_KEY] = 315;
+    net.edges[SPREADING_EDGE].parameters!.source_area_mm2 = 315;
+    return net;
+  };
+
+  const projectedArea = (component: Component) =>
+    projectComponentMaster(staleNetwork(), [component], defaultMaterials(), {
+      physics: true,
+      limits: true,
+    }).edges[SPREADING_EDGE].parameters?.source_area_mm2;
+
+  it('is recomputed from the mount, not read back off the edge', () => {
+    expect(projectedArea(embeddedPipeComponent())).toBe(ALUMINIUM_AREA);
+  });
+
+  /** And the resistance moves with it — that is the whole point. */
+  it('moves the solved resistance with it', () => {
+    const projected = projectComponentMaster(
+      staleNetwork(),
+      [embeddedPipeComponent()],
+      defaultMaterials(),
+      { physics: true, limits: true },
+    );
+
+    const stale = computeRth('spreading_disc', {
+      thickness_mm: 7,
+      k_W_mK: 150,
+      plate_area_mm2: 92400,
+      source_area_mm2: 315,
+      psi_variant: 'max',
+      bi: 0.10610761791275494,
+    });
+    const fixed = computeRth('spreading_disc', {
+      ...(projected.edges[SPREADING_EDGE].parameters as Record<string, unknown>),
+      bi: 0.10610761791275494,
+    });
+
+    expect(stale.value!).toBeCloseTo(0.4175, 4);
+    expect(fixed.value!).toBeCloseTo(0.3222, 4);
+  });
+
+  /**
+   * A mount that cannot answer keeps what the edge holds. Restoring the full
+   * face instead would UNDER-estimate the resistance, and an optimistic thermal
+   * answer is the one that ships a part over its limit.
+   */
+  it('keeps the stored area when the mount is not an embedded pipe', () => {
+    expect(projectedArea(component())).toBe(315);
+  });
+
+  it('keeps it when an embedded pipe has no footprint stated', () => {
+    const vague = embeddedPipeComponent();
+    vague.thermal_spec.mount = { ...emptyMount('EmbeddedHeatPipe'), heat_pipe_count: 2 };
+
+    expect(projectedArea(vague)).toBe(315);
   });
 });

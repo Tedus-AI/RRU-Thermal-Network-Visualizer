@@ -13,6 +13,7 @@ import { defaultMaterials, findTimMaterial, type MaterialDefaults } from '@/doma
 import type { Component } from '@/domain/component';
 import { loadComponents } from '@/data/persistence';
 import type { ComponentCategory } from '@/domain/component';
+import { CARRIED_SPEC_COLUMN, encodeCarriedSpec } from './carriedSpec';
 import type { ParsedTable } from './types';
 
 export interface ExistingProjectSummary {
@@ -46,9 +47,20 @@ export function summarizeSourceProject(
 }
 
 /**
- * One column per canonical field the component model can still answer, so a
- * project exported here re-imports without losing anything. The spread face is
- * absent because it is derived from the heat path now, not stored.
+ * The columns the review table is built from, plus the two lineage columns and
+ * the carried spec.
+ *
+ * The mapped columns are what the engineer SEES and edits in the review step,
+ * so they cover the fields worth reviewing. They cannot cover the whole model —
+ * the mount alone is nine fields, and `heat_path.parameters` has no fixed shape
+ * at all — and everything without a column used to be re-guessed or lost.
+ *
+ * `_ref_spec` carries the rest as JSON, unmapped, exactly as the `_ref_origin_*`
+ * lineage columns already ride along (02 §6). One column, and it keeps up with
+ * the model on its own: see `carriedSpec.ts` for what it holds and why the
+ * mapped columns still win over it.
+ *
+ * The spread face is absent because it is derived from the heat path now.
  */
 export const EXISTING_PROJECT_HEADERS = [
   'Component',
@@ -69,6 +81,7 @@ export const EXISTING_PROJECT_HEADERS = [
   'Thick(mm)',
   '_ref_origin_project',
   '_ref_origin_id',
+  CARRIED_SPEC_COLUMN,
 ];
 
 const text = (value: unknown): string => (value == null ? '' : String(value));
@@ -117,6 +130,10 @@ export function parseExistingProject(
     // Keep the original lineage if the source already had one, else point here.
     text(component.provenance.ref_origin_project ?? projectId),
     text(component.provenance.ref_origin_id ?? component.id),
+    // Everything the columns above cannot say: the mount, the limit type and
+    // whether it was confirmed, the heat path's parameters, the TIM's contact
+    // mode, and the architecture preferences.
+    encodeCarriedSpec(component),
   ]);
 
   return { headers: EXISTING_PROJECT_HEADERS, rows, sourceName: projectId };

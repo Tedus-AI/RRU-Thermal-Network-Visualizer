@@ -166,6 +166,26 @@ export async function writeTextFile(
   }
 }
 
+/**
+ * Removes one file from the bound folder.
+ *
+ * Returns false when the browser's handle does not offer `removeEntry` — it is
+ * optional in the File System Access API and older engines lack it — so the
+ * caller can say the file is still there rather than claim a delete that never
+ * happened. A file that is already gone counts as removed.
+ */
+export async function deleteFile(handle: DirectoryHandle, filename: string): Promise<boolean> {
+  if (typeof handle.removeEntry !== 'function') return false;
+  try {
+    await handle.removeEntry(filename);
+    return true;
+  } catch {
+    // Already gone is the outcome the caller wanted; anything else (a lock, a
+    // revoked permission) is reported by re-reading the folder, not guessed at.
+    return (await readTextFile(handle, filename)) == null;
+  }
+}
+
 export interface FolderEntry {
   filename: string;
   size: number;

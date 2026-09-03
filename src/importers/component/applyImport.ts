@@ -26,6 +26,12 @@ import {
   effectiveHeatPath,
   effectiveSourceFace,
 } from './buildStagingRows';
+import {
+  applyCarriedSpec,
+  carriedArchitecturePrep,
+  CARRIED_SPEC_COLUMN,
+  decodeCarriedSpec,
+} from './carriedSpec';
 import type { ApplyResult, DuplicatePolicy, ImportSourceDescriptor, StagingRow } from './types';
 
 /**
@@ -51,7 +57,14 @@ function geometryFaces(row: StagingRow, heatPath: HeatPathType) {
   };
 }
 
-function specFromRow(row: StagingRow, materials: MaterialDefaults): ThermalSpec {
+/**
+ * The spec the row's own columns describe, before anything is carried over.
+ *
+ * Every field here either has a column or is inferred from one. That is all a
+ * spreadsheet can offer, and it stays exactly as it was — see `specFromRow`,
+ * which lays a carried spec over the top when the source has one.
+ */
+function specFromColumns(row: StagingRow, materials: MaterialDefaults): ThermalSpec {
   // No heat path stated means it is inferred, which must not read as a decision.
   const heatPath = effectiveHeatPath(row);
   const faces = geometryFaces(row, heatPath);
@@ -97,12 +110,35 @@ function specFromRow(row: StagingRow, materials: MaterialDefaults): ThermalSpec 
   };
 }
 
+/**
+ * The spec to write, columns first and the carried payload over the top.
+ *
+ * A spreadsheet has no carried payload, so this is `specFromColumns` unchanged.
+ * An existing-project import has one, and it fills in exactly the fields no
+ * column can state — the mount, the limit type the source had already settled,
+ * the heat path's parameters, the TIM's contact mode. Without it those were
+ * re-guessed or dropped, and the re-guess could CONTRADICT what survived: a
+ * body-sourced part came back with its heat path intact and its limit type
+ * inferred back to `Tj`, which Screen 02 then reported as a red error the
+ * source project never had.
+ */
+function specFromRow(row: StagingRow, materials: MaterialDefaults): ThermalSpec {
+  const built = specFromColumns(row, materials);
+  const carried = decodeCarriedSpec(row.extra[CARRIED_SPEC_COLUMN]);
+  return carried ? applyCarriedSpec(built, carried) : built;
+}
+
 /** Keeps a TIM name the library could not match, so it is recoverable. */
 function buildMetadata(
   row: StagingRow,
   materials: MaterialDefaults,
 ): Record<string, unknown> | undefined {
   const extra: Record<string, unknown> = { ...row.extra };
+  // The carried spec has been read into the component's own fields; keeping a
+  // second copy in `metadata` would let the two drift and would show a wall of
+  // JSON under "Preserved Source Fields", which is for values this tool does
+  // NOT model — the opposite of what this one is.
+  delete extra[CARRIED_SPEC_COLUMN];
   if (row.tim_name && matchTimId(row.tim_name, materials) == null) {
     extra._unmatched_tim = row.tim_name;
   }
@@ -332,20 +368,30 @@ export function applyImport({ existing, rows, sessionPolicy, source, materials }
     const id = slugId(name, takenIds);
     takenIds.add(id);
 
+    const carried = decodeCarriedSpec(row.extra[CARRIED_SPEC_COLUMN]);
     const component: Component = {
       id,
       name,
       category,
-      enabled: true,
+      // A part the source had switched off arrives switched off. It is in the
+      // table because the engineer ticked "Hidden / Excluded" in Import Scope,
+      // and silently re-enabling it would put power back into the design.
+      enabled: carried ? carried.enabled : true,
       qty: row.qty ?? 0,
       power_W:
         row.power_W == null ? unknownValue<number>('Imported') : sourced(row.power_W, 'Imported'),
       thermal_spec: specFromRow(row, materials),
-      // 02 §34 / 04 §40 — importing never creates graph topology or preferences.
-      architecture_prep: emptyArchitecturePrep(),
+      // 02 §34 / 04 §40 — importing still never creates graph topology. What
+      // carries is the PREFERENCES: which template, which base zone, how
+      // quantity is modelled. Copying a project within the same product is
+      // exactly when those hold, and Screen 05 readiness is reset regardless.
+      architecture_prep: carried
+        ? carriedArchitecturePrep(emptyArchitecturePrep(), carried)
+        : emptyArchitecturePrep(),
       provenance: provenanceFor(source, row),
       external_mappings: emptyExternalMappings(),
       metadata: buildMetadata(row, materials),
+      ...(carried?.notes ? { notes: carried.notes } : {}),
     };
 
     components.push(component);
