@@ -12,6 +12,10 @@
 
 import type { StylesheetCSS } from 'cytoscape';
 import type { NodeType, ThermalEdge, ThermalNode } from '@/thermal/types';
+import {
+  parallelBraceStyle,
+  parallelBranchStyles,
+} from '@/screens/05-thermal-path-builder/parallelPairs';
 
 export type NodeVisualGroup =
   | 'source'
@@ -156,6 +160,21 @@ export const LEGEND: LegendEntry[] = [
     kind: 'line',
     style: 'solid',
     color: HSK_BUS_COLOR,
+  },
+  // Two entries about the same thing: the dotted arc that brackets a parallel
+  // pair, and the `≥` on the number it brackets.
+  {
+    label: 'Parallel pair, combined',
+    zh: '並聯後合計（虛線括住的兩條路）',
+    kind: 'line',
+    style: 'dotted',
+    color: HSK_BUS_COLOR,
+  },
+  {
+    label: '≥ Bi → ∞ floor; 07 re-solves it higher',
+    zh: '≥ 為 Bi→∞ 下限，07 以實際邊界重算後只會更大',
+    kind: 'state',
+    style: HSK_BUS_COLOR,
   },
 ];
 
@@ -536,5 +555,9 @@ export function cytoscapeStylesheet(): StylesheetCSS[] {
       selector: '.hide-label',
       style: { label: '' },
     },
+    // The brace over a parallel pair the bus is not drawing. Screen 07 adds the
+    // identical rule from the identical helper, so 05, 06 and 07 draw one thing.
+    ...parallelBranchStyles(),
+    parallelBraceStyle(HSK_BUS_COLOR),
   ] as unknown as StylesheetCSS[];
 }

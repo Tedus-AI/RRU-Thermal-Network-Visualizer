@@ -50,6 +50,14 @@ import {
   type ViewportBox,
 } from '@/ui/graphViewport';
 import { layoutOptions } from '@/screens/05-thermal-path-builder/ThermalGraphCanvas';
+import {
+  parallelBraceElement,
+  parallelBraceStyle,
+  parallelBranchGeometry,
+  parallelBranchStyles,
+  parallelPairNames,
+  parallelPairs,
+} from '@/screens/05-thermal-path-builder/parallelPairs';
 import type { ThermalNetwork } from '@/thermal/types';
 import type { ThermalSolution } from '@/thermal/solver/solverTypes';
 
@@ -199,6 +207,8 @@ export function solvedStylesheet(): StylesheetCSS[] {
         'z-index': 10,
       },
     },
+    ...parallelBranchStyles(),
+    parallelBraceStyle(HSK_BUS_COLOR),
     {
       selector: 'edge:selected',
       style: { 'line-color': '#1d4ed8', 'target-arrow-color': '#1d4ed8', 'source-arrow-color': '#1d4ed8' },
@@ -298,6 +308,21 @@ export function buildElements(
   });
   elements.push(...bus.elements);
   for (const element of bus.elements) presentNodes.add(element.data.id as string);
+
+  // Pairs the bar is not drawing. Computed here rather than after the edges,
+  // because a branch of a pair has to be NAMED as well as braced: two lines
+  // between the same boxes are otherwise told apart only by their numbers, and
+  // "which of these is the pipe?" is the question a reader actually has.
+  const pairs = parallelPairs(network, hidden, bus.routed);
+  // Index within its own pair, so the two labels are pushed apart rather than
+  // both landing in the gap between the same two boxes.
+  const pairedEdgeIds = new Map(
+    pairs.flatMap((pair) =>
+      pair.edgeIds.map(
+        (id, index) => [id, parallelBranchGeometry(index, pair.edgeIds.length)] as const,
+      ),
+    ),
+  );
 
   for (const edge of Object.values(network.edges)) {
     if (!presentNodes.has(edge.from) || !presentNodes.has(edge.to)) continue;
@@ -436,88 +461,56 @@ export function buildElements(
         id: edge.id,
         source: edge.from,
         target: edge.to,
-        label,
+        // Named, because one of a pair is only identifiable by its name — here
+        // they read as two bare numbers with nothing to say which was the pipe.
+        // On ONE line, unlike the bar's two: the bar has a whole branch length
+        // to write along, while a pair between two boxes has only the gap
+        // between them, and two stacked lines each side of it collided in the
+        // middle. One line each, pushed apart by the stylesheet, fits.
+        label: label && pairedEdgeIds.has(edge.id) ? `${branchShortName(edge)} ${label}` : label,
         color,
         width,
         // A negative Q means the heat really flows the other way (07 §15, §22).
         srcArrow: reverse ? 'triangle' : 'none',
         tgtArrow: reverse ? 'none' : 'triangle',
         lineStyle: !enabled ? 'dotted' : R == null && solved ? 'dashed' : 'solid',
+        ...pairedEdgeIds.get(edge.id),
       },
+      classes: pairedEdgeIds.has(edge.id) ? 'parallel-pair-branch' : undefined,
     });
   }
 
   /*
      The combination, for a pair the BUS did not draw.
 
-     A bus only forms at four branches or more, so filtering the graph down to
-     one component dissolved it — and with it the note saying what that
-     component's two routes were worth together. That was backwards: the pair is
-     a property of the network, not of the bar that happens to be drawn over it,
-     and reading one part's chain is exactly when the combination matters most.
+     A bar only forms at four branches or more, so filtering the graph down to
+     one component dissolves it — and with it the note saying what that
+     component's two routes were worth together. The pair is a property of the
+     network, not of the bar drawn over it, and reading one part's chain is
+     exactly when the combination matters most.
 
-     So the note is derived here from the node pairs themselves. It lands at the
-     midpoint, which is where two curves drawn between the same nodes bow apart.
+     Drawn as a brace: an arc over the pair carrying the value, and naming the
+     two branches it came from. The free-standing note this replaces had to be
+     repositioned after every layout and still read as a caption floating near
+     two curves rather than as a statement about them.
   */
-  for (const [key, ids] of parallelSetsOf(network, hidden, bus.routed)) {
-    if (ids.length < 2 || !display.showLabels) continue;
-    const [fromId, toId] = key.split('\u0000');
-    if (!presentNodes.has(fromId) || !presentNodes.has(toId)) continue;
-    const a = network.layout.positions[fromId];
-    const b = network.layout.positions[toId];
-    const text = parallelNote(network, solution, ids, mode, scenarioId);
-    if (!text) continue;
-    elements.push({
-      group: 'nodes',
-      data: {
-        id: `PARALLEL_NOTE_${fromId}__${toId}`,
-        // The pair it belongs to. `positionViewBuses` re-reads these after every
-        // layout and puts the note back at the LIVE midpoint; the position
-        // below is only the opening guess, from coordinates an Auto relayout is
-        // free to discard.
-        pairFrom: fromId,
-        pairTo: toId,
-        w: 1,
-        h: 1,
-        fill: '#ffffff',
-        border: '#ffffff',
-        text: HSK_BUS_COLOR,
-        label: text,
-      },
-      classes: 'view-only hsk-bus-parallel-note',
-      position: a && b ? { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 } : undefined,
-      selectable: false,
-      grabbable: false,
-    });
+  if (display.showLabels) {
+    for (const pair of pairs) {
+      if (!presentNodes.has(pair.from) || !presentNodes.has(pair.to)) continue;
+      const value = parallelNote(network, solution, pair.edgeIds, mode, scenarioId);
+      if (!value) continue;
+      const names = parallelPairNames(
+        network,
+        pair.edgeIds,
+        mode === 'heat_flow' ? 'heat_flow' : mode === 'delta_t' ? 'delta_t' : 'rth',
+      );
+      elements.push(
+        parallelBraceElement(pair, names ? `${names}\n${value}` : value, HSK_BUS_COLOR),
+      );
+    }
   }
 
   return elements;
-}
-
-/**
- * Node pairs joined by more than one edge the bus is not already drawing.
- *
- * Keyed by the ordered pair, because "parallel" means precisely "between the
- * same two nodes" — that is what makes the two share a ΔT and lets their
- * conductances add.
- */
-function parallelSetsOf(
-  network: ThermalNetwork,
-  hidden: ReadonlySet<string>,
-  routed: ReadonlyMap<string, unknown>,
-): Map<string, string[]> {
-  const byPair = new Map<string, string[]>();
-  for (const edge of Object.values(network.edges)) {
-    if (!edge.enabled) continue;
-    if (routed.has(edge.id)) continue;
-    if (hidden.has(edge.from) || hidden.has(edge.to)) continue;
-    const key = `${edge.from}\u0000${edge.to}`;
-    const list = byPair.get(key) ?? [];
-    list.push(edge.id);
-    byPair.set(key, list);
-  }
-  for (const [key, ids] of byPair) if (ids.length < 2) byPair.delete(key);
-  return byPair;
 }
 
 export const SolvedGraphCanvas = forwardRef<

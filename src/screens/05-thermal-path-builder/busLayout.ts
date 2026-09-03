@@ -90,15 +90,6 @@ function ensureParallelBusLabelRoom(cy: Core) {
   });
 }
 
-/**
- * How far off the pair's own axis the combination note sits.
- *
- * Cytoscape bows parallel edges apart by `control-point-step-size` (40 px by
- * default), so a pair reaches about 20 px either side of the straight line
- * between its nodes. This clears that, plus half a line of text.
- */
-const PAIR_NOTE_CLEARANCE_PX = 48;
-
 export function positionViewBuses(cy: Core, ensureParallelRoom = false) {
   if (ensureParallelRoom) ensureParallelBusLabelRoom(cy);
   cy.nodes('.hsk-bus').forEach((bus) => {
@@ -221,44 +212,5 @@ export function positionViewBuses(cy: Core, ensureParallelRoom = false) {
             : { x: source.position('x'), y: geometry.along! },
         );
       });
-  });
-
-  positionPairNotes(cy);
-}
-
-/**
- * The combination note for a parallel pair that NO bus is drawing.
- *
- * A bus only forms at four branches or more, so filtering the graph down to one
- * component dissolves it — and the note above rides on the bar, keyed by
- * `busId`, so it went with it. The note built from the node pair instead has no
- * bar to ride, and this pass is what gives it somewhere to be.
- *
- * It has to run here, after the layout, and not once when the element is built:
- * the stored `layout.positions` are the last SAVED coordinates, and every Auto
- * relayout recomputes the graph without writing them back. Positioning from
- * them put the note wherever the nodes used to be — which is why it looked, on
- * a relaid-out graph, as though the note had simply not been drawn.
- */
-function positionPairNotes(cy: Core) {
-  cy.nodes('.hsk-bus-parallel-note').forEach((note) => {
-    const from = cy.getElementById(note.data('pairFrom') as string);
-    const to = cy.getElementById(note.data('pairTo') as string);
-    if (!from.isNode() || !to.isNode()) return;
-    const midX = (from.position('x') + to.position('x')) / 2;
-    const midY = (from.position('y') + to.position('y')) / 2;
-    // Clear of the bow, not inside it. The bare midpoint is the one point the
-    // two curves are drawn to avoid, but it is also where the lower branch's
-    // own label sits and, on a short span, where the node at the far end
-    // reaches — so the combination landed on top of one of the two numbers it
-    // combines. Pushed off the axis it captions the pair instead of crowding
-    // it, and the two branch labels stay readable beside it.
-    const along = Math.abs(to.position('x') - from.position('x'));
-    const across = Math.abs(to.position('y') - from.position('y'));
-    note.position(
-      along >= across
-        ? { x: midX, y: midY + PAIR_NOTE_CLEARANCE_PX }
-        : { x: midX + PAIR_NOTE_CLEARANCE_PX, y: midY },
-    );
   });
 }
