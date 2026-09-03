@@ -12,7 +12,11 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { createComponent, type Component } from '@/domain/component';
+import {
+  createComponent,
+  type Component,
+  type ComponentCategory,
+} from '@/domain/component';
 import { withValue } from '@/domain/sourcedValue';
 
 import {
@@ -41,7 +45,11 @@ beforeEach(() => {
   useComponentLibraryStore.setState({ entries: [] });
 });
 
-function component(name: string, powerW: number, category = 'Digital' as const): Component {
+function component(
+  name: string,
+  powerW: number,
+  category: ComponentCategory = 'Digital',
+): Component {
   const base = createComponent({
     id: `CMP_${name.replace(/\W+/g, '_')}`,
     name,
