@@ -59,7 +59,7 @@ import {
   buildScale,
   num,
   rth as formatRth,
-  signed,
+  temperatureDrop,
   type ResultMode,
   type Scale,
 } from './resultViewModel';
@@ -212,7 +212,7 @@ function widthForFlow(magnitude: number, max: number): number {
   return 1.5 + (Math.min(magnitude, max) / max) * 7.5;
 }
 
-function buildElements(
+export function buildElements(
   network: ThermalNetwork,
   solution: ThermalSolution | null,
   mode: ResultMode,
@@ -310,7 +310,18 @@ function buildElements(
     let color = EDGE_NEUTRAL;
     let width = 2;
     let label = '';
-    let reverse = false;
+
+    /*
+       The arrow points where the heat actually goes, in EVERY mode.
+
+       07 §22 has always said so, and this file's header quotes it, but only
+       Heat Flow implemented it: the other modes drew the arrow along the
+       stored from→to whatever the solve found. An arrow is the one part of
+       the picture a reader takes on trust, so it has to be right wherever it
+       is drawn — and once it is, the numbers beside it no longer have to
+       carry a direction of their own.
+    */
+    const reverse = result?.actual_direction === 'reverse';
 
     switch (mode) {
       case 'temperature':
@@ -322,7 +333,6 @@ function buildElements(
         if (result) {
           color = '#ea580c';
           width = widthForFlow(Math.abs(result.heat_flow_W), scales.maxFlow);
-          reverse = result.actual_direction === 'reverse';
           if (display.showLabels) label = `${Math.abs(result.heat_flow_W).toFixed(1)} W`;
         }
         break;
@@ -331,7 +341,7 @@ function buildElements(
         if (result) {
           color = scales.delta.colorOf(Math.abs(result.delta_T_C));
           width = 3;
-          if (display.showLabels) label = signed(result.delta_T_C, 1, '°C');
+          if (display.showLabels) label = temperatureDrop(result.delta_T_C);
         }
         break;
 
@@ -461,6 +471,12 @@ function buildElements(
       group: 'nodes',
       data: {
         id: `PARALLEL_NOTE_${fromId}__${toId}`,
+        // The pair it belongs to. `positionViewBuses` re-reads these after every
+        // layout and puts the note back at the LIVE midpoint; the position
+        // below is only the opening guess, from coordinates an Auto relayout is
+        // free to discard.
+        pairFrom: fromId,
+        pairTo: toId,
         w: 1,
         h: 1,
         fill: '#ffffff',
@@ -910,11 +926,15 @@ export function legendFor(
 
     case 'delta_t': {
       const scale = buildScale(results.map((entry) => Math.abs(entry.delta_T_C)), DELTA_RAMP);
-      return scale.stops.map((stop) => ({
-        color: stop.color,
-        label: `${stop.from.toFixed(1)} – ${stop.to.toFixed(1)} °C`,
-        zh: '連線溫差（帶正負號顯示）',
-      }));
+      return [
+        ...scale.stops.map((stop) => ({
+          color: stop.color,
+          label: `${stop.from.toFixed(1)} – ${stop.to.toFixed(1)} °C`,
+          zh: '連線溫差（↓為沿箭頭方向的溫度落差）',
+        })),
+        // The key the number needs: which end is hot is the arrow's, not a sign's.
+        { color: EDGE_NEUTRAL, label: '↓ = fall along the arrow', zh: '箭頭為實際熱流方向' },
+      ];
     }
 
     case 'rth': {

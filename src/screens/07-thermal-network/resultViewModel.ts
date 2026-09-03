@@ -116,6 +116,24 @@ export function rth(value: number | null | undefined): string {
   return value.toFixed(3);
 }
 
+/**
+ * A temperature difference across an edge, written as the FALL that it is.
+ *
+ * `+7.6 °C` invites exactly the wrong reading: that 7.6 is added on the way
+ * downstream. ΔT here is `T_source − T_target`, so a positive value means the
+ * upstream end is the hotter one and the heat is falling 7.6 °C as it crosses.
+ * A leading `↓` says that outright.
+ *
+ * The sign is not lost, only moved: which end is upstream is the arrow's job,
+ * and the arrow now follows the solved direction in every result mode, so a
+ * negative ΔT turns the arrow round rather than putting a `−` on the number.
+ * That leaves the number to carry one thing — how far the temperature falls.
+ */
+export function temperatureDrop(value: number | null | undefined, digits = 1): string {
+  if (value == null || !Number.isFinite(value)) return 'N/A';
+  return `\u2193${Math.abs(value).toFixed(digits)} \u00b0C`;
+}
+
 export function signed(value: number | null | undefined, digits = 1, unit = ''): string {
   if (value == null || !Number.isFinite(value)) return 'N/A';
   const text = `${value > 0 ? '+' : ''}${value.toFixed(digits)}`;
