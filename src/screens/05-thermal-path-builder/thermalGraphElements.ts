@@ -3,7 +3,7 @@
 import type { ElementDefinition } from 'cytoscape';
 
 import { activeRth } from '@/thermal/rth';
-import type { ThermalNetwork } from '@/thermal/types';
+import type { ThermalEdge, ThermalNetwork } from '@/thermal/types';
 import {
   GROUP_COLORS,
   HSK_BUS_COLOR,
@@ -29,6 +29,26 @@ const EDGE_SHORT: Record<string, string> = {
   radiation: 'Rad',
   custom: 'Custom',
 };
+
+/**
+ * What a branch is called on the graph — "Spreading", "Heat Pipe ×2".
+ *
+ * Two lines converging on the same bar are indistinguishable without it: the
+ * pair of numbers alone says nothing about WHICH route is which, and the whole
+ * point of drawing the pair is that the reader can see where the heat prefers
+ * to go. The pipe count rides on the name because `R` is already the combined
+ * value for all of them, and a lone 0.065 beside a 0.13 datasheet figure is a
+ * discrepancy the reader would otherwise have to work out.
+ *
+ * Shared with Screen 07, which draws the same branches over the solved graph.
+ */
+export function branchShortName(edge: ThermalEdge): string {
+  const base = EDGE_SHORT[edge.type] ?? edge.type;
+  const pipes = edge.parameters?.pipes;
+  return edge.type === 'heat_pipe' && typeof pipes === 'number' && pipes > 1
+    ? `${base} ×${pipes}`
+    : base;
+}
 
 const HSK_BUS_MIN_BRANCHES = 4;
 const HSK_BUS_PREFIX = 'VIEW_HSK_BUS_';
@@ -556,7 +576,6 @@ export function buildElements(
     const isothermal = edge.parameters?.ideal_link === true && scenarioBoundary == null;
     // A pipe branch carries every pipe at once, so it says how many. Without
     // it the number reads as one pipe's and nobody can check the division.
-    const pipes = edge.parameters?.pipes;
     const short = scenarioBoundary
       ? scenarioBoundary.kind === 'radiation'
         ? 'Rad'
@@ -565,8 +584,7 @@ export function buildElements(
           : scenarioBoundary.kind === 'fin_conduction'
             ? 'Fin'
             : 'Boundary'
-      : (EDGE_SHORT[edge.type] ?? edge.type) +
-        (edge.type === 'heat_pipe' && typeof pipes === 'number' && pipes > 1 ? ` ×${pipes}` : '');
+      : branchShortName(edge);
     const label = options.showLabels
       ? isothermal
         ? 'Isothermal / 等溫'
