@@ -18,6 +18,7 @@ import {
 } from './componentLibraryFile';
 import { readTextFile, writeTextFile } from './folderBinding';
 import {
+  COMPONENT_CATEGORIES,
   emptyArchitecturePrep,
   emptyExternalMappings,
   type Component,
@@ -27,9 +28,29 @@ import {
 
 const LIBRARY_KEY = 'tnv.component_library';
 
+/**
+ * The project a catalogue entry came from.
+ *
+ * Entries used to be keyed by part NAME alone, which made the catalogue one
+ * row per name across every project that ever existed. Saving an XCZU67DR at
+ * 35 W into a project that runs it at 20 W silently replaced the 20 W record —
+ * and with it the whole thermal spec, for every future project that pulled the
+ * part. Two projects genuinely disagree about a part, and the catalogue has to
+ * be able to hold both answers.
+ *
+ * Entries written before the project was recorded belong to no project, and
+ * are gathered under this sentinel rather than being guessed at.
+ */
+export const UNASSIGNED_LIBRARY_PROJECT = '__unassigned__';
+export const UNASSIGNED_LIBRARY_PROJECT_LABEL = 'Unassigned / 未分類';
+
 export interface LibraryEntry {
   id: string;
   name: string;
+  /** Which project's answer this is. See `UNASSIGNED_LIBRARY_PROJECT`. */
+  source_project_id: string;
+  /** Shown as the tree's top level; the id is what identity is built on. */
+  source_project_name: string;
   category: ComponentCategory;
   /** Default per-unit power for a new use of this part. */
   default_power_W: number | null;
@@ -45,7 +66,7 @@ function read(): LibraryEntry[] {
   try {
     const raw = localStorage.getItem(LIBRARY_KEY);
     const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? (parsed as LibraryEntry[]) : [];
+    return Array.isArray(parsed) ? migrateEntries(parsed as LibraryEntry[]) : [];
   } catch {
     return [];
   }
@@ -56,11 +77,26 @@ function write(entries: LibraryEntry[]): void {
   localStorage.setItem(LIBRARY_KEY, JSON.stringify(entries));
 }
 
-/** Strips everything project-specific — the core of AC-04-11. */
-export function toLibraryEntry(component: Component): LibraryEntry {
+/** The catalogue's key: one row per part PER PROJECT. */
+export function libraryEntryId(projectId: string, name: string): string {
+  const slug = (value: string) => value.trim().toUpperCase().replace(/[^A-Z0-9]+/g, '_');
+  return `LIB_${slug(projectId)}__${slug(name)}`;
+}
+
+/**
+ * Strips everything that is a project's USE of a part rather than the part —
+ * quantity, base zone, FloTHERM mapping (AC-04-11) — while recording which
+ * project's answer this is.
+ */
+export function toLibraryEntry(
+  component: Component,
+  project: { id: string; name: string },
+): LibraryEntry {
   return {
-    id: `LIB_${component.name.trim().toUpperCase().replace(/[^A-Z0-9]+/g, '_')}`,
+    id: libraryEntryId(project.id, component.name),
     name: component.name,
+    source_project_id: project.id,
+    source_project_name: project.name,
     category: component.category,
     default_power_W: component.power_W.value,
     thermal_spec: component.thermal_spec,
@@ -148,6 +184,12 @@ export interface ImportLibraryResult {
   error?: string;
 }
 
+/** Whose answer a save is recording. */
+export interface LibraryProject {
+  id: string;
+  name: string;
+}
+
 interface LibraryState {
   entries: LibraryEntry[];
   load: () => void;
@@ -157,7 +199,7 @@ interface LibraryState {
    * would silently start over each time a new version shipped.
    */
   loadWithFolder: () => Promise<void>;
-  saveComponent: (component: Component) => LibraryEntry;
+  saveComponent: (component: Component, project: LibraryProject) => LibraryEntry;
   /**
    * Files a whole table into the catalogue at once.
    *
@@ -165,7 +207,10 @@ interface LibraryState {
    * report it honestly — the same part twice under one name is one entry, not
    * two, and the count has to say so.
    */
-  saveAll: (components: Component[]) => { saved: number; overwritten: string[] };
+  saveAll: (
+    components: Component[],
+    project: LibraryProject,
+  ) => { saved: number; overwritten: string[] };
   rename: (id: string, name: string) => void;
   setNotes: (id: string, notes: string) => void;
   remove: (id: string) => void;
@@ -181,6 +226,43 @@ function sameName(a: string, b: string): boolean {
 }
 
 /**
+ * Brings pre-project entries forward.
+ *
+ * A catalogue written before entries knew their project cannot be split by
+ * guesswork — one row named "XCZU67DR" could have come from any of five
+ * projects, and inventing an owner would be a fabrication dressed as data. They
+ * are gathered under the Unassigned node instead, where they still work exactly
+ * as before and the engineer can see they came from an earlier scheme.
+ */
+export function migrateEntries(entries: LibraryEntry[]): LibraryEntry[] {
+  return entries.map((entry) =>
+    entry && typeof entry.source_project_id === 'string' && entry.source_project_id
+      ? entry
+      : {
+          ...entry,
+          source_project_id: UNASSIGNED_LIBRARY_PROJECT,
+          source_project_name: UNASSIGNED_LIBRARY_PROJECT_LABEL,
+        },
+  );
+}
+
+/** The entry this part would replace, if the catalogue already holds one. */
+function existingEntry(
+  entries: LibraryEntry[],
+  derived: LibraryEntry,
+): LibraryEntry | undefined {
+  // Scoped to the project: the same name under a DIFFERENT project is a
+  // different answer and must not be overwritten. Matching on the name too
+  // (within the project) keeps a rename from forking the catalogue, which is
+  // why `rename` never re-derives the id.
+  return entries.find(
+    (e) =>
+      e.id === derived.id ||
+      (e.source_project_id === derived.source_project_id && sameName(e.name, derived.name)),
+  );
+}
+
+/**
  * Which of these parts the catalogue already holds.
  *
  * Names them rather than counting them: "3 will be overwritten" tells an
@@ -191,11 +273,11 @@ function sameName(a: string, b: string): boolean {
 export function libraryOverwrites(
   entries: LibraryEntry[],
   components: Component[],
+  project: { id: string; name: string },
 ): string[] {
   const names: string[] = [];
   for (const component of components) {
-    const derived = toLibraryEntry(component);
-    const hit = entries.find((e) => e.id === derived.id || sameName(e.name, derived.name));
+    const hit = existingEntry(entries, toLibraryEntry(component, project));
     if (hit && !names.includes(hit.name)) names.push(hit.name);
   }
   return names;
@@ -216,14 +298,9 @@ export const useComponentLibraryStore = create<LibraryState>((set, get) => ({
     set({ entries });
   },
 
-  saveComponent: (component) => {
-    const derived = toLibraryEntry(component);
-    // A renamed entry keeps its id (see `rename`), so the derived id can miss an
-    // entry this part is already saved as. Matching on the name too stops a
-    // re-save from forking the catalogue into two copies of the same part.
-    const existing = get().entries.find(
-      (e) => e.id === derived.id || sameName(e.name, derived.name),
-    );
+  saveComponent: (component, project) => {
+    const derived = toLibraryEntry(component, project);
+    const existing = existingEntry(get().entries, derived);
     const entry = existing ? { ...derived, id: existing.id } : derived;
     const entries = mergeLibraries(
       get().entries.filter((e) => e.id !== entry.id),
@@ -235,15 +312,13 @@ export const useComponentLibraryStore = create<LibraryState>((set, get) => ({
     return entry;
   },
 
-  saveAll: (components) => {
-    const overwritten = libraryOverwrites(get().entries, components);
+  saveAll: (components, project) => {
+    const overwritten = libraryOverwrites(get().entries, components, project);
     let entries = get().entries;
     const seen = new Set<string>();
     for (const component of components) {
-      const derived = toLibraryEntry(component);
-      const existing = entries.find(
-        (e) => e.id === derived.id || sameName(e.name, derived.name),
-      );
+      const derived = toLibraryEntry(component, project);
+      const existing = existingEntry(entries, derived);
       const entry = existing ? { ...derived, id: existing.id } : derived;
       // Two rows of the same part name file as one entry, and the LAST one
       // wins — the same answer `saveComponent` would give run twice.
@@ -322,3 +397,70 @@ export const useComponentLibraryStore = create<LibraryState>((set, get) => ({
 
   exportText: () => serializeLibrary(get().entries),
 }));
+
+// --- the catalogue as a tree -----------------------------------------------
+
+export interface LibraryTreeCategory {
+  category: ComponentCategory;
+  entries: LibraryEntry[];
+}
+
+export interface LibraryTreeProject {
+  projectId: string;
+  projectName: string;
+  categories: LibraryTreeCategory[];
+  count: number;
+}
+
+/**
+ * Project → category → part.
+ *
+ * A flat list stopped being readable the moment the catalogue could hold the
+ * same part more than once: two rows called XCZU67DR, one at 35 W and one at
+ * 20 W, are indistinguishable without saying which project each answers for.
+ * The project is therefore the top level, not a column.
+ *
+ * Unassigned sorts last however it is named — it is where entries written
+ * before the project was recorded ended up, and it is the one node the reader
+ * is meant to empty rather than browse.
+ */
+export function libraryTree(entries: LibraryEntry[]): LibraryTreeProject[] {
+  const byProject = new Map<string, LibraryEntry[]>();
+  for (const entry of entries) {
+    const id = entry.source_project_id || UNASSIGNED_LIBRARY_PROJECT;
+    const list = byProject.get(id) ?? [];
+    list.push(entry);
+    byProject.set(id, list);
+  }
+
+  const projects: LibraryTreeProject[] = [];
+  for (const [projectId, list] of byProject) {
+    const byCategory = new Map<ComponentCategory, LibraryEntry[]>();
+    for (const entry of list) {
+      const bucket = byCategory.get(entry.category) ?? [];
+      bucket.push(entry);
+      byCategory.set(entry.category, bucket);
+    }
+    projects.push({
+      projectId,
+      projectName:
+        projectId === UNASSIGNED_LIBRARY_PROJECT
+          ? UNASSIGNED_LIBRARY_PROJECT_LABEL
+          : (list[0]?.source_project_name || projectId),
+      count: list.length,
+      // The Screen 04 tab order, so the catalogue reads like the table does.
+      categories: COMPONENT_CATEGORIES.filter((category) => byCategory.has(category)).map(
+        (category) => ({
+          category,
+          entries: [...byCategory.get(category)!].sort((a, b) => a.name.localeCompare(b.name)),
+        }),
+      ),
+    });
+  }
+
+  return projects.sort((a, b) => {
+    if (a.projectId === UNASSIGNED_LIBRARY_PROJECT) return 1;
+    if (b.projectId === UNASSIGNED_LIBRARY_PROJECT) return -1;
+    return a.projectName.localeCompare(b.projectName);
+  });
+}

@@ -13,6 +13,8 @@ function entry(patch: Partial<LibraryEntry> = {}): LibraryEntry {
   return {
     id: 'LIB_PA',
     name: 'Final PA',
+    source_project_id: 'PRJ_A',
+    source_project_name: 'Project A',
     category: 'RF',
     default_power_W: 45,
     thermal_spec: emptyThermalSpec(),

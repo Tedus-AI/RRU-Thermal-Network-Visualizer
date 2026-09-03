@@ -12,12 +12,26 @@
  */
 
 import { useMemo, useRef, useState } from 'react';
-import { Check, Download, FolderOpen, Pencil, Search, Trash2, Upload, X } from 'lucide-react';
+import {
+  Check,
+  ChevronDown,
+  Download,
+  FolderOpen,
+  Pencil,
+  Search,
+  Trash2,
+  Upload,
+  X,
+} from 'lucide-react';
 
 import { Badge, Button, Modal, TextInput } from '@/ui/primitives';
 import { toast } from '@/ui/toast';
 import { LIBRARY_FILENAME } from '@/data/componentLibraryFile';
-import { useComponentLibraryStore, type LibraryEntry } from '@/data/componentLibraryStore';
+import {
+  libraryTree,
+  useComponentLibraryStore,
+  type LibraryEntry,
+} from '@/data/componentLibraryStore';
 import { useFolderStore } from '@/data/folderStore';
 import { triggerDownload, textBlob } from '@/export/download';
 import {
@@ -175,6 +189,9 @@ export function ComponentLibraryManager({
   const folderName = useFolderStore((s) => s.handle?.name ?? null);
 
   const [search, setSearch] = useState('');
+  const [collapsedProjects, setCollapsedProjects] = useState<ReadonlySet<string>>(
+    () => new Set<string>(),
+  );
   const [category, setCategory] = useState<ComponentCategory | 'ALL'>('ALL');
   const fileInput = useRef<HTMLInputElement>(null);
 
@@ -191,6 +208,10 @@ export function ComponentLibraryManager({
       return `${entry.name} ${entry.category} ${entry.notes ?? ''}`.toLowerCase().includes(needle);
     });
   }, [entries, search, category]);
+
+  // Grouped from the FILTERED list, so searching narrows the tree rather than
+  // leaving empty branches standing.
+  const tree = useMemo(() => libraryTree(visible), [visible]);
 
   const handleImport = async (file: File) => {
     const result = importFile(await file.text());
@@ -296,25 +317,76 @@ export function ComponentLibraryManager({
           </p>
         ) : (
           <>
-            <ul className="flex max-h-[26rem] flex-col gap-1.5 overflow-y-auto">
+            {/* Project → category → part. The project is the top level and not
+                a column because the catalogue can now hold the same part more
+                than once: two rows called XCZU67DR, one at 35 W and one at
+                20 W, are indistinguishable without saying which project each
+                answers for. */}
+            <div className="flex max-h-[26rem] flex-col gap-2 overflow-y-auto">
               {visible.length === 0 && (
-                <li className="px-2 py-6 text-center text-[12px] text-ink-400">
+                <p className="px-2 py-6 text-center text-[12px] text-ink-400">
                   No saved part matches. / 沒有符合的元件。
-                </li>
+                </p>
               )}
-              {visible.map((entry) => (
-                <EntryRow
-                  key={entry.id}
-                  entry={entry}
-                  inProject={inProject.has(entry.name.trim().toLowerCase())}
-                  onRename={(name) => rename(entry.id, name)}
-                  onDelete={() => {
-                    remove(entry.id);
-                    toast.success(`Removed "${entry.name}" from the library / 已從元件庫移除`);
-                  }}
-                />
-              ))}
-            </ul>
+              {tree.map((project) => {
+                const collapsed = collapsedProjects.has(project.projectId);
+                return (
+                  <section key={project.projectId} className="rounded-md border border-line">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setCollapsedProjects((current) => {
+                          const next = new Set(current);
+                          if (!next.delete(project.projectId)) next.add(project.projectId);
+                          return next;
+                        })
+                      }
+                      aria-expanded={!collapsed}
+                      className="flex w-full items-center gap-1.5 rounded-t-md bg-surface-muted px-2.5 py-1.5 text-left text-[12px] font-bold text-ink-800"
+                    >
+                      <ChevronDown
+                        size={13}
+                        className={`shrink-0 text-ink-400 ${collapsed ? '-rotate-90' : ''}`}
+                      />
+                      <span className="min-w-0 flex-1 truncate">{project.projectName}</span>
+                      <span className="tabular shrink-0 text-[11px] font-normal text-ink-400">
+                        {project.count}
+                      </span>
+                    </button>
+                    {!collapsed && (
+                      <div className="flex flex-col gap-2 p-2">
+                        {project.categories.map((group) => (
+                          <div key={group.category}>
+                            <p className="mb-1 text-[11px] font-semibold text-ink-500">
+                              {group.category}
+                              <span className="ml-1 font-normal text-ink-400">
+                                ({group.entries.length})
+                              </span>
+                            </p>
+                            <ul className="flex flex-col gap-1.5">
+                              {group.entries.map((entry) => (
+                                <EntryRow
+                                  key={entry.id}
+                                  entry={entry}
+                                  inProject={inProject.has(entry.name.trim().toLowerCase())}
+                                  onRename={(name) => rename(entry.id, name)}
+                                  onDelete={() => {
+                                    remove(entry.id);
+                                    toast.success(
+                                      `Removed "${entry.name}" from the library / 已從元件庫移除`,
+                                    );
+                                  }}
+                                />
+                              ))}
+                            </ul>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </section>
+                );
+              })}
+            </div>
             <p className="tabular text-right text-[11px] text-ink-400">
               {visible.length} of {entries.length} parts / 共 {entries.length} 筆
             </p>
