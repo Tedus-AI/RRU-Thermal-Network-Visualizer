@@ -5,12 +5,13 @@
 
 import { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Download, HelpCircle, Library, Lock, Settings, Upload } from 'lucide-react';
+import { Download, HelpCircle, Library, Lock, Settings, Trash2, Upload } from 'lucide-react';
 import { GROUP_LABELS_EN, SCREENS, projectPath } from './navigation';
 import { useProjectStore } from '@/data/projectStore';
 import { useScenarioStore } from '@/data/scenarioStore';
 import { useSolverStore } from '@/data/solverStore';
 import { toast } from '@/ui/toast';
+import { Button, Modal } from '@/ui/primitives';
 import { biTitle } from '@/ui/FieldLabel';
 import { SaveIndicator } from './SaveIndicator';
 import { triggerDownload } from '@/export/download';
@@ -30,7 +31,7 @@ import {
   useProjectFilePicker,
 } from './ShellDialogs';
 import type { SolverState } from '@/thermal/types';
-import { loadComponents } from '@/data/persistence';
+import { loadComponents, purgeProject } from '@/data/persistence';
 import { useComponentLibraryStore } from '@/data/componentLibraryStore';
 import { ComponentLibraryManager } from '@/screens/04-component-manager/ComponentLibraryManager';
 
@@ -144,6 +145,7 @@ export function TopHeader() {
     SCREENS.find((screen) => location.pathname.endsWith(`/${screen.path}`)) ?? SCREENS[0];
 
   const [dialog, setDialog] = useState<'library' | 'settings' | 'help' | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<{ id: string; name: string } | null>(null);
   const [pending, setPending] = useState<{
     file: ProjectFile;
     summary: ProjectFileSummary;
@@ -208,21 +210,47 @@ export function TopHeader() {
         <label htmlFor="hdr-project" className="mb-0.5 block text-[11px] text-white/50">
           Project
         </label>
-        <select
-          id="hdr-project"
-          className={HEADER_SELECT_CLASS}
-          value={isNew ? '__new__' : (draft?.project_id ?? '')}
-          onChange={(event) => handleProjectChange(event.target.value)}
-        >
-          {isNew && <option value="__new__">New Project</option>}
-          {projects.map((project) => (
-            <option key={project.project_id} value={project.project_id}>
-              {project.project_name || project.project_id}
-              {project.status === 'archived' ? ' (archived)' : ''}
-            </option>
-          ))}
-          {!isNew && <option value="__new__">+ New Project…</option>}
-        </select>
+        <div className="flex items-center gap-1">
+          <select
+            id="hdr-project"
+            className={HEADER_SELECT_CLASS}
+            value={isNew ? '__new__' : (draft?.project_id ?? '')}
+            onChange={(event) => handleProjectChange(event.target.value)}
+          >
+            {isNew && <option value="__new__">New Project</option>}
+            {projects.map((project) => (
+              <option key={project.project_id} value={project.project_id}>
+                {project.project_name || project.project_id}
+                {project.status === 'archived' ? ' (archived)' : ''}
+              </option>
+            ))}
+            {!isNew && <option value="__new__">+ New Project…</option>}
+          </select>
+          {/*
+            Deletes the project the selector is showing. Beside the selector
+            rather than inside it, because a delete that lives among the options
+            is one mis-click away from happening — and a `<select>` cannot warn.
+          */}
+          <button
+            type="button"
+            disabled={!draft || isNew}
+            onClick={() =>
+              draft &&
+              setConfirmDelete({
+                id: draft.project_id,
+                name: draft.project_name || draft.project_id,
+              })
+            }
+            title={biTitle(
+              'Delete this project and everything in it',
+              '刪除目前專案及其所有資料',
+            )}
+            aria-label={biTitle('Delete this project', '刪除目前專案')}
+            className="flex size-9 shrink-0 items-center justify-center rounded-md border border-shell-600 bg-shell-700 text-white/60 transition-colors hover:border-danger-600 hover:bg-danger-600 hover:text-white disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-shell-600 disabled:hover:bg-shell-700 disabled:hover:text-white/60"
+          >
+            <Trash2 size={15} />
+          </button>
+        </div>
       </div>
 
       <div className="w-36 shrink xl:w-48">
@@ -375,6 +403,49 @@ export function TopHeader() {
         />
       )}
       {dialog === 'help' && <HelpDialog onClose={() => setDialog(null)} />}
+
+      {/*
+        The warning names the project, because the selector may have been
+        changed since the button was reached for, and it names what goes with
+        it — the components, the network and the results are the work, not the
+        project record. There is no undo, and the file on disk is the only copy
+        that survives, so the export is offered right here rather than as
+        advice the reader has to act on somewhere else.
+      */}
+      {confirmDelete && (
+        <Modal
+          title="Delete this project? / 刪除此專案？"
+          description={`“${confirmDelete.name}” and everything stored under it — components, thermal network, boundary conditions, solutions, analyses and report settings — will be removed from this browser. This cannot be undone. / 「${confirmDelete.name}」及其所有資料（元件、熱網路、邊界條件、求解結果、分析與報告設定）都會從這個瀏覽器移除，且無法復原。`}
+          onClose={() => setConfirmDelete(null)}
+          footer={
+            <>
+              <Button onClick={() => setConfirmDelete(null)}>Cancel / 取消</Button>
+              <Button
+                variant="danger"
+                onClick={() => {
+                  const { id, name } = confirmDelete;
+                  setConfirmDelete(null);
+                  purgeProject(id);
+                  const remaining = useProjectStore.getState().refreshProjects();
+                  toast.success(`Deleted ${name}. / 已刪除 ${name}。`);
+                  const next = remaining.find((project) => project.project_id !== id);
+                  navigate(next ? projectPath(next.project_id, 'info') : '/project/new/info');
+                }}
+              >
+                Delete / 刪除
+              </Button>
+            </>
+          }
+        >
+          <p className="text-[12px] text-ink-500">
+            Export the project file first if you may need it again — a project
+            file is the only copy that outlives this browser.
+            <span className="block text-ink-400">
+              若日後可能還需要，請先匯出專案檔；專案檔是唯一能離開這個瀏覽器保存的副本。
+            </span>
+          </p>
+        </Modal>
+      )}
       {pending && (
         <ImportProjectDialog
           file={pending.file}

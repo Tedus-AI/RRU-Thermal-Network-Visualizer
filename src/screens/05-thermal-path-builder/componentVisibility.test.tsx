@@ -77,6 +77,7 @@ describe('fullscreen component visibility controls', () => {
         hiddenIds={hiddenIds}
         onToggleVisible={vi.fn()}
         onShowAll={vi.fn()}
+        onHideAll={vi.fn()}
         onClose={vi.fn()}
       />,
     );

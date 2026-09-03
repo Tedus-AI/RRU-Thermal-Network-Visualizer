@@ -76,6 +76,7 @@ describe('Screen 07 component visibility', () => {
         hiddenIds={new Set()}
         onToggleVisible={vi.fn()}
         onShowAll={vi.fn()}
+        onHideAll={vi.fn()}
         onClose={vi.fn()}
         placement="bottom-left"
       />,
@@ -92,6 +93,7 @@ describe('Screen 07 component visibility', () => {
         hiddenIds={new Set()}
         onToggleVisible={vi.fn()}
         onShowAll={vi.fn()}
+        onHideAll={vi.fn()}
         onClose={vi.fn()}
       />,
     );

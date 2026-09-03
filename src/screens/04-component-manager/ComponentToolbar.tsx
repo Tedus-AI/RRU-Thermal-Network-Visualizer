@@ -1,6 +1,6 @@
 /** Category tabs, filters and actions — 04 §8, §9. */
 
-import { Copy, Layers, Library, Plus, RotateCcw, Settings2, Trash2 } from 'lucide-react';
+import { Layers, Library, Plus, RotateCcw, Settings2, Upload } from 'lucide-react';
 import { Button } from '@/ui/primitives';
 import { dataSourceLabelZh } from '@/ui/dataSourceLabels';
 import { COMPONENT_CATEGORIES, componentTotalPowerW, type Component, type ComponentCategory } from '@/domain/component';
@@ -181,8 +181,13 @@ export function ComponentToolbar({
 }
 
 /**
- * Row actions, under the table. Duplicate and Delete act on the selected row;
- * Bulk Edit acts on every row the filters currently show, so it says how many.
+ * Actions under the table.
+ *
+ * Duplicate and Delete used to live here and act on "the selected row", which
+ * put them in conflict with selection itself: clicking a row opens the
+ * inspector over the table. They are now two icons at the head of every row,
+ * where they need no selection at all. What is left here is what genuinely has
+ * no single row to sit on — Bulk Edit says how many rows it would touch.
  */
 export function ComponentActions({
   selectedName,
@@ -191,8 +196,7 @@ export function ComponentActions({
   onAdd,
   onAddFromLibrary,
   onManageLibrary,
-  onDuplicate,
-  onDelete,
+  onSaveAllToLibrary,
   onBulkEdit,
 }: {
   selectedName: string | null;
@@ -201,11 +205,9 @@ export function ComponentActions({
   onAdd: () => void;
   onAddFromLibrary: () => void;
   onManageLibrary: () => void;
-  onDuplicate: () => void;
-  onDelete: () => void;
+  onSaveAllToLibrary: () => void;
   onBulkEdit: () => void;
 }) {
-  const noSelection = selectedName == null;
   return (
     <div className="flex flex-wrap items-center gap-2">
       <Button icon={<Plus size={14} />} disabled={readOnly} onClick={onAdd}>
@@ -218,26 +220,20 @@ export function ComponentActions({
       <Button icon={<Settings2 size={13} />} onClick={onManageLibrary}>
         Manage Library / 管理元件庫
       </Button>
+      {/* Files the whole table at once. Gated on there being rows to file,
+          not on write access: the catalogue is a different document from the
+          project, and an archived project's parts are still worth keeping. */}
       <Button
-        icon={<Copy size={13} />}
-        disabled={readOnly || noSelection}
-        title={noSelection ? 'Select a row first / 請先選取一列' : undefined}
-        onClick={onDuplicate}
+        icon={<Upload size={13} />}
+        disabled={visibleCount === 0}
+        onClick={onSaveAllToLibrary}
       >
-        Duplicate / 複製
+        Save All to Library / 全部匯入元件庫
+        <span className="ml-1 font-normal text-ink-400">({visibleCount})</span>
       </Button>
       <Button icon={<Layers size={13} />} disabled={readOnly || visibleCount === 0} onClick={onBulkEdit}>
         Bulk Edit / 批次編輯
         <span className="ml-1 font-normal text-ink-400">({visibleCount})</span>
-      </Button>
-      <Button
-        variant="danger"
-        icon={<Trash2 size={13} />}
-        disabled={readOnly || noSelection}
-        title={noSelection ? 'Select a row first / 請先選取一列' : undefined}
-        onClick={onDelete}
-      >
-        Delete / 刪除
       </Button>
       {selectedName && (
         <span className="text-[12px] text-ink-400">
