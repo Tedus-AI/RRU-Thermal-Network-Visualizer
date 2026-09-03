@@ -101,6 +101,35 @@ describe('Screen 07 component visibility', () => {
     expect(html).toContain('top-3');
   });
 
+  /**
+   * One button, two directions. A disabled "Show all" was dead half the time
+   * and left no way to clear the canvas down to one chain, which is the thing
+   * the panel exists for. The label has to name the NEXT click, so it can be
+   * read without the count beside it.
+   */
+  it('offers Hide all with nothing hidden, and Show all once something is', () => {
+    const parts = [component('CMP_PA', 'Final PA'), component('CMP_FPGA', 'FPGA')];
+    const panel = (hiddenIds: ReadonlySet<string>) =>
+      renderToStaticMarkup(
+        <ComponentVisibilityPanel
+          components={parts}
+          hiddenIds={hiddenIds}
+          onToggleVisible={vi.fn()}
+          onShowAll={vi.fn()}
+          onHideAll={vi.fn()}
+          onClose={vi.fn()}
+        />,
+      );
+
+    const empty = panel(new Set());
+    expect(empty).toContain('Hide all / 全部取消');
+    expect(empty).not.toContain('Show all / 全部顯示');
+
+    const some = panel(new Set(['CMP_FPGA']));
+    expect(some).toContain('Show all / 全部顯示');
+    expect(some).not.toContain('Hide all / 全部取消');
+  });
+
   it('takes a hidden component off the bus, and leaves the network alone', () => {
     const network = busNetwork();
     const before = JSON.stringify(network);
