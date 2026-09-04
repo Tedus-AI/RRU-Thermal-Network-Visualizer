@@ -18,7 +18,7 @@
  */
 
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ResultTree } from './ResultTree';
 import type { ResultTreeGroupRow } from './resultViewModel';
@@ -71,6 +71,23 @@ const GROUPS: ResultTreeGroupRow[] = [
     ],
   } as unknown as ResultTreeGroupRow,
 ];
+
+/**
+ * `useColumnWidths` reads the remembered widths on first render, so SSR needs a
+ * window. Without the stub every assertion below would pass against a throw.
+ */
+beforeEach(() => {
+  const store = new Map<string, string>();
+  vi.stubGlobal('window', {
+    localStorage: {
+      getItem: (key: string) => store.get(key) ?? null,
+      setItem: (key: string, value: string) => void store.set(key, value),
+      removeItem: (key: string) => void store.delete(key),
+    },
+    addEventListener: () => {},
+    removeEventListener: () => {},
+  });
+});
 
 function render(overrides: Partial<Parameters<typeof ResultTree>[0]> = {}) {
   return renderToStaticMarkup(
@@ -158,5 +175,109 @@ describe('opening the tree', () => {
 
     expect(html).toContain('GTRB384608FC 1 Junction');
     expect(html).toContain('1.500 °C/W');
+  });
+});
+
+/**
+ * The reported problem: "一展開就感覺有點亂，全部搞在一起". Twenty rows of one
+ * component at the same weight on the same ground, with nothing saying where
+ * that component ended and the next began.
+ */
+describe('telling one component from the next', () => {
+  it('gives each component a block of its own', () => {
+    const html = render({ forceExpanded: true });
+
+    expect(html).toContain('data-result-block="CMP_PA"');
+    expect((html.match(/<tbody/g) ?? []).length).toBe(1);
+  });
+
+  /** The header a continued page in the PDF puts back is found by this hook. */
+  it('marks the block header, which the PDF re-shows on a continued page', () => {
+    expect(render()).toContain('data-result-block-header');
+  });
+
+  /** The gap is the signal the eye catches while scrolling. */
+  it('closes an open block with a gap, and a closed one without', () => {
+    expect(render({ forceExpanded: true })).toContain('data-result-block-gap');
+    expect(render()).not.toContain('data-result-block-gap');
+  });
+
+  /**
+   * One continuous stripe down every row of the block: it bounds the block AND
+   * says whether the part is inside its limit. Green here, since this fixture
+   * passes.
+   */
+  it('runs a status rail down every row of the block', () => {
+    const html = render({ forceExpanded: true });
+    const rails = html.match(/border-left:3px solid var\(--color-ok-500\)/g) ?? [];
+
+    // The group row, its node, and that node's edge — the whole block.
+    expect(rails.length).toBe(3);
+  });
+
+  it('paints the rail red when the component is over limit', () => {
+    const over = [{ ...GROUPS[0], status: 'over' as const, margin_C: -1.9 }];
+    const html = renderToStaticMarkup(
+      <ResultTree
+        groups={over}
+        hasSolution
+        selectedNodeId={null}
+        selectedEdgeId={null}
+        onSelectNode={vi.fn()}
+        onSelectEdge={vi.fn()}
+      />,
+    );
+
+    expect(html).toContain('border-left:3px solid var(--color-danger-500)');
+  });
+});
+
+describe('an edge is not a node', () => {
+  /**
+   * It used to be a row in the same five-column grid, and its numbers landed
+   * under Q, LIMIT and MARGIN — headings that mean something else entirely.
+   */
+  it('spans the whole table rather than borrowing the node columns', () => {
+    const html = render({ forceExpanded: true });
+    const edge = html.slice(html.indexOf('Rjc'));
+
+    // Case-insensitive: `renderToStaticMarkup` echoes the JSX spelling, while
+    // the browser DOM carries the real `colspan`. Both were checked.
+    expect(html.toLowerCase()).toContain('colspan="6"');
+    // …and its numbers sit next to its name, not at the far right.
+    expect(edge.indexOf('79.5 K')).toBeGreaterThan(-1);
+  });
+});
+
+describe('columns the engineer sized', () => {
+  it('is table-fixed with a colgroup, or a dragged width springs back', () => {
+    const html = render();
+
+    expect(html).toContain('table-fixed');
+    expect(html).toContain('<colgroup>');
+  });
+
+  it('offers a resize handle per sized column, and none on the filler', () => {
+    const html = render();
+
+    expect((html.match(/role="separator"/g) ?? []).length).toBe(5);
+  });
+
+  /**
+   * `table-fixed` needs every width stated, and a table of stated widths stops
+   * where they stop — 832 px adrift in an 1180 px window. The filler takes the
+   * slack so the table fills its panel without disturbing the five real widths.
+   */
+  it('fills the panel through an unsized filler column', () => {
+    const html = render();
+
+    expect(html).toContain('width:100%');
+    expect(html).toContain('min-width:832px');
+    expect((html.match(/<col[ />]/g) ?? []).length).toBe(6);
+  });
+
+  /** A PDF has no draggable columns, and a stray hover style is a raster risk. */
+  it('drops the handles for the export', () => {
+    expect(render({ forceExpanded: true })).not.toContain('role="separator"');
   });
 });
