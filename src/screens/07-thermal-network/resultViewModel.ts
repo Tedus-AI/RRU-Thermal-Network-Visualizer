@@ -8,6 +8,8 @@
 
 import type { LimitType } from '@/domain/component';
 import type { ThermalNetwork, ThermalNode } from '@/thermal/types';
+
+import { sortAlongHeatPath } from './heatPathOrder';
 import type {
   EdgeSolutionResult,
   SolverIssue,
@@ -494,6 +496,13 @@ export function resultTree(
       group.limit_type = row.node.limit_type ?? null;
       group.status = row.status;
     }
+  }
+
+  // Along the heat path, per group. Done here rather than in `nodeRows`
+  // because it is a per-COMPONENT order — a node's place depends on how far it
+  // is from its own component's source, which the flat list does not know.
+  for (const group of groups.values()) {
+    sortAlongHeatPath(network, group.nodes, (entry) => entry.row);
   }
 
   // Components in the order Screen 04 lists them, then the structural groups.

@@ -74,11 +74,6 @@ export function ResultsOverlay({
       // manufacturer's part number.
       defaultWidth={1180}
       defaultHeight={760}
-      badge={
-        <span className="flex size-5 shrink-0 items-center justify-center rounded bg-orange-600 text-[11px] font-bold text-white tabular">
-          3
-        </span>
-      }
       actions={
         <button
           type="button"
