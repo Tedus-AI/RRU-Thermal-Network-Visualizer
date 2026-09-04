@@ -134,28 +134,6 @@ export function directRth(params: EdgeParameters): RthComputation {
   return { value: R, resolution: 'resolved', missing: [] };
 }
 
-/**
- * Spreading resistance — 05 §21.
- *
- * Only computed when a correlation and its inputs are both present. Substituting
- * L/kA here would silently misrepresent 3D spreading, so an unknown stays
- * unresolved (05 §57 tooltip, AC-05-33).
- */
-export function spreadingRth(params: EdgeParameters): RthComputation {
-  const method = params.correlation;
-  const R = numeric(params, 'R_C_per_W');
-
-  if (R != null) return { value: R, resolution: 'resolved', missing: [] };
-  if (!method) {
-    return unresolved(
-      ['correlation'],
-      'Spreading resistance needs a correlation or a directly quoted value. ' +
-        'L/kA is not a substitute.',
-    );
-  }
-  return unresolved(['R_C_per_W'], 'Selected correlation still needs its input parameters.');
-}
-
 export const SPREADING_UNDER_ESTIMATE_NOTE =
   'Assumption: Lee/Song/Au/Moran disc spreading, exact series, with Bi → ∞ (a ' +
   'perfectly cooled far face). Bi needs h, which is a Screen 06 boundary ' +

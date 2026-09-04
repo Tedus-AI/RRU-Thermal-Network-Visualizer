@@ -17,7 +17,7 @@ import { STRUCTURE_PRESETS, buildSharedStructure, createSpreadingEdge } from './
 import { validateGraph, networkKpis } from './graphValidation';
 import { edgeId, instanceKeys, instanceMultiplier, nodeId } from './idFactory';
 import { getTemplate, TEMPLATE_LIST } from '../templates/templateRegistry';
-import { computeRth, conductionRth, spreadingRth, timRth } from '../resistance/calculators';
+import { computeRth, conductionRth, timRth } from '../resistance/calculators';
 import { emptyNetwork } from '@/data/networkStore';
 import { buildMountChain } from './componentMount';
 import { activeRth } from '../rth';
@@ -500,10 +500,21 @@ describe('analytical edge resistance (05 §21)', () => {
     expect(result.missing).toContain('k_W_mK');
   });
 
+  /**
+   * Aimed at `spreading_disc`, the only spreading method there is. It used to
+   * call `spreadingRth`, a second calculator that no `EdgeMethod` named and
+   * `computeRth` never reached — so the guard passed while testing code that
+   * could not run. The guarantee is the same and now it is tested where it
+   * lives: L/kA inputs do not make a spreading edge resolve, and what is
+   * actually missing is named.
+   */
   it('refuses to substitute L/kA for spreading resistance (05 §21, AC-05-33)', () => {
-    const result = spreadingRth({ length_mm: 10, k_W_mK: 200, area_mm2: 100 });
+    const result = computeRth('spreading_disc', { length_mm: 10, k_W_mK: 200, area_mm2: 100 });
     expect(result.value).toBeNull();
-    expect(result.note).toContain('L/kA is not a substitute');
+    expect(result.resolution).toBe('unresolved');
+    expect(result.missing).toEqual(
+      expect.arrayContaining(['source_area_mm2', 'plate_area_mm2', 'thickness_mm']),
+    );
   });
 
   it('keeps boundary-derived edges unresolved until Screen 06 (AC-05-34)', () => {
