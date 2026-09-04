@@ -8,7 +8,19 @@
  * 07 §27 forbids a Bottleneck Ranking control. There is none.
  */
 
-import { Eye, Maximize2, Minimize2, Minus, Plus, Scan, Table2, Workflow } from 'lucide-react';
+import {
+  Eye,
+  FileImage,
+  FileText,
+  Loader2,
+  Maximize2,
+  Minimize2,
+  Minus,
+  Plus,
+  Scan,
+  Table2,
+  Workflow,
+} from 'lucide-react';
 
 import { Select } from '@/ui/primitives';
 import { LAYOUT_MODES } from '@/screens/05-thermal-path-builder/GraphToolbar';
@@ -23,6 +35,7 @@ function IconButton({
   zh,
   active,
   badge,
+  disabled,
   onClick,
   children,
 }: {
@@ -31,6 +44,7 @@ function IconButton({
   active?: boolean;
   /** A count worth seeing without opening the control — as on Screen 05. */
   badge?: number;
+  disabled?: boolean;
   onClick: () => void;
   children: React.ReactNode;
 }) {
@@ -40,8 +54,9 @@ function IconButton({
       title={biTitle(label, zh)}
       aria-label={biTitle(label, zh)}
       aria-pressed={active}
+      disabled={disabled}
       onClick={onClick}
-      className={`relative flex size-7 items-center justify-center rounded border text-ink-500 transition-colors ${
+      className={`relative flex size-7 items-center justify-center rounded border text-ink-500 transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
         active
           ? 'border-accent-600 bg-accent-100 text-accent-700'
           : 'border-line-strong hover:bg-surface-muted'
@@ -75,7 +90,10 @@ export function ResultModeToolbar({
   componentVisibilityOpen,
   hiddenComponentCount,
   resultsSummary,
+  exporting,
   onOpenResults,
+  onExportJpg,
+  onExportPdf,
   onToggleComponentVisibility,
   onMode,
   onDisplay,
@@ -96,7 +114,11 @@ export function ResultModeToolbar({
   hiddenComponentCount: number;
   /** "85 nodes · 85 edges", so the button says how much is behind it. */
   resultsSummary: string;
+  /** Which export is in flight, so its own button can say so. */
+  exporting: 'jpg' | 'pdf' | null;
   onOpenResults: () => void;
+  onExportJpg: () => void;
+  onExportPdf: () => void;
   onToggleComponentVisibility: () => void;
   onMode: (mode: ResultMode) => void;
   onDisplay: (patch: Partial<GraphDisplayOptions>) => void;
@@ -231,6 +253,36 @@ export function ResultModeToolbar({
           onClick={onToggleComponentVisibility}
         >
           <Eye size={13} />
+        </IconButton>
+        {/* Both exports render at model size rather than at the zoom on
+            screen: the whole graph fits a 22" monitor only at about 51 %, and
+            at 51 % the edge labels are unreadable. They sit on the toolbar so
+            fullscreen — where the whole graph is actually looked at — has them
+            too. Disabled while one is running, because a second render would
+            compete with the first for the same offscreen canvas. */}
+        <IconButton
+          label="Export JPG"
+          zh="輸出 JPG（100% 尺寸）"
+          disabled={exporting != null}
+          onClick={onExportJpg}
+        >
+          {exporting === 'jpg' ? (
+            <Loader2 size={13} className="animate-spin" />
+          ) : (
+            <FileImage size={13} />
+          )}
+        </IconButton>
+        <IconButton
+          label="Export PDF"
+          zh="輸出 PDF（含各元件單頁）"
+          disabled={exporting != null}
+          onClick={onExportPdf}
+        >
+          {exporting === 'pdf' ? (
+            <Loader2 size={13} className="animate-spin" />
+          ) : (
+            <FileText size={13} />
+          )}
         </IconButton>
         <IconButton
           label={fullscreen ? 'Exit Fullscreen' : 'Fullscreen'}

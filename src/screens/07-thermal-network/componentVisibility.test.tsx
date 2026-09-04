@@ -52,7 +52,10 @@ const toolbarProps = {
   onRelayout: vi.fn(),
   onToggleFullscreen: vi.fn(),
   resultsSummary: '85 · 85',
+  exporting: null,
   onOpenResults: vi.fn(),
+  onExportJpg: vi.fn(),
+  onExportPdf: vi.fn(),
   onToggleComponentVisibility: vi.fn(),
 };
 
