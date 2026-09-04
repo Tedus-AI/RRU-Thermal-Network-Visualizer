@@ -8,7 +8,7 @@
  * 07 §27 forbids a Bottleneck Ranking control. There is none.
  */
 
-import { Eye, Maximize2, Minimize2, Minus, Plus, Scan, Workflow } from 'lucide-react';
+import { Eye, Maximize2, Minimize2, Minus, Plus, Scan, Table2, Workflow } from 'lucide-react';
 
 import { Select } from '@/ui/primitives';
 import { LAYOUT_MODES } from '@/screens/05-thermal-path-builder/GraphToolbar';
@@ -74,6 +74,8 @@ export function ResultModeToolbar({
   fullscreen,
   componentVisibilityOpen,
   hiddenComponentCount,
+  resultsSummary,
+  onOpenResults,
   onToggleComponentVisibility,
   onMode,
   onDisplay,
@@ -92,6 +94,9 @@ export function ResultModeToolbar({
   fullscreen: boolean;
   componentVisibilityOpen: boolean;
   hiddenComponentCount: number;
+  /** "85 nodes · 85 edges", so the button says how much is behind it. */
+  resultsSummary: string;
+  onOpenResults: () => void;
   onToggleComponentVisibility: () => void;
   onMode: (mode: ResultMode) => void;
   onDisplay: (patch: Partial<GraphDisplayOptions>) => void;
@@ -151,6 +156,34 @@ export function ResultModeToolbar({
           </label>
         ))}
       </div>
+
+      {/* The result table, which is a panel now rather than a row under the
+          graph — see `ResultsOverlay`. It is the only FILLED button on a
+          toolbar of ghost icons and outline pills, and the only one carrying
+          both an icon and a word, which is what makes it findable: the mode
+          pills do go accent when active, but none of them is a solid button.
+
+          The face is short and the Chinese is in the tooltip, which is the
+          convention its neighbours already follow — every icon button beside
+          it shows no text at all. A bilingual face fitted, but only by wrapping
+          the toolbar onto a second row and stealing back the graph height this
+          change exists to give it.
+
+          It lives here rather than on the page so fullscreen has it too, which
+          the old row never did. */}
+      <button
+        type="button"
+        onClick={onOpenResults}
+        aria-label="Results / 求解結果"
+        title={biTitle('Open the full result table', '開啟完整求解結果')}
+        className="flex shrink-0 items-center gap-1.5 rounded-md bg-accent-600 px-2 py-1.5 text-[11px] font-bold text-white shadow-sm ring-1 ring-accent-700/40 transition-colors hover:bg-accent-500"
+      >
+        <Table2 size={13} />
+        <span>Results</span>
+        <span className="rounded bg-white/20 px-1 text-[10px] font-semibold tabular">
+          {resultsSummary}
+        </span>
+      </button>
 
       <div className="ml-auto flex items-center gap-1">
         {/* Auto Layout and its mode, as on Screen 05: the button re-runs the
