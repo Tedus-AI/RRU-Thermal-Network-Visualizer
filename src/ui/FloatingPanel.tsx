@@ -22,6 +22,27 @@ export interface PanelRect {
   h: number;
 }
 
+/**
+ * Window stacking.
+ *
+ * Two floating panels can be open at once — Screen 07 opens the result table
+ * and, when a row in it is clicked, the inspector for that row. At one fixed
+ * z-index the second one opens BEHIND whichever the stylesheet happened to
+ * favour, which is how clicking a row produced an inspector you could not read.
+ *
+ * So they stack like windows: each panel takes the next z on mount, and takes a
+ * fresh one whenever it is touched. A counter rather than a list because
+ * nothing needs to know the order — only who is on top, and that is whoever
+ * asked last.
+ */
+const PANEL_Z_BASE = 40;
+let panelZCursor = PANEL_Z_BASE;
+
+function nextPanelZ(): number {
+  panelZCursor += 1;
+  return panelZCursor;
+}
+
 const MIN_W = 340;
 const MIN_H = 260;
 /** Keep this much of the panel on screen, so the header is always grabbable. */
@@ -72,6 +93,8 @@ export function FloatingPanel({
   title,
   subtitle,
   badge,
+  actions,
+  bodyClassName = 'p-3',
   storageKey,
   defaultWidth = 560,
   defaultHeight = 900,
@@ -81,6 +104,10 @@ export function FloatingPanel({
   title: string;
   subtitle?: ReactNode;
   badge?: ReactNode;
+  /** Panel-specific controls, left of the maximize and close buttons. */
+  actions?: ReactNode;
+  /** Padding for the body. A table wants the full width, so it passes none. */
+  bodyClassName?: string;
   /** localStorage key for the remembered geometry. */
   storageKey: string;
   defaultWidth?: number;
@@ -97,6 +124,8 @@ export function FloatingPanel({
     ),
   );
   const [maximized, setMaximized] = useState(false);
+  const [z, setZ] = useState(nextPanelZ);
+  const raise = useCallback(() => setZ((current) => (current === panelZCursor ? current : nextPanelZ())), []);
   const drag = useRef<{ mode: 'move' | 'resize'; dx: number; dy: number; rect: PanelRect } | null>(
     null,
   );
@@ -180,8 +209,11 @@ export function FloatingPanel({
     <section
       role="dialog"
       aria-labelledby={titleId}
-      className="fixed z-40 flex flex-col overflow-hidden rounded-lg border border-line-strong bg-surface shadow-2xl"
-      style={style}
+      className="fixed flex flex-col overflow-hidden rounded-lg border border-line-strong bg-surface shadow-2xl"
+      style={{ ...style, zIndex: z }}
+      // Capture, so a click anywhere inside raises the panel even when the
+      // target stops propagation for its own reasons.
+      onPointerDownCapture={raise}
     >
       <header
         onPointerDown={startMove}
@@ -199,6 +231,15 @@ export function FloatingPanel({
           {subtitle && <div className="truncate text-[11px] text-ink-400">{subtitle}</div>}
         </div>
         {badge}
+        {actions && (
+          <div
+            className="flex shrink-0 items-center gap-1"
+            // The header is the drag handle; its controls must not be.
+            onPointerDown={(event) => event.stopPropagation()}
+          >
+            {actions}
+          </div>
+        )}
         <button
           type="button"
           aria-label={maximized ? 'Restore panel size' : 'Maximize panel'}
@@ -219,7 +260,7 @@ export function FloatingPanel({
         </button>
       </header>
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-3">{children}</div>
+      <div className={`min-h-0 flex-1 overflow-auto ${bodyClassName}`}>{children}</div>
 
       {!maximized && (
         <div
