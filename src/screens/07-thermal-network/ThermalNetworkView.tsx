@@ -93,9 +93,11 @@ import { NodeResultInspector } from './NodeResultInspector';
 import { EdgeResultInspector } from './EdgeResultInspector';
 import { SolverStatusOverlay } from './SolverStatusOverlay';
 import { ResultsOverlay } from './ResultsOverlay';
+import { ResultTree } from './ResultTree';
 import {
   allowedModes,
   isResultMode,
+  modeFilenamePart,
   edgeRows,
   nodeRows,
   resultTree,
@@ -478,6 +480,45 @@ export function ThermalNetworkView() {
     solution.status === 'FAILED' ||
     solution.energy_balance.error_pct > settings.energy_error_pct;
 
+  const [exportingTable, setExportingTable] = useState(false);
+
+  /**
+   * The table as a PDF, fully expanded — see `exportResultTablePdf`. It mounts
+   * the same `ResultTree` a second time rather than a print-only copy, so the
+   * document and the panel can never disagree.
+   */
+  const handleExportTablePdf = useCallback(async () => {
+    setExportingTable(true);
+    try {
+      const { exportResultTablePdf } = await import('@/export/exportResultTable');
+      const blob = await exportResultTablePdf({
+        table: (
+          <ResultTree
+            groups={tree}
+            hasSolution={hasResult && !stale}
+            selectedNodeId={null}
+            selectedEdgeId={null}
+            onSelectNode={() => {}}
+            onSelectEdge={() => {}}
+            forceExpanded
+          />
+        ),
+        title: `${draft?.project_name || 'Thermal network'} — solved results`,
+        subtitle: `${rows.length} nodes · ${flows.length} edges · ${scenario?.name ?? ''}`.trim(),
+      });
+      const url = URL.createObjectURL(blob);
+      triggerDownload(url, exportFilename(draft?.project_name ?? '', 'pdf', { subject: 'results' }));
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      toast.success('Result table exported / 已輸出求解結果 PDF');
+    } catch (error) {
+      toast.error(
+        `Export failed: ${error instanceof Error ? error.message : 'unknown error'} / 輸出失敗`,
+      );
+    } finally {
+      setExportingTable(false);
+    }
+  }, [draft?.project_name, flows.length, hasResult, rows.length, scenario?.name, stale, tree]);
+
   // --- graph export --------------------------------------------------------
 
   const [exporting, setExporting] = useState<'jpg' | 'pdf' | null>(null);
@@ -500,7 +541,7 @@ export function ThermalNetworkView() {
     setExporting('jpg');
     try {
       const image = await wholeGraphImage();
-      triggerDownload(image.dataUrl, exportFilename(projectName, 'jpg'));
+      triggerDownload(image.dataUrl, exportFilename(projectName, 'jpg', { mode: modeFilenamePart(mode) }));
       toast.success(
         `Graph exported at ${image.width} × ${image.height} px / 已輸出熱網路圖（100% 尺寸）`,
       );
@@ -511,7 +552,7 @@ export function ThermalNetworkView() {
     } finally {
       setExporting(null);
     }
-  }, [projectName, wholeGraphImage]);
+  }, [mode, projectName, wholeGraphImage]);
 
   /**
    * The whole graph, then one page per component — see `componentGraphPages`
@@ -559,7 +600,7 @@ export function ThermalNetworkView() {
 
       const blob = await buildGraphPdf(sources);
       const url = URL.createObjectURL(blob);
-      triggerDownload(url, exportFilename(projectName, 'pdf'));
+      triggerDownload(url, exportFilename(projectName, 'pdf', { mode: modeFilenamePart(mode) }));
       // Revoked on the next tick: revoking synchronously races the download in
       // Chromium and yields a zero-byte file.
       setTimeout(() => URL.revokeObjectURL(url), 60_000);
@@ -923,6 +964,8 @@ export function ThermalNetworkView() {
             setSelectedEdgeId(edgeId);
             canvasRef.current?.center(edgeId);
           }}
+          onExportPdf={handleExportTablePdf}
+          exporting={exportingTable}
           onClose={() => setResultsOpen(false)}
         />
       )}

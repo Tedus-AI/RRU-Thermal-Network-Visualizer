@@ -40,6 +40,15 @@
   --color-danger-100: #fde4e4;
   --color-neutral-600: #5a6781;
 
+  /* Orange. NOT a severity: warn-* is amber and reads as an alert, so a
+     permanently-present control painted with it would cry wolf. This is the
+     accent for a primary action that must not be confused with the blue
+     navigation accent either — Screen 07's Results panel is the first. */
+  --color-orange-700: #a8410a;
+  --color-orange-600: #cb5410;
+  --color-orange-500: #ea6a1a;
+  --color-orange-100: #ffe8d8;
+
   --color-ink-900: #0f1b30;
   --color-ink-700: #33405a;
   --color-ink-500: #5c6981;

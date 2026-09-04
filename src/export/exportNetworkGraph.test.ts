@@ -16,6 +16,8 @@
 
 import { describe, expect, it } from 'vitest';
 
+import { modeFilenamePart, RESULT_MODES } from '@/screens/07-thermal-network/resultViewModel';
+
 import {
   exportFilename,
   PAGE_CAPTION_PT,
@@ -86,25 +88,68 @@ describe('which way up the page goes', () => {
 });
 
 describe('what the file is called', () => {
-  const day = new Date(2026, 8, 4);
+  const now = new Date(2026, 8, 4);
 
   it('carries the project, the subject and the day', () => {
-    expect(exportFilename('FR1 RRU starkcore 12L', 'pdf', day)).toBe(
+    expect(exportFilename('FR1 RRU starkcore 12L', 'pdf', { now })).toBe(
       'FR1_RRU_starkcore_12L_network_20260904.pdf',
     );
   });
 
+  /**
+   * The mode decides what the picture SHOWS, so it belongs in the name: two
+   * exports of one project in Temperature and in Rth are different documents,
+   * and without it the second silently replaced the first.
+   */
+  it('carries the result mode the export was taken in', () => {
+    expect(exportFilename('STARK', 'jpg', { mode: 'DeltaT', now })).toBe(
+      'STARK_network_DeltaT_20260904.jpg',
+    );
+    expect(exportFilename('STARK', 'jpg', { mode: 'RthSource', now })).toBe(
+      'STARK_network_RthSource_20260904.jpg',
+    );
+  });
+
+  it('names a different subject differently, so the table is not the graph', () => {
+    expect(exportFilename('STARK', 'pdf', { subject: 'results', now })).toBe(
+      'STARK_results_20260904.pdf',
+    );
+  });
+
   it('pads a single-digit month and day', () => {
-    expect(exportFilename('P', 'jpg', new Date(2026, 0, 7))).toBe('P_network_20260107.jpg');
+    expect(exportFilename('P', 'jpg', { now: new Date(2026, 0, 7) })).toBe(
+      'P_network_20260107.jpg',
+    );
   });
 
   /** A project name is free text and lands in a filesystem. */
   it('strips what a filename may not carry', () => {
-    expect(exportFilename('A/B:C*?"<>|D', 'jpg', day)).toBe('A_B_C_D_network_20260904.jpg');
+    expect(exportFilename('A/B:C*?"<>|D', 'jpg', { now })).toBe('A_B_C_D_network_20260904.jpg');
   });
 
   it('still names the file when the project has no name', () => {
-    expect(exportFilename('', 'pdf', day)).toBe('project_network_20260904.pdf');
-    expect(exportFilename('///', 'pdf', day)).toBe('project_network_20260904.pdf');
+    expect(exportFilename('', 'pdf', { now })).toBe('project_network_20260904.pdf');
+    expect(exportFilename('///', 'pdf', { now })).toBe('project_network_20260904.pdf');
+  });
+});
+
+describe('the mode as a filename fragment', () => {
+  /** Every mode has to fold to something a filesystem will take. */
+  it('folds every mode to bare ASCII', () => {
+    for (const mode of RESULT_MODES) {
+      const part = modeFilenamePart(mode.id);
+      expect(part, mode.id).toMatch(/^[A-Za-z0-9]+$/);
+    }
+  });
+
+  /** The one that needed folding at all. */
+  it('spells the delta out rather than shipping a Greek letter', () => {
+    expect(modeFilenamePart('delta_t')).toBe('DeltaT');
+  });
+
+  it('says what the toolbar says', () => {
+    expect(modeFilenamePart('temperature')).toBe('Temperature');
+    expect(modeFilenamePart('heat_flow')).toBe('HeatFlow');
+    expect(modeFilenamePart('rth_source')).toBe('RthSource');
   });
 });
