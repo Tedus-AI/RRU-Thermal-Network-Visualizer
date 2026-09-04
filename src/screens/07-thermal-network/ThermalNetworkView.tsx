@@ -61,6 +61,15 @@ import { useBoundaryStore } from '@/data/boundaryStore';
 import { useSolutionStore } from '@/data/solutionStore';
 
 import { projectComponentLimits } from '@/thermal/graph/componentProjection';
+import { triggerDownload } from '@/export/download';
+import {
+  buildGraphPdf,
+  exportFilename,
+  measureImage,
+  renderGraphImage,
+  type PdfPageSource,
+} from '@/export/exportNetworkGraph';
+import { componentGraphPages, pageTitle } from '@/export/networkGraphPages';
 import { DEFAULT_SOLVER_SETTINGS, type SolverSettings } from '@/thermal/types';
 import type { SolverIssue } from '@/thermal/solver/solverTypes';
 
@@ -75,6 +84,8 @@ import {
   type GraphDisplayOptions,
   type SolvedCanvasTool,
   type SolvedGraphHandle,
+  buildElements,
+  resultScales,
 } from './SolvedGraphCanvas';
 import { isLayoutMode } from '@/screens/05-thermal-path-builder/GraphToolbar';
 import { EnergyBalancePanel } from './EnergyBalancePanel';
@@ -467,6 +478,115 @@ export function ThermalNetworkView() {
     solution.status === 'FAILED' ||
     solution.energy_balance.error_pct > settings.energy_error_pct;
 
+  // --- graph export --------------------------------------------------------
+
+  const [exporting, setExporting] = useState<'jpg' | 'pdf' | null>(null);
+  const graphNetwork = limited ?? network;
+  const projectName = draft?.project_name ?? '';
+
+  /**
+   * The whole graph as the engineer has it — live instance, current layout,
+   * model scale. Everything downstream measures the returned image rather than
+   * assuming a size, because Cytoscape scales a render down when it meets a
+   * canvas limit and says nothing.
+   */
+  const wholeGraphImage = useCallback(async () => {
+    const dataUrl = canvasRef.current?.exportJpg() ?? null;
+    if (!dataUrl) throw new Error('The graph has nothing to export yet.');
+    return measureImage(dataUrl);
+  }, []);
+
+  const handleExportJpg = useCallback(async () => {
+    setExporting('jpg');
+    try {
+      const image = await wholeGraphImage();
+      triggerDownload(image.dataUrl, exportFilename(projectName, 'jpg'));
+      toast.success(
+        `Graph exported at ${image.width} × ${image.height} px / 已輸出熱網路圖（100% 尺寸）`,
+      );
+    } catch (error) {
+      toast.error(
+        `Export failed: ${error instanceof Error ? error.message : 'unknown error'} / 輸出失敗`,
+      );
+    } finally {
+      setExporting(null);
+    }
+  }, [projectName, wholeGraphImage]);
+
+  /**
+   * The whole graph, then one page per component — see `componentGraphPages`
+   * for why a ×4 part is one page and not four.
+   *
+   * Each component page is rendered on its own offscreen instance so the part
+   * is laid out alone rather than cropped out of a 113-node picture, and so the
+   * engineer's own view is never disturbed. The colour ramps stay those of the
+   * WHOLE network: rescaled per page, every page would show a red node and mean
+   * something different by it.
+   */
+  const handleExportPdf = useCallback(async () => {
+    setExporting('pdf');
+    try {
+      const scales = resultScales(stale ? null : solution);
+      const sources: PdfPageSource[] = [
+        {
+          title: `${projectName || 'Thermal network'} — full network`,
+          subtitle: `${rows.length} nodes · ${flows.length} edges · ${scenario?.name ?? ''}`.trim(),
+          image: await wholeGraphImage(),
+        },
+      ];
+
+      for (const page of componentGraphPages(graphNetwork, components)) {
+        const elements = buildElements(
+          graphNetwork,
+          stale ? null : solution,
+          mode,
+          display,
+          activeScenarioId ?? '',
+          layoutMode,
+          scales,
+          page.hidden_component_ids,
+          page.hidden_node_ids,
+        );
+        // A part whose every node was filtered out has nothing to draw; skip it
+        // rather than adding a blank sheet.
+        if (elements.length === 0) continue;
+        sources.push({
+          title: pageTitle(page),
+          subtitle: `${page.component_id} · heat path to ambient`,
+          image: await renderGraphImage(elements, layoutMode),
+        });
+      }
+
+      const blob = await buildGraphPdf(sources);
+      const url = URL.createObjectURL(blob);
+      triggerDownload(url, exportFilename(projectName, 'pdf'));
+      // Revoked on the next tick: revoking synchronously races the download in
+      // Chromium and yields a zero-byte file.
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      toast.success(`PDF exported — ${sources.length} pages / 已輸出 PDF，共 ${sources.length} 頁`);
+    } catch (error) {
+      toast.error(
+        `Export failed: ${error instanceof Error ? error.message : 'unknown error'} / 輸出失敗`,
+      );
+    } finally {
+      setExporting(null);
+    }
+  }, [
+    activeScenarioId,
+    components,
+    display,
+    flows.length,
+    graphNetwork,
+    layoutMode,
+    mode,
+    projectName,
+    rows.length,
+    scenario?.name,
+    solution,
+    stale,
+    wholeGraphImage,
+  ]);
+
   const legend = legendFor(mode, stale ? null : solution);
   const selectedNode = selectedNodeId ? ((limited ?? network).nodes[selectedNodeId] ?? null) : null;
   const selectedEdge = selectedEdgeId ? (network.edges[selectedEdgeId] ?? null) : null;
@@ -662,7 +782,10 @@ export function ThermalNetworkView() {
               componentVisibilityOpen={componentVisibilityOpen}
               hiddenComponentCount={hiddenModeledComponentIds.size}
               resultsSummary={`${rows.length} · ${flows.length}`}
+              exporting={exporting}
               onOpenResults={() => setResultsOpen(true)}
+              onExportJpg={handleExportJpg}
+              onExportPdf={handleExportPdf}
               onToggleComponentVisibility={() => setComponentVisibilityOpen((value) => !value)}
               onMode={setMode}
               onDisplay={(patch) => setDisplay((current) => ({ ...current, ...patch }))}

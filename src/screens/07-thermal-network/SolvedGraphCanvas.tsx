@@ -99,6 +99,19 @@ export interface GraphDisplayOptions {
 
 export interface SolvedGraphHandle {
   fit: () => void;
+  /**
+   * The WHOLE graph as a JPEG data URI at model scale, or null before the
+   * canvas exists.
+   *
+   * `full: true` renders the graph's own bounding box, so it neither depends on
+   * where the engineer has scrolled nor moves them; `scale: 1` is the point of
+   * the export — the fitted view is about 51 % on a 22" screen, and 51 % is
+   * where the edge labels stop being readable.
+   *
+   * Taken from the LIVE instance rather than re-rendered, so the file shows the
+   * layout on screen, including any node dragged by hand.
+   */
+  exportJpg: () => string | null;
   zoomBy: (delta: number) => void;
   relayout: (mode: string) => void;
   center: (elementId: string) => void;
@@ -120,7 +133,7 @@ export type SolvedCanvasTool = 'select' | 'zoom-box';
  * dagre produces. Handing them to dagre as though they were nodes would have it
  * solve for their placement too, and the bar would end up in a rank of its own.
  */
-function layoutSubject(cy: Core) {
+export function layoutSubject(cy: Core) {
   return cy.elements().filter((element) => {
     if (element.isNode()) return !element.hasClass('view-only');
     return (
@@ -130,7 +143,7 @@ function layoutSubject(cy: Core) {
   });
 }
 
-function edgeLabelsOf(cy: Core): string[] {
+export function edgeLabelsOf(cy: Core): string[] {
   const labels: string[] = [];
   layoutSubject(cy)
     .edges()
@@ -237,6 +250,31 @@ function widthForFlow(magnitude: number, max: number): number {
   return 1.5 + (Math.min(magnitude, max) / max) * 7.5;
 }
 
+/**
+ * The colour ramps every element is painted against.
+ *
+ * Exported because an export renders its own Cytoscape instance and has to
+ * build elements the same way — and it has to use the ramps of the WHOLE
+ * network, not of the one component a page draws. Rescaled per page, an
+ * isolated part would be painted from its own hottest node down, so every page
+ * would show a red node and mean something different by it.
+ */
+export function resultScales(solution: ThermalSolution | null): {
+  temperature: Scale;
+  delta: Scale;
+  rth: Scale;
+  maxFlow: number;
+} {
+  const temperatures = Object.values(solution?.node_temperatures_C ?? {});
+  const results = Object.values(solution?.edge_results ?? {});
+  return {
+    temperature: buildScale(temperatures),
+    delta: buildScale(results.map((entry) => Math.abs(entry.delta_T_C)), DELTA_RAMP),
+    rth: buildScale(results.map((entry) => entry.active_rth_C_per_W), RTH_RAMP),
+    maxFlow: results.reduce((max, entry) => Math.max(max, Math.abs(entry.heat_flow_W)), 0),
+  };
+}
+
 export function buildElements(
   network: ThermalNetwork,
   solution: ThermalSolution | null,
@@ -246,13 +284,24 @@ export function buildElements(
   layoutMode: string,
   scales: { temperature: Scale; delta: Scale; rth: Scale; maxFlow: number },
   hiddenComponentIds: ReadonlySet<string>,
+  /**
+   * Node ids to leave out beyond the hidden components — how the PDF exporter
+   * draws ONE instance of a ×4 part. It joins the same set the bus and the
+   * parallel-pair braces are built from, so a dropped instance takes its bus
+   * junction and its brace with it instead of leaving them pointing at nothing.
+   */
+  extraHiddenNodeIds?: ReadonlySet<string>,
 ): ElementDefinition[] {
   const elements: ElementDefinition[] = [];
   const solved = mode === 'temperature' || mode === 'heat_flow' || mode === 'delta_t';
   // A view filter only: the solution was computed over the whole network and
   // every KPI still reports it. Shared structure has no component behind it, so
   // the base and the fins never vanish.
-  const hidden = hiddenNodeIds(network, hiddenComponentIds);
+  const byComponent = hiddenNodeIds(network, hiddenComponentIds);
+  const hidden =
+    extraHiddenNodeIds && extraHiddenNodeIds.size > 0
+      ? new Set([...byComponent, ...extraHiddenNodeIds])
+      : byComponent;
 
   for (const node of Object.values(network.nodes)) {
     if (node.disabled || hidden.has(node.id)) continue;
@@ -576,16 +625,7 @@ export const SolvedGraphCanvas = forwardRef<
   const handlers = useRef({ onSelectNode, onSelectEdge, onZoomChange });
   handlers.current = { onSelectNode, onSelectEdge, onZoomChange };
 
-  const scales = useMemo(() => {
-    const temperatures = Object.values(solution?.node_temperatures_C ?? {});
-    const results = Object.values(solution?.edge_results ?? {});
-    return {
-      temperature: buildScale(temperatures),
-      delta: buildScale(results.map((entry) => Math.abs(entry.delta_T_C)), DELTA_RAMP),
-      rth: buildScale(results.map((entry) => entry.active_rth_C_per_W), RTH_RAMP),
-      maxFlow: results.reduce((max, entry) => Math.max(max, Math.abs(entry.heat_flow_W)), 0),
-    };
-  }, [solution]);
+  const scales = useMemo(() => resultScales(solution), [solution]);
 
   const elements = useMemo(
     () =>
@@ -804,6 +844,19 @@ export const SolvedGraphCanvas = forwardRef<
         cy.resize();
         cy.fit(undefined, 40);
         handlers.current.onZoomChange(cy.zoom());
+      },
+      exportJpg: () => {
+        const cy = cyRef.current;
+        if (!cy || cy.nodes().length === 0) return null;
+        return cy.jpg({
+          output: 'base64uri',
+          full: true,
+          scale: 1,
+          quality: 0.92,
+          bg: '#ffffff',
+          maxWidth: 16384,
+          maxHeight: 16384,
+        });
       },
       zoomBy: (delta) => {
         const cy = cyRef.current;
