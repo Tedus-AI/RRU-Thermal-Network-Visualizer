@@ -87,9 +87,23 @@ describe('the button that opens the results', () => {
     const html = renderToStaticMarkup(<ResultModeToolbar {...toolbarProps} />);
     const button = html.slice(html.indexOf('aria-label="Results'));
 
-    expect(button).toContain('bg-accent-600');
     expect(button).toContain('text-white');
     expect(button).toContain('shadow-sm');
+  });
+
+  /**
+   * Orange, not the blue accent: every other filled control in the app is
+   * accent-600, so the panel's entry point was the same colour as navigation.
+   * It is deliberately NOT `warn-*`, which is amber and means an alert — a
+   * control that is always on screen must not read as one.
+   */
+  it('is orange, so it is not read as another accent control', () => {
+    const html = renderToStaticMarkup(<ResultModeToolbar {...toolbarProps} />);
+    const button = html.slice(html.indexOf('aria-label="Results'));
+
+    expect(button).toContain('bg-orange-600');
+    expect(button).not.toContain('bg-accent-600');
+    expect(button).not.toContain('bg-warn');
   });
 
   it('still renders in fullscreen', () => {
@@ -113,6 +127,8 @@ describe('the panel itself', () => {
         selectedEdgeId={null}
         onSelectNode={vi.fn()}
         onSelectEdge={vi.fn()}
+        onExportPdf={vi.fn()}
+        exporting={false}
         onClose={vi.fn()}
       />,
     );

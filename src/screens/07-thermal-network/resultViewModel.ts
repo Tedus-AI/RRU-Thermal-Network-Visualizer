@@ -28,6 +28,19 @@ export const RESULT_MODES = [
 export type ResultMode = (typeof RESULT_MODES)[number]['id'];
 
 /**
+ * The mode as a filename fragment — `Temperature`, `HeatFlow`, `DeltaT`.
+ *
+ * Built from the label rather than the id so the file says what the toolbar
+ * says, and ASCII-folded because `ΔT` is not something every filesystem, mail
+ * client and archive tool agrees on.
+ */
+export function modeFilenamePart(mode: ResultMode): string {
+  const entry = RESULT_MODES.find((candidate) => candidate.id === mode);
+  if (!entry) return mode;
+  return entry.label.replace(/\u0394/g, 'Delta').replace(/[^A-Za-z0-9]+/g, '');
+}
+
+/**
  * Whether a value read back from storage is still a mode this build has.
  *
  * The remembered toolbar reads what a PREVIOUS build wrote. A mode that has

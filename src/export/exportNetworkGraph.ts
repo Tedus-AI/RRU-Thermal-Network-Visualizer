@@ -236,9 +236,26 @@ export async function buildGraphPdf(pages: readonly PdfPageSource[]): Promise<Bl
   return pdf!.output('blob');
 }
 
-/** `FR1_RRU_starkcore_network_20260904.pdf` — project, subject, day. */
-export function exportFilename(projectName: string, kind: 'jpg' | 'pdf', now = new Date()): string {
-  const safe = (projectName || 'project').replace(/[^A-Za-z0-9._-]+/g, '_').replace(/^_+|_+$/g, '');
+/**
+ * `FR1_RRU_starkcore_12L_network_DeltaT_20260904.pdf` — project, subject, what
+ * the picture is coloured by, day.
+ *
+ * The mode is in the name because it decides what the file SHOWS. Two exports
+ * of one project in Temperature and in Rth are different documents, and without
+ * it the second silently replaced the first in the download folder.
+ *
+ * `subject` separates the graph exports from the result table, which is a
+ * different document again.
+ */
+export function exportFilename(
+  projectName: string,
+  kind: 'jpg' | 'pdf',
+  options: { subject?: string; mode?: string; now?: Date } = {},
+): string {
+  const { subject = 'network', mode, now = new Date() } = options;
+  const clean = (value: string) => value.replace(/[^A-Za-z0-9._-]+/g, '_').replace(/^_+|_+$/g, '');
+  const safe = clean(projectName) || 'project';
   const day = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
-  return `${safe || 'project'}_network_${day}.${kind}`;
+  const modePart = mode ? `_${clean(mode)}` : '';
+  return `${safe}_${clean(subject)}${modePart}_${day}.${kind}`;
 }

@@ -198,7 +198,7 @@ export function ResultModeToolbar({
         onClick={onOpenResults}
         aria-label="Results / 求解結果"
         title={biTitle('Open the full result table', '開啟完整求解結果')}
-        className="flex shrink-0 items-center gap-1.5 rounded-md bg-accent-600 px-2 py-1.5 text-[11px] font-bold text-white shadow-sm ring-1 ring-accent-700/40 transition-colors hover:bg-accent-500"
+        className="flex shrink-0 items-center gap-1.5 rounded-md bg-orange-600 px-2 py-1.5 text-[11px] font-bold text-white shadow-sm ring-1 ring-orange-700/40 transition-colors hover:bg-orange-500"
       >
         <Table2 size={13} />
         <span>Results</span>
