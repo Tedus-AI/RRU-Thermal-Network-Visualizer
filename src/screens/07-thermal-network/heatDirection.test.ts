@@ -18,7 +18,7 @@ import type { ThermalNetwork } from '@/thermal/types';
 import type { ThermalSolution } from '@/thermal/solver/solverTypes';
 
 import { buildElements, legendFor } from './SolvedGraphCanvas';
-import { buildScale, temperatureDrop, type ResultMode } from './resultViewModel';
+import { buildScale, deltaTLabel, type ResultMode } from './resultViewModel';
 
 const EDGE = 'EDGE_A_B';
 const DISPLAY = { showLabels: true, showPower: true, showLimits: false, showBoundary: true };
@@ -117,30 +117,38 @@ describe('the arrow follows the solved heat direction', () => {
   });
 });
 
-describe('ΔT is written as the fall it is', () => {
-  it('labels the drop with ↓ and no sign', () => {
-    expect(edgeData('delta_t', solution('forward', 7.6)).label).toBe('↓7.6 °C');
+describe('ΔT is named, and carries no sign', () => {
+  it('labels the difference with ΔT and no sign', () => {
+    expect(edgeData('delta_t', solution('forward', 7.6)).label).toBe('ΔT 7.6 °C');
   });
 
   /**
-   * A reverse solve gives a negative ΔT. The magnitude is unchanged — the fall
-   * is the same 7.6 °C — and the arrow, now turned round, says which way.
+   * A reverse solve gives a negative ΔT. The magnitude is unchanged — the same
+   * 7.6 °C across the same pair — and the arrow, now turned round, says which
+   * end is the hotter one.
    */
   it('shows the same magnitude when the heat runs the other way', () => {
     const data = edgeData('delta_t', solution('reverse', -7.6));
-    expect(data.label).toBe('↓7.6 °C');
+    expect(data.label).toBe('ΔT 7.6 °C');
     expect(data.srcArrow).toBe('triangle');
   });
 
-  it('says N/A rather than ↓0.0 when there is no value', () => {
-    expect(temperatureDrop(null)).toBe('N/A');
-    expect(temperatureDrop(Number.NaN)).toBe('N/A');
+  /** No `+`, no `−`, and no arrow either: direction is the arrow's job. */
+  it('carries no direction marker of its own', () => {
+    const label = String(edgeData('delta_t', solution('reverse', -7.6)).label);
+    expect(label).not.toMatch(/[+↓↑]/);
+    expect(label).not.toContain('-');
   });
 
-  /** The legend has to explain the mark, and no longer promise a sign. */
-  it('keys ↓ in the ΔT legend', () => {
+  it('says N/A rather than ΔT 0.0 when there is no value', () => {
+    expect(deltaTLabel(null)).toBe('N/A');
+    expect(deltaTLabel(Number.NaN)).toBe('N/A');
+  });
+
+  /** The legend explains the arrow, and no longer promises a sign. */
+  it('points at the arrow in the ΔT legend, not at a sign', () => {
     const rows = legendFor('delta_t', solution('forward', 7.6));
-    expect(rows.some((row) => row.label.includes('↓'))).toBe(true);
+    expect(rows.some((row) => /Arrow/i.test(row.label))).toBe(true);
     expect(rows.some((row) => row.zh.includes('正負號'))).toBe(false);
   });
 });
@@ -245,7 +253,7 @@ describe("Screen 07's brace over a parallel pair", () => {
   });
 
   it('names the one ΔT the pair shares', () => {
-    expect(braceLabel('delta_t')).toBe('Spreading, Heat Pipe ×2\nshared ↓1.9 °C');
+    expect(braceLabel('delta_t')).toBe('Spreading, Heat Pipe ×2\nshared ΔT 1.9 °C');
   });
 
   /** Nothing combinable, nothing to say — and no stray °C/W in a °C graph. */

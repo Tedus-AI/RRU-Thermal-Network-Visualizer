@@ -26,6 +26,18 @@ export const RESULT_MODES = [
 
 export type ResultMode = (typeof RESULT_MODES)[number]['id'];
 
+/**
+ * Whether a value read back from storage is still a mode this build has.
+ *
+ * The remembered toolbar reads what a PREVIOUS build wrote. A mode that has
+ * since been renamed or removed would fall through every branch of the canvas's
+ * switch and paint a graph with no colouring and no legend, from a toolbar
+ * showing nothing selected.
+ */
+export function isResultMode(value: unknown): value is ResultMode {
+  return RESULT_MODES.some((mode) => mode.id === value);
+}
+
 /** 07 §20 — before a solve only the three input-only modes are selectable. */
 export function allowedModes(hasResult: boolean): ResultMode[] {
   return RESULT_MODES.filter((mode) => hasResult || !mode.needsSolution).map((mode) => mode.id);
@@ -117,21 +129,22 @@ export function rth(value: number | null | undefined): string {
 }
 
 /**
- * A temperature difference across an edge, written as the FALL that it is.
+ * A temperature difference across an edge, named and unsigned.
  *
- * `+7.6 °C` invites exactly the wrong reading: that 7.6 is added on the way
- * downstream. ΔT here is `T_source − T_target`, so a positive value means the
- * upstream end is the hotter one and the heat is falling 7.6 °C as it crosses.
- * A leading `↓` says that outright.
+ * It has been three things. `+7.6 °C` invited exactly the wrong reading — that
+ * 7.6 is added on the way downstream — when ΔT here is `T_source − T_target`,
+ * so a positive value means the UPSTREAM end is the hotter one. `↓7.6 °C` said
+ * "falls by" but put a second direction marker next to an arrow that already
+ * carries the direction.
  *
- * The sign is not lost, only moved: which end is upstream is the arrow's job,
- * and the arrow now follows the solved direction in every result mode, so a
- * negative ΔT turns the arrow round rather than putting a `−` on the number.
- * That leaves the number to carry one thing — how far the temperature falls.
+ * So the number carries neither. Which end is hotter is the arrow's job, and
+ * the arrow follows the solved direction in every result mode; the `ΔT` prefix
+ * says only what the quantity IS, so a reader meeting `7.6 °C` on a graph full
+ * of absolute temperatures cannot mistake it for one.
  */
-export function temperatureDrop(value: number | null | undefined, digits = 1): string {
+export function deltaTLabel(value: number | null | undefined, digits = 1): string {
   if (value == null || !Number.isFinite(value)) return 'N/A';
-  return `\u2193${Math.abs(value).toFixed(digits)} \u00b0C`;
+  return `\u0394T ${Math.abs(value).toFixed(digits)} \u00b0C`;
 }
 
 export function signed(value: number | null | undefined, digits = 1, unit = ''): string {

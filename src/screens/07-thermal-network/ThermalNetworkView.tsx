@@ -28,7 +28,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { ComponentVisibilityPanel } from '@/ui/ComponentVisibilityPanel';
-import { useRememberedFlag } from '@/ui/rememberedFlag';
+import { useRememberedFlag, useRememberedValue } from '@/ui/rememberedFlag';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -70,11 +70,13 @@ import { ScenarioSummary } from './ScenarioSummary';
 import { ResultModeToolbar } from './ResultModeToolbar';
 import {
   SolvedGraphCanvas,
+  isDisplayOptions,
   legendFor,
   type GraphDisplayOptions,
   type SolvedCanvasTool,
   type SolvedGraphHandle,
 } from './SolvedGraphCanvas';
+import { isLayoutMode } from '@/screens/05-thermal-path-builder/GraphToolbar';
 import { EnergyBalancePanel } from './EnergyBalancePanel';
 import { NodeResultInspector } from './NodeResultInspector';
 import { EdgeResultInspector } from './EdgeResultInspector';
@@ -82,6 +84,7 @@ import { SolverStatusOverlay } from './SolverStatusOverlay';
 import { ResultTree } from './ResultTree';
 import {
   allowedModes,
+  isResultMode,
   edgeRows,
   nodeRows,
   resultTree,
@@ -164,14 +167,34 @@ export function ThermalNetworkView() {
   const signature = useSolutionStore((s) => s.signature);
   const solving = useSolutionStore((s) => s.solving);
 
-  const [mode, setMode] = useState<ResultMode>('node_type');
+  /*
+     The toolbar's choices are REMEMBERED, not reset on every mount.
+
+     Which result to colour the graph by, which labels to show and how to lay
+     it out are how the engineer has decided to read this graph — and they all
+     snapped back to their defaults the moment they stepped to Screen 08 to
+     check something and came back. Checking one number against another screen
+     meant re-choosing ΔT, re-ticking Limits and re-picking the layout, every
+     single time.
+
+     Under `tnvui.`, like the legend and the panel sizes: `syncBuildStamp`
+     clears the `tnv.` namespace on a build change because project data written
+     against an older schema cannot be trusted, and none of this is project
+     data. Each one validates what comes back, so a mode written by an older
+     build cannot drive the screen into a state it can no longer render.
+  */
+  const [mode, setMode] = useRememberedValue<ResultMode>(
+    '07.mode',
+    'node_type',
+    isResultMode,
+  );
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [confirmReset, setConfirmReset] = useState(false);
   const [tool, setTool] = useState<SolvedCanvasTool>('select');
   const [zoom, setZoom] = useState(1);
   const [fullscreen, setFullscreen] = useState(false);
-  const [layoutMode, setLayoutMode] = useState('Auto');
+  const [layoutMode, setLayoutMode] = useRememberedValue('07.layout', 'Auto', isLayoutMode);
   // Collapsed until the reader says otherwise, and then remembered: it is an
   // overlay in the corner the graph starts in, so left open it sits on the
   // first two nodes — but re-collapsing it on every visit is its own annoyance.
@@ -194,12 +217,11 @@ export function ThermalNetworkView() {
       return next;
     });
   }, []);
-  const [display, setDisplay] = useState<GraphDisplayOptions>({
-    showLabels: true,
-    showPower: true,
-    showLimits: false,
-    showBoundary: true,
-  });
+  const [display, setDisplay] = useRememberedValue<GraphDisplayOptions>(
+    '07.display',
+    { showLabels: true, showPower: true, showLimits: false, showBoundary: true },
+    isDisplayOptions,
+  );
   const canvasRef = useRef<SolvedGraphHandle | null>(null);
 
   const boundarySet = boundaryKey ? (boundarySets[boundaryKey] ?? null) : null;

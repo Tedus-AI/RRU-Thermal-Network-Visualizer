@@ -67,12 +67,27 @@ import {
   buildScale,
   num,
   rth as formatRth,
-  temperatureDrop,
+  deltaTLabel,
   type ResultMode,
   type Scale,
 } from './resultViewModel';
 
 cytoscape.use(dagre);
+
+/**
+ * Whether a value read back from storage is a complete set of display options.
+ *
+ * Every flag is checked, not just the shape: a partial object would leave one
+ * of them `undefined`, which reads as false, so a label the engineer had left
+ * ON would come back off with nothing to say why.
+ */
+export function isDisplayOptions(value: unknown): value is GraphDisplayOptions {
+  if (value == null || typeof value !== 'object') return false;
+  const options = value as Record<string, unknown>;
+  return (['showLabels', 'showPower', 'showLimits', 'showBoundary'] as const).every(
+    (flag) => typeof options[flag] === 'boolean',
+  );
+}
 
 export interface GraphDisplayOptions {
   showLabels: boolean;
@@ -366,7 +381,7 @@ export function buildElements(
         if (result) {
           color = scales.delta.colorOf(Math.abs(result.delta_T_C));
           width = 3;
-          if (display.showLabels) label = temperatureDrop(result.delta_T_C);
+          if (display.showLabels) label = deltaTLabel(result.delta_T_C);
         }
         break;
 
@@ -923,10 +938,10 @@ export function legendFor(
         ...scale.stops.map((stop) => ({
           color: stop.color,
           label: `${stop.from.toFixed(1)} – ${stop.to.toFixed(1)} °C`,
-          zh: '連線溫差（↓為沿箭頭方向的溫度落差）',
+          zh: '連線溫差（沿箭頭方向的溫度落差）',
         })),
-        // The key the number needs: which end is hot is the arrow's, not a sign's.
-        { color: EDGE_NEUTRAL, label: '↓ = fall along the arrow', zh: '箭頭為實際熱流方向' },
+        // The number is unsigned, so the arrow is what says which end is hot.
+        { color: EDGE_NEUTRAL, label: 'Arrow = hotter end first', zh: '箭頭為實際熱流方向' },
       ];
     }
 

@@ -64,3 +64,46 @@ export function useRememberedFlag(
 
   return [value, set];
 }
+
+/**
+ * The same, for a value that is not a yes/no.
+ *
+ * Screen 07's toolbar is a set of reading choices — which result to colour the
+ * graph by, which labels to show, how to lay it out — and every one of them
+ * reset to its default the moment the engineer stepped to another screen and
+ * back. Checking a result against Screen 08 and returning meant re-choosing ΔT,
+ * re-ticking Limits, re-picking the layout, every single time.
+ *
+ * `valid` is not optional politeness: what comes back is whatever a previous
+ * BUILD wrote, and a mode or layout that no longer exists would drive the
+ * screen into a state its own switch cannot render. An unrecognised value
+ * falls back rather than being trusted.
+ */
+export function useRememberedValue<T>(
+  key: string,
+  fallback: T,
+  valid: (value: unknown) => value is T,
+): [T, (next: T | ((current: T) => T)) => void] {
+  const [value, setValue] = useState<T>(() => {
+    try {
+      const raw = window.localStorage.getItem(storageKey(key));
+      if (raw == null) return fallback;
+      const parsed: unknown = JSON.parse(raw);
+      return valid(parsed) ? parsed : fallback;
+    } catch {
+      return fallback;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(storageKey(key), JSON.stringify(value));
+    } catch {
+      // Storage being unavailable must not break the control.
+    }
+  }, [key, value]);
+
+  const set = useCallback((next: T | ((current: T) => T)) => setValue(next), []);
+
+  return [value, set];
+}
