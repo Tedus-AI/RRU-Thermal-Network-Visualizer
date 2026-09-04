@@ -50,7 +50,6 @@ import { Badge, Button, Modal, Skeleton } from '@/ui/primitives';
 import { FloatingPanel } from '@/ui/FloatingPanel';
 import { biTitle } from '@/ui/FieldLabel';
 import { ResizableSidebar } from '@/ui/ResizableSidebar';
-import { ResizablePane } from '@/ui/ResizablePane';
 import { toast } from '@/ui/toast';
 
 import { useProjectStore } from '@/data/projectStore';
@@ -81,7 +80,7 @@ import { EnergyBalancePanel } from './EnergyBalancePanel';
 import { NodeResultInspector } from './NodeResultInspector';
 import { EdgeResultInspector } from './EdgeResultInspector';
 import { SolverStatusOverlay } from './SolverStatusOverlay';
-import { ResultTree } from './ResultTree';
+import { ResultsOverlay } from './ResultsOverlay';
 import {
   allowedModes,
   isResultMode,
@@ -200,6 +199,10 @@ export function ThermalNetworkView() {
   // first two nodes — but re-collapsing it on every visit is its own annoyance.
   const [legendOpen, setLegendOpen] = useRememberedFlag('07.legend', false);
   const [componentVisibilityOpen, setComponentVisibilityOpen] = useState(false);
+  // Not remembered, unlike the toolbar's reading choices: it covers the graph,
+  // and a panel that reopened itself on every visit would hide the thing the
+  // screen is for before the reader had asked for it.
+  const [resultsOpen, setResultsOpen] = useState(false);
   /**
    * Components switched off in the visibility panel. Deliberately component
    * state and not persisted, as on Screen 05: it is a way of reading a crowded
@@ -567,7 +570,10 @@ export function ThermalNetworkView() {
 
       {/* Row 1 — controls, solved graph, inspector */}
       <div
-        className={`flex h-[calc(100vh-27rem)] min-h-[28rem] flex-col gap-3 lg:flex-row ${
+        // 27rem of that reservation was the result table sitting underneath.
+        // It is a panel now, so the graph takes the height back — which was
+        // the whole point of moving it.
+        className={`flex h-[calc(100vh-21rem)] min-h-[30rem] flex-col gap-3 lg:flex-row ${
           fullscreen ? 'fixed inset-0 z-30 h-auto min-h-0 bg-canvas p-3' : ''
         }`}
       >
@@ -641,6 +647,8 @@ export function ThermalNetworkView() {
               fullscreen={fullscreen}
               componentVisibilityOpen={componentVisibilityOpen}
               hiddenComponentCount={hiddenModeledComponentIds.size}
+              resultsSummary={`${rows.length} · ${flows.length}`}
+              onOpenResults={() => setResultsOpen(true)}
               onToggleComponentVisibility={() => setComponentVisibilityOpen((value) => !value)}
               onMode={setMode}
               onDisplay={(patch) => setDisplay((current) => ({ ...current, ...patch }))}
@@ -754,48 +762,30 @@ export function ThermalNetworkView() {
 
       </div>
 
-      {/* Row 2 — every result in one hierarchy.
-          Sized by the reader: at 32rem it took half the screen from the graph
-          it reports on, and how much of it is worth showing depends on how many
-          groups are expanded. */}
-      <ResizablePane
-        id="07.results"
-        defaultHeight={320}
-        labelEn="results"
-        labelZh="求解結果"
-        header={
-          <>
-            <span className="flex size-5 shrink-0 items-center justify-center rounded bg-accent-600 text-[11px] font-bold text-white tabular">
-              3
-            </span>
-            <h2 className="min-w-0 truncate text-[13px] font-bold text-ink-900">
-              Results <span className="font-semibold text-ink-400">/ 求解結果</span>
-            </h2>
-            <span className="ml-auto shrink-0 text-[11px] text-ink-400">
-              {tree.length} groups · {rows.length} nodes · {flows.length} edges
-            </span>
-          </>
-        }
-      >
-        <div className="overflow-x-auto">
-          <ResultTree
-            groups={tree}
-            hasSolution={hasResult}
-            selectedNodeId={selectedNodeId}
-            selectedEdgeId={selectedEdgeId}
-            onSelectNode={(nodeId) => {
-              setSelectedEdgeId(null);
-              setSelectedNodeId(nodeId);
-              canvasRef.current?.center(nodeId);
-            }}
-            onSelectEdge={(edgeId) => {
-              setSelectedNodeId(null);
-              setSelectedEdgeId(edgeId);
-              canvasRef.current?.center(edgeId);
-            }}
-          />
-        </div>
-      </ResizablePane>
+      {resultsOpen && (
+        <ResultsOverlay
+          groups={tree}
+          hasSolution={hasResult}
+          nodeCount={rows.length}
+          edgeCount={flows.length}
+          selectedNodeId={selectedNodeId}
+          selectedEdgeId={selectedEdgeId}
+          onSelectNode={(nodeId) => {
+            setSelectedEdgeId(null);
+            setSelectedNodeId(nodeId);
+            // Centring happens behind the panel, so the node is already framed
+            // when the reader closes it — which is what they opened the table
+            // to find.
+            canvasRef.current?.center(nodeId);
+          }}
+          onSelectEdge={(edgeId) => {
+            setSelectedNodeId(null);
+            setSelectedEdgeId(edgeId);
+            canvasRef.current?.center(edgeId);
+          }}
+          onClose={() => setResultsOpen(false)}
+        />
+      )}
 
       {/* The inspector floats: it is a read-only detail view, so it should
           appear where the reader asked for it and be pushable out of the way,

@@ -51,6 +51,8 @@ const toolbarProps = {
   onLayoutMode: vi.fn(),
   onRelayout: vi.fn(),
   onToggleFullscreen: vi.fn(),
+  resultsSummary: '85 · 85',
+  onOpenResults: vi.fn(),
   onToggleComponentVisibility: vi.fn(),
 };
 
