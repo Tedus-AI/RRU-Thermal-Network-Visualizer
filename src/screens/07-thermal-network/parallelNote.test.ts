@@ -122,8 +122,8 @@ describe('the parallel note on the solved graph', () => {
       expect(note('heat_flow')).toBe('∑ 35.0 W');
     });
 
-    it('names the one ΔT the pair shares, as a fall', () => {
-      expect(note('delta_t')).toBe('shared ↓1.9 °C');
+    it('names the one ΔT the pair shares', () => {
+      expect(note('delta_t')).toBe('shared ΔT 1.9 °C');
     });
 
     /**

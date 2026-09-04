@@ -19,7 +19,7 @@ import type { ElementDefinition } from 'cytoscape';
 import type { ThermalNetwork } from '@/thermal/types';
 import type { ThermalSolution } from '@/thermal/solver/solverTypes';
 import { HSK_BUS_COLOR, labelBox } from '@/ui/graphStyles';
-import { temperatureDrop } from './resultViewModel';
+import { deltaTLabel } from './resultViewModel';
 import {
   busAxis,
   hskBusGroups,
@@ -126,7 +126,7 @@ export function parallelNote(
     // Same two nodes, so one ΔT — printing it once is the point.
     const first = edgeIds[0] ? solution?.edge_results?.[edgeIds[0]] : undefined;
     if (!first || !Number.isFinite(first.delta_T_C)) return '';
-    return `shared ${temperatureDrop(first.delta_T_C)}`;
+    return `shared ${deltaTLabel(first.delta_T_C)}`;
   }
 
   if (mode !== 'rth') return '';

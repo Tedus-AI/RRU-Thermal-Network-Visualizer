@@ -41,6 +41,11 @@ export const LAYOUT_MODES = [
   { value: 'Free', label: 'Free' },
 ];
 
+/** Same reason as `isResultMode`: a layout a previous build offered may be gone. */
+export function isLayoutMode(value: unknown): value is string {
+  return LAYOUT_MODES.some((mode) => mode.value === value);
+}
+
 function ToolButton({
   active,
   disabled,
