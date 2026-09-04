@@ -6,6 +6,7 @@
  * statistic. Rows are ordered by node id or by the graph, never by "worst".
  */
 
+import type { LimitType } from '@/domain/component';
 import type { ThermalNetwork, ThermalNode } from '@/thermal/types';
 import type {
   EdgeSolutionResult,
@@ -375,6 +376,8 @@ export interface ResultTreeGroupRow {
   power_W: number;
   /** The tightest limit and margin in the group, or null when none is set. */
   limit_C: number | null;
+  /** Which temperature the limit is stated against — Tj, Tc, Tb or Ts. */
+  limit_type: LimitType | null;
   margin_C: number | null;
   status: 'pass' | 'over' | 'na';
   nodes: ResultTreeNodeRow[];
@@ -451,6 +454,7 @@ export function resultTree(
         peak_C: null,
         power_W: 0,
         limit_C: null,
+        limit_type: null,
         margin_C: null,
         status: 'na',
         nodes: [],
@@ -474,6 +478,7 @@ export function resultTree(
     if (row.margin_C != null && (group.margin_C == null || row.margin_C < group.margin_C)) {
       group.margin_C = row.margin_C;
       group.limit_C = row.limit_C;
+      group.limit_type = row.node.limit_type ?? null;
       group.status = row.status;
     }
   }

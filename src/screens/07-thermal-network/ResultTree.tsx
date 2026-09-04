@@ -13,6 +13,8 @@
  */
 
 import { useState } from 'react';
+
+import { LIMIT_TYPE_LABELS, type LimitType } from '@/domain/component';
 import { ChevronRight, CornerDownRight } from 'lucide-react';
 
 import type {
@@ -23,6 +25,35 @@ import type {
 import { NODE_ROLE_LABELS, num, rth, signed } from './resultViewModel';
 
 const GRID = 'grid grid-cols-[minmax(11rem,1.6fr)_5rem_4.5rem_5rem_6rem_5rem_5.5rem] items-center gap-x-2';
+
+/**
+ * The limit, with the temperature it is stated against.
+ *
+ * A Tc part shows its junction in the T column and its CASE in the margin, so
+ * a row can legitimately read 96.9 against a limit of 95 and still be passing.
+ * Naming the type is what makes that readable rather than alarming.
+ */
+function LimitCell({
+  limit_C,
+  limit_type,
+}: {
+  limit_C: number | null;
+  limit_type: LimitType | null | undefined;
+}) {
+  return (
+    <span className="text-right tabular text-ink-500">
+      {num(limit_C, 0)}
+      {limit_C != null && limit_type && (
+        <span
+          className="ml-0.5 text-[9px] font-semibold text-ink-400"
+          title={`${LIMIT_TYPE_LABELS[limit_type].en} / ${LIMIT_TYPE_LABELS[limit_type].zh}`}
+        >
+          {limit_type}
+        </span>
+      )}
+    </span>
+  );
+}
 
 function MarginCell({
   margin_C,
@@ -154,7 +185,7 @@ function NodeRow({
           {row.power_W > 0 ? num(row.power_W, 2) : '—'}
         </span>
         <span className="text-right text-ink-400">—</span>
-        <span className="text-right tabular text-ink-500">{num(row.limit_C, 0)}</span>
+        <LimitCell limit_C={row.limit_C} limit_type={row.node.limit_type} />
         <MarginCell margin_C={row.margin_C} status={row.status} />
       </div>
 
@@ -254,7 +285,7 @@ export function ResultTree({
                 {group.power_W > 0 ? num(group.power_W, 2) : '—'}
               </span>
               <span className="text-right text-ink-400">—</span>
-              <span className="text-right tabular text-ink-500">{num(group.limit_C, 0)}</span>
+              <LimitCell limit_C={group.limit_C} limit_type={group.limit_type} />
               <MarginCell margin_C={group.margin_C} status={group.status} />
             </button>
 

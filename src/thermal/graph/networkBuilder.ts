@@ -38,6 +38,7 @@ import { getTemplate } from '../templates/templateRegistry';
 import type { ThermalTemplate } from '../templates/types';
 import { MOUNT_SPEC_KEY } from './componentMount';
 import { edgeId, instanceKeys, instanceMultiplier, nodeId, structureNodeId } from './idFactory';
+import { limitReferenceRole } from './limitReference';
 import type {
   ComponentTemplateBinding,
   EdgeMethod,
@@ -413,6 +414,9 @@ export function buildComponentSubgraph(
   const edges: ThermalEdge[] = [];
   const keys = instanceKeys(component.qty, options.qtyModel, options.groupCount);
   const perDevicePower = powerWOf(component);
+  // The limit is judged where its TYPE says, which is not always the source:
+  // a Tc limit belongs on the case, one Rjc below the junction.
+  const limitRole = limitReferenceRole(template, component.thermal_spec.limit_type);
 
   keys.forEach((instance, instanceIndex) => {
     const multiplier = instanceMultiplier(
@@ -437,8 +441,8 @@ export function buildComponentSubgraph(
         power_W: proto.heatSource ? perDevicePower * multiplier : 0,
         temperature_C: null,
         temperature_source: null,
-        limit_C: proto.heatSource ? valueOf(component.thermal_spec.limit_C) : null,
-        limit_type: proto.heatSource ? component.thermal_spec.limit_type : null,
+        limit_C: proto.role === limitRole ? valueOf(component.thermal_spec.limit_C) : null,
+        limit_type: proto.role === limitRole ? component.thermal_spec.limit_type : null,
         boundary_type: null,
         boundary_role: proto.boundaryRole,
         zone_id: null,
@@ -454,8 +458,8 @@ export function buildComponentSubgraph(
           ...(instance ? { instance } : {}),
           devices_represented: multiplier,
           component_power_linked: proto.heatSource,
-          component_limit_linked: proto.heatSource,
-          ...(proto.heatSource && component.thermal_spec.limit_reference_note?.trim()
+          component_limit_linked: proto.role === limitRole,
+          ...(proto.role === limitRole && component.thermal_spec.limit_reference_note?.trim()
             ? { limit_reference_note: component.thermal_spec.limit_reference_note.trim() }
             : {}),
           ...(template.id === 'DIRECT_METAL' &&

@@ -60,6 +60,7 @@ import { useSolverStore } from '@/data/solverStore';
 import { useBoundaryStore } from '@/data/boundaryStore';
 import { useSolutionStore } from '@/data/solutionStore';
 
+import { projectComponentLimits } from '@/thermal/graph/componentProjection';
 import { DEFAULT_SOLVER_SETTINGS, type SolverSettings } from '@/thermal/types';
 import type { SolverIssue } from '@/thermal/solver/solverTypes';
 
@@ -292,17 +293,30 @@ export function ThermalNetworkView() {
   const powerScale = scenario?.power_scale ?? 1;
   const ambient = boundarySet?.ambient.external_ambient_C ?? scenario?.ambient_C ?? null;
 
+  // Limits are read through the same projection Screens 08+ use, not off the
+  // stored graph. Screen 04 owns the limit and its TYPE, and the type decides
+  // WHICH node holds it — so a part re-typed from Tj to Tc has to have its
+  // limit moved onto the case before any margin is computed from it. Reading
+  // the stored graph judged it wherever Screen 05 last wrote it.
+  const limited = useMemo(
+    () => (network ? projectComponentLimits(network, components) : null),
+    [network, components],
+  );
+
   const rows = useMemo(
-    () => (network ? nodeRows(network, stale ? null : solution, { ambient_C: ambient, powerScale }) : []),
-    [network, solution, stale, ambient, powerScale],
+    () =>
+      limited
+        ? nodeRows(limited, stale ? null : solution, { ambient_C: ambient, powerScale })
+        : [],
+    [limited, solution, stale, ambient, powerScale],
   );
   const flows = useMemo(
     () => (network ? edgeRows(network, stale ? null : solution) : []),
     [network, solution, stale],
   );
   const tree = useMemo(
-    () => (network ? resultTree(network, stale ? null : solution, rows, components) : []),
-    [network, solution, stale, rows, components],
+    () => (limited ? resultTree(limited, stale ? null : solution, rows, components) : []),
+    [limited, solution, stale, rows, components],
   );
 
   const issues: SolverIssue[] = useMemo(() => {
@@ -454,7 +468,7 @@ export function ThermalNetworkView() {
     solution.energy_balance.error_pct > settings.energy_error_pct;
 
   const legend = legendFor(mode, stale ? null : solution);
-  const selectedNode = selectedNodeId ? (network.nodes[selectedNodeId] ?? null) : null;
+  const selectedNode = selectedNodeId ? ((limited ?? network).nodes[selectedNodeId] ?? null) : null;
   const selectedEdge = selectedEdgeId ? (network.edges[selectedEdgeId] ?? null) : null;
 
   return (
@@ -666,7 +680,10 @@ export function ThermalNetworkView() {
           <div className={`relative min-h-0 flex-1 ${stale ? 'opacity-50' : ''}`}>
             <SolvedGraphCanvas
               ref={canvasRef}
-              network={network}
+              // The graph badges and colours by limit, so it reads the same
+              // projected limits the table does — otherwise it would paint a
+              // junction over-limit that the table reports as passing.
+              network={limited ?? network}
               solution={stale ? null : solution}
               mode={mode}
               display={display}
