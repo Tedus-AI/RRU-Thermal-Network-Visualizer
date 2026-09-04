@@ -54,6 +54,7 @@ const GROUPS: ResultTreeGroupRow[] = [
     peak_C: 96.2,
     power_W: 35,
     limit_C: 100,
+    limit_type: 'Tj',
     margin_C: 3.8,
     status: 'pass',
     nodes: [],

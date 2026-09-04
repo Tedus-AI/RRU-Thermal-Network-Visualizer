@@ -13,6 +13,7 @@ import {
 } from '../resistance/calculators';
 import type { ThermalEdge, ThermalNetwork, ThermalNode } from '../types';
 import { readLinkedInput } from './networkBuilder';
+import { limitReferenceNodeId } from './limitReference';
 import { SOURCE_AREA_OVERRIDE_KEY } from './hskBaseConnection';
 
 function followsComponentPower(node: ThermalNode): boolean {
@@ -154,6 +155,55 @@ export interface ComponentProjectionOptions {
   limits?: boolean;
 }
 
+/**
+ * Puts each component's limit on the node its limit TYPE names.
+ *
+ * Not a per-node decision, because it has to MOVE: an engineer who switches a
+ * part from Tj to Tc is re-stating where the number is measured, and the limit
+ * has to leave the junction and land on the case. A per-node pass can only ever
+ * refresh a limit where one already sits, so the wrong node keeps it and the
+ * right node never gets it.
+ *
+ * Clearing goes through `followsComponentLimit`, so a limit is taken away from
+ * exactly the nodes the old per-node pass would have written one to. That
+ * predicate lets an explicit `component_limit_linked` outrank `modified`, which
+ * is why a limit typed into a linked node has never survived a solve —
+ * unchanged here, and not this fix's to change.
+ */
+function applyComponentLimits(network: ThermalNetwork, byId: Map<string, Component>): void {
+  const intended = new Map<string, Component>();
+
+  for (const node of Object.values(network.nodes)) {
+    const component = node.component_ref ? byId.get(node.component_ref) : undefined;
+    // Anchored on the POWER link, never on the limit link: after one pass the
+    // case carries a limit too, and anchoring on that would let it claim a
+    // second limit of its own and never give the junction its Tj back.
+    if (!component || !followsComponentPower(node)) continue;
+    const target = limitReferenceNodeId(network, node.id, component.thermal_spec.limit_type);
+    if (network.nodes[target]) intended.set(target, component);
+  }
+
+  for (const node of Object.values(network.nodes)) {
+    if (!node.component_ref || !byId.has(node.component_ref)) continue;
+    const component = intended.get(node.id);
+
+    if (component) {
+      // The target may never have carried a limit before — a lid on a graph
+      // built while the part was still Tj — so eligibility cannot be read from
+      // the `component_limit_linked` flag it does not have yet. A template node
+      // is Screen 04's slot to fill; a hand-drawn one is not.
+      if (node.origin?.kind !== 'template') continue;
+      node.limit_C = valueOf(component.thermal_spec.limit_C);
+      node.limit_type = component.thermal_spec.limit_type;
+      node.metadata = { ...node.metadata, component_limit_linked: true };
+    } else if (followsComponentLimit(node)) {
+      node.limit_C = null;
+      node.limit_type = null;
+      node.metadata = { ...node.metadata, component_limit_linked: false };
+    }
+  }
+}
+
 /** Returns a clone; Component Master follows explicit template links only. */
 export function projectComponentMaster(
   network: ThermalNetwork,
@@ -176,11 +226,9 @@ export function projectComponentMaster(
       }
     }
 
-    if (options.limits && followsComponentLimit(node)) {
-      node.limit_C = valueOf(component.thermal_spec.limit_C);
-      node.limit_type = component.thermal_spec.limit_type;
-    }
   }
+
+  if (options.limits) applyComponentLimits(clone, byId);
 
   if (options.physics) {
     for (const edge of Object.values(clone.edges)) {
