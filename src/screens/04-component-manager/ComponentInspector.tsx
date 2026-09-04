@@ -221,6 +221,38 @@ function GeometryField({
   );
 }
 
+/**
+ * The two via numbers a component may state for itself.
+ *
+ * Both are project constants by default (01 §4) — one via stack-up serves the
+ * whole board — and both can be overridden, because a part over a locally
+ * denser via field is a real arrangement the project number cannot express.
+ *
+ * They are the only two inputs the via formula actually reads. Count and inner
+ * diameter are deliberately not here: they do not appear in it, and offering
+ * them would invite an engineer to tune a number that changes nothing.
+ */
+const VIA_OVERRIDES = [
+  {
+    key: 'via_effective_k_W_mK',
+    label: 'Via effective k',
+    zh: '導熱孔等效 k',
+    unit: 'W/m·K',
+    step: '1',
+    inheritNote: 'From Screen 01. / 取自 Screen 01 的專案設定。',
+    customNote: 'This part\u2019s own via field. / 此元件下方導熱孔區的實際值。',
+  },
+  {
+    key: 'via_efficiency',
+    label: 'Via efficiency',
+    zh: '導熱孔製程係數',
+    unit: '—',
+    step: '0.01',
+    inheritNote: 'From Screen 01. / 取自 Screen 01 的專案設定。',
+    customNote: 'This part\u2019s own process derate. / 此元件的製程折減。',
+  },
+] as const;
+
 /** A dimension this component does not own: shown, never typed, and said why. */
 function DerivedField({
   id,
@@ -725,26 +757,90 @@ export function ComponentInspector({
                     </div>
                   </div>
 
-                  {/* The via array's k and process derate are the project's
-                      (01 §4) — the template reads `materials.*`, so these were
-                      never per-component inputs, they only looked like it.
-                      Count and inner diameter are not in the formula at all. */}
+                  {/* The via array's k and process derate are the PROJECT's
+                      (01 §4): one stack-up serves the whole board, so they are
+                      inherited by default and were read-only until now.
+
+                      But a part sitting over a locally denser via field is a
+                      real arrangement the project constant cannot describe, so
+                      either may be overridden here. Same idiom as the TIM bond
+                      line — inherit or state it — and the same rule: switching
+                      to Custom seeds the field with the inherited number, so it
+                      never blanks a value the reader was looking at.
+
+                      Count and inner diameter are still absent: they are not in
+                      the formula at all. */}
                   {heatPath === 'Board' && (
                     <div className="grid grid-cols-2 gap-2.5">
-                      <DerivedField
-                        id="hp-effective_k_W_mK"
-                        label="Via effective k"
-                        zh="導熱孔等效 k"
-                        value={materials.via_effective_k_W_mK.value}
-                        from="Screen 01 / 專案設定"
-                      />
-                      <DerivedField
-                        id="hp-via_efficiency"
-                        label="Via efficiency"
-                        zh="導熱孔製程係數"
-                        value={materials.via_efficiency.value}
-                        from=""
-                      />
+                      {VIA_OVERRIDES.map((field) => {
+                        const inherited = materials[field.key].value;
+                        const stated = spec.heat_path.parameters?.[field.key];
+                        const custom = typeof stated === 'number' && Number.isFinite(stated);
+                        return (
+                          <div key={field.key} className="flex flex-col gap-1.5">
+                            <FieldLabel
+                              label={field.label}
+                              zh={field.zh}
+                              unit={field.unit}
+                              htmlFor={`hp-${field.key}`}
+                            />
+                            <div
+                              role="radiogroup"
+                              aria-label={`${field.label} source`}
+                              className="flex flex-wrap gap-3 text-[12px]"
+                            >
+                              <label className="flex items-center gap-1.5">
+                                <input
+                                  type="radio"
+                                  name={`${field.key}-mode-${component.id}`}
+                                  className="size-3.5 accent-[var(--color-accent-600)]"
+                                  checked={!custom}
+                                  disabled={readOnly}
+                                  onChange={() =>
+                                    patchHeatPathParameters({ [field.key]: null }, ['heat_path'])
+                                  }
+                                />
+                                Screen 01 / 專案設定
+                              </label>
+                              <label className="flex items-center gap-1.5">
+                                <input
+                                  type="radio"
+                                  name={`${field.key}-mode-${component.id}`}
+                                  className="size-3.5 accent-[var(--color-accent-600)]"
+                                  checked={custom}
+                                  disabled={readOnly}
+                                  onChange={() =>
+                                    patchHeatPathParameters({ [field.key]: inherited }, [
+                                      'heat_path',
+                                    ])
+                                  }
+                                />
+                                Custom / 自訂
+                              </label>
+                            </div>
+                            <NumberInput
+                              id={`hp-${field.key}`}
+                              step={field.step}
+                              value={custom ? stated : (inherited ?? '')}
+                              placeholder="—"
+                              disabled={readOnly || !custom}
+                              readOnly={!custom}
+                              onChange={(event) =>
+                                patchHeatPathParameters(
+                                  {
+                                    [field.key]:
+                                      event.target.value === '' ? null : Number(event.target.value),
+                                  },
+                                  ['heat_path'],
+                                )
+                              }
+                            />
+                            <p className="text-[11px] leading-relaxed text-ink-400">
+                              {custom ? field.customNote : field.inheritNote}
+                            </p>
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
