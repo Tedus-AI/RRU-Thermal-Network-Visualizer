@@ -66,6 +66,18 @@ export interface Subgraph {
  * Was `readComponentField`, which stopped being true once project constants
  * became linkable.
  */
+/**
+ * A per-component via number, or null to inherit the project's.
+ *
+ * Only positive finite values count as an override: a blank field stores null,
+ * and a zero conductivity or a zero derate would silently take the whole via
+ * path to infinite resistance rather than reading as "not stated".
+ */
+function viaOverride(component: Component, key: string): number | null {
+  const value = component.thermal_spec.heat_path.parameters?.[key];
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null;
+}
+
 export function readLinkedInput(
   component: Component,
   path: string,
@@ -75,10 +87,19 @@ export function readLinkedInput(
   switch (path) {
     case 'materials.copper_k_W_mK':
       return materials.copper_k_W_mK.value;
+    // The via array's k and process derate are the PROJECT's numbers (01 §4) —
+    // one via stack-up serves the whole board. A component may still override
+    // them, because a part sitting over a locally denser via field is a real
+    // arrangement and the project constant cannot describe it. Stored on the
+    // heat path's own parameters, so it travels with the path that uses it and
+    // needs no new field on the component.
+    //
+    // Same shape as the TIM bond line: absent means inherit, present means the
+    // engineer stated it for this part.
     case 'materials.via_effective_k_W_mK':
-      return materials.via_effective_k_W_mK.value;
+      return viaOverride(component, 'via_effective_k_W_mK') ?? materials.via_effective_k_W_mK.value;
     case 'materials.via_efficiency':
-      return materials.via_efficiency.value;
+      return viaOverride(component, 'via_efficiency') ?? materials.via_efficiency.value;
     case 'materials.solder_k_W_mK':
       return materials.solder_k_W_mK.value;
     case 'materials.solder_thickness_mm':
