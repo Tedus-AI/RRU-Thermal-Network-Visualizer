@@ -108,6 +108,18 @@ describe('the button that opens the results', () => {
     expect(button).not.toContain('bg-warn');
   });
 
+  /**
+   * The step number belongs on the button, not inside the panel it opens: it
+   * says which step of Screen 07 this IS, which is worth knowing before opening
+   * it rather than after.
+   */
+  it('carries the step number, so it reads as step 3 before it is opened', () => {
+    const html = renderToStaticMarkup(<ResultModeToolbar {...toolbarProps} />);
+    const button = html.slice(html.indexOf('aria-label="Results'));
+
+    expect(button.slice(0, button.indexOf('</button>'))).toContain('>3<');
+  });
+
   it('still renders in fullscreen', () => {
     const html = renderToStaticMarkup(
       <ResultModeToolbar {...toolbarProps} fullscreen componentVisibilityOpen />,

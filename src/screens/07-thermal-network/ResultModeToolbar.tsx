@@ -200,6 +200,12 @@ export function ResultModeToolbar({
         title={biTitle('Open the full result table', '開啟完整求解結果')}
         className="flex shrink-0 items-center gap-1.5 rounded-md bg-orange-600 px-2 py-1.5 text-[11px] font-bold text-white shadow-sm ring-1 ring-orange-700/40 transition-colors hover:bg-orange-500"
       >
+        {/* The step number lives out here on the button rather than inside the
+            panel it opens: it says which step of Screen 07 this IS, which is
+            information you want before opening it, not after. */}
+        <span className="flex size-4 shrink-0 items-center justify-center rounded bg-white text-[10px] font-bold text-orange-700 tabular">
+          3
+        </span>
         <Table2 size={13} />
         <span>Results</span>
         <span className="rounded bg-white/20 px-1 text-[10px] font-semibold tabular">

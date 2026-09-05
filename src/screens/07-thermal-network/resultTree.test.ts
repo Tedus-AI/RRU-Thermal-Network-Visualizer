@@ -103,7 +103,12 @@ describe('result tree', () => {
     const tree = build();
     expect(tree.map((group) => group.id)).toEqual(['CMP_FPGA', SHARED_STRUCTURE_GROUP_ID]);
     expect(tree[0].name).toBe('XCZU67DR');
-    expect(tree[0].nodes.map((entry) => entry.id)).toEqual(['NODE_C', 'NODE_J']);
+    // Along the heat path: the junction dissipates, the case is downstream of
+    // it. Alphabetically it would be the other way round, which is how the PA
+    // came to list its junction third.
+    expect(tree[0].nodes.map((entry) => entry.id)).toEqual(['NODE_J', 'NODE_C']);
+    // Shared structure has nothing dissipating in it and this fixture is
+    // unsolved, so it falls all the way back to the id.
     expect(tree[1].nodes.map((entry) => entry.id)).toEqual(['NODE_AMB', 'NODE_BASE']);
   });
 

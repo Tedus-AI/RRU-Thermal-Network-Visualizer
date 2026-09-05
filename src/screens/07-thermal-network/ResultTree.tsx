@@ -160,11 +160,19 @@ function MarginCell({
   return <span className="font-bold tabular text-ok-600">{signed(margin_C, 1)}</span>;
 }
 
-/** One number and its unit, as a chip on an edge row. */
+/**
+ * One number and its unit, as a chip on an edge row.
+ *
+ * `inline-block` and inline children, NOT flex. html2canvas does not size a
+ * flex container the way the browser does: in the rasterized PDF every chip
+ * drew its text straight through its own rounded border, the box sized to
+ * something narrower than the text inside it. Ordinary inline flow it gets
+ * right, and the chips look the same on screen either way.
+ */
 function Metric({ label, value }: { label: string; value: string }) {
   return (
-    <span className="flex shrink-0 items-baseline gap-1 rounded border border-line bg-surface px-1.5 py-0.5">
-      <span className="text-[9px] leading-none font-semibold tracking-wide text-ink-400 uppercase">
+    <span className="inline-block shrink-0 rounded border border-line bg-surface px-1.5 py-0.5 whitespace-nowrap">
+      <span className="mr-1 text-[9px] leading-none font-semibold tracking-wide text-ink-400 uppercase">
         {label}
       </span>
       <span className="text-[11px] leading-none font-semibold tabular text-ink-700">{value}</span>

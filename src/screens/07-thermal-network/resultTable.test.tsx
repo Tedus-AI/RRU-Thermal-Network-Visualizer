@@ -281,3 +281,23 @@ describe('columns the engineer sized', () => {
     expect(render({ forceExpanded: true })).not.toContain('role="separator"');
   });
 });
+
+/**
+ * html2canvas rasterizes this table into the PDF, and it does not size a flex
+ * container the way the browser does: every metric chip drew its text straight
+ * through its own rounded border, the box narrower than the text inside it.
+ * Ordinary inline flow it gets right.
+ */
+describe('what the chips may not be', () => {
+  it('lays the metric chips out inline, not as flex boxes', () => {
+    const html = render({ forceExpanded: true });
+    const chip = html.slice(html.indexOf('79.5 K') - 400, html.indexOf('79.5 K'));
+
+    expect(chip).toContain('inline-block');
+    expect(chip).not.toContain('items-baseline');
+  });
+
+  it('keeps a chip on one line', () => {
+    expect(render({ forceExpanded: true })).toContain('whitespace-nowrap');
+  });
+});
