@@ -77,6 +77,7 @@ import { SolverKpiBar } from './SolverKpiBar';
 import { SolveControlPanel } from './SolveControlPanel';
 import { ScenarioSummary } from './ScenarioSummary';
 import { ResultModeToolbar } from './ResultModeToolbar';
+import { GraphExplorerControls, GraphGroupOverview, GraphToolbarBridge, useGraphExplorer } from '@/ui/GraphExplorer';
 import {
   SolvedGraphCanvas,
   isDisplayOptions,
@@ -227,6 +228,7 @@ export function ThermalNetworkView() {
   const [hiddenComponentIds, setHiddenComponentIds] = useState<ReadonlySet<string>>(
     () => new Set<string>(),
   );
+  const explorer = useGraphExplorer(network, components, hiddenComponentIds);
   const toggleComponentVisible = useCallback((componentId: string) => {
     setHiddenComponentIds((current) => {
       const next = new Set(current);
@@ -812,6 +814,7 @@ export function ThermalNetworkView() {
               </Badge>
               {stale && <Badge tone="warn">Stale / 已失效</Badge>}
             </div>
+            <GraphToolbarBridge explorer={explorer}>
             <ResultModeToolbar
               mode={mode}
               hasResult={hasResult}
@@ -839,11 +842,16 @@ export function ThermalNetworkView() {
               onRelayout={() => canvasRef.current?.relayout(layoutMode)}
               onToggleFullscreen={() => setFullscreen((value) => !value)}
             />
+            </GraphToolbarBridge>
           </header>
-
+          <GraphExplorerControls explorer={explorer} components={components} hiddenIds={hiddenComponentIds} />
           <div className={`relative min-h-0 flex-1 ${stale ? 'opacity-50' : ''}`}>
+            <GraphGroupOverview explorer={{ ...explorer, network: limited ?? network }} components={components} hiddenIds={hiddenComponentIds} solved={{ solution: stale ? null : solution, mode, display, scenarioId: activeScenarioId ?? '' }} />
             <SolvedGraphCanvas
               ref={canvasRef}
+              focusKey={explorer.focused?.key}
+              extraHiddenNodeIds={explorer.hiddenNodes}
+              nodeLabelOverrides={explorer.labels}
               // The graph badges and colours by limit, so it reads the same
               // projected limits the table does — otherwise it would paint a
               // junction over-limit that the table reports as passing.
@@ -882,7 +890,7 @@ export function ThermalNetworkView() {
                 overlay in the corner the graph starts in, so left open it sits
                 on the first two nodes. A scale you have read once does not need
                 to keep covering the picture it describes. */}
-            <div className="absolute top-3 left-3 z-10 w-[13rem] rounded-md border border-line bg-surface/95 p-2 shadow-sm">
+            <div hidden={explorer.view === 'groups'} className="absolute top-3 left-3 z-10 w-[13rem] rounded-md border border-line bg-surface/95 p-2 shadow-sm">
               <button
                 type="button"
                 onClick={() => setLegendOpen((value) => !value)}
@@ -920,7 +928,7 @@ export function ThermalNetworkView() {
               solution={solution}
               issues={issues}
               hasRun={Boolean(checks || solution)}
-              onFocus={focusIssue}
+              onFocus={issue => explorer.showFull(() => focusIssue(issue))}
               onNavigate={(screen) =>
                 navigate(projectPath(projectId, screen === '05' ? 'thermal-path' : 'boundary'))
               }

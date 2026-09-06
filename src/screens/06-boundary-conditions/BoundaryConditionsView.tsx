@@ -71,6 +71,7 @@ import {
 import type { CanvasTool } from '@/screens/05-thermal-path-builder/GraphToolbar';
 import { ComponentVisibilityPanel } from '@/ui/ComponentVisibilityPanel';
 import { BoundaryGraphToolbar } from './BoundaryGraphToolbar';
+import { GraphExplorerControls, GraphGroupOverview, GraphToolbarBridge, useGraphExplorer } from '@/ui/GraphExplorer';
 import { BoundaryValidationOverlay } from './BoundaryValidationOverlay';
 import { projectScenarioBoundaryEdges } from '@/screens/05-thermal-path-builder/scenarioBoundaryProjection';
 import {
@@ -249,6 +250,7 @@ export function BoundaryConditionsView() {
   const [hiddenComponentIds, setHiddenComponentIds] = useState<ReadonlySet<string>>(
     () => new Set<string>(),
   );
+  const explorer = useGraphExplorer(network, components, hiddenComponentIds);
   const toggleComponentVisible = useCallback((componentId: string) => {
     setHiddenComponentIds((current) => {
       const next = new Set(current);
@@ -1011,6 +1013,7 @@ export function BoundaryConditionsView() {
             fullscreen ? 'rounded-none' : 'rounded-lg'
           }`}
         >
+          <GraphToolbarBridge explorer={explorer}>
           <BoundaryGraphToolbar
             tool={tool}
             layoutMode={layoutMode}
@@ -1024,7 +1027,7 @@ export function BoundaryConditionsView() {
               canvasRef.current?.runLayout(mode);
             }}
             onAutoLayout={() => canvasRef.current?.runLayout(layoutMode)}
-            onFit={() => canvasRef.current?.fit()}
+            onFit={() => explorer.showFull(() => canvasRef.current?.fit())}
             onZoom={(delta) => canvasRef.current?.zoomBy(delta)}
             onValidate={handleValidate}
             onTogglePorts={() => setShowPorts((value) => !value)}
@@ -1034,7 +1037,10 @@ export function BoundaryConditionsView() {
             onToggleComponentVisibility={() => setComponentVisibilityOpen((value) => !value)}
             onToggleFullscreen={() => setFullscreen((value) => !value)}
           />
+          </GraphToolbarBridge>
+          <GraphExplorerControls explorer={explorer} components={components} hiddenIds={hiddenComponentIds} />
           <div className="relative min-h-0 flex-1">
+            <GraphGroupOverview explorer={explorer} components={components} hiddenIds={hiddenComponentIds} showLabels={showLabels} showPorts={showPorts} scenarioBoundaryEdges={scenarioBoundaryEdges} />
             {componentVisibilityOpen && (
               <ComponentVisibilityPanel
                 components={modeledComponents}
@@ -1047,6 +1053,9 @@ export function BoundaryConditionsView() {
             )}
             <ThermalGraphCanvas
               ref={canvasRef}
+              focusKey={explorer.focused?.key}
+              extraHiddenNodeIds={explorer.hiddenNodes}
+              nodeLabelOverrides={explorer.labels}
               network={network!}
               selection={selection}
               tool={tool}
@@ -1082,6 +1091,7 @@ export function BoundaryConditionsView() {
               validation={validation}
               checks={checks}
               onFocus={(message) => {
+                explorer.showFull();
                 if (!message.boundary_port_id) return;
                 const port = ports.find((entry) => entry.id === message.boundary_port_id);
                 setSelectedPortId(message.boundary_port_id);
