@@ -80,6 +80,7 @@ import {
   type NewZoneDraft,
 } from './SharedStructurePanel';
 import { GraphToolbar, type CanvasTool } from './GraphToolbar';
+import { GraphExplorerControls, GraphGroupOverview, GraphToolbarBridge, useGraphExplorer } from '@/ui/GraphExplorer';
 import { ComponentVisibilityPanel } from '@/ui/ComponentVisibilityPanel';
 import { useRememberedFlag } from '@/ui/rememberedFlag';
 import { ThermalGraphCanvas, type CanvasHandle, type GraphSelection } from './ThermalGraphCanvas';
@@ -304,6 +305,7 @@ export function ThermalPathBuilderView() {
   const [hiddenComponentIds, setHiddenComponentIds] = useState<ReadonlySet<string>>(
     () => new Set<string>(),
   );
+  const explorer = useGraphExplorer(network, components, hiddenComponentIds);
   const toggleComponentVisible = useCallback((componentId: string) => {
     setHiddenComponentIds((current) => {
       const next = new Set(current);
@@ -1287,6 +1289,7 @@ export function ThermalPathBuilderView() {
         <div
           className={`flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden border border-line bg-surface ${fullscreen ? 'rounded-none' : 'rounded-lg'}`}
         >
+          <GraphToolbarBridge explorer={explorer}>
           <GraphToolbar
             tool={tool}
             layoutMode={layoutMode}
@@ -1297,6 +1300,7 @@ export function ThermalPathBuilderView() {
             canRedo={future.length > 0}
             readOnly={readOnly}
             onTool={(next) => {
+              if (next === 'add-node' || next === 'add-edge' || next === 'connect') explorer.setView('full');
               setTool(next);
               if (next === 'add-node') setAddNodeDraft({ name: '', type: 'custom' });
             }}
@@ -1306,7 +1310,7 @@ export function ThermalPathBuilderView() {
             }}
             onAutoLayout={() => canvasRef.current?.runLayout(layoutMode)}
             onAutoConnect={autoConnectSuggested}
-            onFit={() => canvasRef.current?.fit()}
+            onFit={() => explorer.showFull(() => canvasRef.current?.fit())}
             onZoom={(delta) => canvasRef.current?.zoomBy(delta)}
             onUndo={() => useNetworkStore.getState().undo()}
             onRedo={() => useNetworkStore.getState().redo()}
@@ -1325,7 +1329,10 @@ export function ThermalPathBuilderView() {
             }}
           />
 
+          </GraphToolbarBridge>
+          <GraphExplorerControls explorer={explorer} components={components} hiddenIds={hiddenComponentIds} />
           <div className="relative min-h-0 flex-1">
+            <GraphGroupOverview explorer={explorer} components={components} hiddenIds={hiddenComponentIds} showLabels={showLabels} showPorts={showPorts} scenarioBoundaryEdges={scenarioBoundaryEdges} />
             {fullscreen && componentVisibilityOpen && (
               <ComponentVisibilityPanel
                 components={modeledComponents}
@@ -1351,6 +1358,10 @@ export function ThermalPathBuilderView() {
               <>
                 <ThermalGraphCanvas
                   ref={canvasRef}
+                  readOnly={readOnly || Boolean(explorer.focused)}
+                  focusKey={explorer.focused?.key}
+                  extraHiddenNodeIds={explorer.hiddenNodes}
+                  nodeLabelOverrides={explorer.labels}
                   network={network}
                   selection={selection}
                   tool={tool}
@@ -1403,8 +1414,8 @@ export function ThermalPathBuilderView() {
                   }}
                   pendingSourceRef={pendingSourceRef}
                 />
-                <Legend />
-                <NetworkValidationPanel validation={displayValidation} onFocus={focusIssue} />
+                {explorer.view !== 'groups' && <Legend />}
+                <NetworkValidationPanel validation={displayValidation} onFocus={issue => explorer.showFull(() => focusIssue(issue))} />
                 {/* Beside the legend, not on top of it — and it names which of
                     the two wiring tools is armed, since they ask for the same
                     two clicks but do different things with them. */}

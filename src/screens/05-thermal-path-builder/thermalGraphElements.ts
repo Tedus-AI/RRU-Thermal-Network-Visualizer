@@ -354,13 +354,16 @@ export function buildElements(
     layoutMode: string;
     /** Components switched off in the palette. A view filter only. */
     hiddenComponentIds?: ReadonlySet<string>;
+    extraHiddenNodeIds?: ReadonlySet<string>;
+    nodeLabelOverrides?: ReadonlyMap<string, string>;
     /** Active Screen 06 values shown without mutating the Screen 05 edge. */
     scenarioBoundaryEdges?: ReadonlyMap<string, ScenarioBoundaryEdgeView>;
   },
 ): ElementDefinition[] {
   const elements: ElementDefinition[] = [];
   const axis = busAxis(options.layoutMode);
-  const hidden = hiddenNodeIds(network, options.hiddenComponentIds);
+  const hidden = new Set(hiddenNodeIds(network, options.hiddenComponentIds));
+  options.extraHiddenNodeIds?.forEach(id => hidden.add(id));
   const busGroups = hskBusGroups(network, options.layoutMode, hidden);
   const busGeometries = new Map(
     busGroups.map((group) => [group.id, storedBusGeometry(network, group, axis!)] as const),
@@ -393,7 +396,7 @@ export function buildElements(
     if (node.disabled) classes.push('disabled');
     if (!options.showLabels) classes.push('hide-label');
 
-    const label = `${node.name}${node.power_W > 0 ? ` · ${node.power_W.toFixed(1)} W` : ''}${portLine}`;
+    const label = `${options.nodeLabelOverrides?.get(node.id) ?? node.name}${node.power_W > 0 ? ` · ${node.power_W.toFixed(1)} W` : ''}${portLine}`;
     const box = labelBox(label);
     elements.push({
       group: 'nodes',

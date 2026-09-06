@@ -182,6 +182,9 @@ export const ThermalGraphCanvas = forwardRef<
     readOnly?: boolean;
     /** Components switched off in the palette. A view filter, never the model. */
     hiddenComponentIds: ReadonlySet<string>;
+    extraHiddenNodeIds?: ReadonlySet<string>;
+    focusKey?: string;
+    nodeLabelOverrides?: ReadonlyMap<string, string>;
     /** Read-only values calculated by the active Screen 06 scenario. */
     scenarioBoundaryEdges?: ReadonlyMap<string, ScenarioBoundaryEdgeView>;
     onSelect: (selection: GraphSelection) => void;
@@ -216,6 +219,9 @@ export const ThermalGraphCanvas = forwardRef<
     layoutMode,
     readOnly = false,
     hiddenComponentIds,
+    extraHiddenNodeIds,
+    focusKey,
+    nodeLabelOverrides,
     scenarioBoundaryEdges,
     onSelect,
     onNodeMoved,
@@ -254,7 +260,11 @@ export const ThermalGraphCanvas = forwardRef<
    * rule applies here: it may move what is drawn, never what is stored.
    */
   const filteredRef = useRef(false);
-  filteredRef.current = hiddenComponentIds.size > 0;
+  filteredRef.current = hiddenComponentIds.size > 0 || Boolean(focusKey);
+  const focusRef = useRef(focusKey);
+  focusRef.current = focusKey;
+  const originalPositionsRef = useRef(network.layout.positions);
+  originalPositionsRef.current = network.layout.positions;
   const fittedRef = useRef(false);
   // Signature of the last rendered element set, so a pure attribute change keeps
   // the engineer's viewport while an added or removed object brings it into view.
@@ -292,9 +302,11 @@ export const ThermalGraphCanvas = forwardRef<
         showLabels,
         layoutMode,
         hiddenComponentIds,
+        extraHiddenNodeIds,
+        nodeLabelOverrides,
         scenarioBoundaryEdges,
       }),
-    [network, showPorts, showLabels, layoutMode, hiddenComponentIds, scenarioBoundaryEdges],
+    [network, showPorts, showLabels, layoutMode, hiddenComponentIds, extraHiddenNodeIds, nodeLabelOverrides, scenarioBoundaryEdges],
   );
 
   useEffect(() => {
@@ -421,7 +433,7 @@ export const ThermalGraphCanvas = forwardRef<
       cy.resize();
       // A fit computed against a 0x0 container is meaningless, so the first fit
       // that counts is the one taken once the container really has a size.
-      if (!fittedRef.current && cy.nodes().length > 0) {
+      if ((!fittedRef.current || focusRef.current) && cy.nodes().length > 0) {
         cy.fit(undefined, 40);
         fittedRef.current = true;
       }
@@ -501,7 +513,7 @@ export const ThermalGraphCanvas = forwardRef<
       !network.layout.hand_placed &&
       labelSpacingSignature.current !== labelSpacingKey &&
       edgeLabelsNeedRoom(cy, layoutModeRef.current);
-    if ((unpositioned.length > 0 || needsLabelRoom) && cy.nodes().length > 0) {
+    if ((focusRef.current || unpositioned.length > 0 || needsLabelRoom) && cy.nodes().length > 0) {
       labelSpacingSignature.current = labelSpacingKey;
       // The layout applies positions asynchronously; they are written back to
       // the store on `layoutstop` so the next rebuild reuses them instead of
@@ -623,6 +635,7 @@ export const ThermalGraphCanvas = forwardRef<
       },
       getZoom: () => cyRef.current?.zoom() ?? 1,
       positions: () => {
+        if (focusRef.current) return originalPositionsRef.current;
         const cy = cyRef.current;
         if (!cy) return {};
         return renderedDomainPositions(cy);

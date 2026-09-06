@@ -291,6 +291,7 @@ export function buildElements(
    * junction and its brace with it instead of leaving them pointing at nothing.
    */
   extraHiddenNodeIds?: ReadonlySet<string>,
+  nodeLabelOverrides?: ReadonlyMap<string, string>,
 ): ElementDefinition[] {
   const elements: ElementDefinition[] = [];
   const solved = mode === 'temperature' || mode === 'heat_flow' || mode === 'delta_t';
@@ -313,7 +314,7 @@ export function buildElements(
 
     if (fixed && !display.showBoundary) continue;
 
-    const lines = [node.name];
+    const lines = [nodeLabelOverrides?.get(node.id) ?? node.name];
     if (mode === 'temperature' && temperature != null) {
       lines.push(`${temperature.toFixed(1)} °C`);
     }
@@ -590,6 +591,9 @@ export const SolvedGraphCanvas = forwardRef<
     tool: SolvedCanvasTool;
     layoutMode: string;
     hiddenComponentIds: ReadonlySet<string>;
+    extraHiddenNodeIds?: ReadonlySet<string>;
+    focusKey?: string;
+    nodeLabelOverrides?: ReadonlyMap<string, string>;
     onSelectNode: (nodeId: string | null) => void;
     onSelectEdge: (edgeId: string | null) => void;
     onZoomChange: (zoom: number) => void;
@@ -606,6 +610,9 @@ export const SolvedGraphCanvas = forwardRef<
     tool,
     layoutMode,
     hiddenComponentIds,
+    extraHiddenNodeIds,
+    focusKey,
+    nodeLabelOverrides,
     onSelectNode,
     onSelectEdge,
     onZoomChange,
@@ -616,6 +623,10 @@ export const SolvedGraphCanvas = forwardRef<
   const cyRef = useRef<Core | null>(null);
   const fittedRef = useRef(false);
   const positionsRef = useRef<Record<string, { x: number; y: number }>>({});
+  const fullPositionsRef = useRef<Record<string, { x: number; y: number }>>({});
+  const previousFocusRef = useRef(focusKey);
+  const focusRef = useRef(focusKey);
+  focusRef.current = focusKey;
   const signatureRef = useRef('');
 
   // Marquee zoom, in container pixels. `null` while no drag is in progress.
@@ -638,8 +649,10 @@ export const SolvedGraphCanvas = forwardRef<
         layoutMode,
         scales,
         hiddenComponentIds,
+        extraHiddenNodeIds,
+        nodeLabelOverrides,
       ),
-    [network, solution, mode, display, scenarioId, layoutMode, scales, hiddenComponentIds],
+    [network, solution, mode, display, scenarioId, layoutMode, scales, hiddenComponentIds, extraHiddenNodeIds, nodeLabelOverrides],
   );
 
   useEffect(() => {
@@ -701,7 +714,7 @@ export const SolvedGraphCanvas = forwardRef<
       const rect = entries[0]?.contentRect;
       if (!rect || rect.width === 0 || rect.height === 0) return;
       cy.resize();
-      if (!fittedRef.current && cy.nodes().length > 0) {
+      if ((!fittedRef.current || focusRef.current) && cy.nodes().length > 0) {
         cy.fit(undefined, 40);
         fittedRef.current = true;
       }
@@ -739,6 +752,11 @@ export const SolvedGraphCanvas = forwardRef<
     // The bus is drawn FROM the domain positions, so it is never laid out and
     // never counted as missing one — it is placed by `positionViewBuses` once
     // the nodes it spans have settled.
+    if (previousFocusRef.current !== focusKey) {
+      if (!previousFocusRef.current) fullPositionsRef.current = { ...positionsRef.current };
+      positionsRef.current = focusKey ? {} : { ...fullPositionsRef.current };
+      previousFocusRef.current = focusKey;
+    }
     const missing: string[] = [];
     cy.nodes().forEach((node) => {
       if (node.hasClass('view-only')) return;
@@ -782,7 +800,7 @@ export const SolvedGraphCanvas = forwardRef<
     snapshot();
     if (hadElements && !structureChanged) cy.viewport({ zoom, pan });
     else refit();
-  }, [elements, layoutMode]);
+  }, [elements, layoutMode, focusKey]);
 
   // --- selection + focus ---------------------------------------------------
   useEffect(() => {
