@@ -100,11 +100,15 @@ Sidebar 必須完全是：
 ```text
 Breadcrumb + 08 Bottleneck Analysis + Scenario + Analysis Status
 KPI Cards
-Left: Analysis Controls / Filters / Sensitivity Setup
-Center: Ranked Candidate Table + Bottleneck Graph Overlay + Improvement Preview
-Right: Bottleneck Inspector
-Bottom: Validation + Actions + Status
+Left: 1 Analysis Controls / 2 Filters / 3 Analysis Validation
+Center: 4 Ranked Candidate Table + 5 Thermal Network Highlight + 6 Improvement Preview
+Right: 7 Bottleneck Inspector
+Bottom: Actions + Status
 ```
+
+原本左欄的 Sensitivity Setup 卡片（§2）已移除：三段文字、沒有任何控制項。其中
+定義 Rth Reduction 意義的那一句已移到該 stepper 下方，另外兩句只是在保證求解
+方式誠實（完整重新求解、在副本上進行），那屬於文件而不是畫面。
 
 ## 9. KPI Cards
 正式 UI 必須顯示：
@@ -153,26 +157,29 @@ Shared vs Local 與 Boundary vs Internal 已移除：實測與 Candidate Scope �
 Boundary Path 的 2 條、`internal` 的 83 條就是 Component Path 的 83 條。
 
 ## 12. Ranking Table
-Columns 必須是：
+Columns：
 ```text
 Rank
 Score
 Edge
 Path / Component
 Type
-Rth
-Q
-ΔT
-Sensitivity ΔT
-Margin Impact
-Affected Components
-Confidence
-Source
+ΔT now
+[目標指標]        ← 只有當 Target Metric 不是 Worst Thermal Margin 時才出現
+Margin Gain
+Affected
 ```
 
 依 Score 降冪。
 
-Rth tooltip：`Rth is displayed for engineering context but is not the primary ranking metric.`
+原本規格列了 13 欄，移除 6 欄，全部都還在右側 inspector 裡（點該列即可看到）：
+
+| 移除欄位 | 理由 |
+| --- | --- |
+| Rth、Q | Baseline context。§1 是「Bottleneck ≠ Maximum Rth」，在排名旁邊放一整欄熱阻，正好誘導出這頁要避免的讀法。ΔT 保留，因為那是這一段真正在付的代價，也佔 score 的 0.35 |
+| Source | STARKCORE 85 列全是 Analytical，整欄只有一個值 |
+| Confidence | 挑選候選時是雜訊，決定要動手時才需要；低信心度本來就會出現在驗證卡片 |
+| Sensitivity ΔT / Margin Impact 兩欄並列 | 當 Target Metric 是 Worst Thermal Margin（預設）時，兩欄是同一個數字。改為：Margin Gain 恆常顯示，目標欄只在目標不是餘裕時才出現 |
 
 Affected component threshold V1 = temperature improvement >= 0.5°C。
 
@@ -202,26 +209,38 @@ Center graph 使用 07 solved topology，只加 Bottleneck Score Overlay，不�
 可顯示 Local Component Path / Shared Base Path / Boundary Path。
 
 ## 16. Right Inspector
-Tabs：
+三個區塊，單欄捲動，沒有 tab strip：
 ```text
 Overview
 Baseline
-Sensitivity
 Affected Components
-Source
-External Mapping
+Recommendation
 ```
 
-Overview：Edge、From/To、Type、Component/Zone、Rank、Score、Classification。
+Overview：Edge、Type、Component/Zone、Score、Classification、Confidence。
 
-Baseline：Rth、Q、ΔT、T_from、T_to、Rth Source、Confidence。
-
-Sensitivity：Reduction、Original/Modified Rth、Baseline/Modified Target T、Temperature Improvement、Baseline/Modified Worst Margin、Margin Improvement、Energy Balance。
+Baseline：Rth、Q、ΔT、T_from、T_to、Rth Source，加上「在圖上定位」。
 
 Affected Components table：Component / Baseline T / Modified T / Improvement / Limit / Baseline Margin / Modified Margin。
 
+Recommendation：§18 的規則式建議。
+
+移除的三項：
+
+| 移除項目 | 理由 |
+| --- | --- |
+| Tab strip | 六個 tab 從來沒有隱藏任何東西 —— 它只是捲動同一欄。剩三個區塊後，它只剩下「移動捲軸」這個功能 |
+| External Mapping | 兩列寫著「Reserved / Deferred」「Not Available」，加一段說明 08 不匯入 FloTHERM。那是 03 的佔位符，不是這個候選的任何資訊 |
+| Sensitivity Details（10 列） | 與 §17 Improvement Preview 完全重複，而且後者是 before → after 的表格、就在同一個畫面上、由同一個選取驅動。唯一只有它有的「Original / Modified Rth」已移入 §17 |
+| Score Weights / Normalized 三項 | 權重是三個常數，每一列候選都一樣，等於把圖例重畫 N 次；normalized 是分數的算法而不是結論 |
+
 ## 17. Improvement Preview
-Compact Baseline vs Rth -20% 比較：Target Temperature、Worst Margin、Affected Components、Energy Balance。**不要做 09 的 histogram/distribution chart。**
+Compact Baseline → Rth -N% 比較：Target（依 Target Metric）、Worst Margin、Affected
+Components、Edge Rth。**不要做 09 的 histogram/distribution chart。**
+
+原本的 Energy Balance 列已移除：它的 Baseline 欄是寫死的 `0.00 %`，不是讀自
+baseline 解；而且求解品質不是「改善量」。真正的能量平衡由 07 的狀態列與本畫面
+的驗證卡片回報。
 
 ## 18. Recommendation
 V1 使用 deterministic rules，不依賴 LLM。

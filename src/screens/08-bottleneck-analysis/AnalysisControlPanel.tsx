@@ -1,5 +1,5 @@
 /**
- * Analysis Controls, Filters / Scope and Sensitivity Setup — 08 §10, §11, §2.
+ * Analysis Controls and Filters / Scope — 08 §10, §11.
  * Laid out after the PNG's left column, top to bottom.
  *
  * The Rth reduction is a stepper (−/+ around the value) exactly as the mockup
@@ -16,6 +16,10 @@
  *   - Shared vs Local and Boundary vs Internal restated Candidate Scope: on
  *     STARKCORE `shared` selected the same 3 edges as the Shared Structure
  *     scope and `boundary` the same 2 as Boundary Path.
+ *
+ * The Sensitivity Setup card (08 §2) went the same way: three paragraphs, no
+ * control. The one sentence that defines what the reduction stepper does now
+ * sits under the stepper; the other two only promised the solve is honest.
  */
 
 import { Minus, Play, Plus, RotateCcw, Square } from 'lucide-react';
@@ -133,8 +137,14 @@ export function AnalysisControlPanel({
             <Plus size={13} />
           </button>
         </div>
-        <p className="mt-1 text-[10px] text-ink-400">
-          {REDUCTION_LIMITS.min}–{REDUCTION_LIMITS.max}% in steps of {REDUCTION_LIMITS.step}
+        {/* 08 §2 was its own card of three paragraphs. Two of them were
+            reassurance — the solve is a full re-solve, it runs on a copy — and
+            the third is the sentence that actually defines what this stepper
+            means, so it belongs under the stepper. */}
+        <p className="mt-1 text-[10px] leading-relaxed text-ink-400" title={T08.sensitivity}>
+          {REDUCTION_LIMITS.min}–{REDUCTION_LIMITS.max}% in steps of {REDUCTION_LIMITS.step}. Each
+          candidate is re-solved with its own Rth cut by this much.
+          <span className="block">每個候選都會把自己的熱阻降低此比例，再重新求解整張網路。</span>
         </p>
       </div>
 
@@ -292,33 +302,6 @@ export function FilterPanel({
         CONFIDENCES.map((value) => ({ value, label: value })),
         (value) => onChange({ confidence: value }),
       )}
-    </div>
-  );
-}
-
-// --- Sensitivity Setup (08 §2, PNG left column third card) ------------------
-
-export function SensitivitySetup({ reductionPct }: { reductionPct: number }) {
-  return (
-    <div className="grid gap-2">
-      <p
-        className="rounded-md border border-accent-500/30 bg-accent-100 px-2.5 py-2 text-[11px] leading-relaxed text-accent-700"
-        title={T08.sensitivity}
-      >
-        Sensitivity method: reduce candidate Rth by {reductionPct}% and solve the
-        full thermal network again.
-        <span className="block text-ink-500">
-          敏感度方法：將候選連線熱阻降低 {reductionPct}%，並重新求解完整熱網路。
-        </span>
-      </p>
-      <p className="text-[11px] leading-relaxed text-ink-500" title={T08.field.fullResolve}>
-        Full-network re-solve is used. Baseline Q is not reused.
-        <span className="block text-ink-400">使用完整網路重新求解，不重用 baseline 的 Q。</span>
-      </p>
-      <p className="text-[11px] leading-relaxed text-ink-400">
-        Nothing here changes the official network. The analysis solves on a copy.
-        <span className="block">本分析在副本上求解，不會修改正式網路。</span>
-      </p>
     </div>
   );
 }

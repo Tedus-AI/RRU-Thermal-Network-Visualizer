@@ -1,44 +1,55 @@
 /**
  * Ranked Candidate Table — 08 §12.
  *
- * The columns are exactly the specification's list, in its order:
- *   Rank · Score · Edge · Path / Component · Type · Rth · Q · ΔT ·
- *   Sensitivity ΔT · Margin Impact · Affected Components · Confidence · Source
+ * The specification listed thirteen columns. Six of them answered a different
+ * question than the one this screen exists to answer, and each was already one
+ * row-click away in the inspector:
  *
- * Sorted by Score, descending. The Rth column carries the specification's own
- * caveat on its tooltip: it is displayed for engineering context and is not the
- * primary ranking metric.
+ *   Rth, Q   — baseline context. §1 is "Bottleneck ≠ Maximum Rth", and a column
+ *              of resistances next to a ranking invites exactly the reading the
+ *              screen exists to prevent. ΔT stays: it is the drop actually being
+ *              paid here, and it carries 0.35 of the score.
+ *   Source   — "Analytical" on all 85 rows of STARKCORE. A column of one value.
+ *   Confidence — a badge per row that matters when you act on a candidate, not
+ *              while you are scanning for one. It is in the inspector, and a
+ *              low-confidence candidate already raises a validation warning.
+ *
+ * The improvement columns are now driven by the target metric. Sensitivity ΔT
+ * and Margin Impact were separate columns holding the SAME number whenever the
+ * target was the worst margin — which is the default — so the target column
+ * appears only when it is measuring something the margin column is not.
  */
 
-import { Badge } from '@/ui/primitives';
 import { ColumnLabel, biTitle } from '@/ui/FieldLabel';
-import { CLASSIFICATION_COLOR, type BottleneckResult } from '@/thermal/analysis/analysisTypes';
-
 import {
-  CLASSIFICATION_ZH,
-  CONFIDENCE_TONE,
-  CONFIDENCE_ZH,
-  num,
-  rth as formatRth,
-  signed,
-} from './analysisViewModel';
-import { T08 } from './tooltips';
+  CLASSIFICATION_COLOR,
+  TARGET_METRIC_LABELS,
+  type BottleneckResult,
+  type TargetMetric,
+} from '@/thermal/analysis/analysisTypes';
+import { Badge } from '@/ui/primitives';
 
-/** 08 §12 — the exact tooltip the specification asks for on the Rth column. */
-const RTH_CONTEXT_TOOLTIP =
-  'Rth is displayed for engineering context but is not the primary ranking metric. / ' + T08.rth;
+import { CLASSIFICATION_ZH, num, signed } from './analysisViewModel';
+import { T08 } from './tooltips';
 
 export function BottleneckRankingTable({
   results,
+  targetMetric,
   selectedEdgeId,
   onSelect,
 }: {
   results: BottleneckResult[];
+  targetMetric: TargetMetric;
   selectedEdgeId: string | null;
   onSelect: (edgeId: string) => void;
 }) {
+  // With the margin as the target, `target_improvement_C` and
+  // `margin_improvement_C` are the same measurement of the same solve.
+  const targetIsMargin = targetMetric === 'worst_thermal_margin';
+  const columns = targetIsMargin ? 8 : 9;
+
   return (
-    <table className="w-full min-w-[62rem] border-collapse text-[11px]">
+    <table className="w-full min-w-[46rem] border-collapse text-[11px]">
       <thead className="sticky top-0 z-10 bg-surface">
         <tr className="border-b border-line text-left align-bottom text-ink-700">
           <th className="py-1.5 pr-1.5 font-semibold">
@@ -57,35 +68,30 @@ export function BottleneckRankingTable({
             <ColumnLabel label="Type" zh="類型" />
           </th>
           <th className="py-1.5 pr-1.5 text-right font-semibold">
-            <ColumnLabel label="Rth" zh="熱阻" unit="°C/W" tooltip={RTH_CONTEXT_TOOLTIP} />
+            <ColumnLabel label="ΔT now" zh="目前溫差" unit="°C" tooltip={T08.field.deltaT} />
           </th>
+          {!targetIsMargin && (
+            <th className="py-1.5 pr-1.5 text-right font-semibold">
+              <ColumnLabel
+                label={TARGET_METRIC_LABELS[targetMetric].label}
+                zh={TARGET_METRIC_LABELS[targetMetric].zh}
+                unit="°C"
+                tooltip={T08.sensitivity}
+              />
+            </th>
+          )}
           <th className="py-1.5 pr-1.5 text-right font-semibold">
-            <ColumnLabel label="Q" zh="熱流" unit="W" tooltip={T08.field.heatFlow} />
+            <ColumnLabel label="Margin Gain" zh="餘裕改善" unit="°C" tooltip={T08.marginImpact} />
           </th>
-          <th className="py-1.5 pr-1.5 text-right font-semibold">
-            <ColumnLabel label="ΔT" zh="溫差" unit="°C" tooltip={T08.field.deltaT} />
-          </th>
-          <th className="py-1.5 pr-1.5 text-right font-semibold">
-            <ColumnLabel label="Sensitivity ΔT" zh="敏感度改善" unit="°C" tooltip={T08.sensitivity} />
-          </th>
-          <th className="py-1.5 pr-1.5 text-right font-semibold">
-            <ColumnLabel label="Margin Impact" zh="餘裕改善" unit="°C" tooltip={T08.marginImpact} />
-          </th>
-          <th className="py-1.5 pr-1.5 text-right font-semibold">
+          <th className="py-1.5 text-right font-semibold">
             <ColumnLabel label="Affected" zh="受影響元件" tooltip={T08.affected} />
-          </th>
-          <th className="py-1.5 pr-1.5 font-semibold">
-            <ColumnLabel label="Confidence" zh="信心度" tooltip={T08.field.confidence} />
-          </th>
-          <th className="py-1.5 font-semibold">
-            <ColumnLabel label="Source" zh="來源" tooltip={T08.field.source} />
           </th>
         </tr>
       </thead>
       <tbody>
         {results.length === 0 ? (
           <tr>
-            <td colSpan={13} className="py-8 text-center text-[11px] text-ink-400">
+            <td colSpan={columns} className="py-8 text-center text-[11px] text-ink-400">
               No ranked candidates yet. Run the analysis.
               <span className="block">尚無排名結果，請執行分析。</span>
             </td>
@@ -129,42 +135,34 @@ export function BottleneckRankingTable({
                   )}
                 </td>
                 <td className="py-1.5 pr-1.5">
-                  <span className="block max-w-[13rem] truncate font-semibold text-ink-900">
+                  <span className="block max-w-[15rem] truncate font-semibold text-ink-900">
                     {result.edge_label}
                   </span>
                 </td>
                 <td className="py-1.5 pr-1.5">
-                  <span className="block max-w-[9rem] truncate text-ink-500">{result.path_label}</span>
+                  <span className="block max-w-[10rem] truncate text-ink-500">
+                    {result.path_label}
+                  </span>
                 </td>
                 <td className="py-1.5 pr-1.5 text-ink-500">{result.edge_type}</td>
                 <td className="py-1.5 pr-1.5 text-right tabular text-ink-500">
-                  {formatRth(result.baseline.rth_C_per_W)}
-                </td>
-                <td className="py-1.5 pr-1.5 text-right tabular">
-                  {num(result.baseline.heat_flow_W, 1)}
-                </td>
-                <td className="py-1.5 pr-1.5 text-right tabular">
                   {num(result.baseline.delta_T_C, 1)}
                 </td>
-                <td className="py-1.5 pr-1.5 text-right font-bold tabular text-ink-900">
-                  {failed ? 'N/A' : num(result.sensitivity.target_improvement_C, 1)}
-                </td>
+                {!targetIsMargin && (
+                  <td className="py-1.5 pr-1.5 text-right font-semibold tabular text-ink-900">
+                    {failed ? 'N/A' : num(result.sensitivity.target_improvement_C, 1)}
+                  </td>
+                )}
                 <td
-                  className={`py-1.5 pr-1.5 text-right font-semibold tabular ${
+                  className={`py-1.5 pr-1.5 text-right font-bold tabular ${
                     result.sensitivity.margin_improvement_C > 0 ? 'text-ok-600' : 'text-ink-500'
                   }`}
                 >
                   {failed ? 'N/A' : signed(result.sensitivity.margin_improvement_C, 1)}
                 </td>
-                <td className="py-1.5 pr-1.5 text-right tabular text-ink-500">
+                <td className="py-1.5 text-right tabular text-ink-500">
                   {failed ? 'N/A' : result.sensitivity.affected_component_count}
                 </td>
-                <td className="py-1.5 pr-1.5">
-                  <Badge tone={CONFIDENCE_TONE[result.confidence]}>
-                    <span title={CONFIDENCE_ZH[result.confidence]}>{result.confidence}</span>
-                  </Badge>
-                </td>
-                <td className="py-1.5 text-ink-500">{result.baseline.rth_source}</td>
               </tr>
             );
           })

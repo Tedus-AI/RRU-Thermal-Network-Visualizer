@@ -56,11 +56,7 @@ import {
 } from '@/thermal/analysis/analysisTypes';
 
 import { BottleneckKpiBar } from './BottleneckKpiBar';
-import {
-  AnalysisControlPanel,
-  FilterPanel,
-  SensitivitySetup,
-} from './AnalysisControlPanel';
+import { AnalysisControlPanel, FilterPanel } from './AnalysisControlPanel';
 import { BottleneckRankingTable } from './BottleneckRankingTable';
 import {
   BottleneckGraphOverlay,
@@ -546,11 +542,7 @@ export function BottleneckAnalysisView() {
             />
           </Section>
 
-          <Section index={3} title="Sensitivity Setup" zh="敏感度設定" className="shrink-0">
-            <SensitivitySetup reductionPct={settings.reduction_pct} />
-          </Section>
-
-          <Section index={4} title="Analysis Validation" zh="分析驗證" className="shrink-0">
+          <Section index={3} title="Analysis Validation" zh="分析驗證" className="shrink-0">
             <AnalysisValidationPanel checks={checks} analysis={analysis} onFocus={focusEdge} />
           </Section>
         </div>
@@ -558,7 +550,7 @@ export function BottleneckAnalysisView() {
         {/* Center column — ranking, overlay, improvement preview */}
         <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
           <Section
-            index={5}
+            index={4}
             title="Ranked Candidate Table"
             zh="候選排名表"
             className="max-h-[15.5rem] shrink-0"
@@ -589,6 +581,7 @@ export function BottleneckAnalysisView() {
             <div className="min-w-0 overflow-x-auto">
               <BottleneckRankingTable
                 results={results}
+                targetMetric={settings.target_metric}
                 selectedEdgeId={selectedEdgeId}
                 onSelect={focusEdge}
               />
@@ -604,7 +597,7 @@ export function BottleneckAnalysisView() {
           <section className="flex h-[17rem] min-h-0 min-w-0 shrink-0 flex-col overflow-hidden rounded-lg border border-line bg-surface">
             <header className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line px-3.5 py-2.5">
               <span className="flex size-5 shrink-0 items-center justify-center rounded bg-accent-600 text-[11px] font-bold text-white tabular">
-                6
+                5
               </span>
               <h2 className="text-[13px] font-bold text-ink-900">
                 Thermal Network Highlight{' '}
@@ -684,7 +677,7 @@ export function BottleneckAnalysisView() {
           </section>
 
           <Section
-            index={7}
+            index={6}
             title={`Improvement Preview (Reduce Selected Edge Rth by ${settings.reduction_pct}%)`}
             zh="改善預覽"
             className="max-h-[14rem] shrink-0"
@@ -703,7 +696,7 @@ export function BottleneckAnalysisView() {
         {/* Right column — inspector */}
         <div className="flex w-full shrink-0 flex-col gap-3 lg:w-[24rem]">
           <Section
-            index={8}
+            index={7}
             title="Selected Candidate Inspector"
             zh="候選檢視"
             className="h-[calc(100vh-21rem)] min-h-[26rem]"
@@ -716,11 +709,7 @@ export function BottleneckAnalysisView() {
             }
           >
             {selected && !analysisStale ? (
-              <BottleneckInspector
-                result={selected}
-                targetMetric={settings.target_metric}
-                onFocusEdge={focusEdge}
-              />
+              <BottleneckInspector result={selected} onFocusEdge={focusEdge} />
             ) : (
               <InspectorEmpty />
             )}

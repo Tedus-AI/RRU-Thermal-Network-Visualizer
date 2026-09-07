@@ -602,3 +602,117 @@ describe('Rth reduction (08 §10)', () => {
     expect(at(small, 'E1')).toBeCloseTo(4, 6);
   });
 });
+
+// --- Affected components (08 §12) ------------------------------------------
+
+describe('Affected components are the parts with a limit (08 §12)', () => {
+  const net = network(
+    [
+      node('JUNCTION', { power: 50, component: 'CMP', limit: 110 }),
+      node('CASE', { component: 'CMP' }),
+      node('TIM', { component: 'CMP' }),
+      node('BASE'),
+      node('AMB', { ambient: true }),
+    ],
+    [
+      edge('E_JC', 'JUNCTION', 'CASE', 0.4),
+      edge('E_CT', 'CASE', 'TIM', 0.2),
+      edge('E_TB', 'TIM', 'BASE', 0.3),
+      edge('E_BA', 'BASE', 'AMB', 0.5),
+    ],
+  );
+
+  it('reports one row per limited part, not one per node on its chain', async () => {
+    const analysis = await runAnalysis(analysisInputFor(net));
+    const top = analysis.results[0];
+    const names = top.sensitivity.affected_components.map((entry) => entry.name);
+
+    // Case and TIM fall on the same chain and improve by the same amount; they
+    // are the junction's own path, not three separate things to act on.
+    expect(names).toEqual(['JUNCTION']);
+    expect(top.sensitivity.affected_component_count).toBe(1);
+  });
+
+  it('leaves every column of the row populated', async () => {
+    const analysis = await runAnalysis(analysisInputFor(net));
+    const row = analysis.results[0].sensitivity.affected_components[0];
+    // The limit, the margin and the new margin were "—" on 59 of STARKCORE's
+    // 81 rows because those rows were nodes with no limit at all.
+    expect(row.limit_C).toBe(110);
+    expect(row.baseline_margin_C).not.toBeNull();
+    expect(row.modified_margin_C).not.toBeNull();
+    expect(row.modified_margin_C!).toBeGreaterThan(row.baseline_margin_C!);
+  });
+
+  it('falls back to the wider set when the project has set no limits at all', async () => {
+    const unlimited = network(
+      [
+        node('SRC', { power: 50, component: 'CMP' }),
+        node('MID', { component: 'CMP' }),
+        node('AMB', { ambient: true }),
+      ],
+      [edge('E1', 'SRC', 'MID', 0.6), edge('E2', 'MID', 'AMB', 0.4)],
+    );
+    const analysis = await runAnalysis(analysisInputFor(unlimited));
+    // Reporting "0 affected" here would be a worse answer than a wide one.
+    expect(analysis.results[0].sensitivity.affected_components.length).toBeGreaterThan(0);
+  });
+});
+
+// --- Baseline consistency (08 §2, §13) -------------------------------------
+
+describe('Improvements are measured against the network being modified', () => {
+  const net = network(
+    [
+      node('SRC', { power: 100, component: 'CMP', limit: 150 }),
+      node('MID'),
+      node('AMB', { ambient: true }),
+    ],
+    [edge('E1', 'SRC', 'MID', 0.3), edge('E2', 'MID', 'AMB', 0.2)],
+  );
+
+  /**
+   * The store can hand Screen 08 a solution and an input that came from
+   * different solves — `solutionStore.refresh()` replaces the input with a
+   * pre-solve check input while the solution stays put. Comparing across that
+   * pair credits every candidate with the whole difference between the two
+   * networks, which on STARKCORE made one PA's Rjc reduction look like it
+   * cooled the other three PAs by 12.9 °C.
+   */
+  it('ignores a stored solution that disagrees with its own inputs', async () => {
+    const input = analysisInputFor(net);
+    const honest = await runAnalysis(input);
+
+    // Same inputs, but the stored solution says everything is 20 °C hotter.
+    const drifted = {
+      ...input,
+      baselineSolution: {
+        ...input.baselineSolution,
+        node_temperatures_C: Object.fromEntries(
+          Object.entries(input.baselineSolution.node_temperatures_C).map(([id, value]) => [
+            id,
+            value + 20,
+          ]),
+        ),
+      },
+    };
+    const analysis = await runAnalysis(drifted);
+
+    // Every improvement is unchanged: a 20 °C offset in the stored solution is
+    // not 20 °C of improvement available to every candidate.
+    for (const result of analysis.results) {
+      const same = honest.results.find((entry) => entry.edge_id === result.edge_id)!;
+      expect(result.sensitivity.target_improvement_C).toBeCloseTo(
+        same.sensitivity.target_improvement_C,
+        9,
+      );
+    }
+    expect(analysis.issues.map((entry) => entry.code)).toContain('baseline_input_drift');
+    expect(analysis.state).toBe('WARNING');
+  });
+
+  it('says nothing when the stored solution and its inputs agree', async () => {
+    const analysis = await runAnalysis(analysisInputFor(net));
+    expect(analysis.issues.map((entry) => entry.code)).not.toContain('baseline_input_drift');
+  });
+});
