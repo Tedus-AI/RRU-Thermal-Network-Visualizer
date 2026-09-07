@@ -31,10 +31,8 @@ import {
 import type { ScenarioBoundaryConditionSet } from '@/thermal/boundary/types';
 import { normalizeBoundarySet } from '@/thermal/boundary/boundaryMigration';
 import type { ThermalSolution } from '@/thermal/solver/solverTypes';
-import type {
-  BottleneckAnalysis,
-  BottleneckProposal,
-} from '@/thermal/analysis/analysisTypes';
+import type { BottleneckAnalysis, ImprovementStudy } from '@/thermal/analysis/analysisTypes';
+import { isImprovementStudy } from '@/thermal/analysis/analysisTypes';
 import type { ResultsOverviewSnapshot } from '@/thermal/overview/overviewTypes';
 import type { TemperatureDistributionResult } from '@/thermal/analysis/distributionResult';
 import type {
@@ -639,13 +637,16 @@ export function deleteDistribution(
   writeCollection(DISTRIBUTIONS_KEY, all);
 }
 
-export function loadProposals(projectId: string): BottleneckProposal[] {
+export function loadProposals(projectId: string): ImprovementStudy[] {
   const all = readCollection(PROPOSALS_KEY);
-  const bucket = (all[projectId] ?? {}) as Record<string, BottleneckProposal>;
-  return Object.values(bucket).filter((entry) => entry && typeof entry === 'object' && entry.edge_id);
+  const bucket = (all[projectId] ?? {}) as Record<string, ImprovementStudy>;
+  // A record saved by the ranking screen was a single edge with no `segments`;
+  // this build cannot render one, so it is left in storage rather than shown
+  // half-empty.
+  return Object.values(bucket).filter(isImprovementStudy);
 }
 
-export function saveProposal(projectId: string, proposal: BottleneckProposal): void {
+export function saveProposal(projectId: string, proposal: ImprovementStudy): void {
   const all = readCollection(PROPOSALS_KEY);
   const bucket = (all[projectId] ?? {}) as Record<string, unknown>;
   bucket[proposal.id] = proposal;

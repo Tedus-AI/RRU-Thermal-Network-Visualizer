@@ -21,6 +21,7 @@ import {
   loadProposals,
   saveAnalysis,
   saveProposal,
+  deleteProposal,
 } from './persistence';
 import { useNetworkStore } from './networkStore';
 import { useScenarioStore } from './scenarioStore';
@@ -32,21 +33,19 @@ import { DEFAULT_SOLVER_SETTINGS } from '@/thermal/types';
 import { AnalysisCancelled, runAnalysis } from '@/thermal/analysis/bottleneckScore';
 import { isAnalysisCurrent } from '@/thermal/analysis/analysisCache';
 import {
-  ANALYSIS_SCHEMA_VERSION,
   defaultSettings,
   supportedSettings,
   type AnalysisSettings,
   type AnalysisState,
   type BottleneckAnalysis,
-  type BottleneckProposal,
-  type BottleneckResult,
+  type ImprovementStudy,
 } from '@/thermal/analysis/analysisTypes';
 
 const keyOf = (networkId: string, scenarioId: string) => `${networkId}::${scenarioId}`;
 
 interface AnalysisStoreState {
   analyses: Record<string, BottleneckAnalysis>;
-  proposals: BottleneckProposal[];
+  proposals: ImprovementStudy[];
   activeKey: string | null;
   settings: AnalysisSettings;
 
@@ -70,7 +69,9 @@ interface AnalysisStoreState {
   cancel: () => void;
   reset: (projectId: string) => void;
   save: (projectId: string) => void;
-  createProposal: (projectId: string, result: BottleneckResult, note?: string) => BottleneckProposal | null;
+  /** Save a what-if study for the active scenario. */
+  saveStudy: (projectId: string, study: ImprovementStudy) => ImprovementStudy;
+  deleteStudy: (projectId: string, studyId: string) => void;
 }
 
 /** Everything a run needs, gathered from the read-only stores. */
@@ -266,45 +267,22 @@ export const useAnalysisStore = create<AnalysisStoreState>((set, get) => ({
   },
 
   /**
-   * 08 §23 — records the assumption and the projected benefit. It does not
-   * change an Rth: the real engineering change goes back through 04 / 05 / 06,
-   * which is why `applied` is a literal false rather than a mutable flag.
+   * Save a what-if as a study (08 §23).
+   *
+   * The record is an ASSUMPTION, not an edit: nothing here writes an Rth back
+   * into the network. The real change goes through 04 / 05 / 06, which is why
+   * `applied` is a literal false rather than a mutable flag.
    */
-  createProposal: (projectId, result, note) => {
-    const context = gather();
-    if (!context) return null;
-
-    const proposal: BottleneckProposal = {
-      id: `PROP_${context.scenarioId}_${result.edge_id}_${result.sensitivity.reduction_pct}`,
-      schema_version: ANALYSIS_SCHEMA_VERSION,
-      project_id: projectId,
-      scenario_id: context.scenarioId,
-      edge_id: result.edge_id,
-      edge_label: result.edge_label,
-      reduction_pct: result.sensitivity.reduction_pct,
-      baseline: {
-        rth_C_per_W: result.sensitivity.original_rth_C_per_W,
-        target_temperature_C: result.sensitivity.baseline_target_C,
-        worst_margin_C: result.sensitivity.baseline_worst_margin_C,
-      },
-      projected: {
-        rth_C_per_W: result.sensitivity.modified_rth_C_per_W,
-        target_temperature_C: result.sensitivity.modified_target_C,
-        worst_margin_C: result.sensitivity.modified_worst_margin_C,
-      },
-      score: result.score,
-      classification: result.classification,
-      target_metric: get().settings.target_metric,
-      recommendation: result.recommendation.points,
-      note,
-      created_at: new Date().toISOString(),
-      applied: false,
-    };
-
-    saveProposal(projectId, proposal);
+  saveStudy: (projectId, study) => {
+    saveProposal(projectId, study);
     set((state) => ({
-      proposals: [...state.proposals.filter((entry) => entry.id !== proposal.id), proposal],
+      proposals: [...state.proposals.filter((entry) => entry.id !== study.id), study],
     }));
-    return proposal;
+    return study;
+  },
+
+  deleteStudy: (projectId, studyId) => {
+    deleteProposal(projectId, studyId);
+    set((state) => ({ proposals: state.proposals.filter((entry) => entry.id !== studyId) }));
   },
 }));
