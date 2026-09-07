@@ -100,8 +100,6 @@ export async function runAnalysis(
     scenarioId: input.scenario_id,
     scope: input.settings.scope,
     filters: input.settings.filters,
-    targetNodeId: input.settings.target_node_id,
-    customEdgeIds: input.settings.custom_edge_ids,
   });
 
   const baseline = baselineMetricsOf(
@@ -117,7 +115,6 @@ export async function runAnalysis(
     scenarioId: input.scenario_id,
     settings: input.solverSettings,
     target_metric: input.settings.target_metric,
-    target_node_id: input.settings.target_node_id,
     reduction_pct: input.settings.reduction_pct,
   };
 
@@ -128,21 +125,6 @@ export async function runAnalysis(
         'no_candidates',
         'No eligible candidate edges under the current scope and filters.',
         '目前的範圍與篩選條件下沒有可分析的連線。',
-      ),
-    );
-  }
-
-  if (
-    (input.settings.target_metric === 'selected_component_temperature' ||
-      input.settings.target_metric === 'selected_node_temperature') &&
-    !input.settings.target_node_id
-  ) {
-    issues.push(
-      issue(
-        'error',
-        'no_target',
-        'The selected target metric needs a node. Pick one on the graph or in the ranking table.',
-        '此目標指標需要指定節點，請於圖面或排名表中選取。',
       ),
     );
   }

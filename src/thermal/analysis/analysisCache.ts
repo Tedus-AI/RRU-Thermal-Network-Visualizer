@@ -17,15 +17,11 @@ export function analysisKey(baselineSignature: string, settings: AnalysisSetting
     settings.scope,
     settings.reduction_pct,
     settings.target_metric,
-    settings.target_node_id ?? '-',
-    [...settings.custom_edge_ids].sort().join(','),
     filters.edge_type,
     filters.component,
     filters.zone,
     filters.rth_source,
     filters.confidence,
-    filters.sharing,
-    filters.boundary,
   ].join('|');
 }
 

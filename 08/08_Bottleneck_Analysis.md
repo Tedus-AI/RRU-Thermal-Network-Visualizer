@@ -70,7 +70,7 @@ Score 0–100。Rth 只顯示 context，不直接作 primary ranking weight。
 
 排除：disabled edge、ideal link、沒有 valid solved Q、stale/invalid baseline。
 
-Candidate Scope：All Edges / Component Path / Shared Structure / Boundary Path / Selected Component / Selected Node Path / Custom Selection。
+Candidate Scope：All Edges / Component Path / Shared Structure / Boundary Path（見 §10 的移除紀錄）。
 
 ## 6. Fixed App Shell
 必須沿用 00/01/05/06/07 固定 shell。
@@ -121,16 +121,36 @@ Bottleneck 那一列的分數，改放在同一張卡的第二行；Analysis Sta
 同高。
 
 ## 10. Analysis Controls
-- Active Scenario
 - Candidate Scope
 - Rth Reduction % (default 20%, range 5–50%, step 5%)
 - Target Metric
-- Run Analysis / Re-run Analysis / Reset Analysis
+- Run Analysis（已有結果時顯示為 Re-run Analysis）/ Reset Analysis
 
-Target Metric：Worst Component Temperature / Worst Thermal Margin / Selected Component Temperature / Selected Node Temperature。
+Candidate Scope：All Edges / Component Path / Shared Structure / Boundary Path。
+
+Target Metric：**Worst Thermal Margin（預設）** / Worst Component Temperature。
+
+以下項目已移除，理由記錄於此，避免日後又被加回來（皆以 STARKCORE 12L 實測）：
+
+| 移除項目 | 實測結果 |
+| --- | --- |
+| Scope：Selected Component / Selected Node Path / Custom Selection | 三者都依賴 `target_node_id`、`custom_edge_ids`，全 App 沒有任何畫面會寫入它們，實跑一律 0 candidates、狀態 FAILED |
+| Target Metric：Selected Component Temperature / Selected Node Temperature | 同樣依賴 `target_node_id`，每個候選的 improvement 都是 0.000 °C；sensitivity 佔 composite score 的 0.45，結果是畫面照樣列出 85 列看似正常的排名，但排序已無意義 |
+| Active Scenario 下拉 | 永遠 disabled、永遠只有一個項目，且標題列徽章已顯示同一個情境名稱 |
+| Run / Re-run 兩顆按鈕 | 綁的是同一個 handler，Re-run 只是多一個 disabled 條件；改為單顆按鈕、依狀態換字 |
+
+預設 Target Metric 改為 Worst Thermal Margin：本畫面的目的是找「離規格最近」的
+路徑（§1），開啟時就該以餘裕排序。
 
 ## 11. Filters
-Edge Type / Component / Zone / Rth Source / Confidence / Shared vs Local / Boundary vs Internal。
+Edge Type / Component / Zone / Rth Source / Confidence。
+
+Zone 與 Rth Source 只有在該專案真的有兩種以上的值時才會出現 —— STARKCORE 全部
+節點無 zone、全部熱阻皆為 Analytical，兩個下拉都只剩「All」，無法篩掉任何東西。
+
+Shared vs Local 與 Boundary vs Internal 已移除：實測與 Candidate Scope 完全重複，
+`shared` 選到的 3 條就是 Shared Structure scope 的 3 條、`boundary` 的 2 條就是
+Boundary Path 的 2 條、`internal` 的 83 條就是 Component Path 的 83 條。
 
 ## 12. Ranking Table
 Columns 必須是：
@@ -341,7 +361,7 @@ Project / Scenario / Solver Status / Analysis Status / Reduction % / Target Metr
 - Continue → 09
 
 ## 32. UI ↔ MD Audit
-正式 PNG 必須看到：固定 App Shell、01–12 Sidebar、03 Deferred、08 active、Active Scenario、4 KPI、Candidate Scope、Rth Reduction、Target Metric、Run/Re-run、Ranking table完整欄位、Bottleneck graph overlay、selected path、Right Inspector tabs、Improvement Preview、Validation、Back to 07、Save Analysis、Create Improvement Proposal、Continue to 09；且不得有 histogram/distribution/executive summary/fake FloTHERM。
+正式 PNG 必須看到：固定 App Shell、01–12 Sidebar、03 Deferred、08 active、Active Scenario（標題徽章）、4 KPI、Candidate Scope、Rth Reduction、Target Metric、Run/Re-run、Ranking table完整欄位、Bottleneck graph overlay、selected path、Right Inspector tabs、Improvement Preview、Validation、Back to 07、Save Analysis、Create Improvement Proposal、Continue to 09；且不得有 histogram/distribution/executive summary/fake FloTHERM。
 
 ## 33. Final Principle
 **08 的 Bottleneck 不是「哪個 Rth 最大」，而是「改善哪一段後，完整 General Thermal Graph 重新分配熱流並 re-solve 時，能帶來最大的實際熱風險改善」。**

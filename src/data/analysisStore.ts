@@ -34,6 +34,7 @@ import { isAnalysisCurrent } from '@/thermal/analysis/analysisCache';
 import {
   ANALYSIS_SCHEMA_VERSION,
   defaultSettings,
+  supportedSettings,
   type AnalysisSettings,
   type AnalysisState,
   type BottleneckAnalysis,
@@ -128,7 +129,11 @@ export const useAnalysisStore = create<AnalysisStoreState>((set, get) => ({
       analyses,
       proposals: loadProposals(projectId),
       activeKey,
-      settings: existing ? { ...defaultSettings(), ...existing.settings } : defaultSettings(),
+      // `supportedSettings`, not a spread: a project saved before the dead
+      // scopes and metrics were dropped still names them, and a value with no
+      // matching option leaves the control blank while the store keeps running
+      // on it.
+      settings: supportedSettings(existing?.settings),
       running: false,
       progress: { done: 0, total: 0 },
       cancelRequested: false,

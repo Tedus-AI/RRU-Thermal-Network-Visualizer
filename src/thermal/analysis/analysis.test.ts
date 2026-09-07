@@ -221,7 +221,9 @@ describe('Full-network sensitivity re-solve (08 §2, §13)', () => {
   });
 
   it('improves the target and records both the original and modified Rth', async () => {
-    const analysis = await runAnalysis(analysisInputFor(net));
+    const analysis = await runAnalysis(
+      analysisInputFor(net, { target_metric: 'worst_component_temperature' }),
+    );
     const entry = analysis.results[0];
     expect(entry.sensitivity.reduction_pct).toBe(20);
     expect(entry.sensitivity.modified_rth_C_per_W).toBeCloseTo(
@@ -229,7 +231,21 @@ describe('Full-network sensitivity re-solve (08 §2, §13)', () => {
       12,
     );
     expect(entry.sensitivity.target_improvement_C).toBeGreaterThan(0);
+    // A temperature target improves by FALLING.
     expect(entry.sensitivity.modified_target_C).toBeLessThan(entry.sensitivity.baseline_target_C!);
+  });
+
+  it('improves the default margin target by raising it, not lowering it', async () => {
+    // The default metric is the worst thermal margin (08 §1), and "improvement"
+    // there means the opposite direction. Getting this backwards would rank
+    // every candidate upside down while still reporting positive numbers.
+    const analysis = await runAnalysis(analysisInputFor(net));
+    const entry = analysis.results[0];
+    expect(analysis.settings.target_metric).toBe('worst_thermal_margin');
+    expect(entry.sensitivity.target_improvement_C).toBeGreaterThan(0);
+    expect(entry.sensitivity.modified_target_C).toBeGreaterThan(
+      entry.sensitivity.baseline_target_C!,
+    );
   });
 });
 
@@ -417,8 +433,6 @@ describe('Candidate eligibility (08 §5)', () => {
       scenarioId: 'SCN_A',
       scope: 'all_edges',
       filters: defaultSettings().filters,
-      targetNodeId: null,
-      customEdgeIds: [],
     });
 
     const ids = candidates.map((entry) => entry.edge.id);
@@ -447,8 +461,13 @@ describe('Candidate eligibility (08 §5)', () => {
   });
 
   it('reports an error, not an empty ranking, when nothing is eligible', async () => {
+    // A filter no edge can satisfy. This used to be the custom_selection scope
+    // with an empty id list; that scope is gone precisely because an empty
+    // selection was the ONLY thing it could ever produce.
     const analysis = await runAnalysis(
-      analysisInputFor(net, { scope: 'custom_selection', custom_edge_ids: [] }),
+      analysisInputFor(net, {
+        filters: { ...defaultSettings().filters, component: 'CMP_DOES_NOT_EXIST' },
+      }),
     );
     expect(analysis.results).toHaveLength(0);
     expect(analysis.state).toBe('FAILED');
@@ -540,8 +559,12 @@ describe('Analysis freshness (08 §14)', () => {
     expect(isAnalysisCurrent(analysis, signature, input.settings)).toBe(true);
     expect(isAnalysisCurrent(analysis, signature, { ...input.settings, reduction_pct: 30 })).toBe(false);
     expect(isAnalysisCurrent(analysis, signature, { ...input.settings, scope: 'boundary_path' })).toBe(false);
+    // Not the margin: that is the default the analysis already ran with.
     expect(
-      isAnalysisCurrent(analysis, signature, { ...input.settings, target_metric: 'worst_thermal_margin' }),
+      isAnalysisCurrent(analysis, signature, {
+        ...input.settings,
+        target_metric: 'worst_component_temperature',
+      }),
     ).toBe(false);
     // A different 07 baseline invalidates it too.
     expect(isAnalysisCurrent(analysis, 'other-signature', input.settings)).toBe(false);

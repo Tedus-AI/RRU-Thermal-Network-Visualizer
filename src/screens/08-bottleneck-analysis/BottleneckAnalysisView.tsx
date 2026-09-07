@@ -519,7 +519,6 @@ export function BottleneckAnalysisView() {
         <div className="flex w-full shrink-0 flex-col gap-3 lg:w-[20rem]">
           <Section index={1} title="Analysis Controls" zh="分析控制" className="shrink-0">
             <AnalysisControlPanel
-              scenario={scenario}
               settings={settings}
               state={analysisState}
               running={running}

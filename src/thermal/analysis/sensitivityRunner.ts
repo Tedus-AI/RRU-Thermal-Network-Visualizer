@@ -39,13 +39,12 @@ export interface SensitivityContext {
   scenarioId: string;
   settings: SolverSettings;
   target_metric: TargetMetric;
-  target_node_id: string | null;
   reduction_pct: number;
 }
 
 /** The value of the target metric for one set of solved temperatures. */
 export function targetValue(
-  context: Pick<SensitivityContext, 'network' | 'target_metric' | 'target_node_id'>,
+  context: Pick<SensitivityContext, 'network' | 'target_metric'>,
   temperatures: Record<string, number>,
 ): number | null {
   switch (context.target_metric) {
@@ -54,13 +53,6 @@ export function targetValue(
 
     case 'worst_thermal_margin':
       return worstThermalMargin(context.network, temperatures).value;
-
-    case 'selected_component_temperature':
-    case 'selected_node_temperature': {
-      if (!context.target_node_id) return null;
-      const value = temperatures[context.target_node_id];
-      return Number.isFinite(value) ? value : null;
-    }
 
     default:
       return null;

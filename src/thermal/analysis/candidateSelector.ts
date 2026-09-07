@@ -81,41 +81,7 @@ export function pathLabelFor(network: ThermalNetwork, edge: ThermalEdge): string
   return from?.zone ?? to?.zone ?? 'Structure';
 }
 
-/** Nodes reachable from `startId` over the active edges, `startId` included. */
-function reachableFrom(
-  network: ThermalNetwork,
-  startId: string,
-  scenarioId: string,
-): Set<string> {
-  const neighbours = new Map<string, string[]>();
-  for (const edge of Object.values(network.edges)) {
-    const R = edgeResistance(edge, scenarioId);
-    if (R == null || !(R > 0)) continue;
-    if (!neighbours.has(edge.from)) neighbours.set(edge.from, []);
-    if (!neighbours.has(edge.to)) neighbours.set(edge.to, []);
-    neighbours.get(edge.from)?.push(edge.to);
-    neighbours.get(edge.to)?.push(edge.from);
-  }
-
-  const seen = new Set([startId]);
-  const queue = [startId];
-  while (queue.length > 0) {
-    const current = queue.shift() as string;
-    for (const next of neighbours.get(current) ?? []) {
-      if (seen.has(next)) continue;
-      seen.add(next);
-      queue.push(next);
-    }
-  }
-  return seen;
-}
-
-function inScope(
-  network: ThermalNetwork,
-  edge: ThermalEdge,
-  scope: CandidateScope,
-  options: { targetNodeId: string | null; customIds: string[]; scenarioId: string },
-): boolean {
+function inScope(network: ThermalNetwork, edge: ThermalEdge, scope: CandidateScope): boolean {
   switch (scope) {
     case 'all_edges':
       return true;
@@ -128,26 +94,6 @@ function inScope(
 
     case 'component_path':
       return Boolean(network.nodes[edge.from]?.component_ref || network.nodes[edge.to]?.component_ref);
-
-    case 'custom_selection':
-      return options.customIds.includes(edge.id);
-
-    case 'selected_component': {
-      if (!options.targetNodeId) return false;
-      const componentId = network.nodes[options.targetNodeId]?.component_ref;
-      if (!componentId) return false;
-      return (
-        network.nodes[edge.from]?.component_ref === componentId ||
-        network.nodes[edge.to]?.component_ref === componentId
-      );
-    }
-
-    case 'selected_node_path': {
-      if (!options.targetNodeId) return false;
-      // Everything the selected node can reach: its whole path to the boundary.
-      const reachable = reachableFrom(network, options.targetNodeId, options.scenarioId);
-      return reachable.has(edge.from) && reachable.has(edge.to);
-    }
 
     default:
       return true;
@@ -177,12 +123,6 @@ function passesFilters(
   if (filters.rth_source !== 'All' && candidate.active_source !== filters.rth_source) return false;
   if (filters.confidence !== 'All' && candidate.confidence !== filters.confidence) return false;
 
-  if (filters.sharing === 'shared' && !candidate.shared) return false;
-  if (filters.sharing === 'local' && candidate.shared) return false;
-
-  if (filters.boundary === 'boundary' && !candidate.boundary_derived) return false;
-  if (filters.boundary === 'internal' && candidate.boundary_derived) return false;
-
   return true;
 }
 
@@ -197,8 +137,6 @@ export function selectCandidates(input: {
   scenarioId: string;
   scope: CandidateScope;
   filters: CandidateFilters;
-  targetNodeId: string | null;
-  customEdgeIds: string[];
 }): CandidateSelection {
   const { network, solution, scenarioId, scope, filters } = input;
   const candidates: Candidate[] = [];
@@ -231,13 +169,7 @@ export function selectCandidates(input: {
       continue;
     }
 
-    if (
-      !inScope(network, edge, scope, {
-        targetNodeId: input.targetNodeId,
-        customIds: input.customEdgeIds,
-        scenarioId,
-      })
-    ) {
+    if (!inScope(network, edge, scope)) {
       rejected.push({ edge_id: edge.id, reason: 'out_of_scope' });
       continue;
     }
