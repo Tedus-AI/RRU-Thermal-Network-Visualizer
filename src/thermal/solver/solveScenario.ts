@@ -114,11 +114,30 @@ function emptySolution(
 }
 
 /** Pre-solve only — the "Pre-Solve Check" button (07 §9, §47). */
+/**
+ * The solve-ready input for a scenario — the SAME network whether it is being
+ * checked or solved.
+ *
+ * The finite-Bi spreading refinement used to live in `solveScenario`, after
+ * this function had already returned. That made the input two different
+ * networks depending on which door you came in by: `solve()` kept the refined
+ * one, while `refresh()` and `runPreSolveCheck()` replaced it with an
+ * unrefined rebuild — and the stored solution stayed put either way. Screen 08
+ * mounts, calls `loadFor`, and gets the pair back mismatched, which is exactly
+ * how it came to show a PA junction 12.9 °C cooler than Screen 07 was showing
+ * for the same solve.
+ *
+ * So the refinement happens here, once, for everyone. The signature is taken
+ * BEFORE it, so a solution stored by an earlier build is not invalidated by
+ * this move.
+ */
 export function checkScenario(options: SolveScenarioOptions): {
   checks: PreSolveReport;
   input: SolveInput;
   signature: string;
+  spreading_refinements: SpreadingBiotRefinement[];
 } {
+  const settings = options.settings ?? options.network.solver_settings ?? DEFAULT_SOLVER_SETTINGS;
   const input = buildSolveInput({
     network: options.network,
     components: options.components,
@@ -129,12 +148,26 @@ export function checkScenario(options: SolveScenarioOptions): {
     sourceRevision: options.sourceRevision,
     powerScale: options.powerScale,
   });
-  return { checks: runPreSolveChecks(input), input, signature: solveInputSignature(input) };
+  const signature = solveInputSignature(input);
+
+  // Screen 05 has to build every spreading edge at Bi → ∞ because h is scenario
+  // data. Here the scenario's boundary resistances are already on the clone, so
+  // the far-face h can be measured off the network itself and the edge re-solved
+  // against it. See `spreadingBiot.ts`; it refines nothing when the plate has no
+  // finite path to a boundary, so an unsolvable network simply keeps Bi → ∞.
+  const spreading_refinements = refineSpreadingWithBiot(
+    input.network,
+    input.scenario_id,
+    settings,
+  );
+
+  return { checks: runPreSolveChecks(input), input, signature, spreading_refinements };
 }
 
 export function solveScenario(options: SolveScenarioOptions): SolveScenarioOutcome {
   const settings = options.settings ?? options.network.solver_settings ?? DEFAULT_SOLVER_SETTINGS;
-  const { checks, input, signature } = checkScenario(options);
+  const { checks, input, signature, spreading_refinements: spreadingRefinements } =
+    checkScenario(options);
 
   if (!checks.can_solve) {
     return {
@@ -147,16 +180,8 @@ export function solveScenario(options: SolveScenarioOptions): SolveScenarioOutco
   }
 
   // --- finite-Bi spreading -------------------------------------------------
-  // Screen 05 has to build every spreading edge at Bi → ∞ because h is scenario
-  // data. Here the scenario's boundary resistances are already on the clone, so
-  // the far-face h can be measured off the network itself and the edge re-solved
-  // against it. See `spreadingBiot.ts`; it refines nothing when the plate has no
-  // finite path to a boundary.
-  const spreadingRefinements = refineSpreadingWithBiot(
-    input.network,
-    input.scenario_id,
-    settings,
-  );
+  // Applied in `checkScenario` so every caller sees the same network; here we
+  // only report what it did.
   const spreadingByEdge = new Map(
     spreadingRefinements.map((entry) => [entry.edge_id, entry]),
   );

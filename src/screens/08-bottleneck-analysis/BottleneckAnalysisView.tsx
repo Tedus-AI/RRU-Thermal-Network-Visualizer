@@ -146,6 +146,8 @@ export function BottleneckAnalysisView() {
   const [rankIndex, setRankIndex] = useState(0);
   const [reductions, setReductions] = useState<Record<string, number>>({});
   const [mode, setMode] = useState<ResultMode>('temperature');
+  /** 08 — the focused chain answers the question; the whole machine gives it context. */
+  const [wholeMachine, setWholeMachine] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const graphRef = useRef<SolvedGraphHandle | null>(null);
@@ -198,26 +200,42 @@ export function BottleneckAnalysisView() {
   }, [solveInput, network, components]);
 
   /**
-   * The baseline, solved here rather than read from the stored solution.
+   * The baseline IS Screen 07's result. Not a re-solve of it, not a variant of
+   * it — the temperatures that screen is showing.
    *
-   * Same reason the ranking needed it: the stored solution and the stored solve
-   * input can come from different solves, and a what-if compared across that
-   * pair would credit every adjustment with the difference between two
-   * networks. Baseline and projection now come from one graph.
+   * That is the only defensible answer to "why do the two screens disagree",
+   * and it now holds by construction: `checkScenario` applies the finite-Bi
+   * refinement, so the solve input the store hands over is the network the
+   * stored solution came from, whichever door the store came in by. The guard
+   * below is the belt to that braces — cheap, and it fails loudly instead of
+   * quietly producing different numbers than the screen before it.
    */
-  const baseline = useMemo(() => {
-    if (!solveGraph || !scenarioId) return null;
-    const result = solveNetwork(solveGraph, {
+  const baselineTemperatures = solution?.node_temperatures_C ?? null;
+
+  const drift = useMemo(() => {
+    if (!solveGraph || !scenarioId || !baselineTemperatures) return null;
+    const again = solveNetwork(solveGraph, {
       scenarioId,
       powerScale: 1,
       settings: solverSettings,
     });
-    return result.ok ? result : null;
-  }, [solveGraph, scenarioId, solverSettings]);
+    if (!again.ok) return null;
+    let worst: { node_id: string; delta_C: number } | null = null;
+    for (const [id, value] of Object.entries(baselineTemperatures)) {
+      const other = again.temperatures[id];
+      if (!Number.isFinite(value) || !Number.isFinite(other)) continue;
+      const delta = Math.abs(value - other);
+      if (!worst || delta > worst.delta_C) worst = { node_id: id, delta_C: delta };
+    }
+    return worst && worst.delta_C > 0.05 ? worst : null;
+  }, [solveGraph, scenarioId, solverSettings, baselineTemperatures]);
 
   const ranked = useMemo(
-    () => (solveGraph && baseline ? marginRanking(solveGraph, baseline.temperatures, DECK_SIZE) : []),
-    [solveGraph, baseline],
+    () =>
+      solveGraph && baselineTemperatures
+        ? marginRanking(solveGraph, baselineTemperatures, DECK_SIZE)
+        : [],
+    [solveGraph, baselineTemperatures],
   );
   const target = ranked[Math.min(rankIndex, Math.max(ranked.length - 1, 0))] ?? null;
 
@@ -275,7 +293,7 @@ export function BottleneckAnalysisView() {
   /** What each segment would buy on its own — the "where do I spend effort" number. */
   const soloGains = useMemo(() => {
     const gains: Record<string, number> = {};
-    if (!solveGraph || !scenarioId || !target || !baseline) return gains;
+    if (!solveGraph || !scenarioId || !target || !baselineTemperatures) return gains;
     for (const segment of segments) {
       const pct = reductions[segment.edge_id] ?? 0;
       if (pct <= 0) {
@@ -286,11 +304,11 @@ export function BottleneckAnalysisView() {
         { edge_id: segment.edge_id, reduction_pct: pct },
       ]);
       gains[segment.edge_id] = solo.ok
-        ? baseline.temperatures[target.node_id] - solo.temperatures[target.node_id]
+        ? baselineTemperatures[target.node_id] - solo.temperatures[target.node_id]
         : 0;
     }
     return gains;
-  }, [solveGraph, scenarioId, solverSettings, segments, reductions, target, baseline]);
+  }, [solveGraph, scenarioId, solverSettings, segments, reductions, target, baselineTemperatures]);
 
   /** The graph paints the what-if while one is live, and the baseline otherwise. */
   const graphSolution = useMemo(() => {
@@ -372,7 +390,7 @@ export function BottleneckAnalysisView() {
     !network ||
     !solution ||
     !solveGraph ||
-    !baseline ||
+    !baselineTemperatures ||
     solutionStale ||
     solution.status === 'FAILED'
   ) {
@@ -497,16 +515,55 @@ export function BottleneckAnalysisView() {
         </div>
       }
     >
+      {drift && (
+        <p className="mb-3 rounded-md border border-warn-500/40 bg-warn-100 px-3 py-2 text-[11px] leading-relaxed font-semibold text-warn-600">
+          Screen 07's stored solution and a re-solve of its own inputs differ by{' '}
+          {drift.delta_C.toFixed(1)} °C at {drift.node_id}. Re-solve Screen 07 so both screens
+          show the same baseline.
+          <span className="block font-normal text-ink-500">
+            07 的既有解與「以其輸入重新求解」在 {drift.node_id} 相差 {drift.delta_C.toFixed(1)}{' '}
+            °C，請回 07 重新求解，兩畫面才會一致。
+          </span>
+        </p>
+      )}
+
       <div className="flex min-h-0 flex-1 flex-col gap-3 xl:flex-row">
         <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
           <Section
             index={1}
-            title={target ? `Heat Path — ${target.name}` : 'Heat Path'}
-            zh="此元件的熱路徑"
+            title={
+              wholeMachine
+                ? 'Thermal Network — whole machine'
+                : target
+                  ? `Heat Path — ${target.name}`
+                  : 'Heat Path'
+            }
+            zh={wholeMachine ? '整機熱網路' : '此元件的熱路徑'}
             className="min-h-[22rem] flex-1"
             bodyClassName="p-0"
             actions={
               <>
+                <span className="flex overflow-hidden rounded-md border border-line-strong">
+                  {[
+                    { id: false, label: 'This part', zh: '此元件' },
+                    { id: true, label: 'Whole machine', zh: '整機' },
+                  ].map((entry) => (
+                    <button
+                      key={String(entry.id)}
+                      type="button"
+                      aria-pressed={wholeMachine === entry.id}
+                      title={biTitle(entry.label, entry.zh)}
+                      onClick={() => setWholeMachine(entry.id)}
+                      className={`px-2 py-1 text-[11px] font-semibold transition-colors ${
+                        wholeMachine === entry.id
+                          ? 'bg-accent-600 text-white'
+                          : 'bg-surface text-ink-500 hover:text-ink-900'
+                      }`}
+                    >
+                      {entry.label}
+                    </button>
+                  ))}
+                </span>
                 <Select
                   className="h-7 !text-[11px]"
                   value={mode}
@@ -538,9 +595,9 @@ export function BottleneckAnalysisView() {
                 tool="select"
                 layoutMode="Auto"
                 hiddenComponentIds={EMPTY_SET}
-                extraHiddenNodeIds={focus?.hidden ?? EMPTY_SET}
-                focusKey={focus?.path.key}
-                nodeLabelOverrides={focus?.labels}
+                extraHiddenNodeIds={wholeMachine ? EMPTY_SET : (focus?.hidden ?? EMPTY_SET)}
+                focusKey={wholeMachine ? undefined : focus?.path.key}
+                nodeLabelOverrides={wholeMachine ? undefined : focus?.labels}
                 onSelectNode={setSelectedNodeId}
                 onSelectEdge={setSelectedEdgeId}
                 onZoomChange={() => undefined}
