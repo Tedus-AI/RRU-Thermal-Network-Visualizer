@@ -28,6 +28,7 @@
   --color-accent-50: #f2f7ff;
 
   /* Engineering semantic colors — also used for thermal severity */
+  --color-ok-700: #115e33;
   --color-ok-600: #17803d;
   --color-ok-500: #22a355;
   --color-ok-100: #dcf5e5;
@@ -48,6 +49,13 @@
   --color-orange-600: #cb5410;
   --color-orange-500: #ea6a1a;
   --color-orange-100: #ffe8d8;
+
+  /* Highlighter yellow. NOT a severity either: it marks the one message in a
+     list that carries the run's own numbers, the way a pen marks a line in a
+     printout. warn-* would have read as "something is wrong"; this reads as
+     "read this one". Only ever a background, always under ink-* text. */
+  --color-mark-100: #fff6b8;
+  --color-mark-300: #f0d975;
 
   --color-ink-900: #0f1b30;
   --color-ink-700: #33405a;

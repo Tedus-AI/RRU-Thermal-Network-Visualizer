@@ -165,13 +165,20 @@ export function solveScenario(options: SolveScenarioOptions): SolveScenarioOutco
     const worst = spreadingRefinements.reduce((a, b) =>
       b.R_after_C_per_W - b.R_before_C_per_W > a.R_after_C_per_W - a.R_before_C_per_W ? b : a,
     );
+    // Built once, then interpolated into both messages AND handed over as the
+    // emphasis runs. The panel matches them literally, so anything that retyped
+    // them here would have to stay character-identical forever; sharing the
+    // string makes that impossible to get wrong.
+    const figuresEn = `h_eff ${worst.h_eff_W_m2K.toFixed(1)} W/m²K, Bi ${worst.bi.toFixed(3)}`;
+    const figuresZh = `h_eff 為 ${worst.h_eff_W_m2K.toFixed(1)} W/m²K、Bi 為 ${worst.bi.toFixed(3)}`;
     spreadingIssues.push(
       issue(
         'info',
         'spreading_biot_applied',
         'boundary',
-        `${spreadingRefinements.length} spreading edge(s) re-solved at finite Bi from the scenario's own boundary — h_eff ${worst.h_eff_W_m2K.toFixed(1)} W/m²K, Bi ${worst.bi.toFixed(3)} on the largest change, which rose from ${worst.R_before_C_per_W.toFixed(3)} to ${worst.R_after_C_per_W.toFixed(3)} °C/W. Screen 05 shows the Bi → ∞ value, which is always the lower of the two.`,
-        `已依本情境的邊界條件，以有限 Bi 重新計算 ${spreadingRefinements.length} 條擴散邊；變化最大的一條 h_eff 為 ${worst.h_eff_W_m2K.toFixed(1)} W/m²K、Bi 為 ${worst.bi.toFixed(3)}，熱阻由 ${worst.R_before_C_per_W.toFixed(3)} 升至 ${worst.R_after_C_per_W.toFixed(3)} °C/W。畫面 05 顯示的是 Bi → ∞ 的值，恆為兩者中的較小者。`,
+        `${spreadingRefinements.length} spreading edge(s) re-solved at finite Bi from the scenario's own boundary — ${figuresEn} on the largest change, which rose from ${worst.R_before_C_per_W.toFixed(3)} to ${worst.R_after_C_per_W.toFixed(3)} °C/W. Screen 05 shows the Bi → ∞ value, which is always the lower of the two.`,
+        `已依本情境的邊界條件，以有限 Bi 重新計算 ${spreadingRefinements.length} 條擴散邊；變化最大的一條 ${figuresZh}，熱阻由 ${worst.R_before_C_per_W.toFixed(3)} 升至 ${worst.R_after_C_per_W.toFixed(3)} °C/W。畫面 05 顯示的是 Bi → ∞ 的值，恆為兩者中的較小者。`,
+        { emphasis: [figuresEn, figuresZh] },
       ),
     );
   }

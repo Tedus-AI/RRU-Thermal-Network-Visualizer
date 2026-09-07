@@ -24,6 +24,62 @@ const SEVERITY_ICON = {
   info: <Info size={13} className="text-accent-600" />,
 } as const;
 
+function escapeForRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * One message, with the runs the solver marked as its figures picked out.
+ *
+ * A message that carries measured numbers is the one line in this list anybody
+ * scrolls back to find, and it reads as prose until the numbers are visible on
+ * their own. So the sentence gets a highlighter and the figures inside it go
+ * dark green — the marker survives the line wrap because the background is on
+ * an INLINE span with `box-decoration-clone`, which paints every line box
+ * rather than one rectangle around the block.
+ *
+ * `emphasis` covers both languages at once, so the runs that belong to the
+ * other one simply do not occur here and are left alone. A run that no longer
+ * matches — the message was reworded, the formatting changed — degrades to
+ * ordinary highlighted text rather than throwing.
+ */
+function Message({
+  text,
+  emphasis,
+  className,
+}: {
+  text: string;
+  emphasis?: readonly string[];
+  className: string;
+}) {
+  const present = (emphasis ?? []).filter((run) => run.length > 0 && text.includes(run));
+  if (present.length === 0) return <p className={className}>{text}</p>;
+
+  // Longest first: a short run that is a prefix of a longer one must not win
+  // the alternation and leave the rest of the longer run unmarked.
+  const pattern = [...present]
+    .sort((a, b) => b.length - a.length)
+    .map(escapeForRegExp)
+    .join('|');
+  const parts = text.split(new RegExp(`(${pattern})`, 'g'));
+
+  return (
+    <p className={className}>
+      <span className="box-decoration-clone rounded-sm bg-mark-100 px-1">
+        {parts.map((part, index) =>
+          present.includes(part) ? (
+            <strong key={index} className="font-bold text-ok-700">
+              {part}
+            </strong>
+          ) : (
+            <span key={index}>{part}</span>
+          ),
+        )}
+      </span>
+    </p>
+  );
+}
+
 export function SolverValidationPanel({
   issues,
   hasRun,
@@ -129,10 +185,21 @@ export function SolverValidationPanel({
                 <div className="flex items-start gap-1.5">
                   <span className="mt-0.5 shrink-0">{SEVERITY_ICON[entry.severity]}</span>
                   <div className="min-w-0 flex-1">
-                    <p className="text-[11px] leading-snug font-medium text-ink-700">
-                      {entry.message}
-                    </p>
-                    <p className="text-[11px] leading-snug text-ink-400">{entry.message_zh}</p>
+                    <Message
+                      text={entry.message}
+                      emphasis={entry.emphasis}
+                      className="text-[11px] leading-relaxed font-medium text-ink-700"
+                    />
+                    <Message
+                      text={entry.message_zh}
+                      emphasis={entry.emphasis}
+                      // Highlighted, the grey second line has to carry ink-500:
+                      // ink-400 on yellow is the one pairing in this palette
+                      // that drops under the contrast floor.
+                      className={`text-[11px] leading-relaxed ${
+                        entry.emphasis?.length ? 'text-ink-500' : 'text-ink-400'
+                      }`}
+                    />
                     <div className="mt-1 flex flex-wrap gap-1.5">
                       {(entry.node_id || entry.edge_id) && (
                         <button

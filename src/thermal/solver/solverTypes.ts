@@ -45,6 +45,18 @@ export interface SolverIssue {
   edge_id?: string;
   boundary_port_id?: string;
   fix_in?: SolverIssueFix;
+  /**
+   * Literal substrings of `message` and `message_zh` that carry the run's own
+   * measured figures, for a message list that wants to mark them.
+   *
+   * One flat list covers both languages: an entry that does not occur in the
+   * string being rendered is simply not found, so the English runs fall out of
+   * the Chinese line and vice versa. They are matched literally, which means
+   * they must be built from the same pieces the message is built from — a
+   * hand-retyped copy that drifts by one space stops matching and silently
+   * renders as ordinary text.
+   */
+  emphasis?: readonly string[];
 }
 
 /** 07 §15 — a negative Q is a legal reverse direction, never an error. */
