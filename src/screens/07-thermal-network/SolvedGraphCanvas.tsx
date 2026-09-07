@@ -714,9 +714,20 @@ export const SolvedGraphCanvas = forwardRef<
     // wheel included — has to report, not just the buttons.
     cy.on('zoom', () => handlers.current.onZoomChange(cy.zoom()));
 
+    /**
+     * Cytoscape observes this container itself, on a 100 ms debounce, and every
+     * `resize` re-sizes its canvas layers. So this observer must not fire on a
+     * resize that changed nothing: two resize paths chasing each other across a
+     * one-pixel rounding difference is how a canvas ends up blank between
+     * frames. Only a real change in size does any work.
+     */
+    let lastSize = '';
     const observer = new ResizeObserver((entries) => {
       const rect = entries[0]?.contentRect;
       if (!rect || rect.width === 0 || rect.height === 0) return;
+      const size = `${Math.round(rect.width)}x${Math.round(rect.height)}`;
+      if (size === lastSize) return;
+      lastSize = size;
       cy.resize();
       if ((!fittedRef.current || focusRef.current) && cy.nodes().length > 0) {
         cy.fit(undefined, 40);

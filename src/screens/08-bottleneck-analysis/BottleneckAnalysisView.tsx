@@ -92,7 +92,7 @@ function Section({
   zh,
   actions,
   className = '',
-  bodyClassName = 'p-3',
+  bodyClassName = 'overflow-auto p-3',
   children,
 }: {
   index: number;
@@ -116,7 +116,7 @@ function Section({
         </h2>
         {actions && <span className="ml-auto flex shrink-0 items-center gap-2">{actions}</span>}
       </header>
-      <div className={`min-h-0 flex-1 overflow-auto ${bodyClassName}`}>{children}</div>
+      <div className={`min-h-0 flex-1 ${bodyClassName}`}>{children}</div>
     </section>
   );
 }
@@ -569,7 +569,23 @@ export function BottleneckAnalysisView() {
             }
             zh={wholeMachine ? '整機熱網路' : '此元件的熱路徑'}
             className="min-h-[22rem] flex-1"
-            bodyClassName="p-0"
+            /**
+             * `overflow-hidden`, and the canvas pinned to this box rather than
+             * sized by a percentage of it. Both matter.
+             *
+             * Cytoscape sets its layers to the container's client box in whole
+             * pixels. Inside an `overflow-auto` parent that is a loop: on a
+             * display where the box is a fractional height — Windows at 125 %,
+             * say — the layers round past it, a scrollbar appears, the
+             * scrollbar takes ~15 px back off the box, `h-full` shrinks, and
+             * cytoscape's own debounced observer resizes the layers 100 ms
+             * later, which removes the scrollbar and starts it again. The graph
+             * paints on the one frame the two agree and is blank on the rest —
+             * exactly the "appears for half a second then goes" this screen
+             * showed while Screen 07, whose host is a plain flex child, never
+             * did. A graph pans and zooms; it must never scroll.
+             */
+            bodyClassName="relative overflow-hidden p-0"
             actions={
               <>
                 <span className="flex h-7 shrink-0 overflow-hidden rounded-md border border-line-strong">
@@ -612,7 +628,7 @@ export function BottleneckAnalysisView() {
               </>
             }
           >
-            <div className="relative h-full min-h-0">
+            <div className="absolute inset-0">
               <SolvedGraphCanvas
                 ref={graphRef}
                 network={solveGraph}
@@ -650,7 +666,9 @@ export function BottleneckAnalysisView() {
             title="Saved Studies"
             zh="已儲存的調整分析"
             className={studies.length === 0 ? 'shrink-0' : 'max-h-[12rem] shrink-0'}
-            bodyClassName={studies.length === 0 ? 'px-3 py-1.5' : 'p-3'}
+            bodyClassName={
+              studies.length === 0 ? 'overflow-auto px-3 py-1.5' : 'overflow-auto p-3'
+            }
           >
             <StudyTable
               studies={studies}
