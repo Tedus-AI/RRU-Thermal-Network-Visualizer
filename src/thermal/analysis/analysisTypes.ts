@@ -51,14 +51,21 @@ export const ANALYSIS_STATE_ZH: Record<AnalysisState, string> = {
 
 // --- settings (08 §10, §11) -------------------------------------------------
 
+/**
+ * 08 §10 — the scopes an analysis can actually run.
+ *
+ * The specification also listed Selected Component, Selected Node Path and
+ * Custom Selection. All three narrowed on a target the UI has no way to set:
+ * `target_node_id` and `custom_edge_ids` were never written by any screen, so
+ * on the real STARKCORE project each of them selected 0 candidates and put the
+ * run straight into FAILED. A control whose every use is a failure is not a
+ * control, so they are gone rather than left to be discovered.
+ */
 export const CANDIDATE_SCOPES = [
   'all_edges',
   'component_path',
   'shared_structure',
   'boundary_path',
-  'selected_component',
-  'selected_node_path',
-  'custom_selection',
 ] as const;
 export type CandidateScope = (typeof CANDIDATE_SCOPES)[number];
 
@@ -67,37 +74,43 @@ export const CANDIDATE_SCOPE_LABELS: Record<CandidateScope, { label: string; zh:
   component_path: { label: 'Component Path', zh: '元件路徑' },
   shared_structure: { label: 'Shared Structure', zh: '共用結構' },
   boundary_path: { label: 'Boundary Path', zh: '邊界路徑' },
-  selected_component: { label: 'Selected Component', zh: '所選元件' },
-  selected_node_path: { label: 'Selected Node Path', zh: '所選節點路徑' },
-  custom_selection: { label: 'Custom Selection', zh: '自訂選取' },
 };
 
-export const TARGET_METRICS = [
-  'worst_component_temperature',
-  'worst_thermal_margin',
-  'selected_component_temperature',
-  'selected_node_temperature',
-] as const;
+/**
+ * 08 §10 — the metrics an improvement can be measured against.
+ *
+ * Margin first: this screen exists to find what is closest to its limit, and
+ * the ranking a margin target produces is the one the reader came for.
+ *
+ * The specification also listed Selected Component Temperature and Selected
+ * Node Temperature. Both read `target_node_id`, which nothing sets, so every
+ * candidate's improvement came back 0.000 °C — and because sensitivity carries
+ * 0.45 of the composite score, the screen then rendered a full, confident,
+ * meaningless ranking. Silently wrong is worse than absent.
+ */
+export const TARGET_METRICS = ['worst_thermal_margin', 'worst_component_temperature'] as const;
 export type TargetMetric = (typeof TARGET_METRICS)[number];
 
 export const TARGET_METRIC_LABELS: Record<TargetMetric, { label: string; zh: string }> = {
-  worst_component_temperature: { label: 'Worst Component Temperature', zh: '最高元件溫度' },
   worst_thermal_margin: { label: 'Worst Thermal Margin', zh: '最小熱餘裕' },
-  selected_component_temperature: { label: 'Selected Component Temperature', zh: '所選元件溫度' },
-  selected_node_temperature: { label: 'Selected Node Temperature', zh: '所選節點溫度' },
+  worst_component_temperature: { label: 'Worst Component Temperature', zh: '最高元件溫度' },
 };
 
-/** 08 §11 — every filter is "All" until the engineer narrows it. */
+/**
+ * 08 §11 — every filter is "All" until the engineer narrows it.
+ *
+ * Shared-vs-Local and Boundary-vs-Internal used to live here too. Measured on
+ * STARKCORE they were the Candidate Scope again, to the candidate: `shared`
+ * selected the same 3 edges as the Shared Structure scope, `boundary` the same
+ * 2 as Boundary Path, `internal` the same 83 as Component Path. Two controls
+ * for one axis is how a panel gets to seven dropdowns.
+ */
 export interface CandidateFilters {
   edge_type: string;
   component: string;
   zone: string;
   rth_source: string;
   confidence: string;
-  /** Shared structure vs a single component's local path. */
-  sharing: 'all' | 'shared' | 'local';
-  /** Boundary-derived vs internal conduction. */
-  boundary: 'all' | 'boundary' | 'internal';
 }
 
 export function emptyFilters(): CandidateFilters {
@@ -107,8 +120,6 @@ export function emptyFilters(): CandidateFilters {
     zone: 'All',
     rth_source: 'All',
     confidence: 'All',
-    sharing: 'all',
-    boundary: 'all',
   };
 }
 
@@ -117,21 +128,58 @@ export interface AnalysisSettings {
   /** Percent, 5–50. */
   reduction_pct: number;
   target_metric: TargetMetric;
-  /** Node the "Selected …" scopes and metrics refer to. */
-  target_node_id: string | null;
-  custom_edge_ids: string[];
   filters: CandidateFilters;
 }
 
 export function defaultSettings(): AnalysisSettings {
   return {
     scope: 'all_edges',
+    // 08 §1 — the screen ranks what is closest to its limit, so the metric it
+    // opens on is the margin, not the temperature.
+    target_metric: 'worst_thermal_margin',
     reduction_pct: REDUCTION_LIMITS.default,
-    target_metric: 'worst_component_temperature',
-    target_node_id: null,
-    custom_edge_ids: [],
     filters: emptyFilters(),
   };
+}
+
+/**
+ * Settings read back from storage, coerced onto what this build supports.
+ *
+ * Analyses saved before the dead scopes and metrics were removed carry values
+ * that are no longer offered — a project saved with Selected Node Temperature
+ * is not hypothetical, it is the one on disk. Left alone, those values reach a
+ * `<select>` that has no such option and the control renders blank while the
+ * store still holds the old value. Anything unrecognised falls back to the
+ * default, which is the setting the screen would have run anyway.
+ */
+export function supportedSettings(raw: Partial<AnalysisSettings> | null | undefined): AnalysisSettings {
+  const base = defaultSettings();
+  if (!raw) return base;
+
+  const scope = CANDIDATE_SCOPES.includes(raw.scope as CandidateScope)
+    ? (raw.scope as CandidateScope)
+    : base.scope;
+  const metric = TARGET_METRICS.includes(raw.target_metric as TargetMetric)
+    ? (raw.target_metric as TargetMetric)
+    : base.target_metric;
+  const reduction =
+    typeof raw.reduction_pct === 'number' && Number.isFinite(raw.reduction_pct)
+      ? Math.min(REDUCTION_LIMITS.max, Math.max(REDUCTION_LIMITS.min, raw.reduction_pct))
+      : base.reduction_pct;
+
+  // Key by key, not a spread: a spread would carry `sharing` and `boundary`
+  // forward out of every project saved before those filters were removed, and
+  // write them back on the next save.
+  const stored = (raw.filters ?? {}) as Partial<CandidateFilters>;
+  const filters: CandidateFilters = {
+    edge_type: stored.edge_type ?? base.filters.edge_type,
+    component: stored.component ?? base.filters.component,
+    zone: stored.zone ?? base.filters.zone,
+    rth_source: stored.rth_source ?? base.filters.rth_source,
+    confidence: stored.confidence ?? base.filters.confidence,
+  };
+
+  return { scope, target_metric: metric, reduction_pct: reduction, filters };
 }
 
 // --- candidates (08 §5) -----------------------------------------------------

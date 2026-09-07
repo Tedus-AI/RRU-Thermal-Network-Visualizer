@@ -4,14 +4,25 @@
  *
  * The Rth reduction is a stepper (−/+ around the value) exactly as the mockup
  * draws it, clamped to the specification's 5–50 % in steps of 5.
+ *
+ * Three controls that were here are not any more, each measured on STARKCORE
+ * before it went (see `analysisTypes.ts` for the scope and metric lists):
+ *
+ *   - Active Scenario was a `<select>` that was always disabled and always held
+ *     exactly one item, naming the scenario the header badge already names.
+ *   - Run Analysis and Re-run Analysis called the SAME handler; the second was
+ *     only the first with an extra disabled condition. One button now, with the
+ *     label saying which run it is.
+ *   - Shared vs Local and Boundary vs Internal restated Candidate Scope: on
+ *     STARKCORE `shared` selected the same 3 edges as the Shared Structure
+ *     scope and `boundary` the same 2 as Boundary Path.
  */
 
-import { Minus, Play, Plus, RefreshCw, RotateCcw, Square } from 'lucide-react';
+import { Minus, Play, Plus, RotateCcw, Square } from 'lucide-react';
 
 import { Button, Select } from '@/ui/primitives';
 import { FieldLabel, biTitle } from '@/ui/FieldLabel';
 import { dataSourceLabelZh } from '@/ui/dataSourceLabels';
-import type { Scenario } from '@/domain/project';
 import {
   CANDIDATE_SCOPES,
   CANDIDATE_SCOPE_LABELS,
@@ -25,18 +36,6 @@ import {
 
 import { T08 } from './tooltips';
 
-const SHARING = [
-  { value: 'all', label: 'All' },
-  { value: 'shared', label: 'Shared' },
-  { value: 'local', label: 'Local' },
-];
-
-const BOUNDARY = [
-  { value: 'all', label: 'All' },
-  { value: 'boundary', label: 'Boundary' },
-  { value: 'internal', label: 'Internal' },
-];
-
 const CONFIDENCES = ['All', 'high', 'medium', 'low'];
 
 function withAll(values: string[]): Array<{ value: string; label: string }> {
@@ -44,7 +43,6 @@ function withAll(values: string[]): Array<{ value: string; label: string }> {
 }
 
 export function AnalysisControlPanel({
-  scenario,
   settings,
   state,
   running,
@@ -57,7 +55,6 @@ export function AnalysisControlPanel({
   onCancel,
   onReset,
 }: {
-  scenario: Scenario | null;
   settings: AnalysisSettings;
   state: AnalysisState;
   running: boolean;
@@ -80,22 +77,6 @@ export function AnalysisControlPanel({
 
   return (
     <div className="grid gap-2.5">
-      <div>
-        <FieldLabel label="Active Scenario" zh="使用情境" inline={false} htmlFor="ba-scenario" />
-        <Select
-          id="ba-scenario"
-          className="mt-1 h-8 !text-[12px]"
-          value={scenario?.id ?? ''}
-          disabled
-          items={scenario ? [{ value: scenario.id, label: scenario.name }] : []}
-          title={biTitle(
-            'The scenario comes from Screen 06 / 07',
-            '情境由 06 / 07 決定，於此唯讀',
-          )}
-          onChange={() => undefined}
-        />
-      </div>
-
       <div>
         <FieldLabel
           label="Candidate Scope"
@@ -206,25 +187,18 @@ export function AnalysisControlPanel({
           </Button>
         </div>
       ) : (
-        <div className="grid grid-cols-2 gap-1.5">
-          <Button
-            variant="primary"
-            icon={<Play size={14} />}
-            disabled={readOnly || !canRun}
-            title={biTitle('Run analysis', T08.action.run)}
-            onClick={onRun}
-          >
-            Run Analysis
-          </Button>
-          <Button
-            icon={<RefreshCw size={14} />}
-            disabled={readOnly || !canRun || !hasAnalysis}
-            title={biTitle('Re-run analysis', T08.action.rerun)}
-            onClick={onRun}
-          >
-            Re-run Analysis
-          </Button>
-        </div>
+        <Button
+          variant="primary"
+          icon={<Play size={14} />}
+          disabled={readOnly || !canRun}
+          title={biTitle(
+            hasAnalysis ? 'Re-run analysis' : 'Run analysis',
+            hasAnalysis ? T08.action.rerun : T08.action.run,
+          )}
+          onClick={onRun}
+        >
+          {hasAnalysis ? 'Re-run Analysis' : 'Run Analysis'}
+        </Button>
       )}
 
       <Button
@@ -295,15 +269,21 @@ export function FilterPanel({
       {cell('Component', '元件', 'ba-f-comp', filters.component, withAll(options.components), (value) =>
         onChange({ component: value }),
       )}
-      {cell('Zone', '區域', 'ba-f-zone', filters.zone, withAll(options.zones), (value) =>
-        onChange({ zone: value }),
-      )}
-      {cell('Rth Source', '熱阻來源', 'ba-f-src', filters.rth_source, [
-        { value: 'All', label: '全部' },
-        ...options.sources.map((value) => ({ value, label: dataSourceLabelZh(value) })),
-      ], (value) =>
-        onChange({ rth_source: value }),
-      )}
+      {/* Zone and Rth Source are shown only when this project HAS more than one
+          of them. On STARKCORE every node is unzoned and every resistance is
+          Analytical, so both selects held a single option and could not narrow
+          anything — a control that cannot act is worse than no control. */}
+      {options.zones.length > 0 &&
+        cell('Zone', '區域', 'ba-f-zone', filters.zone, withAll(options.zones), (value) =>
+          onChange({ zone: value }),
+        )}
+      {options.sources.length > 1 &&
+        cell('Rth Source', '熱阻來源', 'ba-f-src', filters.rth_source, [
+          { value: 'All', label: '全部' },
+          ...options.sources.map((value) => ({ value, label: dataSourceLabelZh(value) })),
+        ], (value) =>
+          onChange({ rth_source: value }),
+        )}
       {cell(
         'Confidence',
         '信心度',
@@ -312,19 +292,6 @@ export function FilterPanel({
         CONFIDENCES.map((value) => ({ value, label: value })),
         (value) => onChange({ confidence: value }),
       )}
-      {cell('Shared vs Local', '共用 / 局部', 'ba-f-share', filters.sharing, SHARING, (value) =>
-        onChange({ sharing: value as CandidateFilters['sharing'] }),
-      )}
-      <div className="col-span-2">
-        {cell(
-          'Boundary vs Internal',
-          '邊界 / 內部',
-          'ba-f-bnd',
-          filters.boundary,
-          BOUNDARY,
-          (value) => onChange({ boundary: value as CandidateFilters['boundary'] }),
-        )}
-      </div>
     </div>
   );
 }
