@@ -41,6 +41,7 @@ export function ResizablePane({
   id,
   defaultHeight,
   header,
+  actions,
   labelEn,
   labelZh,
   children,
@@ -50,6 +51,14 @@ export function ResizablePane({
   defaultHeight: number;
   /** Rendered inside the header row, which is always visible. */
   header: ReactNode;
+  /**
+   * Controls beside the header, OUTSIDE the expand/collapse button.
+   *
+   * A tab strip cannot live inside `header`: buttons do not nest, and a click
+   * meant for a tab would collapse the panel on its way past. So the button
+   * takes the label and the seam, and this takes the controls.
+   */
+  actions?: ReactNode;
   labelEn: string;
   labelZh: string;
   children: ReactNode;
@@ -141,23 +150,26 @@ export function ResizablePane({
         </div>
       )}
 
-      <button
-        type="button"
-        onClick={toggle}
-        aria-expanded={!state.collapsed}
-        title={
-          state.collapsed
-            ? `Expand ${labelEn} / 展開${labelZh}`
-            : `Collapse ${labelEn} / 收合${labelZh}`
-        }
-        className="flex w-full shrink-0 items-center gap-2 border-b border-line px-3.5 py-2.5 text-left"
-      >
-        {header}
-        <ChevronDown
-          size={14}
-          className={`ml-auto shrink-0 text-ink-400 ${state.collapsed ? '-rotate-90' : ''}`}
-        />
-      </button>
+      <div className="flex shrink-0 items-center gap-2 border-b border-line pr-3.5">
+        <button
+          type="button"
+          onClick={toggle}
+          aria-expanded={!state.collapsed}
+          title={
+            state.collapsed
+              ? `Expand ${labelEn} / 展開${labelZh}`
+              : `Collapse ${labelEn} / 收合${labelZh}`
+          }
+          className="flex min-w-0 flex-1 items-center gap-2 py-2.5 pl-3.5 text-left"
+        >
+          {header}
+          <ChevronDown
+            size={14}
+            className={`ml-auto shrink-0 text-ink-400 ${state.collapsed ? '-rotate-90' : ''}`}
+          />
+        </button>
+        {actions && <span className="flex shrink-0 items-center gap-2">{actions}</span>}
+      </div>
 
       {!state.collapsed && <div className="min-h-0 flex-1 overflow-auto">{children}</div>}
     </section>

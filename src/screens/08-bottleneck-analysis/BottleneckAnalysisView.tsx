@@ -41,6 +41,7 @@ import { KpiTile } from '@/ui/KpiTile';
 import { toast } from '@/ui/toast';
 import { focusHiddenNodes, focusLabels, graphPaths } from '@/ui/graphExplorerModel';
 import { FloatingPanel } from '@/ui/FloatingPanel';
+import { ResizablePane } from '@/ui/ResizablePane';
 
 import { useProjectStore } from '@/data/projectStore';
 import { useComponentStore } from '@/data/componentStore';
@@ -793,22 +794,46 @@ export function BottleneckAnalysisView() {
 
           {/* Two answers to one question, so they share a box rather than each
               taking a slice of the graph's height: what would have to change to
-              get the cut being asked for, and what has been asked for before. */}
-          <Section
-            index={3}
-            title={bottomTab === 'levers' ? 'What To Change' : 'Saved Studies'}
-            zh={bottomTab === 'levers' ? '可調整的參數' : '已儲存的調整分析'}
-            className={
-              bottomTab === 'levers' && levers.length === 0 && studies.length === 0
-                ? 'shrink-0'
-                : 'max-h-[15rem] shrink-0'
+              get the cut being asked for, and what has been asked for before.
+
+              Sized by the reader, not by me. A lever table with four segments
+              on it needs several times the height of an empty one, and how much
+              of the graph that is worth is their call — so it is Screen 07's
+              own seam: drag it to any height, click it to fold, and the choice
+              is remembered per project. */}
+          <ResizablePane
+            id="tnv.08.lowerPane"
+            defaultHeight={220}
+            labelEn={bottomTab === 'levers' ? 'What To Change' : 'Saved Studies'}
+            labelZh={bottomTab === 'levers' ? '可調整的參數' : '已儲存的調整分析'}
+            header={
+              <>
+                <span className="flex size-5 shrink-0 items-center justify-center rounded bg-accent-600 text-[11px] font-bold text-white tabular">
+                  3
+                </span>
+                <h2 className="min-w-0 truncate text-[13px] font-bold text-ink-900">
+                  {bottomTab === 'levers' ? 'What To Change' : 'Saved Studies'}{' '}
+                  <span className="font-semibold text-ink-400">
+                    / {bottomTab === 'levers' ? '可調整的參數' : '已儲存的調整分析'}
+                  </span>
+                </h2>
+              </>
             }
-            bodyClassName="overflow-auto px-3 py-2"
             actions={
               <span className="flex shrink-0 overflow-hidden rounded-md border border-line-strong">
                 {[
-                  { id: 'levers' as const, label: 'What to change', zh: '可調參數', count: levers.length },
-                  { id: 'studies' as const, label: 'Saved', zh: '已儲存', count: studies.length },
+                  {
+                    id: 'levers' as const,
+                    label: 'What to change',
+                    zh: '可調參數',
+                    count: levers.length,
+                  },
+                  {
+                    id: 'studies' as const,
+                    label: 'Saved',
+                    zh: '已儲存',
+                    count: studies.length,
+                  },
                 ].map((entry) => (
                   <button
                     key={entry.id}
@@ -835,17 +860,19 @@ export function BottleneckAnalysisView() {
               </span>
             }
           >
-            {bottomTab === 'levers' ? (
-              <LeverTable segments={levers} />
-            ) : (
-              <StudyTable
-                studies={studies}
-                readOnly={readOnly}
-                onSelect={loadStudy}
-                onDelete={(id) => useAnalysisStore.getState().deleteStudy(projectId, id)}
-              />
-            )}
-          </Section>
+            <div className="px-3 py-2">
+              {bottomTab === 'levers' ? (
+                <LeverTable segments={levers} />
+              ) : (
+                <StudyTable
+                  studies={studies}
+                  readOnly={readOnly}
+                  onSelect={loadStudy}
+                  onDelete={(id) => useAnalysisStore.getState().deleteStudy(projectId, id)}
+                />
+              )}
+            </div>
+          </ResizablePane>
         </div>
 
         <div className="flex w-full shrink-0 flex-col gap-3 xl:w-[23rem]">

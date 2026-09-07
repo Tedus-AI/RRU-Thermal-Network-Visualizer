@@ -107,15 +107,32 @@ export function LeverTable({ segments }: { segments: readonly SegmentLevers[] })
                           <span className="font-bold text-ok-700">
                             {value(lever.target, lever.unit)}
                           </span>
-                        ) : (
+                        ) : lever.limit ? (
+                          /* It cannot get there alone. Saying how far it does
+                             get is the useful half of that answer. */
                           <span
-                            className="text-ink-400"
+                            className="text-warn-600"
                             title={biTitle(
-                              'Not a power law — this input moves the number, but not by a fixed exponent',
-                              '此項與熱阻非冪次關係，方向確定但無法給出目標值',
+                              lever.limit.reason === 'optimum'
+                                ? 'Past this value the segment gets worse again, not better'
+                                : 'This input cannot go any higher',
+                              lever.limit.reason === 'optimum'
+                                ? '超過此值後熱阻反而回升'
+                                : '此參數已達物理上限',
                             )}
                           >
-                            {lever.direction === 'up' ? 'higher' : 'lower'} / 無定值
+                            <span className="block font-semibold">
+                              not on its own / 單獨不足
+                            </span>
+                            <span className="block text-[10px] text-ink-400">
+                              best {rth(lever.limit.best_rth_C_per_W)} @{' '}
+                              {value(lever.limit.at_value, lever.unit)}
+                              {lever.limit.reason === 'optimum' ? ' · 最佳點' : ' · 上限'}
+                            </span>
+                          </span>
+                        ) : (
+                          <span className="text-ink-400">
+                            {lever.direction === 'up' ? 'higher / 提高' : 'lower / 降低'}
                           </span>
                         )}
                       </td>
