@@ -27,7 +27,48 @@ export const RESULT_MODES = [
   { id: 'rth_source', label: 'Rth Source', zh: '熱阻來源', needsSolution: false },
 ] as const;
 
-export type ResultMode = (typeof RESULT_MODES)[number]['id'];
+/**
+ * Node temperature and edge ΔT in one picture — Screen 08's default.
+ *
+ * On 07 the two are separate because that screen is read one question at a
+ * time: what is hot, then where the drops are. On 08 they are the same
+ * question. The reader is looking at one part's chain to decide which link to
+ * argue about, and a link is worth arguing about because of the temperature it
+ * costs the node above it; splitting that across two views makes them hold one
+ * half in their head while looking at the other.
+ *
+ * It is not in `RESULT_MODES` because 07's toolbar, its legend and its remembered
+ * mode are that screen's, and this belongs to 08.
+ */
+export const COMBINED_MODE = {
+  id: 'temperature_delta',
+  label: 'Temperature + ΔT',
+  zh: '溫度＋溫差',
+  needsSolution: true,
+} as const;
+
+/**
+ * What Screen 08 offers. Node Type and Rth Source are input-only views: they
+ * say how the model was built, which is 04/05/06's question, not the question
+ * of which segment to improve.
+ */
+export const ANALYSIS_RESULT_MODES = [
+  COMBINED_MODE,
+  RESULT_MODES[1], // Heat Flow
+  RESULT_MODES[3], // Rth
+] as const;
+
+export type ResultMode = (typeof RESULT_MODES)[number]['id'] | typeof COMBINED_MODE.id;
+
+/** True where the node colouring is the temperature ramp. */
+export function paintsNodeTemperature(mode: ResultMode): boolean {
+  return mode === 'temperature' || mode === COMBINED_MODE.id;
+}
+
+/** True where the edge colouring is the ΔT ramp. */
+export function paintsEdgeDelta(mode: ResultMode): boolean {
+  return mode === 'delta_t' || mode === COMBINED_MODE.id;
+}
 
 /**
  * The mode as a filename fragment — `Temperature`, `HeatFlow`, `DeltaT`.
@@ -37,7 +78,7 @@ export type ResultMode = (typeof RESULT_MODES)[number]['id'];
  * client and archive tool agrees on.
  */
 export function modeFilenamePart(mode: ResultMode): string {
-  const entry = RESULT_MODES.find((candidate) => candidate.id === mode);
+  const entry = [...RESULT_MODES, COMBINED_MODE].find((candidate) => candidate.id === mode);
   if (!entry) return mode;
   return entry.label.replace(/\u0394/g, 'Delta').replace(/[^A-Za-z0-9]+/g, '');
 }
@@ -51,7 +92,7 @@ export function modeFilenamePart(mode: ResultMode): string {
  * showing nothing selected.
  */
 export function isResultMode(value: unknown): value is ResultMode {
-  return RESULT_MODES.some((mode) => mode.id === value);
+  return [...RESULT_MODES, COMBINED_MODE].some((mode) => mode.id === value);
 }
 
 /** 07 §20 — before a solve only the three input-only modes are selectable. */
