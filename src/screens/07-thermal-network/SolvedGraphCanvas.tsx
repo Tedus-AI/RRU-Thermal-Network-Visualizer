@@ -661,7 +661,11 @@ export const SolvedGraphCanvas = forwardRef<
     const cy = cytoscape({
       container: containerRef.current,
       style: solvedStylesheet(),
-      minZoom: 0.15,
+      // Low enough that `fit` can actually show the whole machine. The floor
+      // used to be 0.15, which is above what 113 nodes need in a panel this
+      // size: `fit` clamped there and the graph spilled out of the top and
+      // bottom of its own canvas, which reads as the graph having vanished.
+      minZoom: 0.04,
       maxZoom: 3,
       boxSelectionEnabled: false,
       // Cytoscape's own wheel zoom is off so the hand-rolled one below is the

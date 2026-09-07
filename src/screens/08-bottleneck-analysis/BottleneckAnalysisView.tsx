@@ -22,7 +22,7 @@
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, Maximize, XCircle } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Crosshair, Maximize, Network, XCircle } from 'lucide-react';
 
 import { ScreenWorkspace } from '@/app/ScreenWorkspace';
 import { projectPath } from '@/app/navigation';
@@ -67,9 +67,16 @@ import { REDUCTION_MAX, SegmentTuner } from './SegmentTuner';
 import { StudyTable } from './StudyTable';
 import { num } from './analysisViewModel';
 
-/** How many parts the deck offers, and how many segments the tuner offers. */
+/**
+ * How many parts the deck offers.
+ *
+ * There is no matching cap on the segments: the tuner lists the component's
+ * WHOLE chain, junction to ambient, however many links that is. A top-three cut
+ * answered "where is the biggest drop" but hid the rest of the path, and the
+ * rest of the path is what the reader is deciding against — a 0.4 °C segment
+ * you can actually buy beats a 9 °C one you cannot.
+ */
 const DECK_SIZE = 3;
-const TUNED_SEGMENTS = 3;
 
 const EMPTY_SET: ReadonlySet<string> = new Set<string>();
 const GRAPH_DISPLAY = {
@@ -259,8 +266,30 @@ export function BottleneckAnalysisView() {
 
   const segments = useMemo(() => {
     if (!solveGraph || !solution || !focus) return [];
-    return chainSegments(solveGraph, solution, focus.visible, focus.own).slice(0, TUNED_SEGMENTS);
+    return chainSegments(solveGraph, solution, focus.visible, focus.own);
   }, [solveGraph, solution, focus]);
+
+  /**
+   * Picking a part is a request to see that part.
+   *
+   * Leaving the graph on the whole machine made 1 / 2 / 3 look dead: the deck,
+   * the margin tile and the segment list all changed and the one thing the
+   * reader was looking at did not. Selecting the node as well means the switch
+   * back to the whole machine still says where the part is.
+   */
+  const showWholeMachine = (next: boolean) => {
+    setWholeMachine(next);
+    // Going wide without a mark loses the part among 113 nodes; the selection
+    // is what carries "this is the one you were looking at" across the switch.
+    if (next && target) setSelectedNodeId(target.node_id);
+  };
+
+  const selectRank = (index: number) => {
+    setRankIndex(index);
+    setWholeMachine(false);
+    setSelectedNodeId(ranked[index]?.node_id ?? null);
+    setSelectedEdgeId(null);
+  };
 
   // A new part starts from its solved state, never from the last part's cuts.
   useEffect(() => {
@@ -445,7 +474,7 @@ export function BottleneckAnalysisView() {
       }
       metrics={
         <div className="grid grid-cols-2 gap-1.5 md:grid-cols-4">
-          <MarginDeck ranked={ranked} index={rankIndex} onSelect={setRankIndex} />
+          <MarginDeck ranked={ranked} index={rankIndex} onSelect={selectRank} />
           <KpiTile
             icon={<span className="text-[10px] font-bold">°C</span>}
             label="Margin Now"
@@ -500,8 +529,8 @@ export function BottleneckAnalysisView() {
             Back to Thermal Network
           </Button>
           <span className="text-[11px] text-ink-400">
-            {ranked.length} part(s) ranked by margin · {segments.length} segment(s) offered ·
-            adjustments are assumptions, never written to the model
+            {ranked.length} part(s) ranked by margin · {segments.length} segment(s) on this
+            part's whole chain · adjustments are assumptions, never written to the model
           </span>
           <Button
             variant="primary"
@@ -543,23 +572,24 @@ export function BottleneckAnalysisView() {
             bodyClassName="p-0"
             actions={
               <>
-                <span className="flex overflow-hidden rounded-md border border-line-strong">
+                <span className="flex h-7 shrink-0 overflow-hidden rounded-md border border-line-strong">
                   {[
-                    { id: false, label: 'This part', zh: '此元件' },
-                    { id: true, label: 'Whole machine', zh: '整機' },
+                    { id: false, label: 'This Part', zh: '此元件', icon: <Crosshair size={12} /> },
+                    { id: true, label: 'Whole Machine', zh: '整機', icon: <Network size={12} /> },
                   ].map((entry) => (
                     <button
                       key={String(entry.id)}
                       type="button"
                       aria-pressed={wholeMachine === entry.id}
                       title={biTitle(entry.label, entry.zh)}
-                      onClick={() => setWholeMachine(entry.id)}
-                      className={`px-2 py-1 text-[11px] font-semibold transition-colors ${
+                      onClick={() => showWholeMachine(entry.id)}
+                      className={`flex shrink-0 items-center gap-1 whitespace-nowrap px-2.5 text-[11px] leading-none font-semibold transition-colors ${
                         wholeMachine === entry.id
                           ? 'bg-accent-600 text-white'
-                          : 'bg-surface text-ink-500 hover:text-ink-900'
+                          : 'bg-surface text-ink-500 hover:bg-surface-muted hover:text-ink-900'
                       }`}
                     >
+                      {entry.icon}
                       {entry.label}
                     </button>
                   ))}
@@ -613,11 +643,14 @@ export function BottleneckAnalysisView() {
             </div>
           </Section>
 
+          {/* Height is the graph's, not this table's: empty, it is one line;
+              full, it scrolls inside 12 rem. The graph is the screen. */}
           <Section
             index={3}
             title="Saved Studies"
             zh="已儲存的調整分析"
-            className="max-h-[14rem] shrink-0"
+            className={studies.length === 0 ? 'shrink-0' : 'max-h-[12rem] shrink-0'}
+            bodyClassName={studies.length === 0 ? 'px-3 py-1.5' : 'p-3'}
           >
             <StudyTable
               studies={studies}
@@ -631,10 +664,14 @@ export function BottleneckAnalysisView() {
         <div className="flex w-full shrink-0 flex-col gap-3 xl:w-[23rem]">
           <Section
             index={2}
-            title="Segments Worth Improving"
-            zh="最值得改善的區段"
+            title="Resistance Chain"
+            zh="整條熱阻鏈路"
             className="min-h-[26rem] flex-1"
-            actions={<span className="text-[10px] text-ink-400">step 0.1 %</span>}
+            actions={
+              <span className="shrink-0 whitespace-nowrap text-[10px] text-ink-400">
+                {segments.length} seg · 0.1 %
+              </span>
+            }
           >
             {target ? (
               <SegmentTuner

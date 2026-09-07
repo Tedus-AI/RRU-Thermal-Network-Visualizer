@@ -26,9 +26,9 @@ export function StudyTable({
 }) {
   if (studies.length === 0) {
     return (
-      <p className="py-5 text-center text-[11px] text-ink-400">
-        No study saved for this scenario yet. Adjust a segment and save it.
-        <span className="block">此情境尚未儲存任何調整；調整區段後按儲存。</span>
+      <p className="text-[11px] text-ink-400">
+        No study saved for this scenario yet — adjust a segment and save it.
+        <span className="ml-1">此情境尚未儲存任何調整；調整區段後按儲存。</span>
       </p>
     );
   }
