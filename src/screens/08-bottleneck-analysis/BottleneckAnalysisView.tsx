@@ -73,7 +73,7 @@ import {
   AnalysisValidationPanel,
   type ReadinessCheck,
 } from './AnalysisValidationPanel';
-import { downloadCsv, rankingCsv, timeOf } from './analysisViewModel';
+import { ANALYSIS_STATE_TONE, downloadCsv, rankingCsv, timeOf } from './analysisViewModel';
 import { T08 } from './tooltips';
 
 // --- building blocks --------------------------------------------------------
@@ -341,7 +341,6 @@ export function BottleneckAnalysisView() {
       <ScreenWorkspace
         title="Bottleneck Analysis"
         titleZh="瓶頸分析"
-        description="Rank the thermal paths worth improving by re-solving the whole network with each candidate resistance reduced."
         descriptionZh="逐一降低候選熱阻並重新求解整張網路，找出最值得改善的熱路徑。"
       >
         <div className="flex h-full items-center justify-center">
@@ -423,22 +422,11 @@ export function BottleneckAnalysisView() {
     <ScreenWorkspace
       title="Bottleneck Analysis"
       titleZh="瓶頸分析"
-      description="Rank the thermal paths worth improving. Each candidate is measured by reducing its resistance and re-solving the complete network, so shared and parallel branches redistribute their heat."
       descriptionZh="找出最值得改善的熱路徑。每個候選都會降低熱阻後重新求解整張網路，共用與並聯分支的熱流會依實際情況重新分配。"
       badge={
         <div className="flex flex-wrap items-center gap-2">
           {readOnly && <Badge tone="accent">READ ONLY / 唯讀</Badge>}
-          <Badge
-            tone={
-              analysisState === 'COMPLETE'
-                ? 'ok'
-                : analysisState === 'FAILED'
-                  ? 'danger'
-                  : analysisState === 'RUNNING'
-                    ? 'accent'
-                    : 'warn'
-            }
-          >
+          <Badge tone={ANALYSIS_STATE_TONE[analysisState]}>
             Analysis {analysisState}
           </Badge>
           <Badge tone={solverState === 'SOLVED' ? 'ok' : 'warn'}>Solver {solverState}</Badge>
@@ -448,7 +436,6 @@ export function BottleneckAnalysisView() {
       metrics={
         <BottleneckKpiBar
           analysis={analysis}
-          state={analysisState}
           reductionPct={settings.reduction_pct}
           stale={analysisStale}
         />
