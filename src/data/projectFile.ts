@@ -21,7 +21,7 @@ import type { Component } from '@/domain/component';
 import type { ThermalNetwork } from '@/thermal/types';
 import type { ScenarioBoundaryConditionSet } from '@/thermal/boundary/types';
 import type { ThermalSolution } from '@/thermal/solver/solverTypes';
-import type { BottleneckAnalysis, BottleneckProposal } from '@/thermal/analysis/analysisTypes';
+import type { BottleneckAnalysis, ImprovementStudy } from '@/thermal/analysis/analysisTypes';
 import type { ResultsOverviewSnapshot } from '@/thermal/overview/overviewTypes';
 import type { TemperatureDistributionResult } from '@/thermal/analysis/distributionResult';
 import type { ReportExportPayload, ThermalReportConfig } from '@/report/reportTypes';
@@ -78,7 +78,7 @@ export interface ProjectBundle {
   network_review: NetworkReviewState;
   analyses: BottleneckAnalysis[];
   distributions: TemperatureDistributionResult[];
-  proposals: BottleneckProposal[];
+  proposals: ImprovementStudy[];
   snapshots: ResultsOverviewSnapshot[];
   report_configs: ThermalReportConfig[];
   export_payloads: ReportExportPayload[];

@@ -311,28 +311,58 @@ export interface BottleneckAnalysis {
 
 // --- improvement proposal (08 §23) ------------------------------------------
 
-export interface BottleneckProposal {
+/** One segment the reader chose to improve, and by how much. */
+export interface StudySegment {
+  edge_id: string;
+  label: string;
+  edge_type: string;
+  /** Percent, 0.1 % resolution — the step the control offers. */
+  reduction_pct: number;
+  rth_before_C_per_W: number;
+  rth_after_C_per_W: number;
+  /** What this segment ALONE buys the target part, °C. */
+  solo_gain_C: number;
+}
+
+/**
+ * A saved what-if: one part, the segments the reader cut, and what it bought.
+ *
+ * This replaces the single-edge proposal the ranking screen saved. The unit a
+ * thermal engineer actually works in is not "edge E_42 at 20 %" — it is "to get
+ * the Power Module off its 3 °C margin I need this much out of these segments",
+ * which is one record with several segments in it.
+ *
+ * A study is a RECORD OF AN ASSUMPTION. It never writes an Rth back into the
+ * network — the real change goes through 04 / 05 / 06 (08 §23). Kept explicit
+ * so no later screen mistakes it for an applied edit.
+ */
+export interface ImprovementStudy {
   id: string;
   schema_version: string;
   project_id: string;
   scenario_id: string;
-  edge_id: string;
-  edge_label: string;
-  reduction_pct: number;
-  baseline: { rth_C_per_W: number; target_temperature_C: number | null; worst_margin_C: number | null };
-  projected: { rth_C_per_W: number; target_temperature_C: number | null; worst_margin_C: number | null };
-  score: number;
-  classification: Classification;
-  target_metric: TargetMetric;
-  recommendation: string[];
+  /** The limited node the study was aimed at. */
+  target_node_id: string;
+  target_node_name: string;
+  limit_C: number;
+  limit_type: string | null;
+  baseline: { temperature_C: number; margin_C: number };
+  projected: { temperature_C: number; margin_C: number };
+  segments: StudySegment[];
   note?: string;
   created_at: string;
-  /**
-   * A proposal is a RECORD OF AN ASSUMPTION. It never writes an Rth back into
-   * the network — the real engineering change goes through 04 / 05 / 06
-   * (08 §23). Kept explicit so no later screen mistakes it for an applied edit.
-   */
   applied: false;
+}
+
+/** True for a record this build can render — an older single-edge proposal is not. */
+export function isImprovementStudy(value: unknown): value is ImprovementStudy {
+  const entry = value as Partial<ImprovementStudy> | null;
+  return Boolean(
+    entry &&
+      typeof entry.id === 'string' &&
+      typeof entry.target_node_id === 'string' &&
+      Array.isArray(entry.segments),
+  );
 }
 
 export function classify(score: number): Classification {
