@@ -61,6 +61,18 @@ export function worstThermalMargin(
  * different branch, and that is a real result of the redistribution. Those are
  * reported too, so the row count is "affected", not "improved only", and a
  * negative improvement is visible instead of being filtered away.
+ *
+ * "Component" here is a node that carries a LIMIT, not every node that belongs
+ * to a component. Measured on STARKCORE, the difference is 81 rows against 22:
+ * a PA contributed its Junction, Case, Solder, Copper Coin and TIM, five rows
+ * that improve by the same amount because they are the same chain, and 59 of
+ * the 81 rows had no limit, no margin and no new margin to show. Worse, the
+ * count went out as "81 component(s) improve" on a board with 22 parts — a
+ * number no reader could reconcile with their own hardware.
+ *
+ * The limited node is the one the margin metric ranks on and the one an
+ * engineer acts on. A network where nobody has set a limit yet keeps the old,
+ * wider set rather than reporting that nothing is affected.
  */
 export function affectedComponents(
   network: ThermalNetwork,
@@ -71,7 +83,11 @@ export function affectedComponents(
   const affected: AffectedComponent[] = [];
   let improvedCount = 0;
 
-  for (const node of componentNodes(network)) {
+  const candidates = componentNodes(network);
+  const limited = candidates.filter((node) => node.limit_C != null);
+  const reported = limited.length > 0 ? limited : candidates;
+
+  for (const node of reported) {
     const before = baseline[node.id];
     const after = modified[node.id];
     if (!Number.isFinite(before) || !Number.isFinite(after)) continue;

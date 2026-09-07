@@ -22,6 +22,7 @@ import type { SolverSettings, ThermalNetwork } from '../types';
 import type { Component } from '@/domain/component';
 import type { SourceRevision } from '@/domain/revision';
 import { projectComponentLimits } from '../graph/componentProjection';
+import { solveNetwork } from '../networkSolver';
 import type { SolveInput } from '../solver/buildSolveInput';
 import type { ThermalSolution } from '../solver/solverTypes';
 
@@ -75,6 +76,24 @@ function issue(
   return { id: `${code}:${edgeId ?? 'global'}`, severity, code, message, message_zh: messageZh, edge_id: edgeId };
 }
 
+/** Above this, the stored solution and a re-solve of its inputs disagree. */
+const BASELINE_DRIFT_C = 0.05;
+
+/** The node where two temperature vectors disagree most, if they do at all. */
+function largestDrift(
+  stored: Record<string, number>,
+  resolved: Record<string, number>,
+): { node_id: string; delta_C: number } | null {
+  let worst: { node_id: string; delta_C: number } | null = null;
+  for (const [id, value] of Object.entries(stored)) {
+    const other = resolved[id];
+    if (!Number.isFinite(value) || !Number.isFinite(other)) continue;
+    const delta = Math.abs(value - other);
+    if (!worst || delta > worst.delta_C) worst = { node_id: id, delta_C: delta };
+  }
+  return worst;
+}
+
 /** Thrown when the caller cancels mid-run. The baseline is untouched (08 §27). */
 export class AnalysisCancelled extends Error {
   constructor() {
@@ -102,9 +121,46 @@ export async function runAnalysis(
     filters: input.settings.filters,
   });
 
+  // The baseline every candidate is measured against has to be a solve of the
+  // SAME network the candidates are modified from. Screen 07's stored
+  // temperatures are not automatically that: `solutionStore.refresh()` replaces
+  // the stored solve input with a pre-solve check input, which never went
+  // through the finite-Bi spreading refinement, while the solution itself stays
+  // put. Measured on STARKCORE, comparing across that pair credited EVERY
+  // candidate with the whole Bi effect — a single PA's Rjc reduction appeared to
+  // cool the other three PAs by 12.9 °C and to move 21 parts, when re-solving
+  // the same network moves exactly one node, by exactly Q·ΔR.
+  //
+  // So: solve it here, once, and compare like with like. If that disagrees with
+  // what Screen 07 is showing, say so rather than quietly reporting different
+  // numbers than the screen the reader just came from.
+  const baselineSolve = solveNetwork(input.baselineInput.network, {
+    scenarioId: input.scenario_id,
+    powerScale: 1,
+    settings: input.solverSettings,
+  });
+  const baselineTemperatures = baselineSolve.ok
+    ? baselineSolve.temperatures
+    : input.baselineSolution.node_temperatures_C;
+
+  const drift = largestDrift(
+    input.baselineSolution.node_temperatures_C,
+    baselineTemperatures,
+  );
+  if (drift && drift.delta_C > BASELINE_DRIFT_C) {
+    issues.push(
+      issue(
+        'warning',
+        'baseline_input_drift',
+        `The stored Screen 07 solution and a re-solve of its own inputs differ by ${drift.delta_C.toFixed(1)} °C at ${drift.node_id}. This analysis is measured against the re-solve, so improvements stay honest; re-solve Screen 07 to make both screens agree.`,
+        `07 的既有解與「以其輸入重新求解」的結果在 ${drift.node_id} 相差 ${drift.delta_C.toFixed(1)} °C。本分析以重新求解為基準，改善量才不會被灌水；請回 07 重新求解使兩畫面一致。`,
+      ),
+    );
+  }
+
   const baseline = baselineMetricsOf(
     analysisNetwork,
-    input.baselineSolution.node_temperatures_C,
+    baselineTemperatures,
     input.baselineSolution.energy_balance.error_pct,
   );
 

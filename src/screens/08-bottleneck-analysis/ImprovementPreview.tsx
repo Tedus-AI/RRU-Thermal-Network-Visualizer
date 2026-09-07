@@ -1,8 +1,8 @@
 /**
  * Improvement Preview — 08 §17.
  *
- * A compact Baseline → Rth −N% comparison of exactly four rows: Target
- * Temperature, Worst Margin, Affected Components, Energy Balance.
+ * A compact Baseline → Rth −N% comparison: the target metric, the worst
+ * margin, how many components move, and the resistance change being assumed.
  *
  * 08 §17 is explicit that this is NOT a distribution view: no histogram, no
  * per-node bar chart, no spatial map. Those are Screen 09's.
@@ -15,7 +15,7 @@ import { ColumnLabel, biTitle } from '@/ui/FieldLabel';
 import { TARGET_METRIC_LABELS, type BottleneckResult } from '@/thermal/analysis/analysisTypes';
 import type { TargetMetric } from '@/thermal/analysis/analysisTypes';
 
-import { num, percent, signed } from './analysisViewModel';
+import { num, rth, signed } from './analysisViewModel';
 import { T08 } from './tooltips';
 
 function Row({
@@ -122,14 +122,20 @@ export function ImprovementPreview({
               modified={failed ? 'N/A' : String(sensitivity.affected_component_count)}
               delta="—"
             />
+            {/* The change being assumed, so the table says what was done as well
+                as what it bought. This was the one number the inspector's
+                Sensitivity section carried that this table did not. */}
             <Row
-              label="Energy Balance"
-              zh="能量平衡"
-              baseline={percent(result.sensitivity.energy_error_pct == null ? null : 0)}
-              modified={percent(sensitivity.energy_error_pct)}
-              delta={sensitivity.solve_status}
-              tone={sensitivity.solve_status === 'SOLVED' ? 'text-ok-600' : 'text-warn-600'}
+              label="Edge Rth"
+              zh="此連線熱阻"
+              baseline={`${rth(sensitivity.original_rth_C_per_W)} °C/W`}
+              modified={`${rth(sensitivity.modified_rth_C_per_W)} °C/W`}
+              delta="—"
             />
+            {/* Energy Balance is gone: its "baseline" column was hard-coded to
+                0.00 % rather than read from the baseline solve, and a solver
+                quality figure is not an improvement. Screen 07's status overlay
+                and this screen's validation card both report it for real. */}
           </tbody>
         </table>
       </div>
