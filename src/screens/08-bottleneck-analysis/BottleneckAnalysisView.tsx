@@ -22,7 +22,16 @@
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, Crosshair, Maximize, Network, XCircle } from 'lucide-react';
+import {
+  ArrowLeft,
+  ArrowRight,
+  Crosshair,
+  Maximize2,
+  Minimize2,
+  Network,
+  Table2,
+  XCircle,
+} from 'lucide-react';
 
 import { ScreenWorkspace } from '@/app/ScreenWorkspace';
 import { projectPath } from '@/app/navigation';
@@ -31,6 +40,7 @@ import { biTitle } from '@/ui/FieldLabel';
 import { KpiTile } from '@/ui/KpiTile';
 import { toast } from '@/ui/toast';
 import { focusHiddenNodes, focusLabels, graphPaths } from '@/ui/graphExplorerModel';
+import { FloatingPanel } from '@/ui/FloatingPanel';
 
 import { useProjectStore } from '@/data/projectStore';
 import { useComponentStore } from '@/data/componentStore';
@@ -56,12 +66,24 @@ import {
   type ImprovementStudy,
   type StudySegment,
 } from '@/thermal/analysis/analysisTypes';
+import { segmentLevers } from '@/thermal/analysis/tunableParameters';
 import {
   SolvedGraphCanvas,
   type SolvedGraphHandle,
 } from '@/screens/07-thermal-network/SolvedGraphCanvas';
-import { RESULT_MODES, type ResultMode } from '@/screens/07-thermal-network/resultViewModel';
+import { NodeResultInspector } from '@/screens/07-thermal-network/NodeResultInspector';
+import { EdgeResultInspector } from '@/screens/07-thermal-network/EdgeResultInspector';
+import { ResultsOverlay } from '@/screens/07-thermal-network/ResultsOverlay';
+import {
+  ANALYSIS_RESULT_MODES,
+  COMBINED_MODE,
+  edgeRows,
+  nodeRows,
+  resultTree,
+  type ResultMode,
+} from '@/screens/07-thermal-network/resultViewModel';
 
+import { LeverTable } from './LeverTable';
 import { MarginDeck } from './MarginDeck';
 import { REDUCTION_MAX, SegmentTuner } from './SegmentTuner';
 import { StudyTable } from './StudyTable';
@@ -152,7 +174,17 @@ export function BottleneckAnalysisView() {
 
   const [rankIndex, setRankIndex] = useState(0);
   const [reductions, setReductions] = useState<Record<string, number>>({});
-  const [mode, setMode] = useState<ResultMode>('temperature');
+  /**
+   * Node temperature and edge ΔT together, by default.
+   *
+   * On 08 they are one question — which link costs this part its margin — so
+   * they are one view. The input-only modes 07 offers (Node Type, Rth Source)
+   * say how the model was built, which is 04/05/06's question, not this one.
+   */
+  const [mode, setMode] = useState<ResultMode>(COMBINED_MODE.id);
+  const [graphFullscreen, setGraphFullscreen] = useState(false);
+  const [resultsOpen, setResultsOpen] = useState(false);
+  const [bottomTab, setBottomTab] = useState<'levers' | 'studies'>('levers');
   /** 08 — the focused chain answers the question; the whole machine gives it context. */
   const [wholeMachine, setWholeMachine] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
@@ -188,6 +220,8 @@ export function BottleneckAnalysisView() {
     setReductions({});
   }, [projectId, activeScenarioId]);
 
+  const boundarySets = useBoundaryStore((s) => s.sets);
+  const boundaryKey = useBoundaryStore((s) => s.activeKey);
   const solutionStale = useSolutionStore((s) => s.isStale());
   const solverSettings = network?.solver_settings ?? DEFAULT_SOLVER_SETTINGS;
   const scenarioId = activeScenarioId ?? '';
@@ -347,6 +381,73 @@ export function BottleneckAnalysisView() {
 
   const dirty = adjustments.length > 0;
 
+  /**
+   * The full result table, built exactly as Screen 07 builds it — same
+   * `nodeRows` / `edgeRows` / `resultTree`, off the same solve-ready network.
+   *
+   * It reads the solution the GRAPH is showing, so with a what-if live the
+   * table and the picture agree; the graph's own banner is what says the
+   * numbers are an assumption.
+   */
+  const ambient =
+    (boundaryKey ? boundarySets[boundaryKey]?.ambient.external_ambient_C : null) ??
+    scenario?.ambient_C ??
+    null;
+  const tableRows = useMemo(
+    () =>
+      solveGraph
+        ? nodeRows(solveGraph, graphSolution, {
+            ambient_C: ambient,
+            powerScale: scenario?.power_scale ?? 1,
+          })
+        : [],
+    [solveGraph, graphSolution, ambient, scenario?.power_scale],
+  );
+  const tableFlows = useMemo(
+    () => (solveGraph ? edgeRows(solveGraph, graphSolution) : []),
+    [solveGraph, graphSolution],
+  );
+  const tableTree = useMemo(
+    () => (solveGraph ? resultTree(solveGraph, graphSolution, tableRows, components) : []),
+    [solveGraph, graphSolution, tableRows, components],
+  );
+
+  const selectedNode = selectedNodeId ? (solveGraph?.nodes[selectedNodeId] ?? null) : null;
+  const selectedEdge = selectedEdgeId ? (solveGraph?.edges[selectedEdgeId] ?? null) : null;
+
+  /** For every segment actually cut: what would have to change, and to what. */
+  const levers = useMemo(() => {
+    if (!solveGraph || !scenarioId) return [];
+    return segments
+      .filter((segment) => (reductions[segment.edge_id] ?? 0) > 0)
+      .map((segment) =>
+        segmentLevers(
+          solveGraph,
+          scenarioId,
+          segment.edge_id,
+          segment.label,
+          reductions[segment.edge_id] ?? 0,
+        ),
+      );
+  }, [solveGraph, scenarioId, segments, reductions]);
+
+  // Fullscreen leaves the same way every overlay on this tool does, and the
+  // graph is re-fitted after the box changes size rather than keeping a zoom
+  // computed for the old one.
+  useEffect(() => {
+    if (!graphFullscreen) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setGraphFullscreen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [graphFullscreen]);
+
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => graphRef.current?.fit());
+    return () => cancelAnimationFrame(frame);
+  }, [graphFullscreen]);
+
   const saveStudy = () => {
     if (!projectId || !target || !projected || !scenarioId) return;
     const studySegments: StudySegment[] = segments
@@ -381,6 +482,9 @@ export function BottleneckAnalysisView() {
     };
 
     useAnalysisStore.getState().saveStudy(projectId, study);
+    // Saving is the moment the reader asks "so what do I actually change?", so
+    // that is the panel they are left looking at.
+    setBottomTab('levers');
     toast.success('Study saved — no resistance was changed / 已儲存，未修改任何熱阻');
   };
 
@@ -568,7 +672,11 @@ export function BottleneckAnalysisView() {
                   : 'Heat Path'
             }
             zh={wholeMachine ? '整機熱網路' : '此元件的熱路徑'}
-            className="min-h-[22rem] flex-1"
+            className={
+              graphFullscreen
+                ? 'fixed inset-3 z-30 shadow-2xl'
+                : 'min-h-[22rem] flex-1'
+            }
             /**
              * `overflow-hidden`, and the canvas pinned to this box rather than
              * sized by a percentage of it. Both matter.
@@ -613,17 +721,41 @@ export function BottleneckAnalysisView() {
                 <Select
                   className="h-7 !text-[11px]"
                   value={mode}
-                  items={RESULT_MODES.map((entry) => ({ value: entry.id, label: entry.label }))}
+                  items={ANALYSIS_RESULT_MODES.map((entry) => ({
+                    value: entry.id,
+                    label: entry.label,
+                  }))}
                   onChange={(event) => setMode(event.target.value as ResultMode)}
                 />
+                {/* Screen 07's own result table, on 07's own numbers. 08 is
+                    where the reader decides; the full table is what they check
+                    the decision against, and sending them back to 07 to read it
+                    loses the part they had selected. */}
                 <button
                   type="button"
-                  title={biTitle('Fit', '全覽')}
-                  aria-label={biTitle('Fit', '全覽')}
-                  onClick={() => graphRef.current?.fit()}
-                  className="flex size-7 items-center justify-center rounded-md border border-line-strong text-ink-500 hover:bg-surface-muted"
+                  onClick={() => setResultsOpen(true)}
+                  aria-label="Results / 求解結果"
+                  title={biTitle('Open the full result table', '開啟完整求解結果')}
+                  className="flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md bg-orange-600 px-2 text-[11px] font-bold text-white shadow-sm ring-1 ring-orange-700/40 transition-colors hover:bg-orange-500"
                 >
-                  <Maximize size={13} />
+                  <Table2 size={13} />
+                  <span>Results</span>
+                  <span className="rounded bg-white/20 px-1 text-[10px] font-semibold tabular">
+                    {tableRows.length} · {tableFlows.length}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  title={biTitle(
+                    graphFullscreen ? 'Leave fullscreen (Esc)' : 'Fullscreen',
+                    graphFullscreen ? '離開全螢幕（Esc）' : '全螢幕',
+                  )}
+                  aria-label={biTitle('Fullscreen', '全螢幕')}
+                  aria-pressed={graphFullscreen}
+                  onClick={() => setGraphFullscreen((value) => !value)}
+                  className="flex size-7 shrink-0 items-center justify-center rounded-md border border-line-strong text-ink-500 hover:bg-surface-muted"
+                >
+                  {graphFullscreen ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
                 </button>
               </>
             }
@@ -659,23 +791,60 @@ export function BottleneckAnalysisView() {
             </div>
           </Section>
 
-          {/* Height is the graph's, not this table's: empty, it is one line;
-              full, it scrolls inside 12 rem. The graph is the screen. */}
+          {/* Two answers to one question, so they share a box rather than each
+              taking a slice of the graph's height: what would have to change to
+              get the cut being asked for, and what has been asked for before. */}
           <Section
             index={3}
-            title="Saved Studies"
-            zh="已儲存的調整分析"
-            className={studies.length === 0 ? 'shrink-0' : 'max-h-[12rem] shrink-0'}
-            bodyClassName={
-              studies.length === 0 ? 'overflow-auto px-3 py-1.5' : 'overflow-auto p-3'
+            title={bottomTab === 'levers' ? 'What To Change' : 'Saved Studies'}
+            zh={bottomTab === 'levers' ? '可調整的參數' : '已儲存的調整分析'}
+            className={
+              bottomTab === 'levers' && levers.length === 0 && studies.length === 0
+                ? 'shrink-0'
+                : 'max-h-[15rem] shrink-0'
+            }
+            bodyClassName="overflow-auto px-3 py-2"
+            actions={
+              <span className="flex shrink-0 overflow-hidden rounded-md border border-line-strong">
+                {[
+                  { id: 'levers' as const, label: 'What to change', zh: '可調參數', count: levers.length },
+                  { id: 'studies' as const, label: 'Saved', zh: '已儲存', count: studies.length },
+                ].map((entry) => (
+                  <button
+                    key={entry.id}
+                    type="button"
+                    aria-pressed={bottomTab === entry.id}
+                    title={biTitle(entry.label, entry.zh)}
+                    onClick={() => setBottomTab(entry.id)}
+                    className={`flex items-center gap-1 whitespace-nowrap px-2.5 py-1 text-[11px] leading-none font-semibold transition-colors ${
+                      bottomTab === entry.id
+                        ? 'bg-accent-600 text-white'
+                        : 'bg-surface text-ink-500 hover:bg-surface-muted hover:text-ink-900'
+                    }`}
+                  >
+                    {entry.label}
+                    <span
+                      className={`rounded px-1 text-[10px] tabular ${
+                        bottomTab === entry.id ? 'bg-white/20' : 'bg-surface-muted'
+                      }`}
+                    >
+                      {entry.count}
+                    </span>
+                  </button>
+                ))}
+              </span>
             }
           >
-            <StudyTable
-              studies={studies}
-              readOnly={readOnly}
-              onSelect={loadStudy}
-              onDelete={(id) => useAnalysisStore.getState().deleteStudy(projectId, id)}
-            />
+            {bottomTab === 'levers' ? (
+              <LeverTable segments={levers} />
+            ) : (
+              <StudyTable
+                studies={studies}
+                readOnly={readOnly}
+                onSelect={loadStudy}
+                onDelete={(id) => useAnalysisStore.getState().deleteStudy(projectId, id)}
+              />
+            )}
           </Section>
         </div>
 
@@ -721,6 +890,85 @@ export function BottleneckAnalysisView() {
           </Section>
         </div>
       </div>
+
+      {resultsOpen && (
+        <ResultsOverlay
+          groups={tableTree}
+          hasSolution={Boolean(graphSolution)}
+          nodeCount={tableRows.length}
+          edgeCount={tableFlows.length}
+          selectedNodeId={selectedNodeId}
+          selectedEdgeId={selectedEdgeId}
+          onSelectNode={(nodeId) => {
+            setSelectedEdgeId(null);
+            setSelectedNodeId(nodeId);
+            graphRef.current?.center(nodeId);
+          }}
+          onSelectEdge={(edgeId) => {
+            setSelectedNodeId(null);
+            setSelectedEdgeId(edgeId);
+            graphRef.current?.center(edgeId);
+          }}
+          // 08 argues about a design; exporting the table is 07's and 12's job.
+          onExportPdf={() => undefined}
+          exporting={false}
+          onClose={() => setResultsOpen(false)}
+        />
+      )}
+
+      {/* The same inspector Screen 07 opens, on the same components. A node or
+          an edge on this graph is the same object it is over there, and the
+          reader tuning a segment is exactly the reader who needs to see where
+          its resistance came from. */}
+      {(selectedNode || selectedEdge) && solveGraph && (
+        <FloatingPanel
+          storageKey="tnv.08.inspector"
+          defaultWidth={460}
+          defaultHeight={620}
+          title={selectedEdge ? selectedEdge.id : (selectedNode?.name ?? '')}
+          subtitle={
+            selectedEdge
+              ? `${solveGraph.nodes[selectedEdge.from]?.name ?? selectedEdge.from} → ${
+                  solveGraph.nodes[selectedEdge.to]?.name ?? selectedEdge.to
+                }`
+              : (selectedNode?.id ?? '')
+          }
+          badge={<Badge tone="neutral">{selectedEdge ? 'Edge / 連線' : 'Node / 節點'}</Badge>}
+          onClose={() => {
+            setSelectedNodeId(null);
+            setSelectedEdgeId(null);
+          }}
+        >
+          <div className="p-3">
+            {selectedEdge ? (
+              <EdgeResultInspector
+                edge={selectedEdge}
+                network={solveGraph}
+                solution={graphSolution}
+                stale={false}
+                scenarioId={scenarioId}
+                onSelectNode={(nodeId) => {
+                  setSelectedEdgeId(null);
+                  setSelectedNodeId(nodeId);
+                }}
+              />
+            ) : selectedNode ? (
+              <NodeResultInspector
+                node={selectedNode}
+                network={solveGraph}
+                solution={graphSolution}
+                stale={false}
+                scenarioName={scenario?.name ?? ''}
+                solverState={solverState}
+                onSelectEdge={(edgeId) => {
+                  setSelectedNodeId(null);
+                  setSelectedEdgeId(edgeId);
+                }}
+              />
+            ) : null}
+          </div>
+        </FloatingPanel>
+      )}
     </ScreenWorkspace>
   );
 }

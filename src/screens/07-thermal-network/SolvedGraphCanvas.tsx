@@ -62,10 +62,13 @@ import type { ThermalNetwork } from '@/thermal/types';
 import type { ThermalSolution } from '@/thermal/solver/solverTypes';
 
 import {
+  COMBINED_MODE,
   RTH_SOURCE_BADGE,
   RTH_SOURCE_COLORS,
   buildScale,
   num,
+  paintsEdgeDelta,
+  paintsNodeTemperature,
   rth as formatRth,
   deltaTLabel,
   type ResultMode,
@@ -294,7 +297,8 @@ export function buildElements(
   nodeLabelOverrides?: ReadonlyMap<string, string>,
 ): ElementDefinition[] {
   const elements: ElementDefinition[] = [];
-  const solved = mode === 'temperature' || mode === 'heat_flow' || mode === 'delta_t';
+  const solved =
+    mode === 'heat_flow' || paintsNodeTemperature(mode) || paintsEdgeDelta(mode);
   // A view filter only: the solution was computed over the whole network and
   // every KPI still reports it. Shared structure has no component behind it, so
   // the base and the fins never vanish.
@@ -315,7 +319,7 @@ export function buildElements(
     if (fixed && !display.showBoundary) continue;
 
     const lines = [nodeLabelOverrides?.get(node.id) ?? node.name];
-    if (mode === 'temperature' && temperature != null) {
+    if (paintsNodeTemperature(mode) && temperature != null) {
       lines.push(`${temperature.toFixed(1)} °C`);
     }
     if (display.showPower && node.power_W > 0) lines.push(`${num(node.power_W, 2, 'W')}`);
@@ -327,17 +331,17 @@ export function buildElements(
           : `limit ${node.limit_C.toFixed(0)} °C`,
       );
     }
-    if (fixed && mode !== 'temperature') lines.push('Boundary');
+    if (fixed && !paintsNodeTemperature(mode)) lines.push('Boundary');
 
     const label = display.showLabels ? lines.join('\n') : '';
     const box = labelBox(label || node.name);
 
     // Only the Temperature mode colours a node by a result (07 §21, §22).
     const fill =
-      mode === 'temperature' && temperature != null
+      paintsNodeTemperature(mode) && temperature != null
         ? scales.temperature.colorOf(temperature)
         : role.fill;
-    const text = mode === 'temperature' && temperature != null ? '#ffffff' : role.text;
+    const text = paintsNodeTemperature(mode) && temperature != null ? '#ffffff' : role.text;
 
     const classes: string[] = [];
     if (fixed) classes.push('fixed');
@@ -427,6 +431,7 @@ export function buildElements(
         }
         break;
 
+      case COMBINED_MODE.id:
       case 'delta_t':
         if (result) {
           color = scales.delta.colorOf(Math.abs(result.delta_T_C));
@@ -567,7 +572,7 @@ export function buildElements(
       const names = parallelPairNames(
         network,
         pair.edgeIds,
-        mode === 'heat_flow' ? 'heat_flow' : mode === 'delta_t' ? 'delta_t' : 'rth',
+        mode === 'heat_flow' ? 'heat_flow' : paintsEdgeDelta(mode) ? 'delta_t' : 'rth',
       );
       elements.push(
         parallelBraceElement(pair, names ? `${names}\n${value}` : value, HSK_BUS_COLOR),
@@ -1018,9 +1023,26 @@ export function legendFor(
       ];
     }
 
+    case COMBINED_MODE.id:
     case 'delta_t': {
       const scale = buildScale(results.map((entry) => Math.abs(entry.delta_T_C)), DELTA_RAMP);
+      const nodes =
+        mode === COMBINED_MODE.id
+          ? (() => {
+              // The combined view colours BOTH, so the legend has to name both
+              // or the reader reads the edge ramp as the node one.
+              const temps = buildScale(Object.values(solution?.node_temperatures_C ?? {}));
+              return temps.max === temps.min
+                ? [{ color: temps.colorOf(temps.min), label: `Node ${temps.min.toFixed(1)} °C`, zh: '節點溫度' }]
+                : temps.stops.map((stop) => ({
+                    color: stop.color,
+                    label: `Node ${stop.from.toFixed(0)} – ${stop.to.toFixed(0)} °C`,
+                    zh: '節點溫度',
+                  }));
+            })()
+          : [];
       return [
+        ...nodes,
         ...scale.stops.map((stop) => ({
           color: stop.color,
           label: `${stop.from.toFixed(1)} – ${stop.to.toFixed(1)} °C`,
