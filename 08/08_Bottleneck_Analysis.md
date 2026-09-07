@@ -108,14 +108,17 @@ Bottom: Validation + Actions + Status
 
 ## 9. KPI Cards
 正式 UI 必須顯示：
-- Top Bottleneck
-- Top Score
+- Top Bottleneck（第二行同時顯示該列的 Top Score 與分類）
 - Worst Margin
 - Best 20% Rth Improvement
 - Analyzed Edges
-- Analysis Status
 
-Example：RF Left Base → HSK Base / 92 / 13.2°C / 6.8°C / 47 / COMPLETE。
+Example：RF Left Base → HSK Base（92/100 · Critical）/ 13.2°C / 6.8°C / 47。
+
+原本另列的 Top Score 與 Analysis Status 兩張卡片已移除：Top Score 就是 Top
+Bottleneck 那一列的分數，改放在同一張卡的第二行；Analysis Status 與標題列的
+`Analysis <STATE>` 徽章完全重複。卡片改用全站共用的 `ui/KpiTile`，與 05、06
+同高。
 
 ## 10. Analysis Controls
 - Active Scenario
@@ -338,7 +341,7 @@ Project / Scenario / Solver Status / Analysis Status / Reduction % / Target Metr
 - Continue → 09
 
 ## 32. UI ↔ MD Audit
-正式 PNG 必須看到：固定 App Shell、01–12 Sidebar、03 Deferred、08 active、Active Scenario、6 KPI、Candidate Scope、Rth Reduction、Target Metric、Run/Re-run、Ranking table完整欄位、Bottleneck graph overlay、selected path、Right Inspector tabs、Improvement Preview、Validation、Back to 07、Save Analysis、Create Improvement Proposal、Continue to 09；且不得有 histogram/distribution/executive summary/fake FloTHERM。
+正式 PNG 必須看到：固定 App Shell、01–12 Sidebar、03 Deferred、08 active、Active Scenario、4 KPI、Candidate Scope、Rth Reduction、Target Metric、Run/Re-run、Ranking table完整欄位、Bottleneck graph overlay、selected path、Right Inspector tabs、Improvement Preview、Validation、Back to 07、Save Analysis、Create Improvement Proposal、Continue to 09；且不得有 histogram/distribution/executive summary/fake FloTHERM。
 
 ## 33. Final Principle
 **08 的 Bottleneck 不是「哪個 Rth 最大」，而是「改善哪一段後，完整 General Thermal Graph 重新分配熱流並 re-solve 時，能帶來最大的實際熱風險改善」。**
