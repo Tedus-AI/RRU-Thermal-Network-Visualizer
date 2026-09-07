@@ -381,6 +381,21 @@ describe('solveScenario with finite-Bi spreading', () => {
     expect(outcome.checks.infos.map((entry) => entry.code)).toContain('spreading_biot_applied');
   });
 
+  it('marks figures the message actually contains', () => {
+    const outcome = solveWith(baseNetwork(0.05), 20);
+    const note = outcome.checks.infos.find((entry) => entry.code === 'spreading_biot_applied')!;
+
+    // The panel matches these literally, so a run that no longer occurs would
+    // not fail anywhere — it would just quietly stop being highlighted. One run
+    // per language, each in its own message.
+    expect(note.emphasis).toHaveLength(2);
+    const [en, zh] = note.emphasis!;
+    expect(note.message).toContain(en);
+    expect(note.message_zh).toContain(zh);
+    expect(en).toMatch(/^h_eff [\d.]+ W\/m²K, Bi [\d.]+$/);
+    expect(zh).toMatch(/^h_eff 為 [\d.]+ W\/m²K、Bi 為 [\d.]+$/);
+  });
+
   it('files no note when nothing was refined', () => {
     const net = baseNetwork(0.05);
     net.edges.E_SPREAD.method = 'direct_rth';
