@@ -10,7 +10,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft,
   ArrowRight,
@@ -34,6 +34,7 @@ function rthText(value: number | null): string {
 
 import { ScreenWorkspace } from '@/app/ScreenWorkspace';
 import { projectPath } from '@/app/navigation';
+import { FOCUS_PARAM, consumeFocus } from '@/app/focusLink';
 import { useShellActions } from '@/app/shellActions';
 import { Badge, Button, Modal, Select, Skeleton, TextInput } from '@/ui/primitives';
 import { ResizableSidebar } from '@/ui/ResizableSidebar';
@@ -289,6 +290,21 @@ export function ThermalPathBuilderView() {
   const [prefs, setPrefs] = useState<Record<string, BuilderPref>>({});
   const [selectedComponentId, setSelectedComponentId] = useState<string | null>(null);
   const [selection, setSelection] = useState<GraphSelection>(null);
+
+  /**
+   * Arrived from Screen 08's "Edit in" with an edge to open.
+   *
+   * It waits for the network, because a selection made before the graph loads
+   * points at nothing; the parameter is consumed on the way so a reload does
+   * not re-select an edge the engineer has moved on from.
+   */
+  const [focusParams] = useSearchParams();
+  useEffect(() => {
+    if (!network) return;
+    const edgeId = consumeFocus(focusParams, FOCUS_PARAM.edge, navigate);
+    if (edgeId && network.edges[edgeId]) setSelection({ kind: 'edge', id: edgeId });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [network, focusParams]);
   const [tool, setTool] = useState<CanvasTool>('select');
   const [layoutMode, setLayoutMode] = useState('Auto');
   const [zoom, setZoom] = useState(1);

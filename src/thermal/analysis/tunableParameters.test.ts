@@ -292,6 +292,129 @@ describe('segmentLevers', () => {
     expect(result.rth_after_C_per_W).toBeCloseTo(0.75, 12);
   });
 
+  /**
+   * A boundary edge and a fin-root link have no parameters of their own: the
+   * first is 1/(h·A) with both terms derived, the second is the fin's own
+   * conduction, and all of it comes out of one set of dimensions on Screen 06.
+   * "Resolved in Screen 06" told the reader nothing; the five numbers that
+   * actually move it are the answer.
+   */
+  const FIN_PARAMETERS: Record<string, unknown> = {
+    finGeometryEnabled: true,
+    finHeight_mm: 28,
+    finGap_mm: 6,
+    finThickness_mm: 2,
+    finConductivity_W_mK: 150,
+    finBaseLength_mm: 420,
+    finBaseWidth_mm: 220,
+  };
+
+  const FIN_PROFILE = {
+    id: 'PROF_FIN',
+    name: 'Fins',
+    type: 'convection',
+    representation: 'derived',
+    source: 'Analytical',
+    confidence: 'medium',
+    parameters: FIN_PARAMETERS,
+  } as never;
+
+  const BOUNDARY = {
+    ports: [{ id: 'PORT_1', connected_node_id: 'B', name: 'Fin Surface' }],
+    set: {
+      profiles: [FIN_PROFILE],
+      assignments: [{ id: 'A1', boundary_port_id: 'PORT_1', profile_ids: ['PROF_FIN'], enabled: true }],
+    },
+  } as never;
+
+  it('breaks a boundary edge down into the fin geometry behind it', () => {
+    const network = networkOf(edge('E1', 'convection_hA', {}, 'convection'));
+    const result = segmentLevers(network, 'S1', 'E1', 'Fin → Ambient', 20, BOUNDARY);
+
+    expect(result.levers.map((lever) => lever.key)).toEqual([
+      'finHeight_mm',
+      'finGap_mm',
+      'finThickness_mm',
+      'finConductivity_W_mK',
+      'finBaseLength_mm',
+      'finBaseWidth_mm',
+    ]);
+    expect(result.levers.map((lever) => lever.value)).toEqual([28, 6, 2, 150, 420, 220]);
+    expect(result.levers.every((lever) => lever.screen === '06')).toBe(true);
+    // Every one of them moves h, the efficiency and the area together, so none
+    // of them gets a number invented here.
+    expect(result.levers.every((lever) => lever.target === null)).toBe(true);
+  });
+
+  /**
+   * The fin-root link is the case that reads worst without this. Screen 05
+   * leaves it ideal and the solver replaces it with the fin's own conduction,
+   * so an edge marked `ideal_link` can be carrying 0.028 °C/W while its only
+   * row says "quoted, not derived".
+   */
+  it('breaks the ideal fin-root link down too, not as a quoted number', () => {
+    const link = {
+      ...edge('E1', 'direct_rth', {}, 'conduction'),
+      parameters: { ideal_link: true },
+      scenario_overrides: { S1: { R_C_per_W: 0.0279 } },
+    };
+    const network = networkOf(link);
+    const result = segmentLevers(network, 'S1', 'E1', 'Fin Root → Fin Surface', 20, BOUNDARY);
+
+    expect(result.rth_before_C_per_W).toBeCloseTo(0.0279, 12);
+    expect(result.levers.map((lever) => lever.key)).toContain('finHeight_mm');
+    expect(result.levers.every((lever) => lever.screen === '06')).toBe(true);
+  });
+
+  /**
+   * The regression that made this land as a no-op the first time: every set the
+   * tool has actually saved describes its fins with a height and no
+   * `finGeometryEnabled` flag, so a local `=== true` check found nothing. The
+   * predicate is `usesFinGeometry`, which knows that.
+   */
+  it('recognises a fin profile that predates the enabled flag', () => {
+    const { finGeometryEnabled: _flag, ...withoutFlag } = FIN_PARAMETERS;
+    const boundary = {
+      ports: [{ id: 'PORT_1', connected_node_id: 'B', name: 'Fin Surface' }],
+      set: {
+        profiles: [{ ...(FIN_PROFILE as object), parameters: withoutFlag }],
+        assignments: [
+          { id: 'A1', boundary_port_id: 'PORT_1', profile_ids: ['PROF_FIN'], enabled: true },
+        ],
+      },
+    } as never;
+
+    const network = networkOf(edge('E1', 'convection_hA', {}, 'convection'));
+    const result = segmentLevers(network, 'S1', 'E1', 'Fin → Ambient', 20, boundary);
+    expect(result.levers.map((lever) => lever.key)).toContain('finHeight_mm');
+  });
+
+  /** Without a fin profile there is nothing to break down, and it says so. */
+  it('leaves a boundary edge alone when the surface is not a fin array', () => {
+    const network = networkOf(edge('E1', 'convection_hA', {}, 'convection'));
+    const result = segmentLevers(network, 'S1', 'E1', 'Plate → Ambient', 20, {
+      ports: [],
+      set: null,
+    });
+
+    expect(result.levers).toHaveLength(1);
+    expect(result.levers[0].key).toBe('boundary_h');
+  });
+
+  describe('where "Edit in" points', () => {
+    it('sends an edge parameter to Screen 05 with the edge selected', () => {
+      const network = networkOf(edge('E1', 'tim_thickness_k', TIM));
+      const result = segmentLevers(network, 'S1', 'E1', 'Lid → TIM', 20);
+      expect(result.levers[0].destination).toEqual({ screen: '05', edge_id: 'E1' });
+    });
+
+    it('sends a fin dimension to Screen 06 with the port node', () => {
+      const network = networkOf(edge('E1', 'convection_hA', {}, 'convection'));
+      const result = segmentLevers(network, 'S1', 'E1', 'Fin → Ambient', 20, BOUNDARY);
+      expect(result.levers[0].destination).toEqual({ screen: '06', node_id: 'B' });
+    });
+  });
+
   it('says so rather than inventing levers for an edge that has gone', () => {
     const result = segmentLevers(networkOf(), 'S1', 'MISSING', 'gone', 20);
     expect(result.levers).toHaveLength(0);

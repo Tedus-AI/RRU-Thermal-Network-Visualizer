@@ -8,11 +8,12 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, ArrowRight, Boxes, CheckCheck, Save, XCircle } from 'lucide-react';
 
 import { ScreenWorkspace } from '@/app/ScreenWorkspace';
 import { projectPath } from '@/app/navigation';
+import { FOCUS_PARAM, consumeFocus } from '@/app/focusLink';
 import { useShellActions } from '@/app/shellActions';
 import { Badge, Button, Modal, Skeleton } from '@/ui/primitives';
 import { FloatingPanel } from '@/ui/FloatingPanel';
@@ -95,6 +96,15 @@ export function ComponentManagerView() {
   const [tab, setTab] = useState<CategoryTab>('All');
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  /** Arrived from Screen 08 with a component whose package Rth to open. */
+  const [focusParams] = useSearchParams();
+  useEffect(() => {
+    if (components.length === 0) return;
+    const id = consumeFocus(focusParams, FOCUS_PARAM.component, navigate);
+    if (id && components.some((entry) => entry.id === id)) setSelectedId(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [components, focusParams]);
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>('overview');
   const [focus, setFocus] = useState<FocusRequest | null>(null);
   const [showAdd, setShowAdd] = useState(false);

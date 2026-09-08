@@ -38,6 +38,8 @@
  * design, not an editor of one.
  */
 
+import { FIN_GEOMETRY_KEYS, usesFinGeometry } from '../boundary/calculations';
+import type { BoundaryPort, ScenarioBoundaryConditionSet } from '../boundary/types';
 import { computeRth, type EdgeParameters } from '../resistance/calculators';
 import { edgeResistance } from '../rth';
 import type { EdgeMethod, ThermalEdge, ThermalNetwork } from '../types';
@@ -53,6 +55,17 @@ export interface LeverLimit {
   at_value: number;
   /** `bound` — a physical ceiling; `optimum` — past here it gets worse again. */
   reason: 'bound' | 'optimum';
+}
+
+/** Where the "Edit in" cell sends the reader, and what it should select there. */
+export interface LeverDestination {
+  screen: LeverScreen;
+  /** Screen 05 selects this edge; absent when the field is not on an edge. */
+  edge_id?: string;
+  /** Screen 06 selects the boundary port on this node. */
+  node_id?: string;
+  /** Screen 04 selects this component. */
+  component_id?: string;
 }
 
 export interface Lever {
@@ -73,6 +86,8 @@ export interface Lever {
   /** What the value would have to become. Null only when it cannot get there. */
   target: number | null;
   screen: LeverScreen;
+  /** Where to go to change it. */
+  destination?: LeverDestination;
   /** Set when `target` is null because this input alone cannot get there. */
   limit?: LeverLimit;
   /** Why this one moves the number, in one line. */
@@ -87,6 +102,15 @@ export interface SegmentLevers {
   reduction_pct: number;
   rth_before_C_per_W: number | null;
   rth_after_C_per_W: number | null;
+  /**
+   * What the edge's OWN calculator returns for its stored parameters.
+   *
+   * Not always `rth_before`: a refined spreading edge carries the finite-Bi
+   * resistance as a scenario override, and a fin-root link carries the fin's
+   * conduction. The levers are solved against this one, so anything comparing a
+   * lever's reach to a fraction of the segment has to use it too.
+   */
+  rth_calculated_C_per_W: number | null;
   levers: Lever[];
   /** Set when the method offers no editable input at all. */
   message?: string;
@@ -307,6 +331,126 @@ const METHOD_LEVERS: Record<EdgeMethod, Spec[]> = {
   imported: [],
 };
 
+/**
+ * The fin geometry behind a surface Screen 06 computed.
+ *
+ * A boundary edge and a fin-root link have no parameters of their own — the
+ * first is `1/(h·A)` with both terms derived, the second is the fin's own
+ * conduction, and all of it comes out of one set of dimensions on Screen 06.
+ * Naming those dimensions is the difference between "resolved in Screen 06",
+ * which tells the reader nothing, and a list of the five numbers that actually
+ * move it.
+ *
+ * No targets: every one of them moves h, the fin efficiency and the wetted area
+ * at the same time, and the split between the conduction step and the
+ * convection step moves with them. Screen 06 recomputes the lot; a number
+ * invented here would be a different model's answer.
+ */
+const FIN_LEVERS: ReadonlyArray<Omit<Lever, 'value' | 'target' | 'limit' | 'destination'>> = [
+  {
+    key: FIN_GEOMETRY_KEYS.height,
+    label: 'Fin height',
+    zh: '鰭片高度',
+    unit: 'mm',
+    direction: 'up',
+    exponent: null,
+    screen: '06',
+    note: 'More wetted area — but a longer path to the tip, so the fin efficiency falls.',
+  },
+  {
+    key: FIN_GEOMETRY_KEYS.gap,
+    label: 'Fin gap',
+    zh: '鰭片間距',
+    unit: 'mm',
+    direction: 'down',
+    exponent: null,
+    screen: '06',
+    note: 'Narrower channels fit more fins; too narrow and the air stops moving.',
+  },
+  {
+    key: FIN_GEOMETRY_KEYS.thickness,
+    label: 'Fin thickness',
+    zh: '鰭片厚度',
+    unit: 'mm',
+    direction: 'up',
+    exponent: null,
+    screen: '06',
+    note: 'A thicker fin carries heat to its tip better, at the cost of a channel.',
+  },
+  {
+    key: FIN_GEOMETRY_KEYS.conductivity,
+    label: 'Fin conductivity k',
+    zh: '鰭片熱傳導率',
+    unit: 'W/m·K',
+    direction: 'up',
+    exponent: null,
+    screen: '06',
+    note: 'Raises the fin efficiency without touching a dimension.',
+  },
+  {
+    key: FIN_GEOMETRY_KEYS.baseLength,
+    label: 'Finned length',
+    zh: '鰭片區長度',
+    unit: 'mm',
+    direction: 'up',
+    exponent: null,
+    screen: '06',
+  },
+  {
+    key: FIN_GEOMETRY_KEYS.baseWidth,
+    label: 'Finned width',
+    zh: '鰭片區寬度',
+    unit: 'mm',
+    direction: 'up',
+    exponent: null,
+    screen: '06',
+  },
+];
+
+/** What Screen 06 knows about the surface at one end of this edge. */
+export interface BoundaryContext {
+  ports: readonly BoundaryPort[];
+  set: ScenarioBoundaryConditionSet | null;
+}
+
+/**
+ * The fin rows for the port on one of an edge's two ends, with today's numbers.
+ *
+ * Returns null when neither end carries a port, or the port's profile does not
+ * describe a fin array — a stated h and area has nothing to break down.
+ */
+function finLevers(
+  context: BoundaryContext | undefined,
+  nodeIds: readonly string[],
+): Lever[] | null {
+  if (!context?.set) return null;
+
+  for (const nodeId of nodeIds) {
+    const port = context.ports.find((entry) => entry.connected_node_id === nodeId);
+    if (!port) continue;
+
+    const assigned = context.set.assignments
+      .filter((entry) => entry.enabled && entry.boundary_port_id === port.id)
+      .flatMap((entry) => entry.profile_ids);
+    // `usesFinGeometry` and nothing hand-rolled: the flag is only one of the
+    // ways a profile is fin-derived — a stored set written before it existed
+    // says so with a height, and on a finned port it is the default. A local
+    // `=== true` check missed every set the tool has actually saved.
+    const profile = context.set.profiles.find(
+      (entry) => assigned.includes(entry.id) && usesFinGeometry(entry, port),
+    );
+    if (!profile) continue;
+
+    return FIN_LEVERS.map((spec) => ({
+      ...spec,
+      value: numeric(profile.parameters[spec.key]),
+      target: null,
+      destination: { screen: '06' as const, node_id: nodeId },
+    }));
+  }
+  return null;
+}
+
 /** The edge types whose resistance is a package number Screen 04 owns. */
 const PACKAGE_TYPES = new Set(['package_rjc', 'package_rjb', 'package_rja']);
 
@@ -448,6 +592,7 @@ export function segmentLevers(
   edgeId: string,
   label: string,
   reductionPct: number,
+  boundary?: BoundaryContext,
 ): SegmentLevers {
   const edge: ThermalEdge | undefined = network.edges[edgeId];
   const before = edge ? edgeResistance(edge, scenarioId) : null;
@@ -463,6 +608,7 @@ export function segmentLevers(
       reduction_pct: reductionPct,
       rth_before_C_per_W: null,
       rth_after_C_per_W: null,
+      rth_calculated_C_per_W: null,
       levers: [],
       message: 'This segment is no longer in the network.',
     };
@@ -476,7 +622,11 @@ export function segmentLevers(
     reduction_pct: reductionPct,
     rth_before_C_per_W: before,
     rth_after_C_per_W: after,
+    rth_calculated_C_per_W: computeRth(edge.method, edge.parameters ?? {}).value,
   };
+
+  const componentId =
+    network.nodes[edge.from]?.component_ref ?? network.nodes[edge.to]?.component_ref ?? undefined;
 
   if (PACKAGE_TYPES.has(edge.type)) {
     return {
@@ -492,10 +642,30 @@ export function segmentLevers(
           exponent: 1,
           target: targetValue(before, 1, reductionPct),
           screen: '04',
+          destination: { screen: '04', component_id: componentId },
           note: 'A part-level number: a different package, die attach, or vendor figure.',
         },
       ],
     };
+  }
+
+  /*
+     A surface Screen 06 computed has no parameters of its own to offer.
+
+     Two shapes of it reach here: a boundary edge, whose 1/(h·A) is derived
+     wholly from the geometry; and the fin-root link, which Screen 05 leaves
+     ideal and the solver replaces with the fin's own conduction once that
+     geometry exists — which is why an edge marked `ideal_link` can still be
+     carrying 0.028 °C/W. Both used to show one useless row. Both now show the
+     dimensions the number actually came out of.
+  */
+  const derivedSurface =
+    edge.method === 'convection_hA' ||
+    edge.method === 'radiation_hA' ||
+    edge.parameters?.ideal_link === true;
+  if (derivedSurface) {
+    const fins = finLevers(boundary, [edge.to, edge.from]);
+    if (fins && fins.length > 0) return { ...base, levers: fins };
   }
 
   const specs = METHOD_LEVERS[edge.method] ?? [];
@@ -520,7 +690,7 @@ export function segmentLevers(
    * the field the row points at — and "16.9 % off this segment" means the same
    * thing either way.
    */
-  const own = computeRth(edge.method, parameters).value;
+  const own = base.rth_calculated_C_per_W;
   const wanted = own != null && reductionPct > 0 ? own * (1 - reductionPct / 100) : null;
 
   const quoted = edge.method === 'direct_rth' || edge.method === 'contact_area';
@@ -552,16 +722,19 @@ export function segmentLevers(
           ...rest,
           value,
           target: null,
+          destination: { screen: rest.screen, edge_id: edge.id },
           limit:
             best != null
               ? { best_rth_C_per_W: best, at_value: max, reason: 'bound' as const }
               : undefined,
         };
       }
-      return { ...rest, value, target: exact };
+      return { ...rest, value, target: exact, destination: { screen: rest.screen, edge_id: edge.id } };
     }
 
-    if (value == null || wanted == null) return { ...rest, value, target: null };
+    if (value == null || wanted == null) {
+      return { ...rest, value, target: null, destination: { screen: rest.screen, edge_id: edge.id } };
+    }
 
     /*
        The base area is not this edge's alone to change.
@@ -577,6 +750,7 @@ export function segmentLevers(
         value,
         target: null,
         screen: '06',
+        destination: { screen: '06', node_id: edge.to },
         note: 'Also sets the convection area and the Bi behind it — a Screen 06 change, not this edge alone.',
       };
     }
@@ -601,11 +775,12 @@ export function segmentLevers(
       wanted,
       max,
     );
-    if (forward.value != null) return { ...rest, value, target: forward.value };
+    const destination = { screen: rest.screen, edge_id: edge.id };
+    if (forward.value != null) return { ...rest, value, target: forward.value, destination };
 
     const back = solveForTarget(edge.method, parameters, spec.key, value, other, wanted);
     if (back.value != null) {
-      return { ...rest, value, direction: other, target: back.value };
+      return { ...rest, value, direction: other, target: back.value, destination };
     }
 
     // Neither reaches it; report whichever gets further, and say which way.
@@ -613,7 +788,14 @@ export function segmentLevers(
       back.limit && (!forward.limit || back.limit.best_rth_C_per_W < forward.limit.best_rth_C_per_W)
         ? { limit: back.limit, direction: other }
         : { limit: forward.limit, direction: spec.direction };
-    return { ...rest, value, direction: best.direction, target: null, limit: best.limit };
+    return {
+      ...rest,
+      value,
+      direction: best.direction,
+      target: null,
+      destination,
+      limit: best.limit,
+    };
   });
 
   return { ...base, levers };
