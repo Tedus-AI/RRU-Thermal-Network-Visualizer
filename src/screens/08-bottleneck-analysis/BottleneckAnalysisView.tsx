@@ -424,6 +424,20 @@ export function BottleneckAnalysisView() {
     return marks;
   }, [segments, reductions]);
 
+  /**
+   * The three least-margin parts, marked where they sit on the whole machine.
+   *
+   * The deck names them 1 / 2 / 3 and the focused view marks the segments of
+   * whichever one is selected. Widening to the whole machine used to lose both:
+   * 113 nodes, one of them selected, and nothing saying that the other two on
+   * the deck are on this picture as well. Same badge, same pulse, anchored to
+   * the part instead of to a segment.
+   */
+  const rankedNodes = useMemo(
+    () => new Map(ranked.map((entry, index) => [entry.node_id, { rank: index + 1 }])),
+    [ranked],
+  );
+
   /** The graph paints the what-if while one is live, and the baseline otherwise. */
   const graphSolution = useMemo(() => {
     if (!solution) return null;
@@ -998,6 +1012,7 @@ export function BottleneckAnalysisView() {
                 solution={graphSolution}
                 mode={mode}
                 tunedEdges={wholeMachine ? undefined : tunedEdges}
+                rankedNodes={wholeMachine ? rankedNodes : undefined}
                 display={GRAPH_DISPLAY}
                 scenarioId={scenarioId}
                 selectedNodeId={selectedNodeId}
@@ -1110,7 +1125,7 @@ export function BottleneckAnalysisView() {
             index={2}
             title="Resistance Chain"
             zh="整條熱阻鏈路"
-            className="h-full min-h-[26rem]"
+            className="h-full min-h-[26rem] xl:min-h-0"
             actions={
               <span className="shrink-0 whitespace-nowrap text-[10px] text-ink-400">
                 {segments.length} seg · 0.1 %

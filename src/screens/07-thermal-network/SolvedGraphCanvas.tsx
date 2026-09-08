@@ -279,7 +279,7 @@ export function solvedStylesheet(): StylesheetCSS[] {
         // rectangle, which around a 20 px circle reads as a square smudge
         // rather than a halo.
         'overlay-shape': 'ellipse',
-        'overlay-padding': 6,
+        'overlay-padding': 3,
         'overlay-opacity': 0.25,
       },
     },
@@ -287,8 +287,14 @@ export function solvedStylesheet(): StylesheetCSS[] {
       // The pulse. Cytoscape has no keyframes, so the canvas toggles this class
       // on a timer; a halo that grows and shrinks reads at a glance where a
       // static colour on a 20px circle does not.
+      //
+      // 3 → 6 px. The first pass breathed 6 → 12, where the widest step was a
+      // 44 px disc around a 20 px badge — big enough to reach the elements
+      // either side of it. The step that used to be the SMALLEST is now the
+      // largest, so the marker still moves without spreading over its
+      // neighbours; the opacity carries the rest of the beat.
       selector: 'node.tuned-badge.tuned-active.tuned-pulse',
-      style: { 'overlay-shape': 'ellipse', 'overlay-padding': 12, 'overlay-opacity': 0.45 },
+      style: { 'overlay-shape': 'ellipse', 'overlay-padding': 6, 'overlay-opacity': 0.5 },
     },
     ...parallelBranchStyles(),
     parallelBraceStyle(HSK_BUS_COLOR),
@@ -309,6 +315,16 @@ export function solvedStylesheet(): StylesheetCSS[] {
  */
 function positionTunedBadges(cy: Core): void {
   cy.nodes('.tuned-badge').forEach((badge) => {
+    const anchorId = badge.data('anchorNodeId') as string | undefined;
+    if (anchorId) {
+      const node = cy.getElementById(anchorId);
+      if (!node || node.length === 0) return;
+      const at = node.position();
+      if (!Number.isFinite(at.x)) return;
+      // Outside the node's own box, so it never sits on the name inside it.
+      badge.position({ x: at.x - node.width() / 2 - BADGE_GAP_PX, y: at.y });
+      return;
+    }
     const edge = cy.getElementById(badge.data('edgeId') as string);
     if (!edge || edge.length === 0) return;
     const from = edge.source().position();
@@ -326,6 +342,14 @@ function positionTunedBadges(cy: Core): void {
  * ΔT text and the two read as one smudged glyph.
  */
 const BADGE_LIFT_PX = 36;
+
+/**
+ * How far left of a part its rank badge sits.
+ *
+ * Half the badge (10) plus its halo (6) plus a little air, measured from the
+ * node's own edge — closer and the halo bleeds over the node's border.
+ */
+const BADGE_GAP_PX = 20;
 
 /** How fast the halo on a cut segment breathes. */
 const PULSE_MS = 620;
@@ -383,6 +407,13 @@ export function buildElements(
    * beside them in its list, and whether that one is actually cut right now.
    */
   tunedEdges?: ReadonlyMap<string, { rank: number; active: boolean }>,
+  /**
+   * Parts Screen 08 has ranked by margin, by node id, for the whole-machine
+   * view: the same 1 / 2 / 3 the deck shows, put back on the picture. Without
+   * it the switch to the whole machine drops the reader into 113 nodes with no
+   * indication of which three the screen is about.
+   */
+  rankedNodes?: ReadonlyMap<string, { rank: number }>,
 ): ElementDefinition[] {
   const elements: ElementDefinition[] = [];
   const solved =
@@ -694,6 +725,34 @@ export function buildElements(
     }
   }
 
+  /*
+     The same badge, anchored to a part instead of a segment.
+
+     On the whole machine there is no chain to number, so the three the deck
+     ranks are marked where they sit — to the LEFT of the node, which is the one
+     side nothing else uses: the label is inside the node, the ΔT of the edge
+     above it sits over the line, and the bus braces come in from the right.
+     Always lit, because unlike a segment there is no "offered but not cut"
+     state for a part: these three ARE the answer the screen is giving.
+  */
+  if (rankedNodes && rankedNodes.size > 0) {
+    for (const [nodeId, mark] of rankedNodes) {
+      const node = network.nodes[nodeId];
+      if (!node || node.disabled || hidden.has(nodeId)) continue;
+      elements.push({
+        group: 'nodes',
+        data: {
+          id: `${nodeId}__RANK_BADGE`,
+          anchorNodeId: nodeId,
+          label: String(mark.rank),
+        },
+        classes: 'view-only tuned-badge tuned-active',
+        selectable: false,
+        grabbable: false,
+      });
+    }
+  }
+
   return elements;
 }
 
@@ -705,6 +764,8 @@ export const SolvedGraphCanvas = forwardRef<
     mode: ResultMode;
     /** Screen 08's marked segments; absent on 07, which marks nothing. */
     tunedEdges?: ReadonlyMap<string, { rank: number; active: boolean }>;
+    /** Screen 08's ranked parts, marked on the whole machine. */
+    rankedNodes?: ReadonlyMap<string, { rank: number }>;
     display: GraphDisplayOptions;
     scenarioId: string;
     selectedNodeId: string | null;
@@ -725,6 +786,7 @@ export const SolvedGraphCanvas = forwardRef<
     solution,
     mode,
     tunedEdges,
+    rankedNodes,
     display,
     scenarioId,
     selectedNodeId,
@@ -774,8 +836,9 @@ export const SolvedGraphCanvas = forwardRef<
         extraHiddenNodeIds,
         nodeLabelOverrides,
         tunedEdges,
+        rankedNodes,
       ),
-    [network, solution, mode, display, scenarioId, layoutMode, scales, hiddenComponentIds, extraHiddenNodeIds, nodeLabelOverrides, tunedEdges],
+    [network, solution, mode, display, scenarioId, layoutMode, scales, hiddenComponentIds, extraHiddenNodeIds, nodeLabelOverrides, tunedEdges, rankedNodes],
   );
 
   useEffect(() => {
@@ -951,8 +1014,10 @@ export const SolvedGraphCanvas = forwardRef<
    * already gives `.tuned-active`.
    */
   const tunedActive = useMemo(
-    () => [...(tunedEdges?.values() ?? [])].some((mark) => mark.active),
-    [tunedEdges],
+    () =>
+      (rankedNodes?.size ?? 0) > 0 ||
+      [...(tunedEdges?.values() ?? [])].some((mark) => mark.active),
+    [tunedEdges, rankedNodes],
   );
 
   useEffect(() => {
