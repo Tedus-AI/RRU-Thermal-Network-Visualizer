@@ -1099,6 +1099,7 @@ export function BottleneckAnalysisView() {
             beside it is what pays either way. Same seam as 05 and 06. */}
         <ResizableSidebar
           id="tnv.08.chain"
+          side="right"
           defaultWidth={368}
           labelEn="the resistance chain"
           labelZh="整條熱阻鏈路"
@@ -1134,7 +1135,19 @@ export function BottleneckAnalysisView() {
                     ),
                   }))
                 }
-                onReset={() => setReductions({})}
+                onReset={() =>
+                  setReductions(
+                    editing
+                      ? Object.fromEntries(
+                          editing.segments.map((entry) => [entry.edge_id, entry.reduction_pct]),
+                        )
+                      : {},
+                  )
+                }
+                onExit={() => {
+                  setEditingStudyId(null);
+                  setReductions({});
+                }}
                 editingName={editing?.target_node_name ?? null}
                 onAdd={() => commitStudy('add')}
                 onSave={() => commitStudy('overwrite')}
