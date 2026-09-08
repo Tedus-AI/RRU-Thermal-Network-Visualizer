@@ -155,3 +155,34 @@ export function downloadCsv(filename: string, contents: string): void {
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
 }
+
+/**
+ * Which of the three write buttons are live, given where the tuner stands.
+ *
+ * Add and Save are one decision, not two: a draft can only be added and a
+ * record being edited can only be written over, so the pair says which of
+ * "new row" and "same row" this click means. Reset is separate — it is the
+ * only one of the three that changes nothing outside the screen.
+ *
+ * It lives here, tested, because the rule is easy to state and was twice got
+ * wrong in the component: first with no way to leave a record at all, then
+ * with a way out that cleared the cuts on the way, which left Add grey for a
+ * second reason and threw away the reader's work.
+ */
+export function studyButtons({
+  readOnly,
+  editing,
+  dirty,
+}: {
+  readOnly: boolean;
+  /** True while the sliders are attached to a saved study. */
+  editing: boolean;
+  /** True while they say something the study — or the solve — does not. */
+  dirty: boolean;
+}): { add: boolean; save: boolean; reset: boolean } {
+  return {
+    add: !readOnly && !editing && dirty,
+    save: !readOnly && editing && dirty,
+    reset: dirty,
+  };
+}
