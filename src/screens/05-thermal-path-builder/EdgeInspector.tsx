@@ -8,7 +8,12 @@
  *   • a missing parameter yields UNRESOLVED, never 0 (05 §22, §45, AC-05-35).
  */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+
+import { revealField } from '@/app/focusLink';
+
+/** Long enough for the search to find the box and the flash to finish. */
+const REVEAL_WINDOW_MS = 6000;
 import { Link2, Link2Off, Power, RefreshCw, Trash2 } from 'lucide-react';
 
 import { Badge, Button, NumberInput, Select, TextInput } from '@/ui/primitives';
@@ -404,6 +409,8 @@ function statusOf(
 
 export function EdgeInspector({
   embedded = false,
+  focusField,
+  onFocusFieldConsumed,
   edge,
   network,
   readOnly,
@@ -415,6 +422,15 @@ export function EdgeInspector({
 }: {
   /** FloatingPanel already owns the title and scrolling when embedded. */
   embedded?: boolean;
+  /**
+   * DOM id of an input a Screen 08 "Edit in" link asked for.
+   *
+   * The tab has to be opened before the box exists, which is why this arrives
+   * here rather than being handled entirely by the caller: the inspector is the
+   * only thing that knows which tab a field is on.
+   */
+  focusField?: string | null;
+  onFocusFieldConsumed?: () => void;
   edge: ThermalEdge;
   network: ThermalNetwork;
   readOnly: boolean;
@@ -427,6 +443,35 @@ export function EdgeInspector({
   onReverse: () => void;
 }) {
   const [tab, setTab] = useState<Tab>('overview');
+
+  /**
+   * A Screen 08 link asked for one of the boxes on this inspector.
+   *
+   * The request is copied into local state before the caller is told it has
+   * been taken, because `revealField` polls: telling the caller inside the same
+   * effect clears the prop, which re-runs the effect, which cancels the search
+   * before the field it is waiting for has rendered. The tab has to be opened
+   * first — the box does not exist until it is.
+   */
+  const [pendingField, setPendingField] = useState<string | null>(focusField ?? null);
+
+  useEffect(() => {
+    if (!focusField) return;
+    setPendingField(focusField);
+    onFocusFieldConsumed?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusField]);
+
+  useEffect(() => {
+    if (!pendingField) return;
+    if (pendingField.startsWith('param-')) setTab('parameters');
+    const cancel = revealField(pendingField);
+    const done = setTimeout(() => setPendingField(null), REVEAL_WINDOW_MS);
+    return () => {
+      cancel();
+      clearTimeout(done);
+    };
+  }, [pendingField]);
   // A scenario projection outranks the stored ideal_link flag: once fin
   // geometry is stated the same step carries the fin's own conduction, and
   // presenting it as an isothermal link would contradict the resistance shown

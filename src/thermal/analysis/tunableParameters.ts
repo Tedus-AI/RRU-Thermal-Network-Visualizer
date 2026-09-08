@@ -66,6 +66,14 @@ export interface LeverDestination {
   node_id?: string;
   /** Screen 04 selects this component. */
   component_id?: string;
+  /**
+   * DOM id of the input to land on, once the object is open.
+   *
+   * The receiving screens already give every input a deterministic id —
+   * `param-<key>` on 05, `bc-fin-<key>` on 06, `ins-rjc` on 04 — so the link
+   * names the box rather than the form it is on.
+   */
+  field?: string;
 }
 
 export interface Lever {
@@ -445,10 +453,24 @@ function finLevers(
       ...spec,
       value: numeric(profile.parameters[spec.key]),
       target: null,
-      destination: { screen: '06' as const, node_id: nodeId },
+      destination: { screen: '06' as const, node_id: nodeId, field: `bc-fin-${spec.key}` },
     }));
   }
   return null;
+}
+
+/**
+ * Where one edge-parameter row points.
+ *
+ * Screen 05 gives every method parameter the id `param-<key>`, so the link can
+ * name the box. The two rows that are routed to 06 instead — the plate area
+ * under a finite Bi — have no single input over there to land on, since what
+ * they describe is a surface rather than a field.
+ */
+function destinationFor(screen: LeverScreen, edgeId: string, key: string): LeverDestination {
+  return screen === '05'
+    ? { screen, edge_id: edgeId, field: `param-${key}` }
+    : { screen, edge_id: edgeId };
 }
 
 /** The edge types whose resistance is a package number Screen 04 owns. */
@@ -642,7 +664,7 @@ export function segmentLevers(
           exponent: 1,
           target: targetValue(before, 1, reductionPct),
           screen: '04',
-          destination: { screen: '04', component_id: componentId },
+          destination: { screen: '04', component_id: componentId, field: 'ins-rjc' },
           note: 'A part-level number: a different package, die attach, or vendor figure.',
         },
       ],
@@ -722,18 +744,18 @@ export function segmentLevers(
           ...rest,
           value,
           target: null,
-          destination: { screen: rest.screen, edge_id: edge.id },
+          destination: destinationFor(rest.screen, edge.id, spec.key),
           limit:
             best != null
               ? { best_rth_C_per_W: best, at_value: max, reason: 'bound' as const }
               : undefined,
         };
       }
-      return { ...rest, value, target: exact, destination: { screen: rest.screen, edge_id: edge.id } };
+      return { ...rest, value, target: exact, destination: destinationFor(rest.screen, edge.id, spec.key) };
     }
 
     if (value == null || wanted == null) {
-      return { ...rest, value, target: null, destination: { screen: rest.screen, edge_id: edge.id } };
+      return { ...rest, value, target: null, destination: destinationFor(rest.screen, edge.id, spec.key) };
     }
 
     /*
@@ -775,7 +797,7 @@ export function segmentLevers(
       wanted,
       max,
     );
-    const destination = { screen: rest.screen, edge_id: edge.id };
+    const destination = destinationFor(rest.screen, edge.id, spec.key);
     if (forward.value != null) return { ...rest, value, target: forward.value, destination };
 
     const back = solveForTarget(edge.method, parameters, spec.key, value, other, wanted);

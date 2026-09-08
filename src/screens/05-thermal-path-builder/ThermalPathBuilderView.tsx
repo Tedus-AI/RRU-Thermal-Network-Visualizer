@@ -299,10 +299,15 @@ export function ThermalPathBuilderView() {
    * not re-select an edge the engineer has moved on from.
    */
   const [focusParams] = useSearchParams();
+  const [focusField, setFocusField] = useState<string | null>(null);
   useEffect(() => {
     if (!network) return;
     const edgeId = consumeFocus(focusParams, FOCUS_PARAM.edge, navigate);
-    if (edgeId && network.edges[edgeId]) setSelection({ kind: 'edge', id: edgeId });
+    const field = consumeFocus(focusParams, FOCUS_PARAM.field, navigate);
+    if (edgeId && network.edges[edgeId]) {
+      setSelection({ kind: 'edge', id: edgeId });
+      setFocusField(field);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [network, focusParams]);
   const [tool, setTool] = useState<CanvasTool>('select');
@@ -1674,6 +1679,8 @@ export function ThermalPathBuilderView() {
           ) : (
             <EdgeInspector
               embedded
+              focusField={focusField}
+              onFocusFieldConsumed={() => setFocusField(null)}
               edge={selectedEdge!}
               network={network}
               readOnly={readOnly}

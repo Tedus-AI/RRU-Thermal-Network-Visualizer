@@ -402,16 +402,38 @@ describe('segmentLevers', () => {
   });
 
   describe('where "Edit in" points', () => {
-    it('sends an edge parameter to Screen 05 with the edge selected', () => {
+    /**
+     * Not just the screen: the box. Screen 05 gives every method parameter the
+     * id `param-<key>`, so each row names its own input rather than the form it
+     * happens to be on.
+     */
+    it('sends each edge parameter to its own input on Screen 05', () => {
       const network = networkOf(edge('E1', 'tim_thickness_k', TIM));
       const result = segmentLevers(network, 'S1', 'E1', 'Lid → TIM', 20);
-      expect(result.levers[0].destination).toEqual({ screen: '05', edge_id: 'E1' });
+      expect(result.levers.map((lever) => lever.destination)).toEqual([
+        { screen: '05', edge_id: 'E1', field: 'param-thickness_mm' },
+        { screen: '05', edge_id: 'E1', field: 'param-k_W_mK' },
+        { screen: '05', edge_id: 'E1', field: 'param-area_mm2' },
+      ]);
     });
 
-    it('sends a fin dimension to Screen 06 with the port node', () => {
+    it('sends each fin dimension to its own input on Screen 06', () => {
       const network = networkOf(edge('E1', 'convection_hA', {}, 'convection'));
       const result = segmentLevers(network, 'S1', 'E1', 'Fin → Ambient', 20, BOUNDARY);
-      expect(result.levers[0].destination).toEqual({ screen: '06', node_id: 'B' });
+      expect(result.levers[0].destination).toEqual({
+        screen: '06',
+        node_id: 'B',
+        field: 'bc-fin-finHeight_mm',
+      });
+      expect(result.levers.map((lever) => lever.destination?.field)).toEqual(
+        result.levers.map((lever) => `bc-fin-${lever.key}`),
+      );
+    });
+
+    it('sends a package resistance to the Rjc box on Screen 04', () => {
+      const network = networkOf(edge('E1', 'direct_rth', { R_C_per_W: 0.16 }, 'package_rjc'));
+      const result = segmentLevers(network, 'S1', 'E1', 'Junction → Lid', 25);
+      expect(result.levers[0].destination?.field).toBe('ins-rjc');
     });
   });
 
