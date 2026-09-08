@@ -1159,10 +1159,10 @@ export function BottleneckAnalysisView() {
                       : {},
                   )
                 }
-                onExit={() => {
-                  setEditingStudyId(null);
-                  setReductions({});
-                }}
+                // Detach from the record, keep the cuts: what is on screen
+                // becomes a new draft, so Add is live the moment Exit is
+                // pressed rather than one slider move later.
+                onExit={() => setEditingStudyId(null)}
                 editingName={editing?.target_node_name ?? null}
                 onAdd={() => commitStudy('add')}
                 onSave={() => commitStudy('overwrite')}

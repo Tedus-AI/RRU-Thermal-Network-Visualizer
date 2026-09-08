@@ -29,7 +29,7 @@ import { biTitle } from '@/ui/FieldLabel';
 import type { ChainSegment } from '@/thermal/analysis/whatIf';
 import type { MarginRank } from '@/thermal/analysis/marginRanking';
 
-import { num, rth, signed } from './analysisViewModel';
+import { num, rth, signed, studyButtons } from './analysisViewModel';
 
 export const REDUCTION_STEP = 0.1;
 export const REDUCTION_MAX = 90;
@@ -75,6 +75,7 @@ export function SegmentTuner({
   onSave: () => void;
 }) {
   const gain = projected ? projected.margin_C - target.margin_C : 0;
+  const gate = studyButtons({ readOnly, editing: Boolean(editingName), dirty });
 
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col gap-2">
@@ -138,7 +139,15 @@ export function SegmentTuner({
       <div className="shrink-0">
         {/* The way out. Without it "editing" was a state with an entrance and
             no exit: Add stayed grey, and the only escape was to pick a
-            different part. */}
+            different part.
+
+            It detaches the record and KEEPS the values on screen. Clearing
+            them as well left Add grey for a second reason — nothing to add —
+            which is the same dead end wearing a different hat, and it threw
+            away the adjustment the reader had just made. Leaving them makes
+            "Exit then Add" mean save this as a new study instead of over the
+            old one, which is the reason to leave a record mid-edit at all.
+            Reset / 歸零 is next to it for the reader who did want them gone. */}
         {editingName && (
           <div className="mb-1 flex items-center gap-1.5">
             <p className="min-w-0 flex-1 truncate text-[10px] text-ink-400" title={editingName}>
@@ -149,8 +158,8 @@ export function SegmentTuner({
               type="button"
               onClick={onExit}
               title={biTitle(
-                'Leave this study and start a fresh one',
-                '結束編輯，回到全新的一筆',
+                'Stop editing this study — these values stay, as a new one',
+                '結束編輯，目前數值保留為全新的一筆',
               )}
               className="flex shrink-0 items-center gap-1 rounded border border-line-strong px-1.5 py-0.5 text-[10px] font-semibold text-ink-500 hover:bg-surface-muted hover:text-ink-900"
             >
@@ -164,7 +173,7 @@ export function SegmentTuner({
             variant={editingName ? 'secondary' : 'primary'}
             icon={<FilePlus2 size={14} />}
             className="h-8 !text-[12px]"
-            disabled={readOnly || Boolean(editingName) || !dirty}
+            disabled={!gate.add}
             title={biTitle(
               editingName
                 ? 'Already a saved study — Save writes over it'
@@ -179,7 +188,7 @@ export function SegmentTuner({
             variant={editingName ? 'primary' : 'secondary'}
             icon={<Save size={14} />}
             className="h-8 !text-[12px]"
-            disabled={readOnly || !editingName || !dirty}
+            disabled={!gate.save}
             title={biTitle(
               editingName ? 'Write over the study being edited' : 'Nothing to write over yet',
               editingName ? '覆蓋目前編輯中的紀錄' : '尚未有可覆蓋的紀錄',
@@ -194,7 +203,7 @@ export function SegmentTuner({
           <Button
             icon={<RotateCcw size={14} />}
             className="h-8 !text-[12px]"
-            disabled={!dirty}
+            disabled={!gate.reset}
             title={biTitle(
               editingName ? 'Back to the saved values' : 'Back to the solved values',
               editingName ? '回到已儲存的數值' : '回到求解結果',
