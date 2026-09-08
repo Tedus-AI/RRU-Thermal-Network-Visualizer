@@ -238,6 +238,54 @@ export function solvedStylesheet(): StylesheetCSS[] {
         'z-index': 10,
       },
     },
+    /*
+       The marker over a segment being tuned.
+
+       A view-only node rather than a second edge label, because Cytoscape gives
+       one element ONE text background: the edge's own label already owns it and
+       already sits above the line. A node can be a real badge — a filled circle
+       with a number in it — and can be placed at the midpoint of the segment it
+       belongs to, which is the only position that is unambiguous when four
+       segments in a row are marked.
+    */
+    {
+      selector: 'node.tuned-badge',
+      style: {
+        width: 20,
+        height: 20,
+        shape: 'ellipse',
+        'background-color': '#94a3b8',
+        'border-width': 2,
+        'border-color': '#ffffff',
+        label: 'data(label)',
+        color: '#ffffff',
+        'font-size': 11,
+        'font-weight': 700,
+        'text-valign': 'center',
+        'text-halign': 'center',
+        'text-background-opacity': 0,
+        events: 'no',
+        'z-index': 30,
+      },
+    },
+    {
+      // Actually cut, as opposed to merely offered: this is the one the reader
+      // is asking "which segment am I moving?" about.
+      selector: 'node.tuned-badge.tuned-active',
+      style: {
+        'background-color': '#ea580c',
+        'overlay-color': '#f97316',
+        'overlay-padding': 6,
+        'overlay-opacity': 0.25,
+      },
+    },
+    {
+      // The pulse. Cytoscape has no keyframes, so the canvas toggles this class
+      // on a timer; a halo that grows and shrinks reads at a glance where a
+      // static colour on a 20px circle does not.
+      selector: 'node.tuned-badge.tuned-active.tuned-pulse',
+      style: { 'overlay-padding': 12, 'overlay-opacity': 0.45 },
+    },
     ...parallelBranchStyles(),
     parallelBraceStyle(HSK_BUS_COLOR),
     {
@@ -246,6 +294,37 @@ export function solvedStylesheet(): StylesheetCSS[] {
     },
   ] as unknown as StylesheetCSS[];
 }
+
+/**
+ * Put every tuned badge over the middle of the segment it marks.
+ *
+ * Above the line by a badge's height, so it never lands on the edge's own
+ * label — that one is already `text-margin-y: -11` and centred, and two things
+ * fighting for the same 20 px is how a marker becomes noise. Called from the
+ * same snapshot the buses are placed in, which is after the layout has settled.
+ */
+function positionTunedBadges(cy: Core): void {
+  cy.nodes('.tuned-badge').forEach((badge) => {
+    const edge = cy.getElementById(badge.data('edgeId') as string);
+    if (!edge || edge.length === 0) return;
+    const from = edge.source().position();
+    const to = edge.target().position();
+    if (!Number.isFinite(from.x) || !Number.isFinite(to.x)) return;
+    badge.position({ x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 - BADGE_LIFT_PX });
+  });
+}
+
+/**
+ * Clear of the edge's own label, which sits 11 px above the line.
+ *
+ * 11 for the label's offset, half of its ~15 px box, half of the badge's 20,
+ * and the 6 px halo an active one wears — under about 34 the halo lands on the
+ * ΔT text and the two read as one smudged glyph.
+ */
+const BADGE_LIFT_PX = 36;
+
+/** How fast the halo on a cut segment breathes. */
+const PULSE_MS = 620;
 
 /** Line width from |Q|, 1.5–9 px. Thickness is magnitude only (07 §22). */
 function widthForFlow(magnitude: number, max: number): number {
@@ -295,6 +374,11 @@ export function buildElements(
    */
   extraHiddenNodeIds?: ReadonlySet<string>,
   nodeLabelOverrides?: ReadonlyMap<string, string>,
+  /**
+   * Segments Screen 08 is offering, by edge id: which number the reader sees
+   * beside them in its list, and whether that one is actually cut right now.
+   */
+  tunedEdges?: ReadonlyMap<string, { rank: number; active: boolean }>,
 ): ElementDefinition[] {
   const elements: ElementDefinition[] = [];
   const solved =
@@ -580,6 +664,32 @@ export function buildElements(
     }
   }
 
+  /*
+     One badge per marked segment, as a view-only node.
+
+     `layout-only`-style nodes are excluded from dagre and positioned by hand
+     after it settles — see `positionTunedBadges` — so a badge never pushes the
+     graph around, it only sits on it.
+  */
+  if (tunedEdges && tunedEdges.size > 0) {
+    for (const [edgeId, mark] of tunedEdges) {
+      const edge = network.edges[edgeId];
+      if (!edge || !edge.enabled) continue;
+      if (hidden.has(edge.from) || hidden.has(edge.to)) continue;
+      elements.push({
+        group: 'nodes',
+        data: {
+          id: `${edgeId}__TUNED_BADGE`,
+          edgeId,
+          label: String(mark.rank),
+        },
+        classes: `view-only tuned-badge${mark.active ? ' tuned-active' : ''}`,
+        selectable: false,
+        grabbable: false,
+      });
+    }
+  }
+
   return elements;
 }
 
@@ -589,6 +699,8 @@ export const SolvedGraphCanvas = forwardRef<
     network: ThermalNetwork;
     solution: ThermalSolution | null;
     mode: ResultMode;
+    /** Screen 08's marked segments; absent on 07, which marks nothing. */
+    tunedEdges?: ReadonlyMap<string, { rank: number; active: boolean }>;
     display: GraphDisplayOptions;
     scenarioId: string;
     selectedNodeId: string | null;
@@ -608,6 +720,7 @@ export const SolvedGraphCanvas = forwardRef<
     network,
     solution,
     mode,
+    tunedEdges,
     display,
     scenarioId,
     selectedNodeId,
@@ -656,8 +769,9 @@ export const SolvedGraphCanvas = forwardRef<
         hiddenComponentIds,
         extraHiddenNodeIds,
         nodeLabelOverrides,
+        tunedEdges,
       ),
-    [network, solution, mode, display, scenarioId, layoutMode, scales, hiddenComponentIds, extraHiddenNodeIds, nodeLabelOverrides],
+    [network, solution, mode, display, scenarioId, layoutMode, scales, hiddenComponentIds, extraHiddenNodeIds, nodeLabelOverrides, tunedEdges],
   );
 
   useEffect(() => {
@@ -793,6 +907,7 @@ export const SolvedGraphCanvas = forwardRef<
         positionsRef.current[node.id() as string] = { x: position.x, y: position.y };
       });
       positionViewBuses(cy);
+      positionTunedBadges(cy);
     };
 
     const refit = () => {
@@ -821,6 +936,36 @@ export const SolvedGraphCanvas = forwardRef<
     if (hadElements && !structureChanged) cy.viewport({ zoom, pan });
     else refit();
   }, [elements, layoutMode, focusKey]);
+
+  /**
+   * The halo on a cut segment breathes.
+   *
+   * Cytoscape has no keyframes, so the class is toggled on a timer. It runs only
+   * while something IS cut — an interval that ticks over an empty selector on
+   * every screen that mounts this canvas would be a cost paid for nothing — and
+   * a reader who has asked not to see motion gets the static halo the stylesheet
+   * already gives `.tuned-active`.
+   */
+  const tunedActive = useMemo(
+    () => [...(tunedEdges?.values() ?? [])].some((mark) => mark.active),
+    [tunedEdges],
+  );
+
+  useEffect(() => {
+    const cy = cyRef.current;
+    if (!cy || !tunedActive) return;
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
+
+    let on = false;
+    const timer = window.setInterval(() => {
+      on = !on;
+      cy.nodes('.tuned-badge.tuned-active').toggleClass('tuned-pulse', on);
+    }, PULSE_MS);
+    return () => {
+      window.clearInterval(timer);
+      cyRef.current?.nodes('.tuned-badge').removeClass('tuned-pulse');
+    };
+  }, [tunedActive, elements]);
 
   // --- selection + focus ---------------------------------------------------
   useEffect(() => {
