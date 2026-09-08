@@ -22,7 +22,7 @@
  * which "how much do I need out of this TIM" becomes a question with an answer.
  */
 
-import { RotateCcw, Save } from 'lucide-react';
+import { FilePlus2, RotateCcw, Save } from 'lucide-react';
 
 import { Button } from '@/ui/primitives';
 import { biTitle } from '@/ui/FieldLabel';
@@ -42,8 +42,10 @@ export function SegmentTuner({
   projected,
   readOnly,
   dirty,
+  editingName,
   onReduction,
   onReset,
+  onAdd,
   onSave,
 }: {
   target: MarginRank;
@@ -54,8 +56,18 @@ export function SegmentTuner({
   projected: { temperature_C: number; margin_C: number } | null;
   readOnly: boolean;
   dirty: boolean;
+  /**
+   * Which saved study these sliders are editing, if any.
+   *
+   * It decides which of the two write buttons is live: on a fresh draft only
+   * Add, on a record only Save. Never both — "add" while editing a record would
+   * silently fork it, and "save" with nothing to write over is not a thing to
+   * offer.
+   */
+  editingName: string | null;
   onReduction: (edgeId: string, pct: number) => void;
   onReset: () => void;
+  onAdd: () => void;
   onSave: () => void;
 }) {
   const gain = projected ? projected.margin_C - target.margin_C : 0;
@@ -119,26 +131,52 @@ export function SegmentTuner({
 
       {/* Wraps: the column this sits in is now the reader's to narrow, and at
           its 240 px floor two buttons on one line clip the second. */}
-      <div className="flex shrink-0 flex-wrap items-center gap-1.5">
-        <Button
-          variant="primary"
-          icon={<Save size={14} />}
-          className="h-8 !text-[12px]"
-          disabled={readOnly || !dirty}
-          title={biTitle('Save this what-if as a study', '將此次調整存成分析紀錄')}
-          onClick={onSave}
-        >
-          Save Study / 儲存
-        </Button>
-        <Button
-          icon={<RotateCcw size={14} />}
-          className="h-8 !text-[12px]"
-          disabled={!dirty}
-          title={biTitle('Back to the solved values', '回到求解結果')}
-          onClick={onReset}
-        >
-          Reset / 歸零
-        </Button>
+      <div className="shrink-0">
+        {editingName && (
+          <p className="mb-1 truncate text-[10px] text-ink-400" title={editingName}>
+            Editing a saved study
+            <span className="ml-1">／正在編輯已儲存的紀錄</span>
+          </p>
+        )}
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Button
+            variant={editingName ? 'secondary' : 'primary'}
+            icon={<FilePlus2 size={14} />}
+            className="h-8 !text-[12px]"
+            disabled={readOnly || Boolean(editingName) || !dirty}
+            title={biTitle(
+              editingName
+                ? 'Already a saved study — Save writes over it'
+                : 'Add this what-if as a new study',
+              editingName ? '目前正在編輯已儲存的紀錄，請用「儲存」覆蓋' : '將此次調整新增為一筆紀錄',
+            )}
+            onClick={onAdd}
+          >
+            Add / 新增
+          </Button>
+          <Button
+            variant={editingName ? 'primary' : 'secondary'}
+            icon={<Save size={14} />}
+            className="h-8 !text-[12px]"
+            disabled={readOnly || !editingName || !dirty}
+            title={biTitle(
+              editingName ? 'Write over the study being edited' : 'Nothing to write over yet',
+              editingName ? '覆蓋目前編輯中的紀錄' : '尚未有可覆蓋的紀錄',
+            )}
+            onClick={onSave}
+          >
+            Save / 儲存
+          </Button>
+          <Button
+            icon={<RotateCcw size={14} />}
+            className="h-8 !text-[12px]"
+            disabled={!dirty}
+            title={biTitle('Back to the solved values', '回到求解結果')}
+            onClick={onReset}
+          >
+            Reset / 歸零
+          </Button>
+        </div>
       </div>
     </div>
   );

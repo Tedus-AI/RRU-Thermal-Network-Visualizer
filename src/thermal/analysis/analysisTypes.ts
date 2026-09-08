@@ -351,6 +351,15 @@ export interface ImprovementStudy {
   segments: StudySegment[];
   note?: string;
   created_at: string;
+  /**
+   * When it was last written over, if it has been.
+   *
+   * A record is now editable: opening a row on Screen 08 puts its cuts back on
+   * the sliders, and Save writes over that same id. `created_at` therefore stays
+   * the time the study was first made, and this is the time it last changed —
+   * a table that ordered by `created_at` would otherwise stop reflecting work.
+   */
+  updated_at?: string;
   applied: false;
 }
 

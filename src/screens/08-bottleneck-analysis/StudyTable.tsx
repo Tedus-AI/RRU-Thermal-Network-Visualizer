@@ -16,11 +16,14 @@ import { num, rth, signed, timeOf } from './analysisViewModel';
 export function StudyTable({
   studies,
   readOnly,
+  editingId,
   onSelect,
   onDelete,
 }: {
   studies: readonly ImprovementStudy[];
   readOnly: boolean;
+  /** The row whose cuts are on the sliders right now, so it reads as open. */
+  editingId: string | null;
   onSelect: (study: ImprovementStudy) => void;
   onDelete: (studyId: string) => void;
 }) {
@@ -33,7 +36,11 @@ export function StudyTable({
     );
   }
 
-  const ordered = [...studies].sort((a, b) => b.created_at.localeCompare(a.created_at));
+  // Newest work first, which is the last time a record CHANGED, not the time it
+  // was first made — a study edited this afternoon belongs at the top.
+  const ordered = [...studies].sort((a, b) =>
+    (b.updated_at ?? b.created_at).localeCompare(a.updated_at ?? a.created_at),
+  );
 
   return (
     <div className="min-w-0 overflow-x-auto">
@@ -68,13 +75,22 @@ export function StudyTable({
               <tr
                 key={study.id}
                 onClick={() => onSelect(study)}
-                title={biTitle('Load this study', '載入此紀錄')}
-                className="cursor-pointer border-b border-line/60 align-top hover:bg-surface-muted"
+                title={biTitle('Open this study for editing', '開啟此紀錄以繼續編輯')}
+                className={`cursor-pointer border-b border-line/60 align-top ${
+                  study.id === editingId
+                    ? 'bg-accent-100 ring-1 ring-accent-600/40'
+                    : 'hover:bg-surface-muted'
+                }`}
               >
                 <td className="py-1.5 pr-2">
                   <span className="block max-w-[12rem] truncate font-semibold text-ink-900">
                     {study.target_node_name}
                   </span>
+                  {study.id === editingId && (
+                    <span className="mb-0.5 inline-block rounded bg-accent-600 px-1 text-[9px] leading-tight font-bold text-white">
+                      editing / 編輯中
+                    </span>
+                  )}
                   <span className="text-[10px] text-ink-400 tabular">
                     limit {study.limit_C} °C {study.limit_type ?? ''}
                   </span>
@@ -107,7 +123,12 @@ export function StudyTable({
                 >
                   {signed(gain, 1)}
                 </td>
-                <td className="py-1.5 pr-2 text-ink-400">{timeOf(study.created_at)}</td>
+                <td className="py-1.5 pr-2 text-ink-400">
+                  {timeOf(study.updated_at ?? study.created_at)}
+                  {study.updated_at && (
+                    <span className="block text-[10px]">edited / 已修改</span>
+                  )}
+                </td>
                 <td className="py-1.5 text-right">
                   <button
                     type="button"

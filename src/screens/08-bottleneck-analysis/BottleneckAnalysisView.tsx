@@ -190,9 +190,27 @@ export function BottleneckAnalysisView() {
   const [bottomTab, setBottomTab] = useState<'levers' | 'studies'>('levers');
   /** The lower panel as a window the reader can put over the graph. */
   const [bottomFloating, setBottomFloating] = useState(false);
+  /**
+   * Which saved study the sliders are currently editing, if any.
+   *
+   * `null` is a fresh draft: Add creates a record, Save has nothing to write
+   * over. Once a record exists — because Add made it, or because a row in the
+   * table was opened — the pair swap: Save overwrites THAT record and Add is
+   * out, because "add" on a study already saved would silently fork it.
+   */
+  const [editingStudyId, setEditingStudyId] = useState<string | null>(null);
   /** 08 — the focused chain answers the question; the whole machine gives it context. */
   const [wholeMachine, setWholeMachine] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  /**
+   * Whether the selection was made ON the graph.
+   *
+   * The deck and the whole-machine switch also select a node — that is how the
+   * part stays marked among 113 of them — but only a tap on the graph is a
+   * request to READ that node, so only a tap opens the inspector. Picking a
+   * rank threw a detail panel over the screen nobody asked for.
+   */
+  const [inspecting, setInspecting] = useState(false);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const graphRef = useRef<SolvedGraphHandle | null>(null);
 
@@ -321,7 +339,11 @@ export function BottleneckAnalysisView() {
     setWholeMachine(next);
     // Going wide without a mark loses the part among 113 nodes; the selection
     // is what carries "this is the one you were looking at" across the switch.
-    if (next && target) setSelectedNodeId(target.node_id);
+    // It marks, it does not open: `inspecting` stays false.
+    if (next && target) {
+      setSelectedNodeId(target.node_id);
+      setInspecting(false);
+    }
   };
 
   const selectRank = (index: number) => {
@@ -329,11 +351,14 @@ export function BottleneckAnalysisView() {
     setWholeMachine(false);
     setSelectedNodeId(ranked[index]?.node_id ?? null);
     setSelectedEdgeId(null);
+    setInspecting(false);
   };
 
-  // A new part starts from its solved state, never from the last part's cuts.
+  // A new part starts from its solved state, never from the last part's cuts —
+  // and never still attached to the record the last part was editing.
   useEffect(() => {
     setReductions({});
+    setEditingStudyId(null);
   }, [target?.node_id]);
 
   const adjustments: Adjustment[] = useMemo(
@@ -379,13 +404,48 @@ export function BottleneckAnalysisView() {
     return gains;
   }, [solveGraph, scenarioId, solverSettings, segments, reductions, target, baselineTemperatures]);
 
+  /**
+   * The segments the tuner is offering, marked on the graph.
+   *
+   * Same numbering as the list beside it — 1 is the biggest drop — so "row 2"
+   * and "the badge with a 2 on it" are the same thing, and the one being cut
+   * right now is the one that glows. Without it the reader moves a slider in a
+   * column and has to work out, from four almost identical labels, which line
+   * on the picture they just changed.
+   */
+  const tunedEdges = useMemo(() => {
+    const marks = new Map<string, { rank: number; active: boolean }>();
+    segments.forEach((segment, index) => {
+      marks.set(segment.edge_id, {
+        rank: index + 1,
+        active: (reductions[segment.edge_id] ?? 0) > 0,
+      });
+    });
+    return marks;
+  }, [segments, reductions]);
+
   /** The graph paints the what-if while one is live, and the baseline otherwise. */
   const graphSolution = useMemo(() => {
     if (!solution) return null;
     return whatIf?.ok ? solutionWithWhatIf(solution, whatIf) : solution;
   }, [solution, whatIf]);
 
-  const dirty = adjustments.length > 0;
+  /**
+   * Whether the sliders say something the stored record does not.
+   *
+   * On a fresh draft that is "any cut at all". On a record being edited it is
+   * a comparison against what was saved — otherwise Save would stay lit after
+   * writing, and a button that is enabled when it has nothing to do teaches the
+   * reader to ignore it.
+   */
+  const editing = studies.find((entry) => entry.id === editingStudyId) ?? null;
+  const dirty = useMemo(() => {
+    const cuts = Object.entries(reductions).filter(([, pct]) => pct > 0);
+    if (!editing) return cuts.length > 0;
+    const saved = new Map(editing.segments.map((entry) => [entry.edge_id, entry.reduction_pct]));
+    if (saved.size !== cuts.length) return true;
+    return cuts.some(([edgeId, pct]) => saved.get(edgeId) !== pct);
+  }, [reductions, editing]);
 
   /**
    * The full result table, built exactly as Screen 07 builds it — same
@@ -516,7 +576,14 @@ export function BottleneckAnalysisView() {
     return () => cancelAnimationFrame(frame);
   }, [graphFullscreen]);
 
-  const saveStudy = () => {
+  /**
+   * Write the sliders out — as a new record, or over the one being edited.
+   *
+   * `saveStudy` in the store replaces by id, so keeping the id IS the
+   * overwrite; a new id is a new row. That is the whole difference between the
+   * two buttons.
+   */
+  const commitStudy = (mode: 'add' | 'overwrite') => {
     if (!projectId || !target || !projected || !scenarioId) return;
     const studySegments: StudySegment[] = segments
       .filter((segment) => (reductions[segment.edge_id] ?? 0) > 0)
@@ -533,8 +600,13 @@ export function BottleneckAnalysisView() {
         };
       });
 
+    const id =
+      mode === 'overwrite' && editingStudyId
+        ? editingStudyId
+        : `STUDY_${scenarioId}_${target.node_id}_${Date.now()}`;
+
     const study: ImprovementStudy = {
-      id: `STUDY_${scenarioId}_${target.node_id}_${Date.now()}`,
+      id,
       schema_version: ANALYSIS_SCHEMA_VERSION,
       project_id: projectId,
       scenario_id: scenarioId,
@@ -545,23 +617,39 @@ export function BottleneckAnalysisView() {
       baseline: { temperature_C: target.temperature_C, margin_C: target.margin_C },
       projected,
       segments: studySegments,
-      created_at: new Date().toISOString(),
+      // A record keeps the time it was FIRST written; overwriting is an edit of
+      // that study, not a different one.
+      created_at: editing?.created_at ?? new Date().toISOString(),
+      updated_at: new Date().toISOString(),
       applied: false,
     };
 
     useAnalysisStore.getState().saveStudy(projectId, study);
+    setEditingStudyId(id);
     // Saving is the moment the reader asks "so what do I actually change?", so
     // that is the panel they are left looking at.
     setBottomTab('levers');
-    toast.success('Study saved — no resistance was changed / 已儲存，未修改任何熱阻');
+    toast.success(
+      mode === 'add'
+        ? 'Study added — no resistance was changed / 已新增，未修改任何熱阻'
+        : 'Study updated — no resistance was changed / 已覆蓋，未修改任何熱阻',
+    );
   };
 
+  /** Opening a row is entering it for editing, not copying it into a draft. */
   const loadStudy = (study: ImprovementStudy) => {
     const position = ranked.findIndex((entry) => entry.node_id === study.target_node_id);
     if (position >= 0) setRankIndex(position);
     setReductions(
       Object.fromEntries(study.segments.map((entry) => [entry.edge_id, entry.reduction_pct])),
     );
+    // After the rank change, which resets the reductions on its own effect.
+    setTimeout(() => {
+      setReductions(
+        Object.fromEntries(study.segments.map((entry) => [entry.edge_id, entry.reduction_pct])),
+      );
+      setEditingStudyId(study.id);
+    }, 0);
   };
 
   // --- guards --------------------------------------------------------------
@@ -701,6 +789,7 @@ export function BottleneckAnalysisView() {
       <StudyTable
         studies={studies}
         readOnly={readOnly}
+        editingId={editingStudyId}
         onSelect={loadStudy}
         onDelete={(id) => useAnalysisStore.getState().deleteStudy(projectId, id)}
       />
@@ -908,6 +997,7 @@ export function BottleneckAnalysisView() {
                 network={solveGraph}
                 solution={graphSolution}
                 mode={mode}
+                tunedEdges={wholeMachine ? undefined : tunedEdges}
                 display={GRAPH_DISPLAY}
                 scenarioId={scenarioId}
                 selectedNodeId={selectedNodeId}
@@ -918,8 +1008,24 @@ export function BottleneckAnalysisView() {
                 extraHiddenNodeIds={wholeMachine ? EMPTY_SET : (focus?.hidden ?? EMPTY_SET)}
                 focusKey={wholeMachine ? undefined : focus?.path.key}
                 nodeLabelOverrides={wholeMachine ? undefined : focus?.labels}
-                onSelectNode={setSelectedNodeId}
-                onSelectEdge={setSelectedEdgeId}
+                /*
+                   Only a tap that LANDS on something opens the inspector.
+
+                   The canvas reports a node tap as "this node, and no edge", so
+                   a handler that also cleared the flag on a null id turned it
+                   straight back off — the panel opened and closed inside one
+                   click. Clearing is the panel's own job: it is gated on there
+                   being a selection at all, and a tap on the background sends
+                   null to both.
+                */
+                onSelectNode={(nodeId) => {
+                  setSelectedNodeId(nodeId);
+                  if (nodeId) setInspecting(true);
+                }}
+                onSelectEdge={(edgeId) => {
+                  setSelectedEdgeId(edgeId);
+                  if (edgeId) setInspecting(true);
+                }}
                 onZoomChange={() => undefined}
               />
               {whatIf?.ok && (
@@ -1029,7 +1135,9 @@ export function BottleneckAnalysisView() {
                   }))
                 }
                 onReset={() => setReductions({})}
-                onSave={saveStudy}
+                editingName={editing?.target_node_name ?? null}
+                onAdd={() => commitStudy('add')}
+                onSave={() => commitStudy('overwrite')}
               />
             ) : (
               <p className="py-6 text-center text-[11px] text-ink-400">
@@ -1072,11 +1180,13 @@ export function BottleneckAnalysisView() {
           onSelectNode={(nodeId) => {
             setSelectedEdgeId(null);
             setSelectedNodeId(nodeId);
+            setInspecting(true);
             graphRef.current?.center(nodeId);
           }}
           onSelectEdge={(edgeId) => {
             setSelectedNodeId(null);
             setSelectedEdgeId(edgeId);
+            setInspecting(true);
             graphRef.current?.center(edgeId);
           }}
           // 08 argues about a design; exporting the table is 07's and 12's job.
@@ -1090,7 +1200,7 @@ export function BottleneckAnalysisView() {
           an edge on this graph is the same object it is over there, and the
           reader tuning a segment is exactly the reader who needs to see where
           its resistance came from. */}
-      {(selectedNode || selectedEdge) && solveGraph && (
+      {inspecting && (selectedNode || selectedEdge) && solveGraph && (
         <FloatingPanel
           storageKey="tnv.08.inspector"
           defaultWidth={460}
@@ -1105,6 +1215,7 @@ export function BottleneckAnalysisView() {
           }
           badge={<Badge tone="neutral">{selectedEdge ? 'Edge / 連線' : 'Node / 節點'}</Badge>}
           onClose={() => {
+            setInspecting(false);
             setSelectedNodeId(null);
             setSelectedEdgeId(null);
           }}
