@@ -29,6 +29,7 @@ import {
   Maximize2,
   Minimize2,
   Network,
+  PictureInPicture2,
   Table2,
   XCircle,
 } from 'lucide-react';
@@ -42,6 +43,7 @@ import { toast } from '@/ui/toast';
 import { focusHiddenNodes, focusLabels, graphPaths } from '@/ui/graphExplorerModel';
 import { FloatingPanel } from '@/ui/FloatingPanel';
 import { ResizablePane } from '@/ui/ResizablePane';
+import { ResizableSidebar } from '@/ui/ResizableSidebar';
 
 import { useProjectStore } from '@/data/projectStore';
 import { useComponentStore } from '@/data/componentStore';
@@ -186,6 +188,8 @@ export function BottleneckAnalysisView() {
   const [graphFullscreen, setGraphFullscreen] = useState(false);
   const [resultsOpen, setResultsOpen] = useState(false);
   const [bottomTab, setBottomTab] = useState<'levers' | 'studies'>('levers');
+  /** The lower panel as a window the reader can put over the graph. */
+  const [bottomFloating, setBottomFloating] = useState(false);
   /** 08 — the focused chain answers the question; the whole machine gives it context. */
   const [wholeMachine, setWholeMachine] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
@@ -628,6 +632,80 @@ export function BottleneckAnalysisView() {
 
   const gain = projected && target ? projected.margin_C - target.margin_C : 0;
 
+  // The lower panel's header, tabs, body and pop-out control, shared by the
+  // docked pane and the floating window so the two cannot drift apart.
+  const lowerHeader = (
+    <>
+      <span className="flex size-5 shrink-0 items-center justify-center rounded bg-accent-600 text-[11px] font-bold text-white tabular">
+        3
+      </span>
+      <h2 className="min-w-0 truncate text-[13px] font-bold text-ink-900">
+        {bottomTab === 'levers' ? 'What To Change' : 'Saved Studies'}{' '}
+        <span className="font-semibold text-ink-400">
+          / {bottomTab === 'levers' ? '可調整的參數' : '已儲存的調整分析'}
+        </span>
+      </h2>
+    </>
+  );
+
+  const lowerTabs = (
+    <span className="flex shrink-0 overflow-hidden rounded-md border border-line-strong">
+      {[
+        { id: 'levers' as const, label: 'What to change', zh: '可調參數', count: levers.length },
+        { id: 'studies' as const, label: 'Saved', zh: '已儲存', count: studies.length },
+      ].map((entry) => (
+        <button
+          key={entry.id}
+          type="button"
+          aria-pressed={bottomTab === entry.id}
+          title={biTitle(entry.label, entry.zh)}
+          onClick={() => setBottomTab(entry.id)}
+          className={`flex items-center gap-1 whitespace-nowrap px-2.5 py-1 text-[11px] leading-none font-semibold transition-colors ${
+            bottomTab === entry.id
+              ? 'bg-accent-600 text-white'
+              : 'bg-surface text-ink-500 hover:bg-surface-muted hover:text-ink-900'
+          }`}
+        >
+          {entry.label}
+          <span
+            className={`rounded px-1 text-[10px] tabular ${
+              bottomTab === entry.id ? 'bg-white/20' : 'bg-surface-muted'
+            }`}
+          >
+            {entry.count}
+          </span>
+        </button>
+      ))}
+    </span>
+  );
+
+  const popOutButton = (
+    <button
+      type="button"
+      aria-pressed={bottomFloating}
+      title={biTitle(
+        bottomFloating ? 'Dock it back into the column' : 'Open as a floating window',
+        bottomFloating ? '收回原本的區域' : '改為浮動視窗',
+      )}
+      onClick={() => setBottomFloating((value) => !value)}
+      className="flex size-7 shrink-0 items-center justify-center rounded-md border border-line-strong text-ink-500 hover:bg-surface-muted hover:text-ink-900"
+    >
+      <PictureInPicture2 size={13} />
+    </button>
+  );
+
+  const lowerBody =
+    bottomTab === 'levers' ? (
+      <LeverTable segments={levers} projectId={projectId} gainOf={coolingOf} />
+    ) : (
+      <StudyTable
+        studies={studies}
+        readOnly={readOnly}
+        onSelect={loadStudy}
+        onDelete={(id) => useAnalysisStore.getState().deleteStudy(projectId, id)}
+      />
+    );
+
   return (
     <ScreenWorkspace
       title="Bottleneck Analysis"
@@ -863,87 +941,69 @@ export function BottleneckAnalysisView() {
               on it needs several times the height of an empty one, and how much
               of the graph that is worth is their call — so it is Screen 07's
               own seam: drag it to any height, click it to fold, and the choice
-              is remembered per project. */}
-          <ResizablePane
-            id="tnv.08.lowerPane"
-            defaultHeight={220}
-            labelEn={bottomTab === 'levers' ? 'What To Change' : 'Saved Studies'}
-            labelZh={bottomTab === 'levers' ? '可調整的參數' : '已儲存的調整分析'}
-            header={
-              <>
-                <span className="flex size-5 shrink-0 items-center justify-center rounded bg-accent-600 text-[11px] font-bold text-white tabular">
-                  3
-                </span>
-                <h2 className="min-w-0 truncate text-[13px] font-bold text-ink-900">
-                  {bottomTab === 'levers' ? 'What To Change' : 'Saved Studies'}{' '}
-                  <span className="font-semibold text-ink-400">
-                    / {bottomTab === 'levers' ? '可調整的參數' : '已儲存的調整分析'}
-                  </span>
-                </h2>
-              </>
-            }
-            actions={
-              <span className="flex shrink-0 overflow-hidden rounded-md border border-line-strong">
-                {[
-                  {
-                    id: 'levers' as const,
-                    label: 'What to change',
-                    zh: '可調參數',
-                    count: levers.length,
-                  },
-                  {
-                    id: 'studies' as const,
-                    label: 'Saved',
-                    zh: '已儲存',
-                    count: studies.length,
-                  },
-                ].map((entry) => (
-                  <button
-                    key={entry.id}
-                    type="button"
-                    aria-pressed={bottomTab === entry.id}
-                    title={biTitle(entry.label, entry.zh)}
-                    onClick={() => setBottomTab(entry.id)}
-                    className={`flex items-center gap-1 whitespace-nowrap px-2.5 py-1 text-[11px] leading-none font-semibold transition-colors ${
-                      bottomTab === entry.id
-                        ? 'bg-accent-600 text-white'
-                        : 'bg-surface text-ink-500 hover:bg-surface-muted hover:text-ink-900'
-                    }`}
-                  >
-                    {entry.label}
-                    <span
-                      className={`rounded px-1 text-[10px] tabular ${
-                        bottomTab === entry.id ? 'bg-white/20' : 'bg-surface-muted'
-                      }`}
-                    >
-                      {entry.count}
-                    </span>
-                  </button>
-                ))}
+              is remembered per project.
+
+              Or taken out of the column entirely. Six fin dimensions across
+              five columns want more width than the space under a graph, and the
+              graph wants its height back while they are being read — so the
+              same panel opens as a window that floats over both, remembers its
+              own geometry, and goes back where it came from on a second
+              press. */}
+          {bottomFloating ? (
+            <section className="flex shrink-0 items-center gap-2 rounded-lg border border-dashed border-line-strong bg-surface px-3.5 py-2.5">
+              <span className="flex size-5 shrink-0 items-center justify-center rounded bg-accent-600 text-[11px] font-bold text-white tabular">
+                3
               </span>
-            }
-          >
-            <div className="px-3 py-2">
-              {bottomTab === 'levers' ? (
-                <LeverTable segments={levers} projectId={projectId} gainOf={coolingOf} />
-              ) : (
-                <StudyTable
-                  studies={studies}
-                  readOnly={readOnly}
-                  onSelect={loadStudy}
-                  onDelete={(id) => useAnalysisStore.getState().deleteStudy(projectId, id)}
-                />
-              )}
-            </div>
-          </ResizablePane>
+              <span className="min-w-0 truncate text-[12px] text-ink-500">
+                {bottomTab === 'levers' ? 'What To Change' : 'Saved Studies'} is open as a window
+                <span className="ml-1 text-ink-400">
+                  / {bottomTab === 'levers' ? '可調整的參數' : '已儲存的調整分析'}目前為浮動視窗
+                </span>
+              </span>
+              <Button
+                className="ml-auto h-7 !text-[11px]"
+                icon={<PictureInPicture2 size={13} />}
+                title={biTitle('Dock it back into the column', '收回原本的區域')}
+                onClick={() => setBottomFloating(false)}
+              >
+                Dock / 收回
+              </Button>
+            </section>
+          ) : (
+            <ResizablePane
+              id="tnv.08.lowerPane"
+              defaultHeight={220}
+              labelEn={bottomTab === 'levers' ? 'What To Change' : 'Saved Studies'}
+              labelZh={bottomTab === 'levers' ? '可調整的參數' : '已儲存的調整分析'}
+              header={lowerHeader}
+              actions={
+                <>
+                  {lowerTabs}
+                  {popOutButton}
+                </>
+              }
+            >
+              <div className="px-3 py-2">{lowerBody}</div>
+            </ResizablePane>
+          )}
         </div>
 
-        <div className="flex w-full shrink-0 flex-col gap-3 xl:w-[23rem]">
+        {/* The chain is a column the reader sizes: four segments of a TIM
+            stack and nine of a heat pipe want different widths, and the graph
+            beside it is what pays either way. Same seam as 05 and 06. */}
+        <ResizableSidebar
+          id="tnv.08.chain"
+          defaultWidth={368}
+          labelEn="the resistance chain"
+          labelZh="整條熱阻鏈路"
+          shortEn="Chain"
+          shortZh="鏈路"
+        >
           <Section
             index={2}
             title="Resistance Chain"
             zh="整條熱阻鏈路"
-            className="min-h-[26rem] flex-1"
+            className="h-full min-h-[26rem]"
             actions={
               <span className="shrink-0 whitespace-nowrap text-[10px] text-ink-400">
                 {segments.length} seg · 0.1 %
@@ -978,8 +1038,28 @@ export function BottleneckAnalysisView() {
               </p>
             )}
           </Section>
-        </div>
+        </ResizableSidebar>
       </div>
+
+      {/* The lower panel, as a window. `FloatingPanel` remembers its own
+          geometry per storage key, so the size the reader drags it to is the
+          size it opens at next time — which is the point of taking it out of a
+          column whose height it has to share. */}
+      {bottomFloating && (
+        <FloatingPanel
+          storageKey="tnv.08.lowerWindow"
+          defaultWidth={860}
+          defaultHeight={520}
+          title={bottomTab === 'levers' ? 'What To Change' : 'Saved Studies'}
+          subtitle={bottomTab === 'levers' ? '可調整的參數' : '已儲存的調整分析'}
+          badge={lowerTabs}
+          actions={popOutButton}
+          bodyClassName="p-3"
+          onClose={() => setBottomFloating(false)}
+        >
+          {lowerBody}
+        </FloatingPanel>
+      )}
 
       {resultsOpen && (
         <ResultsOverlay

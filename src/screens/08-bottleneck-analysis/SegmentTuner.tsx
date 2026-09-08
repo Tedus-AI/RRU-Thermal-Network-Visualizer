@@ -117,7 +117,9 @@ export function SegmentTuner({
         )}
       </div>
 
-      <div className="flex shrink-0 items-center gap-1.5">
+      {/* Wraps: the column this sits in is now the reader's to narrow, and at
+          its 240 px floor two buttons on one line clip the second. */}
+      <div className="flex shrink-0 flex-wrap items-center gap-1.5">
         <Button
           variant="primary"
           icon={<Save size={14} />}

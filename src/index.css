@@ -137,4 +137,34 @@
     appearance: none;
     margin: 0;
   }
+
+  /*
+   * The field a Screen 08 "Edit in" link just landed on.
+   *
+   * A caret is not enough on a form of a dozen boxes: the reader is looking for
+   * the one the link promised, and a moved caret is indistinguishable from
+   * having arrived on the wrong one. Three pulses, then it gets out of the way
+   * — it marks the arrival, it is not a state.
+   */
+  .field-flash {
+    animation: field-flash 0.85s ease-out 3;
+    border-radius: 0.375rem;
+  }
+
+  @keyframes field-flash {
+    0%,
+    100% {
+      box-shadow: 0 0 0 0 transparent;
+    }
+    35% {
+      box-shadow: 0 0 0 3px var(--color-accent-600);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .field-flash {
+      animation: none;
+      box-shadow: 0 0 0 3px var(--color-accent-600);
+    }
+  }
 }

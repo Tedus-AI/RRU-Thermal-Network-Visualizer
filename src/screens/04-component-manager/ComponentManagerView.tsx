@@ -13,7 +13,10 @@ import { ArrowLeft, ArrowRight, Boxes, CheckCheck, Save, XCircle } from 'lucide-
 
 import { ScreenWorkspace } from '@/app/ScreenWorkspace';
 import { projectPath } from '@/app/navigation';
-import { FOCUS_PARAM, consumeFocus } from '@/app/focusLink';
+import { FOCUS_PARAM, consumeFocus, revealField } from '@/app/focusLink';
+
+/** Long enough for the inspector to render the box and the flash to finish. */
+const FOCUS_REVEAL_WINDOW_MS = 6000;
 import { useShellActions } from '@/app/shellActions';
 import { Badge, Button, Modal, Skeleton } from '@/ui/primitives';
 import { FloatingPanel } from '@/ui/FloatingPanel';
@@ -99,12 +102,34 @@ export function ComponentManagerView() {
 
   /** Arrived from Screen 08 with a component whose package Rth to open. */
   const [focusParams] = useSearchParams();
+  const [pendingField, setPendingField] = useState<string | null>(null);
   useEffect(() => {
     if (components.length === 0) return;
     const id = consumeFocus(focusParams, FOCUS_PARAM.component, navigate);
-    if (id && components.some((entry) => entry.id === id)) setSelectedId(id);
+    const field = consumeFocus(focusParams, FOCUS_PARAM.field, navigate);
+    if (!id || !components.some((entry) => entry.id === id)) return;
+    setSelectedId(id);
+    setPendingField(field);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [components, focusParams]);
+
+  /**
+   * The reveal is held in state, not driven straight off the query string.
+   *
+   * `consumeFocus` navigates to strip the parameter, which hands this effect a
+   * new `focusParams` and re-runs it — and the cleanup of the previous run
+   * cancels `revealField` while it is still waiting for the inspector to
+   * render. Copying the request out first is what keeps the search alive.
+   */
+  useEffect(() => {
+    if (!pendingField) return;
+    const cancel = revealField(pendingField);
+    const done = setTimeout(() => setPendingField(null), FOCUS_REVEAL_WINDOW_MS);
+    return () => {
+      cancel();
+      clearTimeout(done);
+    };
+  }, [pendingField]);
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>('overview');
   const [focus, setFocus] = useState<FocusRequest | null>(null);
   const [showAdd, setShowAdd] = useState(false);

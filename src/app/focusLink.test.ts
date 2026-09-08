@@ -36,6 +36,18 @@ describe('focusHref', () => {
     expect(focusHref('P1', { screen: '06', edge_id: 'EDGE_A_B' })).toBe('/project/P1/boundary');
   });
 
+  it('carries the field on every screen, so the link lands on the box', () => {
+    expect(focusHref('P1', { screen: '05', edge_id: 'E1', field: 'param-area_mm2' })).toBe(
+      '/project/P1/thermal-path?focusEdge=E1&focusField=param-area_mm2',
+    );
+    expect(focusHref('P1', { screen: '06', node_id: 'N1', field: 'bc-fin-finGap_mm' })).toBe(
+      '/project/P1/boundary?focusNode=N1&focusField=bc-fin-finGap_mm',
+    );
+    expect(focusHref('P1', { screen: '04', component_id: 'C1', field: 'ins-rjc' })).toBe(
+      '/project/P1/components?focusComponent=C1&focusField=ins-rjc',
+    );
+  });
+
   it('escapes a project id that needs it', () => {
     expect(focusHref('a b/c', { screen: '04', component_id: 'X' })).toBe(
       '/project/a%20b%2Fc/components?focusComponent=X',

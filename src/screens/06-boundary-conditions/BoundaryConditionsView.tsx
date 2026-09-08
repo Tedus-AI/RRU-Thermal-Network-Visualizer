@@ -32,7 +32,10 @@ import {
 
 import { ScreenWorkspace } from '@/app/ScreenWorkspace';
 import { projectPath } from '@/app/navigation';
-import { FOCUS_PARAM, consumeFocus } from '@/app/focusLink';
+import { FOCUS_PARAM, consumeFocus, revealField } from '@/app/focusLink';
+
+/** Long enough for the inspector to render the box and the flash to finish. */
+const FOCUS_REVEAL_WINDOW_MS = 6000;
 import { useShellActions } from '@/app/shellActions';
 import { Badge, Button, Modal, Skeleton } from '@/ui/primitives';
 import { biTitle } from '@/ui/FieldLabel';
@@ -190,14 +193,36 @@ export function BoundaryConditionsView() {
 
   /** Arrived from Screen 08 with a graph node whose boundary port to open. */
   const [focusParams] = useSearchParams();
+  const [pendingField, setPendingField] = useState<string | null>(null);
   useEffect(() => {
     if (ports.length === 0) return;
     const nodeId = consumeFocus(focusParams, FOCUS_PARAM.node, navigate);
+    const field = consumeFocus(focusParams, FOCUS_PARAM.field, navigate);
     if (!nodeId) return;
     const port = ports.find((entry) => entry.connected_node_id === nodeId);
-    if (port) setSelectedPortId(port.id);
+    if (!port) return;
+    setSelectedPortId(port.id);
+    setPendingField(field);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ports, focusParams]);
+
+  /**
+   * The reveal is held in state, not driven straight off the query string.
+   *
+   * `consumeFocus` navigates to strip the parameter, which hands this effect a
+   * new `focusParams` and re-runs it — and the cleanup of the previous run
+   * cancels `revealField` while it is still waiting for the inspector to
+   * render. Copying the request out first is what keeps the search alive.
+   */
+  useEffect(() => {
+    if (!pendingField) return;
+    const cancel = revealField(pendingField);
+    const done = setTimeout(() => setPendingField(null), FOCUS_REVEAL_WINDOW_MS);
+    return () => {
+      cancel();
+      clearTimeout(done);
+    };
+  }, [pendingField]);
   const [preferredProfileId, setPreferredProfileId] = useState<string | null>(null);
   const [warningConfirm, setWarningConfirm] = useState<number | null>(null);
   const [openPanels, setOpenPanels] = useState<Record<BoundaryPanelId, boolean>>({
