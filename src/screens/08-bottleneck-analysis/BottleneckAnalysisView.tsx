@@ -67,7 +67,7 @@ import {
   type ImprovementStudy,
   type StudySegment,
 } from '@/thermal/analysis/analysisTypes';
-import { segmentLevers } from '@/thermal/analysis/tunableParameters';
+import { segmentLevers, type Lever, type SegmentLevers } from '@/thermal/analysis/tunableParameters';
 import {
   SolvedGraphCanvas,
   type SolvedGraphHandle,
@@ -223,6 +223,7 @@ export function BottleneckAnalysisView() {
 
   const boundarySets = useBoundaryStore((s) => s.sets);
   const boundaryKey = useBoundaryStore((s) => s.activeKey);
+  const boundaryPorts = useBoundaryStore((s) => s.ports);
   const solutionStale = useSolutionStore((s) => s.isStale());
   const solverSettings = network?.solver_settings ?? DEFAULT_SOLVER_SETTINGS;
   const scenarioId = activeScenarioId ?? '';
@@ -416,7 +417,19 @@ export function BottleneckAnalysisView() {
   const selectedNode = selectedNodeId ? (solveGraph?.nodes[selectedNodeId] ?? null) : null;
   const selectedEdge = selectedEdgeId ? (solveGraph?.edges[selectedEdgeId] ?? null) : null;
 
-  /** For every segment actually cut: what would have to change, and to what. */
+  /**
+   * For every segment actually cut: what would have to change, and to what.
+   *
+   * Screen 06's own inputs come with it, because a boundary edge and the
+   * fin-root link have no parameters of their own — their resistance is the fin
+   * geometry's, and naming that geometry is the only useful thing to say about
+   * them.
+   */
+  const boundaryContext = useMemo(
+    () => ({ ports: boundaryPorts, set: boundaryKey ? (boundarySets[boundaryKey] ?? null) : null }),
+    [boundaryPorts, boundaryKey, boundarySets],
+  );
+
   const levers = useMemo(() => {
     if (!solveGraph || !scenarioId) return [];
     return segments
@@ -428,9 +441,59 @@ export function BottleneckAnalysisView() {
           segment.edge_id,
           segment.label,
           reductions[segment.edge_id] ?? 0,
+          boundaryContext,
         ),
       );
-  }, [solveGraph, scenarioId, segments, reductions]);
+  }, [solveGraph, scenarioId, segments, reductions, boundaryContext]);
+
+  /**
+   * What the target part gets back if ONE row is taken.
+   *
+   * Every row of a segment reaches the same resistance, so they share a number
+   * — except a row that cannot reach it, which gets the gain at the best that
+   * input can do on its own. That is the honest figure for it, and it is
+   * usually much smaller, which is the point of showing it.
+   */
+  const coolings = useMemo(() => {
+    const table = new Map<string, number | null>();
+    if (!solveGraph || !scenarioId || !target || !baselineTemperatures) return table;
+
+    const gainAt = (edgeId: string, pct: number): number | null => {
+      const solved = solveWithAdjustments(solveGraph, scenarioId, solverSettings, [
+        { edge_id: edgeId, reduction_pct: Math.min(pct, 99.9) },
+      ]);
+      if (!solved.ok) return null;
+      const gain = baselineTemperatures[target.node_id] - solved.temperatures[target.node_id];
+      return Number.isFinite(gain) ? gain : null;
+    };
+
+    for (const segment of levers) {
+      // The rows that reach the target all reach the SAME resistance, so they
+      // share one solve rather than paying for one each.
+      const full = gainAt(segment.edge_id, segment.reduction_pct);
+      // The ratio is against the calculator's own value, which is what a limit
+      // is expressed in — not against a refined override that may differ.
+      const own = segment.rth_calculated_C_per_W;
+      for (const lever of segment.levers) {
+        const key = `${segment.edge_id}|${lever.key}`;
+        if (lever.limit && own != null && own > 0) {
+          // This one cannot reach the segment's target: what it buys is what
+          // its own ceiling or turning point buys, which is smaller.
+          table.set(key, gainAt(segment.edge_id, (1 - lever.limit.best_rth_C_per_W / own) * 100));
+        } else {
+          // Everything else — an exact target, and a Screen 06 dimension with a
+          // direction but no number — is a route to the SAME resistance, so it
+          // is the same °C. The row that has no target still gets one, because
+          // "how much is this segment worth" is the question being asked.
+          table.set(key, full);
+        }
+      }
+    }
+    return table;
+  }, [levers, solveGraph, scenarioId, solverSettings, target, baselineTemperatures]);
+
+  const coolingOf = (segment: SegmentLevers, lever: Lever): number | null =>
+    coolings.get(`${segment.edge_id}|${lever.key}`) ?? null;
 
   // Fullscreen leaves the same way every overlay on this tool does, and the
   // graph is re-fitted after the box changes size rather than keeping a zoom
@@ -862,7 +925,7 @@ export function BottleneckAnalysisView() {
           >
             <div className="px-3 py-2">
               {bottomTab === 'levers' ? (
-                <LeverTable segments={levers} />
+                <LeverTable segments={levers} projectId={projectId} gainOf={coolingOf} />
               ) : (
                 <StudyTable
                   studies={studies}

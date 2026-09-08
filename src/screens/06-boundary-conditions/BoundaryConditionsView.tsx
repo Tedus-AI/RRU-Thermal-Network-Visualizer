@@ -13,7 +13,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft,
   ArrowRight,
@@ -32,6 +32,7 @@ import {
 
 import { ScreenWorkspace } from '@/app/ScreenWorkspace';
 import { projectPath } from '@/app/navigation';
+import { FOCUS_PARAM, consumeFocus } from '@/app/focusLink';
 import { useShellActions } from '@/app/shellActions';
 import { Badge, Button, Modal, Skeleton } from '@/ui/primitives';
 import { biTitle } from '@/ui/FieldLabel';
@@ -186,6 +187,17 @@ export function BoundaryConditionsView() {
 
   const [step, setStep] = useState<BoundaryStep>('scenario');
   const [selectedPortId, setSelectedPortId] = useState<string | null>(null);
+
+  /** Arrived from Screen 08 with a graph node whose boundary port to open. */
+  const [focusParams] = useSearchParams();
+  useEffect(() => {
+    if (ports.length === 0) return;
+    const nodeId = consumeFocus(focusParams, FOCUS_PARAM.node, navigate);
+    if (!nodeId) return;
+    const port = ports.find((entry) => entry.connected_node_id === nodeId);
+    if (port) setSelectedPortId(port.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ports, focusParams]);
   const [preferredProfileId, setPreferredProfileId] = useState<string | null>(null);
   const [warningConfirm, setWarningConfirm] = useState<number | null>(null);
   const [openPanels, setOpenPanels] = useState<Record<BoundaryPanelId, boolean>>({
