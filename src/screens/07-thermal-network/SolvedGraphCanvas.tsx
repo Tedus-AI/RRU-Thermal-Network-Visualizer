@@ -275,6 +275,10 @@ export function solvedStylesheet(): StylesheetCSS[] {
       style: {
         'background-color': '#ea580c',
         'overlay-color': '#f97316',
+        // Round, to match the badge. The overlay defaults to a rounded
+        // rectangle, which around a 20 px circle reads as a square smudge
+        // rather than a halo.
+        'overlay-shape': 'ellipse',
         'overlay-padding': 6,
         'overlay-opacity': 0.25,
       },
@@ -284,7 +288,7 @@ export function solvedStylesheet(): StylesheetCSS[] {
       // on a timer; a halo that grows and shrinks reads at a glance where a
       // static colour on a 20px circle does not.
       selector: 'node.tuned-badge.tuned-active.tuned-pulse',
-      style: { 'overlay-padding': 12, 'overlay-opacity': 0.45 },
+      style: { 'overlay-shape': 'ellipse', 'overlay-padding': 12, 'overlay-opacity': 0.45 },
     },
     ...parallelBranchStyles(),
     parallelBraceStyle(HSK_BUS_COLOR),

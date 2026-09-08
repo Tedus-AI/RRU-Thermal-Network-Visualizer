@@ -18,7 +18,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 import {
   clampPanelSize,
@@ -79,6 +79,7 @@ function useSideBySide(): boolean {
 export function ResizableSidebar({
   id,
   defaultWidth,
+  side = 'left',
   labelEn,
   labelZh,
   shortEn,
@@ -88,6 +89,13 @@ export function ResizableSidebar({
   /** Which screen's sidebar this is; the remembered size is kept per screen. */
   id: string;
   defaultWidth: number;
+  /**
+   * Which side of the layout the panel sits on. The seam always faces the
+   * content it is stealing from, and dragging TOWARDS that content widens the
+   * panel — a seam on the wrong edge is one the reader cannot find, and a drag
+   * that narrows when it should widen is worse than no drag at all.
+   */
+  side?: 'left' | 'right';
   /** What the panel holds, for the collapsed strip's tooltip. */
   labelEn: string;
   labelZh: string;
@@ -131,9 +139,11 @@ export function ResizableSidebar({
     const dx = event.clientX - active.startX;
     if (!active.moved && Math.abs(dx) < PANEL_CLICK_SLOP_PX) return;
     active.moved = true;
+    // A panel on the right grows when the pointer goes LEFT.
+    const travel = side === 'right' ? -dx : dx;
     setState((current) => ({
       ...current,
-      width: clampSidebarWidth(active.startWidth + dx, window.innerWidth),
+      width: clampSidebarWidth(active.startWidth + travel, window.innerWidth),
     }));
   };
 
@@ -160,7 +170,7 @@ export function ResizableSidebar({
         aria-label={`Expand ${labelEn} / 展開${labelZh}`}
         className="flex h-9 w-full shrink-0 items-center justify-center gap-1 rounded-lg border border-line bg-surface text-[11px] font-semibold text-ink-500 hover:border-ink-400 hover:text-ink-900 lg:h-full lg:w-10 lg:flex-col"
       >
-        <ChevronRight size={15} />
+        {side === 'right' ? <ChevronLeft size={15} /> : <ChevronRight size={15} />}
         <span className="hidden [writing-mode:vertical-rl] lg:block">
           {shortEn} / {shortZh}
         </span>
@@ -173,7 +183,15 @@ export function ResizableSidebar({
       className="relative flex w-full shrink-0 flex-col lg:h-full"
       style={sideBySide ? { width: state.width, flexBasis: state.width } : undefined}
     >
-      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto pr-1 lg:pr-3">
+      {/* The gutter is on the side facing the content, so the panel's OUTER
+          edge stays flush with whatever it is aligned to — on the right that is
+          the cards above it, and 12 px of padding there reads as a column that
+          does not line up. */}
+      <div
+        className={`flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto ${
+          side === 'right' ? 'pl-1 lg:pl-3' : 'pr-1 lg:pr-3'
+        }`}
+      >
         {children}
       </div>
 
@@ -186,7 +204,9 @@ export function ResizableSidebar({
         onPointerMove={onPointerMove}
         onPointerUp={endGesture}
         onPointerCancel={endGesture}
-        className="group absolute inset-y-0 -right-1 z-20 hidden w-2.5 cursor-col-resize touch-none items-center justify-center lg:flex"
+        className={`group absolute inset-y-0 z-20 hidden w-2.5 cursor-col-resize touch-none items-center justify-center lg:flex ${
+          side === 'right' ? '-left-1' : '-right-1'
+        }`}
       >
         <span
           className={`h-full w-0.5 rounded-full transition-colors ${
@@ -195,9 +215,9 @@ export function ResizableSidebar({
         />
         {/* Named on hover, because a seam that does two things has to say so. */}
         <span
-          className={`pointer-events-none absolute top-1/2 left-4 z-30 w-max -translate-y-1/2 rounded-md bg-ink-900 px-2 py-1 text-[11px] leading-tight font-semibold text-white shadow-lg ${
-            dragging ? 'hidden' : 'hidden group-hover:block'
-          }`}
+          className={`pointer-events-none absolute top-1/2 z-30 w-max -translate-y-1/2 rounded-md bg-ink-900 px-2 py-1 text-[11px] leading-tight font-semibold text-white shadow-lg ${
+            side === 'right' ? 'right-4' : 'left-4'
+          } ${dragging ? 'hidden' : 'hidden group-hover:block'}`}
         >
           Click to collapse / 點擊收合
           <span className="block font-normal text-white/70">

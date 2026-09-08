@@ -22,7 +22,7 @@
  * which "how much do I need out of this TIM" becomes a question with an answer.
  */
 
-import { FilePlus2, RotateCcw, Save } from 'lucide-react';
+import { FilePlus2, LogOut, RotateCcw, Save } from 'lucide-react';
 
 import { Button } from '@/ui/primitives';
 import { biTitle } from '@/ui/FieldLabel';
@@ -45,6 +45,7 @@ export function SegmentTuner({
   editingName,
   onReduction,
   onReset,
+  onExit,
   onAdd,
   onSave,
 }: {
@@ -66,7 +67,10 @@ export function SegmentTuner({
    */
   editingName: string | null;
   onReduction: (edgeId: string, pct: number) => void;
+  /** Zero the sliders, or — while editing — put the saved values back. */
   onReset: () => void;
+  /** Leave the record and go back to a fresh draft. */
+  onExit: () => void;
   onAdd: () => void;
   onSave: () => void;
 }) {
@@ -132,11 +136,28 @@ export function SegmentTuner({
       {/* Wraps: the column this sits in is now the reader's to narrow, and at
           its 240 px floor two buttons on one line clip the second. */}
       <div className="shrink-0">
+        {/* The way out. Without it "editing" was a state with an entrance and
+            no exit: Add stayed grey, and the only escape was to pick a
+            different part. */}
         {editingName && (
-          <p className="mb-1 truncate text-[10px] text-ink-400" title={editingName}>
-            Editing a saved study
-            <span className="ml-1">／正在編輯已儲存的紀錄</span>
-          </p>
+          <div className="mb-1 flex items-center gap-1.5">
+            <p className="min-w-0 flex-1 truncate text-[10px] text-ink-400" title={editingName}>
+              Editing a saved study
+              <span className="ml-1">／正在編輯已儲存的紀錄</span>
+            </p>
+            <button
+              type="button"
+              onClick={onExit}
+              title={biTitle(
+                'Leave this study and start a fresh one',
+                '結束編輯，回到全新的一筆',
+              )}
+              className="flex shrink-0 items-center gap-1 rounded border border-line-strong px-1.5 py-0.5 text-[10px] font-semibold text-ink-500 hover:bg-surface-muted hover:text-ink-900"
+            >
+              <LogOut size={11} />
+              Exit / 結束編輯
+            </button>
+          </div>
         )}
         <div className="flex flex-wrap items-center gap-1.5">
           <Button
@@ -167,14 +188,20 @@ export function SegmentTuner({
           >
             Save / 儲存
           </Button>
+          {/* Two meanings, one for each state, and each is the useful one:
+              on a fresh draft "reset" is back to the solve; on a record it is
+              back to what that record says. */}
           <Button
             icon={<RotateCcw size={14} />}
             className="h-8 !text-[12px]"
             disabled={!dirty}
-            title={biTitle('Back to the solved values', '回到求解結果')}
+            title={biTitle(
+              editingName ? 'Back to the saved values' : 'Back to the solved values',
+              editingName ? '回到已儲存的數值' : '回到求解結果',
+            )}
             onClick={onReset}
           >
-            Reset / 歸零
+            {editingName ? 'Revert / 還原' : 'Reset / 歸零'}
           </Button>
         </div>
       </div>
