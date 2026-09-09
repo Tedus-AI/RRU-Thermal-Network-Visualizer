@@ -58,7 +58,7 @@ import {
   parallelPairNames,
   parallelPairs,
 } from '@/screens/05-thermal-path-builder/parallelPairs';
-import type { ThermalNetwork } from '@/thermal/types';
+import type { ThermalNetwork, ThermalNode } from '@/thermal/types';
 import type { ThermalSolution } from '@/thermal/solver/solverTypes';
 
 import {
@@ -272,16 +272,35 @@ export function solvedStylesheet(): StylesheetCSS[] {
       // Actually cut, as opposed to merely offered: this is the one the reader
       // is asking "which segment am I moving?" about.
       selector: 'node.tuned-badge.tuned-active',
+      style: { 'background-color': '#ea580c', 'overlay-color': '#f97316' },
+    },
+    {
+      /*
+         The over-temperature alarm: the same dot, in danger red, with nothing
+         written in it. Smaller than a rank badge because it carries no digit,
+         and the only one of the three that takes events — the degrees it is
+         over are a sentence on hover, not a glyph on the picture.
+      */
+      selector: 'node.alert-badge',
       style: {
-        'background-color': '#ea580c',
-        'overlay-color': '#f97316',
-        // Round, to match the badge. The overlay defaults to a rounded
-        // rectangle, which around a 20 px circle reads as a square smudge
-        // rather than a halo.
-        'overlay-shape': 'ellipse',
-        'overlay-padding': 3,
-        'overlay-opacity': 0.25,
+        width: 16,
+        height: 16,
+        shape: 'ellipse',
+        'background-color': '#dc2626',
+        'border-width': 2,
+        'border-color': '#ffffff',
+        label: '',
+        'text-background-opacity': 0,
+        'overlay-color': '#ef4444',
+        events: 'yes',
+        'z-index': 31,
       },
+    },
+    {
+      // Round, to match the badge: the overlay defaults to a rounded rectangle,
+      // which around a 20 px circle reads as a square smudge rather than a halo.
+      selector: 'node.pulse-badge',
+      style: { 'overlay-shape': 'ellipse', 'overlay-padding': 3, 'overlay-opacity': 0.25 },
     },
     {
       // The pulse. Cytoscape has no keyframes, so the canvas toggles this class
@@ -293,7 +312,7 @@ export function solvedStylesheet(): StylesheetCSS[] {
       // either side of it. The step that used to be the SMALLEST is now the
       // largest, so the marker still moves without spreading over its
       // neighbours; the opacity carries the rest of the beat.
-      selector: 'node.tuned-badge.tuned-active.tuned-pulse',
+      selector: 'node.pulse-badge.tuned-pulse',
       style: { 'overlay-shape': 'ellipse', 'overlay-padding': 6, 'overlay-opacity': 0.5 },
     },
     ...parallelBranchStyles(),
@@ -314,7 +333,7 @@ export function solvedStylesheet(): StylesheetCSS[] {
  * same snapshot the buses are placed in, which is after the layout has settled.
  */
 function positionTunedBadges(cy: Core): void {
-  cy.nodes('.tuned-badge').forEach((badge) => {
+  cy.nodes('.tuned-badge, .alert-badge').forEach((badge) => {
     const anchorId = badge.data('anchorNodeId') as string | undefined;
     if (anchorId) {
       const node = cy.getElementById(anchorId);
@@ -414,6 +433,12 @@ export function buildElements(
    * indication of which three the screen is about.
    */
   rankedNodes?: ReadonlyMap<string, { rank: number }>,
+  /**
+   * Mark every node solved past its limit with a pulsing dot. Screen 07 asks
+   * for it; Screen 08 does not, because its own badges already own that side
+   * of a node and two markers on one anchor is a smudge, not an alarm.
+   */
+  alertOverLimit?: boolean,
 ): ElementDefinition[] {
   const elements: ElementDefinition[] = [];
   const solved =
@@ -426,6 +451,9 @@ export function buildElements(
     extraHiddenNodeIds && extraHiddenNodeIds.size > 0
       ? new Set([...byComponent, ...extraHiddenNodeIds])
       : byComponent;
+
+  /** Nodes solved past their own limit, for the alert badges below. */
+  const overLimit: { node: ThermalNode; over_C: number; temperature_C: number }[] = [];
 
   for (const node of Object.values(network.nodes)) {
     if (node.disabled || hidden.has(node.id)) continue;
@@ -466,6 +494,7 @@ export function buildElements(
     if (fixed) classes.push('fixed');
     if (node.limit_C != null && temperature != null && temperature > node.limit_C) {
       classes.push('over-limit');
+      overLimit.push({ node, over_C: temperature - node.limit_C, temperature_C: temperature });
     }
 
     elements.push({
@@ -718,7 +747,7 @@ export function buildElements(
           edgeId,
           label: String(mark.rank),
         },
-        classes: `view-only tuned-badge${mark.active ? ' tuned-active' : ''}`,
+        classes: `view-only tuned-badge${mark.active ? ' tuned-active pulse-badge' : ''}`,
         selectable: false,
         grabbable: false,
       });
@@ -735,6 +764,37 @@ export function buildElements(
      Always lit, because unlike a segment there is no "offered but not cut"
      state for a part: these three ARE the answer the screen is giving.
   */
+  /*
+     The over-temperature alarm.
+
+     A node past its limit already wears a red border, which is correct and
+     easy to miss on a picture of 113 boxes — the reader has to be looking at
+     the node to see that it is in trouble. The dot is the same round pulse
+     Screen 08 marks a cut segment with, in danger red and with nothing written
+     in it: there is only one thing it can mean, and a number inside would
+     invite reading it as a rank. How far over it is belongs on hover, where
+     it can be a sentence instead of a glyph.
+  */
+  if (alertOverLimit) {
+    for (const entry of overLimit) {
+      elements.push({
+        group: 'nodes',
+        data: {
+          id: `${entry.node.id}__ALERT_BADGE`,
+          anchorNodeId: entry.node.id,
+          label: '',
+          over_C: entry.over_C,
+          alertName: entry.node.name,
+          alertTemperature_C: entry.temperature_C,
+          alertLimit_C: entry.node.limit_C,
+        },
+        classes: 'view-only alert-badge pulse-badge',
+        selectable: false,
+        grabbable: false,
+      });
+    }
+  }
+
   if (rankedNodes && rankedNodes.size > 0) {
     for (const [nodeId, mark] of rankedNodes) {
       const node = network.nodes[nodeId];
@@ -746,7 +806,7 @@ export function buildElements(
           anchorNodeId: nodeId,
           label: String(mark.rank),
         },
-        classes: 'view-only tuned-badge tuned-active',
+        classes: 'view-only tuned-badge tuned-active pulse-badge',
         selectable: false,
         grabbable: false,
       });
@@ -766,6 +826,8 @@ export const SolvedGraphCanvas = forwardRef<
     tunedEdges?: ReadonlyMap<string, { rank: number; active: boolean }>;
     /** Screen 08's ranked parts, marked on the whole machine. */
     rankedNodes?: ReadonlyMap<string, { rank: number }>;
+    /** Mark every node solved past its limit with a pulsing red dot (07). */
+    alertOverLimit?: boolean;
     display: GraphDisplayOptions;
     scenarioId: string;
     selectedNodeId: string | null;
@@ -787,6 +849,7 @@ export const SolvedGraphCanvas = forwardRef<
     mode,
     tunedEdges,
     rankedNodes,
+    alertOverLimit,
     display,
     scenarioId,
     selectedNodeId,
@@ -817,6 +880,16 @@ export const SolvedGraphCanvas = forwardRef<
   const [marquee, setMarquee] = useState<ViewportBox | null>(null);
   const marqueeStart = useRef<{ x: number; y: number } | null>(null);
 
+  /** What the hovered alarm dot says, and where to say it. Container pixels. */
+  const [alertTip, setAlertTip] = useState<{
+    x: number;
+    y: number;
+    name: string;
+    over_C: number;
+    temperature_C: number;
+    limit_C: number;
+  } | null>(null);
+
   const handlers = useRef({ onSelectNode, onSelectEdge, onZoomChange });
   handlers.current = { onSelectNode, onSelectEdge, onZoomChange };
 
@@ -837,8 +910,9 @@ export const SolvedGraphCanvas = forwardRef<
         nodeLabelOverrides,
         tunedEdges,
         rankedNodes,
+        alertOverLimit,
       ),
-    [network, solution, mode, display, scenarioId, layoutMode, scales, hiddenComponentIds, extraHiddenNodeIds, nodeLabelOverrides, tunedEdges, rankedNodes],
+    [network, solution, mode, display, scenarioId, layoutMode, scales, hiddenComponentIds, extraHiddenNodeIds, nodeLabelOverrides, tunedEdges, rankedNodes, alertOverLimit],
   );
 
   useEffect(() => {
@@ -895,6 +969,29 @@ export const SolvedGraphCanvas = forwardRef<
       handlers.current.onSelectNode(null);
       handlers.current.onSelectEdge(null);
     });
+
+    /*
+       The alarm dot says how far over on hover.
+
+       Rendered position rather than model position, so the bubble tracks the
+       dot through a pan and a zoom instead of drifting off it. Pan, zoom and
+       a re-layout all dismiss it: at that point the cursor is no longer over
+       the thing the bubble is about.
+    */
+    cy.on('mouseover', 'node.alert-badge', (event) => {
+      const badge = event.target;
+      const at = badge.renderedPosition();
+      setAlertTip({
+        x: at.x,
+        y: at.y,
+        name: String(badge.data('alertName') ?? ''),
+        over_C: Number(badge.data('over_C') ?? 0),
+        temperature_C: Number(badge.data('alertTemperature_C') ?? 0),
+        limit_C: Number(badge.data('alertLimit_C') ?? 0),
+      });
+    });
+    cy.on('mouseout', 'node.alert-badge', () => setAlertTip(null));
+    cy.on('pan zoom', () => setAlertTip(null));
 
     // The toolbar shows the zoom level, so every route that changes it — the
     // wheel included — has to report, not just the buttons.
@@ -1014,10 +1111,8 @@ export const SolvedGraphCanvas = forwardRef<
    * already gives `.tuned-active`.
    */
   const tunedActive = useMemo(
-    () =>
-      (rankedNodes?.size ?? 0) > 0 ||
-      [...(tunedEdges?.values() ?? [])].some((mark) => mark.active),
-    [tunedEdges, rankedNodes],
+    () => elements.some((element) => String(element.classes ?? '').includes('pulse-badge')),
+    [elements],
   );
 
   useEffect(() => {
@@ -1028,11 +1123,11 @@ export const SolvedGraphCanvas = forwardRef<
     let on = false;
     const timer = window.setInterval(() => {
       on = !on;
-      cy.nodes('.tuned-badge.tuned-active').toggleClass('tuned-pulse', on);
+      cy.nodes('.pulse-badge').toggleClass('tuned-pulse', on);
     }, PULSE_MS);
     return () => {
       window.clearInterval(timer);
-      cyRef.current?.nodes('.tuned-badge').removeClass('tuned-pulse');
+      cyRef.current?.nodes('.pulse-badge').removeClass('tuned-pulse');
     };
   }, [tunedActive, elements]);
 
@@ -1134,6 +1229,7 @@ export const SolvedGraphCanvas = forwardRef<
             positionsRef.current[node.id() as string] = { x: position.x, y: position.y };
           });
           positionViewBuses(cy, true);
+          positionTunedBadges(cy);
           cy.fit(undefined, 40);
         });
         layout.run();
@@ -1154,6 +1250,23 @@ export const SolvedGraphCanvas = forwardRef<
   return (
     <div className="relative size-full">
       <div ref={containerRef} className="size-full" data-testid="solved-graph-canvas" />
+      {alertTip && (
+        <div
+          data-testid="solved-over-limit-tip"
+          role="status"
+          className="pointer-events-none absolute z-30 w-max max-w-[19rem] -translate-x-1/2 -translate-y-full rounded-md bg-danger-600 px-2 py-1.5 text-[11px] leading-tight font-semibold text-white shadow-lg"
+          style={{ left: alertTip.x, top: alertTip.y - 14 }}
+        >
+          <span className="block">
+            Over limit by {alertTip.over_C.toFixed(1)} °C
+            <span className="ml-1 font-normal">／超出上限 {alertTip.over_C.toFixed(1)} °C</span>
+          </span>
+          <span className="mt-0.5 block font-normal text-white/85">
+            {alertTip.temperature_C.toFixed(1)} °C vs {alertTip.limit_C.toFixed(0)} °C ·{' '}
+            {alertTip.name}
+          </span>
+        </div>
+      )}
       {tool === 'zoom-box' && (
         <div
           data-testid="solved-zoom-marquee-layer"

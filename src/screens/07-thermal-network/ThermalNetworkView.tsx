@@ -857,6 +857,11 @@ export function ThermalNetworkView() {
               // junction over-limit that the table reports as passing.
               network={limited ?? network}
               solution={stale ? null : solution}
+              // A red border on a box among a hundred boxes is easy to miss.
+              // The dot pulses, so an over-temperature part is visible without
+              // being looked for.
+              alertOverLimit
+
               mode={mode}
               display={display}
               scenarioId={activeScenarioId ?? ''}

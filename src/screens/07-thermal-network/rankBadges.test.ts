@@ -92,3 +92,74 @@ describe('rank badges on the whole machine', () => {
     expect(badges(new Map())).toHaveLength(0);
   });
 });
+
+/**
+ * The over-temperature alarm.
+ *
+ * A node past its limit already wears a red border; the dot is the version of
+ * that a reader sees without looking for it. What matters here is that it
+ * appears for exactly the nodes the border appears for — the same test, not a
+ * second one that could drift from it — that it carries the degrees for the
+ * hover text, and that it is off unless a screen asks for it.
+ */
+describe('over-limit alarm badges', () => {
+  const hot = (): ThermalNetwork => {
+    const net = network();
+    (net.nodes as Record<string, { limit_C?: number }>).A.limit_C = 90;
+    (net.nodes as Record<string, { limit_C?: number }>).B.limit_C = 90;
+    return net;
+  };
+  const solved = {
+    node_temperatures_C: { A: 96.4, B: 71.2, C: 60, D: 60 },
+    edge_results: {},
+  } as unknown as import('../../thermal/solver/solverTypes').ThermalSolution;
+
+  const build = (alert: boolean) =>
+    buildElements(
+      hot(),
+      solved,
+      'temperature',
+      DISPLAY,
+      'SCN_001',
+      'TopBottom',
+      SCALES,
+      new Set<string>(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      alert,
+    );
+
+  it('marks the node that is over, and carries how far over', () => {
+    const marks = build(true).filter((e) => String(e.classes ?? '').includes('alert-badge'));
+
+    expect(marks).toHaveLength(1);
+    expect(marks[0].data.id).toBe('A__ALERT_BADGE');
+    expect(marks[0].data.anchorNodeId).toBe('A');
+    expect(marks[0].data.over_C).toBeCloseTo(6.4, 6);
+    expect(marks[0].data.alertLimit_C).toBe(90);
+    // No digit in it: there is only one thing a red dot can mean here.
+    expect(marks[0].data.label).toBe('');
+    // It pulses with the rest, and takes the hover the others refuse.
+    expect(marks[0].classes).toContain('pulse-badge');
+  });
+
+  it('agrees with the red border it is amplifying', () => {
+    const elements = build(true);
+    const bordered = elements
+      .filter((e) => String(e.classes ?? '').includes('over-limit'))
+      .map((e) => e.data.id);
+    const dotted = elements
+      .filter((e) => String(e.classes ?? '').includes('alert-badge'))
+      .map((e) => String(e.data.anchorNodeId));
+
+    expect(dotted).toEqual(bordered);
+  });
+
+  it('stays off unless a screen asks for it — 08 marks its own way', () => {
+    expect(build(false).filter((e) => String(e.classes ?? '').includes('alert-badge'))).toHaveLength(
+      0,
+    );
+  });
+});
