@@ -34,7 +34,6 @@ import type { ThermalSolution } from '@/thermal/solver/solverTypes';
 import type { BottleneckAnalysis, ImprovementStudy } from '@/thermal/analysis/analysisTypes';
 import { isImprovementStudy } from '@/thermal/analysis/analysisTypes';
 import type { ResultsOverviewSnapshot } from '@/thermal/overview/overviewTypes';
-import type { TemperatureDistributionResult } from '@/thermal/analysis/distributionResult';
 import type {
   ReportExportPayload,
   ReportTemplate,
@@ -52,6 +51,10 @@ const NETWORK_REVIEW_KEY = 'tnv.network_review_state';
 const BOUNDARY_KEY = 'tnv.boundary_sets';
 const SOLUTIONS_KEY = 'tnv.thermal_solutions';
 const ANALYSES_KEY = 'tnv.bottleneck_analyses';
+/**
+ * Written by builds that had Screen 09; nothing writes it now. Kept so that
+ * deleting a project still clears what those builds left behind.
+ */
 const DISTRIBUTIONS_KEY = 'tnv.temperature_distributions';
 const PROPOSALS_KEY = 'tnv.improvement_proposals';
 const SNAPSHOTS_KEY = 'tnv.results_snapshots';
@@ -604,38 +607,6 @@ export function deleteAnalysis(projectId: string, networkId: string, scenarioId:
   writeCollection(ANALYSES_KEY, all);
 }
 
-// --- Temperature distribution results -------------------------------------
-
-export function loadDistributions(projectId: string): TemperatureDistributionResult[] {
-  const all = readCollection(DISTRIBUTIONS_KEY);
-  const bucket = (all[projectId] ?? {}) as Record<string, TemperatureDistributionResult>;
-  return Object.values(bucket).filter(
-    (entry) => entry && typeof entry === 'object' && entry.scenario_id && Array.isArray(entry.rows),
-  );
-}
-
-export function saveDistribution(
-  projectId: string,
-  distribution: TemperatureDistributionResult,
-): void {
-  const all = readCollection(DISTRIBUTIONS_KEY);
-  const bucket = (all[projectId] ?? {}) as Record<string, unknown>;
-  bucket[boundaryKey(distribution.network_id, distribution.scenario_id)] = distribution;
-  all[projectId] = bucket as RawDoc;
-  writeCollection(DISTRIBUTIONS_KEY, all);
-}
-
-export function deleteDistribution(
-  projectId: string,
-  networkId: string,
-  scenarioId: string,
-): void {
-  const all = readCollection(DISTRIBUTIONS_KEY);
-  const bucket = (all[projectId] ?? {}) as Record<string, unknown>;
-  delete bucket[boundaryKey(networkId, scenarioId)];
-  all[projectId] = bucket as RawDoc;
-  writeCollection(DISTRIBUTIONS_KEY, all);
-}
 
 export function loadProposals(projectId: string): ImprovementStudy[] {
   const all = readCollection(PROPOSALS_KEY);

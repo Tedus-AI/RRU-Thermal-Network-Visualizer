@@ -56,7 +56,7 @@ import { useAnalysisStore } from '@/data/analysisStore';
 import { useOverviewStore } from '@/data/overviewStore';
 import { useReportStore } from '@/data/reportStore';
 import { useExportStore, type QueueEntry } from '@/data/exportStore';
-import { useDistributionStore } from '@/data/distributionStore';
+import { useDistributionResult } from '@/data/useDistributionResult';
 import { currentSourceRevision } from '@/data/sourceRevision';
 
 import { buildResultsOverview } from '@/thermal/overview/overviewAggregator';
@@ -217,9 +217,9 @@ export function ExportCenterView() {
   const solutionStale = useSolutionStore((s) => s.isStale());
   const solverState = useSolverStore((s) => s.state);
   const analyses = useAnalysisStore((s) => s.analyses);
-  const distributionResults = useDistributionStore((s) => s.results);
-  const distributionKey = useDistributionStore((s) => s.activeKey);
-  const distributionState = useDistributionStore((s) => s.state());
+  // Derived from the solution on screen rather than read back from a stored
+  // snapshot Screen 09 used to refresh; see `useDistributionResult`.
+  const { distribution, state: distributionState } = useDistributionResult();
   const snapshots = useOverviewStore((s) => s.snapshots);
   const payloads = useReportStore((s) => s.payloads);
   const reportConfigs = useReportStore((s) => s.configs);
@@ -248,7 +248,6 @@ export function ExportCenterView() {
   const analysis = solution
     ? (analyses[`${solution.network_id}::${solution.scenario_id}`] ?? null)
     : null;
-  const distribution = distributionKey ? (distributionResults[distributionKey] ?? null) : null;
   const snapshot = activeScenarioId ? (snapshots[activeScenarioId] ?? null) : null;
   // Screen 06's store materialises an EMPTY set for a scenario that has never
   // been configured, purely so its editor has something to bind to. That is not
@@ -278,7 +277,6 @@ export function ExportCenterView() {
     useBoundaryStore.getState().loadFor(projectId, scenarioId);
     useSolutionStore.getState().loadFor(projectId, scenarioId);
     useAnalysisStore.getState().loadFor(projectId, scenarioId);
-    useDistributionStore.getState().loadFor(projectId, scenarioId);
     useOverviewStore.getState().loadFor(projectId, scenarioId);
     useReportStore.getState().loadFor(projectId, scenarioId);
   }, [projectId]);
@@ -289,7 +287,6 @@ export function ExportCenterView() {
     useBoundaryStore.getState().loadFor(projectId, activeScenarioId);
     useSolutionStore.getState().loadFor(projectId, activeScenarioId);
     useAnalysisStore.getState().loadFor(projectId, activeScenarioId);
-    useDistributionStore.getState().loadFor(projectId, activeScenarioId);
     useOverviewStore.getState().loadFor(projectId, activeScenarioId);
     useReportStore.getState().loadFor(projectId, activeScenarioId);
   }, [projectId, activeScenarioId]);
@@ -318,8 +315,6 @@ export function ExportCenterView() {
       solution,
       components,
       analysis,
-      distribution_result: distribution,
-      distribution_stale: distributionState !== 'CURRENT',
       current_source_revision: sourceRevision ?? undefined,
       solution_stale: stale,
       solver_settings: network.solver_settings,

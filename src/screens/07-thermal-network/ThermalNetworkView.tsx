@@ -104,6 +104,7 @@ import {
   resultTree,
   type ResultMode,
 } from './resultViewModel';
+import { ambientHeadroom } from '@/thermal/analysis/ambientHeadroom';
 import { T07 } from './tooltips';
 
 // --- building blocks --------------------------------------------------------
@@ -325,6 +326,19 @@ export function ThermalNetworkView() {
         : [],
     [limited, solution, stale, ambient, powerScale],
   );
+  /*
+     How much hotter the air can get before the worst part reaches its limit.
+
+     Read off the SAME projected limits the table and the graph are judged by,
+     so the card cannot name a part the rows disagree about; and off the stale
+     guard, so it goes to N/A with everything else rather than reporting a
+     headroom the current inputs no longer support.
+  */
+  const headroom = useMemo(
+    () => (limited ? ambientHeadroom(limited, stale ? null : solution, ambient) : null),
+    [limited, solution, stale, ambient],
+  );
+
   const flows = useMemo(
     () => (network ? edgeRows(network, stale ? null : solution) : []),
     [network, solution, stale],
@@ -425,62 +439,13 @@ export function ThermalNetworkView() {
     }
   };
 
-  // --- guards --------------------------------------------------------------
-
-  if (!projectId || projectStatus === 'error') {
-    return (
-      <div className="flex h-full items-center justify-center p-8">
-        <div className="max-w-md rounded-lg border border-danger-500/30 bg-surface p-7 text-center">
-          <XCircle size={22} className="mx-auto mb-3 text-danger-600" />
-          <h1 className="text-[15px] font-bold text-ink-900">Unable to load the thermal network.</h1>
-          <p className="mt-1 text-[13px] text-ink-500">無法載入熱網路。</p>
-          <Button variant="primary" className="mt-4" onClick={() => navigate('/')}>
-            Return to Project Info
-          </Button>
-        </div>
-      </div>
-    );
-  }
-
-  if (projectStatus === 'loading' || !draft) return <LoadingState />;
-
-  const hasTopology = Boolean(network && Object.keys(network.nodes).length > 0);
-
-  // 07 §49 — no network at all.
-  if (!hasTopology || !network) {
-    return (
-      <ScreenWorkspace
-        title="Thermal Network Solver"
-        titleZh="熱網路求解"
-        description="Solve the thermal network to obtain node temperatures, heat flows and energy balance."
-        descriptionZh="執行熱網路求解，以取得節點溫度、熱流與能量平衡。"
-      >
-        <div className="flex h-full items-center justify-center">
-          <div className="max-w-md rounded-lg border border-dashed border-line-strong bg-surface px-6 py-10 text-center">
-            <Network size={24} className="mx-auto mb-3 text-ink-400" />
-            <p className="text-[14px] font-semibold text-ink-700">No thermal network found.</p>
-            <p className="mt-1 text-[12px] text-ink-400">找不到熱網路，請先完成 05。</p>
-            <Button
-              variant="primary"
-              className="mt-4"
-              onClick={() => navigate(projectPath(projectId, 'thermal-path'))}
-            >
-              Open 05 Thermal Path Builder / 前往 05
-            </Button>
-          </div>
-        </div>
-      </ScreenWorkspace>
-    );
-  }
-
-  const boundaryIncomplete =
-    !boundarySet || boundarySet.validation.errors.length > 0 || ambient == null;
-
-  const continueBlocked =
-    !solution ||
-    stale ||
-    solution.status === 'FAILED' ||
-    solution.energy_balance.error_pct > settings.energy_error_pct;
+  // --- exports -------------------------------------------------------------
+  //
+  // Above the guards below, not after them. These are hooks, and the guards
+  // return early while the project is still loading — so on a direct load of
+  // this screen React saw one hook count on the loading render and a longer
+  // one when the project arrived, and threw. Reaching Screen 07 through the
+  // nav hid it, because by then the project was already in the stores.
 
   const [exportingTable, setExportingTable] = useState(false);
 
@@ -567,6 +532,9 @@ export function ThermalNetworkView() {
    * something different by it.
    */
   const handleExportPdf = useCallback(async () => {
+    // The button is only reachable once the guards below have passed, so this
+    // is the type system catching up with the screen rather than a real case.
+    if (!graphNetwork) return;
     setExporting('pdf');
     try {
       const scales = resultScales(stale ? null : solution);
@@ -630,6 +598,64 @@ export function ThermalNetworkView() {
     wholeGraphImage,
   ]);
 
+  // --- guards --------------------------------------------------------------
+
+  if (!projectId || projectStatus === 'error') {
+    return (
+      <div className="flex h-full items-center justify-center p-8">
+        <div className="max-w-md rounded-lg border border-danger-500/30 bg-surface p-7 text-center">
+          <XCircle size={22} className="mx-auto mb-3 text-danger-600" />
+          <h1 className="text-[15px] font-bold text-ink-900">Unable to load the thermal network.</h1>
+          <p className="mt-1 text-[13px] text-ink-500">無法載入熱網路。</p>
+          <Button variant="primary" className="mt-4" onClick={() => navigate('/')}>
+            Return to Project Info
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  if (projectStatus === 'loading' || !draft) return <LoadingState />;
+
+  const hasTopology = Boolean(network && Object.keys(network.nodes).length > 0);
+
+  // 07 §49 — no network at all.
+  if (!hasTopology || !network) {
+    return (
+      <ScreenWorkspace
+        title="Thermal Network Solver"
+        titleZh="熱網路求解"
+        description="Solve the thermal network to obtain node temperatures, heat flows and energy balance."
+        descriptionZh="執行熱網路求解，以取得節點溫度、熱流與能量平衡。"
+      >
+        <div className="flex h-full items-center justify-center">
+          <div className="max-w-md rounded-lg border border-dashed border-line-strong bg-surface px-6 py-10 text-center">
+            <Network size={24} className="mx-auto mb-3 text-ink-400" />
+            <p className="text-[14px] font-semibold text-ink-700">No thermal network found.</p>
+            <p className="mt-1 text-[12px] text-ink-400">找不到熱網路，請先完成 05。</p>
+            <Button
+              variant="primary"
+              className="mt-4"
+              onClick={() => navigate(projectPath(projectId, 'thermal-path'))}
+            >
+              Open 05 Thermal Path Builder / 前往 05
+            </Button>
+          </div>
+        </div>
+      </ScreenWorkspace>
+    );
+  }
+
+  const boundaryIncomplete =
+    !boundarySet || boundarySet.validation.errors.length > 0 || ambient == null;
+
+  const continueBlocked =
+    !solution ||
+    stale ||
+    solution.status === 'FAILED' ||
+    solution.energy_balance.error_pct > settings.energy_error_pct;
+
+
   const legend = legendFor(mode, stale ? null : solution);
   const selectedNode = selectedNodeId ? ((limited ?? network).nodes[selectedNodeId] ?? null) : null;
   const selectedEdge = selectedEdgeId ? (network.edges[selectedEdgeId] ?? null) : null;
@@ -658,7 +684,7 @@ export function ThermalNetworkView() {
           {scenario && <Badge tone="neutral">{scenario.name}</Badge>}
         </div>
       }
-      metrics={<SolverKpiBar solution={solution} stale={stale} />}
+      metrics={<SolverKpiBar solution={solution} stale={stale} headroom={headroom} />}
       actionBar={
         <div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-line bg-surface px-6 py-3">
           <Button

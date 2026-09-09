@@ -1,7 +1,15 @@
 /**
- * Screen 09 tests — the developer test cases in 09 §58 (A–E), plus the
- * statistics of §23/§24, the scope and filter rules of §7/§9, and the ranking
- * distinction of §26.
+ * What survived Screen 09.
+ *
+ * The screen is gone — its histogram binned NODES, which is a count of how
+ * finely the network was drawn rather than a physical population — and with it
+ * went the scope, filter, group, rank, CSV and scenario-compare tests that only
+ * described its five tabs.
+ *
+ * These three did not, because the code under them did not: the binning and the
+ * statistics still feed Screen 10's aggregator and the PNG export, and the row
+ * builder feeds the overview layer, the report and the temperature CSV. They
+ * keep their original cases, which were good ones.
  */
 
 import { describe, expect, it } from 'vitest';
@@ -20,16 +28,9 @@ import {
 } from './temperatureStatistics';
 import {
   NEAR_LIMIT_MARGIN_C,
-  applyFilters,
-  applyScope,
   buildTemperatureDataset,
-  emptyFilters,
-  groupRows,
-  rankRows,
   statusFor,
-  temperatureCsv,
 } from './temperatureDataset';
-import { compareScenarios } from './scenarioTemperatureCompare';
 
 // --- builders --------------------------------------------------------------
 
@@ -132,9 +133,9 @@ function component(id: string, name: string, category: Component['category']): C
   return { id, name, category } as Component;
 }
 
-// --- Test A — histogram (09 §58 A, §11, §40) --------------------------------
+// --- histogram ------------------------------------------------------------
 
-describe('Test A — deterministic histogram bins (09 §58 A)', () => {
+describe('deterministic histogram bins', () => {
   const temperatures = [55, 60, 62, 70, 75, 85, 90, 96, 103];
   const entries = temperatures.map((temperature_C, index) => ({
     node_id: `N${index}`,
@@ -193,9 +194,9 @@ describe('Test A — deterministic histogram bins (09 §58 A)', () => {
   });
 });
 
-// --- statistics (09 §23, §24, §37) ------------------------------------------
+// --- statistics -----------------------------------------------------------
 
-describe('Statistics (09 §23, §24, §37)', () => {
+describe('temperature statistics', () => {
   it('computes count / min / max / mean / median / P90 / P95 / std-dev', () => {
     const stats = computeStatistics([55, 60, 62, 70, 75, 85, 90, 96, 103]);
     expect(stats.count).toBe(9);
@@ -249,9 +250,9 @@ describe('Statistics (09 §23, §24, §37)', () => {
   });
 });
 
-// --- Test B — mixed limits (09 §58 B, §12) ----------------------------------
+// --- the row builder ------------------------------------------------------
 
-describe('Test B — mixed limits (09 §58 B)', () => {
+describe('rows with mixed limits', () => {
   const net = network([
     node('N_FPGA', { component: 'CMP_FPGA', limit: 110, limitType: 'Tj', power: 35 }),
     node('N_DDR', { component: 'CMP_DDR', limit: 95, limitType: 'Tc', power: 5 }),
@@ -302,245 +303,5 @@ describe('Test B — mixed limits (09 §58 B)', () => {
     const ambient = rows.find((row) => row.node_id === 'AMB');
     expect(ambient?.margin_C).toBeUndefined();
     expect(ambient?.status).toBe('no_limit');
-  });
-});
-
-// --- Tests C and D — scenario compare (09 §58 C/D, §17, §18) ----------------
-
-describe('Test C — scenario compare (09 §58 C)', () => {
-  const net = network([
-    node('N_PA', { component: 'CMP_PA', limit: 180, power: 52 }),
-    node('N_FPGA', { component: 'CMP_FPGA', limit: 110, power: 35 }),
-  ]);
-  const baselineRows = buildTemperatureDataset({
-    network: net,
-    solution: solution({ N_PA: 103.4, N_FPGA: 96.8 }, 'SCN_BASE'),
-    components: [component('CMP_PA', 'PA1', 'RF'), component('CMP_FPGA', 'FPGA', 'Digital')],
-  });
-
-  it('computes ΔT per node against the comparison scenario', () => {
-    const result = compareScenarios({
-      baselineRows,
-      baselineScenarioId: 'SCN_BASE',
-      comparisonSolution: solution({ N_PA: 97.0, N_FPGA: 91.2 }, 'SCN_COMP'),
-      comparisonScenarioId: 'SCN_COMP',
-      limitOf: (nodeId) => net.nodes[nodeId]?.limit_C ?? undefined,
-    });
-
-    const byId = Object.fromEntries(result.rows.map((row) => [row.node_id, row]));
-    expect(byId.N_PA.delta_temperature_C).toBeCloseTo(-6.4, 10);
-    expect(byId.N_FPGA.delta_temperature_C).toBeCloseTo(-5.6, 10);
-    expect(result.matched).toBe(2);
-    expect(result.partial_match).toBe(false);
-    expect(result.compatible).toBe(true);
-  });
-
-  it('carries both margins so a cooler scenario shows its recovered headroom', () => {
-    const result = compareScenarios({
-      baselineRows,
-      baselineScenarioId: 'SCN_BASE',
-      comparisonSolution: solution({ N_PA: 97.0, N_FPGA: 91.2 }, 'SCN_COMP'),
-      comparisonScenarioId: 'SCN_COMP',
-      limitOf: (nodeId) => net.nodes[nodeId]?.limit_C ?? undefined,
-    });
-    const fpga = result.rows.find((row) => row.node_id === 'N_FPGA');
-    expect(fpga?.baseline_margin_C).toBeCloseTo(13.2, 10);
-    expect(fpga?.comparison_margin_C).toBeCloseTo(18.8, 10);
-  });
-});
-
-describe('Test D — partial match (09 §58 D, §18)', () => {
-  const net = network([
-    node('N_PA', { component: 'CMP_PA', limit: 180, power: 52 }),
-    node('N_FPGA', { component: 'CMP_FPGA', limit: 110, power: 35 }),
-  ]);
-  const baselineRows = buildTemperatureDataset({
-    network: net,
-    solution: solution({ N_PA: 103.4, N_FPGA: 96.8 }, 'SCN_BASE'),
-    components: [component('CMP_PA', 'PA1', 'RF'), component('CMP_FPGA', 'FPGA', 'Digital')],
-  });
-
-  it('flags the partial match and still renders the nodes that do line up', () => {
-    const result = compareScenarios({
-      baselineRows,
-      baselineScenarioId: 'SCN_BASE',
-      // The comparison solution is missing N_FPGA and has a node the baseline lacks.
-      comparisonSolution: solution({ N_PA: 97.0, N_EXTRA: 70 }, 'SCN_COMP'),
-      comparisonScenarioId: 'SCN_COMP',
-      limitOf: (nodeId) => net.nodes[nodeId]?.limit_C ?? undefined,
-    });
-
-    expect(result.partial_match).toBe(true);
-    expect(result.compatible).toBe(true);
-    expect(result.matched).toBe(1);
-    expect(result.missing_comparison).toBe(1);
-    expect(result.missing_baseline).toBe(1);
-
-    const byId = Object.fromEntries(result.rows.map((row) => [row.node_id, row]));
-    expect(byId.N_PA.delta_temperature_C).toBeCloseTo(-6.4, 10);
-    // The unmatched node reports N/A rather than a fabricated delta.
-    expect(byId.N_FPGA.comparison_temperature_C).toBeUndefined();
-    expect(byId.N_FPGA.delta_temperature_C).toBeUndefined();
-    expect(byId.N_FPGA.match_status).toBe('missing_comparison');
-    expect(byId.N_EXTRA.match_status).toBe('missing_baseline');
-  });
-
-  it('reports incompatible when nothing lines up at all', () => {
-    const result = compareScenarios({
-      baselineRows,
-      baselineScenarioId: 'SCN_BASE',
-      comparisonSolution: solution({ OTHER_A: 70, OTHER_B: 80 }, 'SCN_COMP'),
-      comparisonScenarioId: 'SCN_COMP',
-      limitOf: () => undefined,
-    });
-    expect(result.compatible).toBe(false);
-    expect(result.matched).toBe(0);
-  });
-});
-
-// --- scope and filters (09 §7, §9) ------------------------------------------
-
-describe('Scope and filters (09 §7, §9)', () => {
-  const net = network([
-    node('N_PA', { component: 'CMP_PA', limit: 180, power: 52, zone: 'RF Left' }),
-    node('N_FPGA', { component: 'CMP_FPGA', limit: 110, power: 35, zone: 'Digital' }),
-    node('N_BASE', { type: 'heat_sink_base', zone: 'Main' }),
-    node('N_FIN', { type: 'fin_surface' }),
-    node('AMB', { ambient: true }),
-  ]);
-  const rows = buildTemperatureDataset({
-    network: net,
-    solution: solution({ N_PA: 103.4, N_FPGA: 96.8, N_BASE: 78, N_FIN: 64, AMB: 55 }),
-    components: [component('CMP_PA', 'PA1', 'RF'), component('CMP_FPGA', 'FPGA', 'Digital')],
-  });
-
-  it('defaults to the components that actually have a limit', () => {
-    const scoped = applyScope(rows, 'components_with_limits', []);
-    expect(scoped.map((row) => row.node_id).sort()).toEqual(['N_FPGA', 'N_PA']);
-  });
-
-  it('narrows to heat sources, shared structure and boundary nodes', () => {
-    expect(
-      applyScope(rows, 'heat_sources_only', [])
-        .map((row) => row.node_id)
-        .sort(),
-    ).toEqual(['N_FPGA', 'N_PA']);
-    expect(
-      applyScope(rows, 'shared_structure', [])
-        .map((row) => row.node_id)
-        .sort(),
-    ).toEqual(['N_BASE', 'N_FIN']);
-    expect(applyScope(rows, 'boundary_nodes', []).map((row) => row.node_id)).toEqual(['AMB']);
-    expect(applyScope(rows, 'all_solved_nodes', []).length).toBe(5);
-    expect(applyScope(rows, 'custom_selection', ['N_FIN']).map((row) => row.node_id)).toEqual([
-      'N_FIN',
-    ]);
-  });
-
-  it('filters by category, zone and temperature range', () => {
-    const base = emptyFilters();
-    expect(applyFilters(rows, { ...base, category: 'RF' }).map((row) => row.node_id)).toEqual([
-      'N_PA',
-    ]);
-    expect(applyFilters(rows, { ...base, zone: 'Digital' }).map((row) => row.node_id)).toEqual([
-      'N_FPGA',
-    ]);
-    expect(
-      applyFilters(rows, { ...base, temperature_min_C: 90 })
-        .map((row) => row.node_id)
-        .sort(),
-    ).toEqual(['N_FPGA', 'N_PA']);
-  });
-
-  it('excludes limitless nodes from a margin filter rather than treating them as 0', () => {
-    const filtered = applyFilters(rows, { ...emptyFilters(), margin_max_C: 20 });
-    expect(filtered.map((row) => row.node_id)).toEqual(['N_FPGA']);
-    expect(filtered.some((row) => row.margin_C == null)).toBe(false);
-  });
-
-  it('offers only the analytical dataset while Screen 03 is deferred', () => {
-    expect(rows.every((row) => row.result_source === 'analytical')).toBe(true);
-    expect(applyFilters(rows, { ...emptyFilters(), result_source: 'flotherm' })).toHaveLength(0);
-  });
-
-  it('groups by the selected dimension', () => {
-    const groups = groupRows(applyScope(rows, 'all_solved_nodes', []), 'category');
-    const keys = groups.map((group) => group.key).sort();
-    expect(keys).toContain('RF');
-    expect(keys).toContain('Digital');
-    expect(keys).toContain('Uncategorised');
-  });
-});
-
-// --- ranking (09 §25, §26) ---------------------------------------------------
-
-describe('Temperature rank is not a bottleneck rank (09 §26)', () => {
-  const net = network([
-    node('HOT_SAFE', { component: 'CMP_PA', limit: 180, power: 52 }),
-    node('COOLER_TIGHT', { component: 'CMP_FPGA', limit: 110, power: 35 }),
-  ]);
-  const rows = buildTemperatureDataset({
-    network: net,
-    solution: solution({ HOT_SAFE: 103.4, COOLER_TIGHT: 96.8 }),
-    components: [component('CMP_PA', 'PA1', 'RF'), component('CMP_FPGA', 'FPGA', 'Digital')],
-  });
-
-  it('ranks by temperature descending', () => {
-    expect(rankRows(rows, 'temperature').map((row) => row.node_id)).toEqual([
-      'HOT_SAFE',
-      'COOLER_TIGHT',
-    ]);
-  });
-
-  it('ranks by margin ascending in margin mode — a different order', () => {
-    expect(rankRows(rows, 'margin').map((row) => row.node_id)).toEqual([
-      'COOLER_TIGHT',
-      'HOT_SAFE',
-    ]);
-  });
-
-  it('puts nodes with no margin last in margin mode', () => {
-    const withAmbient = buildTemperatureDataset({
-      network: network([
-        node('HOT', { component: 'CMP_PA', limit: 180, power: 52 }),
-        node('AMB', { ambient: true }),
-      ]),
-      solution: solution({ HOT: 103.4, AMB: 55 }),
-      components: [component('CMP_PA', 'PA1', 'RF')],
-    });
-    expect(rankRows(withAmbient, 'margin').map((row) => row.node_id)).toEqual(['HOT', 'AMB']);
-  });
-});
-
-// --- export (09 §43) ---------------------------------------------------------
-
-describe('CSV export (09 §43)', () => {
-  it('writes the specified columns and leaves a missing limit blank', () => {
-    const net = network([
-      node('N_PA', {
-        name: 'PA1 Junction',
-        component: 'CMP_PA',
-        limit: 180,
-        power: 52,
-        zone: 'RF Left',
-      }),
-      node('AMB', { name: 'Ambient', ambient: true }),
-    ]);
-    const rows = buildTemperatureDataset({
-      network: net,
-      solution: solution({ N_PA: 103.4, AMB: 55 }),
-      components: [component('CMP_PA', 'PA1', 'RF')],
-    });
-
-    const csv = temperatureCsv(rows, 'Baseline 55C');
-    const [header, ...lines] = csv.split('\n');
-    expect(header).toBe(
-      'Scenario,Node,Component,Category,Node Type,Temperature (C),Limit Type,Limit (C),Margin (C),Zone,Result Source',
-    );
-    expect(lines).toHaveLength(2);
-    expect(lines.find((line) => line.includes('PA1 Junction'))).toContain('103.40');
-    // The ambient row has no limit and no margin: two empty fields, not zeros.
-    const ambientLine = lines.find((line) => line.includes('Ambient')) as string;
-    expect(ambientLine).toContain(',"",,,');
   });
 });

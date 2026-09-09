@@ -9,7 +9,6 @@
 import {
   BarChart3,
   Boxes,
-  CircleGauge,
   FileDown,
   FileText,
   FolderInput,
@@ -121,15 +120,6 @@ export const SCREENS: ScreenDef[] = [
     label: '瓶頸分析',
     labelEn: 'Bottleneck Analysis',
     icon: TriangleAlert,
-    group: '熱網路視覺化',
-    implemented: true,
-  },
-  {
-    code: '09',
-    path: 'temperature',
-    label: '溫度分佈',
-    labelEn: 'Temperature Distribution',
-    icon: CircleGauge,
     group: '熱網路視覺化',
     implemented: true,
   },

@@ -44,9 +44,8 @@ export const T10 = {
   affectedComponents:
     'Screen 08 量到改善量達門檻的元件數；數字越大代表該段是越多元件共用的路徑。',
   confidence: '該候選所依賴之 Rth 輸入的可信度；低可信度代表結論可用但需先確認熱阻來源。',
-  temperatureRangeBar:
-    '以 Min – Average – P95 – Max 呈現本情境的溫度分佈範圍；詳細直方圖與篩選請回到 09。',
-  nodesAboveWarning: '溫度高於警示門檻的節點數；門檻沿用 Screen 09 的預設值。',
+  maxAmbient:
+    '最差餘裕的元件剛好到達上限時的環溫，等於目前環溫加上最小餘裕。溫升隨環溫變化極小（STARKCORE 實測每升 1 °C 環溫僅增加 0.023 °C 溫升），故以相加表示；若有節點被釘為固定溫度，此假設不成立，畫面會另行標示。',
   energyResidual: 'Generated Heat 減去 Rejected Heat 的絕對差值，理想值為 0 W。',
   rthSourceSummary:
     '各段熱阻實際採用的資料來源分佈；Screen 03 尚未上線時 FloTHERM 一律為 0 / Deferred。',

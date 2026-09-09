@@ -31,7 +31,6 @@ import {
   loadBoundarySets,
   loadComponentRevisions,
   loadComponents,
-  loadDistributions,
   loadExportPayloads,
   loadExportStamp,
   loadNetwork,
@@ -47,7 +46,6 @@ import {
   saveBoundarySet,
   saveComponentRevisions,
   saveComponents,
-  saveDistribution,
   saveExportPayload,
   saveExportStamp,
   saveNetwork,
@@ -139,7 +137,10 @@ export function collectProject(projectId: string, appBuild: string): ProjectFile
       solutions: loadSolutions(projectId),
       network_review: loadNetworkReviewState(projectId),
       analyses: loadAnalyses(projectId),
-      distributions: loadDistributions(projectId),
+      // Derived from the solution since Screen 09 was removed. The key
+      // stays, empty, so a file this build writes still loads in one that
+      // expects it.
+      distributions: [],
       proposals: loadProposals(projectId),
       snapshots: loadSnapshots(projectId),
       report_configs: loadReportConfigs(projectId),
@@ -330,8 +331,8 @@ export function applyProjectFile(file: ProjectFile, mode: ImportMode): ImportOut
   for (const analysis of data.analyses ?? []) saveAnalysis(targetId, analysis);
   note('analyses', (data.analyses ?? []).length);
 
-  for (const distribution of data.distributions ?? []) saveDistribution(targetId, distribution);
-  note('distributions', (data.distributions ?? []).length);
+  // `data.distributions` in an older file is read past: the rows are a
+  // projection of the solution, and the solution is imported above.
 
   for (const proposal of data.proposals ?? []) saveProposal(targetId, proposal);
   note('proposals', (data.proposals ?? []).length);

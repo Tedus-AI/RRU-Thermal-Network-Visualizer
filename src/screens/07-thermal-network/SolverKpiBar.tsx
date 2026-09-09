@@ -22,9 +22,10 @@
  */
 
 import type { ReactNode } from 'react';
-import { CircleGauge, Flame, Snowflake } from 'lucide-react';
+import { CircleGauge, Flame, Snowflake, Thermometer } from 'lucide-react';
 
 import type { ThermalSolution } from '@/thermal/solver/solverTypes';
+import type { AmbientHeadroom } from '@/thermal/analysis/ambientHeadroom';
 
 import { num, percent } from './resultViewModel';
 import { T07 } from './tooltips';
@@ -67,16 +68,19 @@ function KpiTile({
 export function SolverKpiBar({
   solution,
   stale,
+  headroom,
 }: {
   solution: ThermalSolution | null;
   stale: boolean;
+  /** The fourth card; null when nothing on this network carries a limit. */
+  headroom: AmbientHeadroom | null;
 }) {
   // A stale solution is not the current answer, so its numbers are not shown as
   // if they were (07 §38). The cards fall back to N/A until a re-solve.
   const balance = stale ? null : (solution?.energy_balance ?? null);
 
   return (
-    <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-3">
+    <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2 xl:grid-cols-4">
       <KpiTile
         icon={<Flame size={13} />}
         label="Generated Heat"
@@ -112,6 +116,34 @@ export function SolverKpiBar({
               : balance.grade === 'warning'
                 ? 'text-warn-600'
                 : 'text-danger-600'
+        }
+      />
+      {/*
+         The one number Screen 09 was worth building for, and the reason it is a
+         card rather than a screen: every other reading here is at THIS air
+         temperature, and the specification the machine is built to is written
+         as a range. It is the worst margin added to the ambient — see
+         `ambientHeadroom` for why that addition is the whole answer.
+      */}
+      <KpiTile
+        icon={<Thermometer size={13} />}
+        label="Max Ambient"
+        zh="最高可用環溫"
+        tooltip={T07.kpi.maxAmbient}
+        value={stale || !headroom ? 'N/A' : `${headroom.max_ambient_C.toFixed(1)} °C`}
+        status={
+          stale || !headroom
+            ? undefined
+            : `${headroom.headroom_C >= 0 ? '+' : ''}${headroom.headroom_C.toFixed(1)} °C · ${headroom.worst_node_name}`
+        }
+        tone={
+          stale || !headroom
+            ? 'text-ink-900'
+            : headroom.headroom_C < 0
+              ? 'text-danger-600'
+              : headroom.headroom_C < 5
+                ? 'text-warn-600'
+                : 'text-ok-600'
         }
       />
     </div>

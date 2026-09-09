@@ -39,7 +39,7 @@ import { useComponentStore } from '@/data/componentStore';
 import { useAnalysisStore } from '@/data/analysisStore';
 import { useOverviewStore } from '@/data/overviewStore';
 import { useReportStore } from '@/data/reportStore';
-import { useDistributionStore } from '@/data/distributionStore';
+import { useDistributionResult } from '@/data/useDistributionResult';
 import { currentSourceRevision } from '@/data/sourceRevision';
 
 import { buildResultsOverview } from '@/thermal/overview/overviewAggregator';
@@ -220,10 +220,9 @@ export function ReportPreviewView() {
     ? (analyses[`${solution.network_id}::${solution.scenario_id}`] ?? null)
     : null;
   const snapshot = activeScenarioId ? (snapshots[activeScenarioId] ?? null) : null;
-  const distributionResults = useDistributionStore((s) => s.results);
-  const distributionKey = useDistributionStore((s) => s.activeKey);
-  const distributionState = useDistributionStore((s) => s.state());
-  const distribution = distributionKey ? (distributionResults[distributionKey] ?? null) : null;
+  // Derived from the solution on screen rather than read back from a stored
+  // snapshot Screen 09 used to refresh; see `useDistributionResult`.
+  const { distribution, state: distributionState } = useDistributionResult();
 
   // --- load -----------------------------------------------------------------
   useEffect(() => {
@@ -241,7 +240,6 @@ export function ReportPreviewView() {
     useBoundaryStore.getState().loadFor(projectId, scenarioId);
     useSolutionStore.getState().loadFor(projectId, scenarioId);
     useAnalysisStore.getState().loadFor(projectId, scenarioId);
-    useDistributionStore.getState().loadFor(projectId, scenarioId);
     useOverviewStore.getState().loadFor(projectId, scenarioId);
     useReportStore.getState().loadFor(projectId, scenarioId);
   }, [projectId]);
@@ -252,7 +250,6 @@ export function ReportPreviewView() {
     useBoundaryStore.getState().loadFor(projectId, activeScenarioId);
     useSolutionStore.getState().loadFor(projectId, activeScenarioId);
     useAnalysisStore.getState().loadFor(projectId, activeScenarioId);
-    useDistributionStore.getState().loadFor(projectId, activeScenarioId);
     useOverviewStore.getState().loadFor(projectId, activeScenarioId);
     useReportStore.getState().loadFor(projectId, activeScenarioId);
     setCurrentPage(1);
@@ -272,8 +269,6 @@ export function ReportPreviewView() {
       solution,
       components,
       analysis,
-      distribution_result: distribution,
-      distribution_stale: distributionState !== 'CURRENT',
       current_source_revision: currentSourceRevision(projectId, network, scenario),
       solution_stale: stale || solverState === 'DIRTY',
       solver_settings: network.solver_settings,
