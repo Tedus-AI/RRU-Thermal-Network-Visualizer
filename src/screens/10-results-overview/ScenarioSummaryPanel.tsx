@@ -1,19 +1,27 @@
 /**
- * Scenario Summary — 10 §7.
+ * Scenario Summary — the conditions the answer rests on.
  *
- * Read-only: Active Scenario, Ambient, Wind, Solar, Power Scale, Solver Status
- * and Last Solved, with links out to the screens that own those inputs. 10 §7 is
- * explicit that nothing on Screen 10 edits them, so the values render as text
- * and the only affordances are navigation (AC-10-17's read-only spirit applied
- * to the inputs as well as to the graph).
+ * It used to be six rows and two buttons, one of which read "View Boundary
+ * Conditions" and sent the reader to Screen 06 to find out how the heat leaves
+ * the machine. That is four short rows of numbers, and it is exactly what a
+ * reader checking a conclusion wants beside the conclusion — so it is here,
+ * read from the set Screen 07 solved with rather than recomputed.
+ *
+ * The other button stays but stops being a trip: the thermal network opens in
+ * a window over this screen, so looking at the graph no longer costs the page
+ * you were reading.
+ *
+ * Still read-only. That used to be said in a footnote under the buttons; every
+ * value renders as text and nothing here is an input, which says it better.
  */
 
-import { ArrowUpRight } from 'lucide-react';
+import { Network } from 'lucide-react';
 
 import { Badge, Button } from '@/ui/primitives';
-import { EngineeringInfo } from '@/ui/FieldLabel';
+import { EngineeringInfo, biTitle } from '@/ui/FieldLabel';
 import type { Scenario } from '@/domain/project';
 import type { SolverQualitySummary } from '@/thermal/overview/overviewTypes';
+import type { BoundarySummary } from '@/thermal/overview/boundarySummary';
 
 import { num, timeOf } from './overviewViewModel';
 import { T10 } from './tooltips';
@@ -30,17 +38,23 @@ function Row({ label, zh, value }: { label: string; zh: string; value: string })
   );
 }
 
+const DERIVATION: Record<'fin_array' | 'flat_plate', { label: string; zh: string }> = {
+  fin_array: { label: 'from fin geometry', zh: '由鰭片幾何推導' },
+  flat_plate: { label: 'from plate correlation', zh: '由平板關聯式推導' },
+};
+
 export function ScenarioSummaryPanel({
   scenario,
   solver,
   stale,
-  onOpenBoundary,
+  boundary,
   onOpenNetwork,
 }: {
   scenario: Scenario;
   solver: SolverQualitySummary;
   stale: boolean;
-  onOpenBoundary: () => void;
+  /** Screen 06's set, as the solve used it. Null before one exists. */
+  boundary: BoundarySummary | null;
   onOpenNetwork: () => void;
 }) {
   return (
@@ -54,39 +68,96 @@ export function ScenarioSummaryPanel({
       </div>
 
       <div>
-        <Row label="Ambient" zh="環境溫度" value={num(scenario.ambient_C, 1, '°C')} />
+        <Row
+          label="Ambient"
+          zh="環境溫度"
+          value={num(boundary?.external_ambient_C ?? scenario.ambient_C, 1, '°C')}
+        />
+        {boundary?.internal_air_C != null && (
+          <Row label="Internal Air" zh="機內空氣" value={num(boundary.internal_air_C, 1, '°C')} />
+        )}
         <Row label="Wind" zh="風速" value={num(scenario.wind_mps, 1, 'm/s')} />
-        <Row label="Solar" zh="太陽輻射" value={num(scenario.solar_W_m2, 0, 'W/m²')} />
+        <Row
+          label="Solar"
+          zh="太陽輻射"
+          value={
+            boundary && boundary.solar_W > 0
+              ? `${num(scenario.solar_W_m2, 0, 'W/m²')} · ${num(boundary.solar_W, 1, 'W')}`
+              : num(scenario.solar_W_m2, 0, 'W/m²')
+          }
+        />
         <Row
           label="Power Scale"
           zh="功率倍率"
           value={`${(scenario.power_scale * 100).toFixed(0)}%`}
         />
-        <Row label="Solver Status" zh="求解狀態" value={stale ? `${solver.status} (stale)` : solver.status} />
         <Row label="Last Solved" zh="最後求解" value={timeOf(solver.solved_at)} />
+      </div>
+
+      {/* How the heat leaves, in the order it leaves by. */}
+      <div className="pt-0.5">
+        <p className="flex items-center gap-1 text-[11px] font-bold text-ink-700">
+          Boundary Conditions
+          <span className="font-semibold text-ink-400">/ 邊界條件</span>
+          <EngineeringInfo zh={T10.boundarySummary} label="Boundary Conditions" />
+        </p>
+        {!boundary || boundary.surfaces.length === 0 ? (
+          <p className="pt-1 text-[10px] text-ink-400">
+            No dissipating surface is assigned yet.
+            <span className="ml-1">尚未指派任何散熱面。</span>
+          </p>
+        ) : (
+          <ul className="mt-1 flex flex-col gap-1">
+            {boundary.surfaces.map((surface) => (
+              <li
+                key={surface.port_id}
+                className="rounded-md border border-line bg-surface-muted px-2 py-1.5"
+              >
+                <span className="flex items-baseline gap-1.5">
+                  <span
+                    className="min-w-0 flex-1 truncate text-[11px] font-semibold text-ink-900"
+                    title={surface.name}
+                  >
+                    {surface.name}
+                  </span>
+                  <span className="shrink-0 text-[11px] font-bold tabular text-accent-700">
+                    {surface.R_C_per_W == null ? '—' : `${num(surface.R_C_per_W, 3)} °C/W`}
+                  </span>
+                </span>
+                <span className="block truncate text-[10px] text-ink-400" title={surface.kind}>
+                  {surface.kind_zh}
+                  {surface.derivation && ` · ${DERIVATION[surface.derivation].zh}`}
+                </span>
+                <span className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[10px] tabular text-ink-500">
+                  {surface.h_W_m2K != null && <span>h {num(surface.h_W_m2K, 1)} W/m²K</span>}
+                  {surface.area_m2 != null && <span>A {num(surface.area_m2, 3)} m²</span>}
+                  {surface.completeness === 'warning' && (
+                    <span
+                      className="font-semibold text-warn-600"
+                      title={biTitle(
+                        'Screen 06 marked this surface as resting on an assumption',
+                        '06 標示此面帶有假設',
+                      )}
+                    >
+                      assumption / 含假設
+                    </span>
+                  )}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
 
       <div className="flex flex-wrap gap-1.5 pt-0.5">
         <Button
           className="!h-7 !px-2 !text-[11px]"
-          icon={<ArrowUpRight className="size-3.5" />}
-          onClick={onOpenBoundary}
-        >
-          View Boundary Conditions / 檢視邊界條件
-        </Button>
-        <Button
-          className="!h-7 !px-2 !text-[11px]"
-          icon={<ArrowUpRight className="size-3.5" />}
+          icon={<Network className="size-3.5" />}
           onClick={onOpenNetwork}
         >
           View Thermal Network / 檢視熱網路
         </Button>
       </div>
-
-      <p className="text-[10px] leading-relaxed text-ink-400">
-        Read-only on this screen. Edit boundaries in 06 and topology in 05.
-        <span className="block">本頁唯讀；邊界條件請於 06 修改，拓樸請於 05 修改。</span>
-      </p>
     </div>
   );
 }

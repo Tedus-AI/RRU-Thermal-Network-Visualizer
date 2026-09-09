@@ -17,6 +17,7 @@ export function ScreenWorkspace({
   description,
   descriptionZh,
   badge,
+  headerAside,
   metrics,
   stepper,
   rightPanel,
@@ -36,6 +37,14 @@ export function ScreenWorkspace({
   description?: string;
   descriptionZh?: string;
   badge?: ReactNode;
+  /**
+   * A panel beside the title, filling the band the description would occupy.
+   *
+   * For a screen whose headline IS a verdict: Screen 10's thermal status has
+   * to be the first thing read, and putting it in the body pushed it under a
+   * row of cards that only make sense once you know it.
+   */
+  headerAside?: ReactNode;
   /** Readiness KPI row. Sits between the title and the stepper (05 §36). */
   metrics?: ReactNode;
   stepper?: ReactNode;
@@ -46,23 +55,28 @@ export function ScreenWorkspace({
   return (
     <div className="flex h-full flex-col">
       <header className="shrink-0 px-6 pt-5 pb-4">
-        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-          <h1 className="text-[21px] font-bold text-ink-900">
-            {title}
-            {titleZh && <span className="ml-2 font-semibold text-ink-500">/ {titleZh}</span>}
-          </h1>
-          {badge}
-        </div>
-        {(description || descriptionZh) && (
-          <p className="mt-1.5 text-[13px] leading-relaxed text-ink-500">
-            {description}
-            {descriptionZh && (
-              <span className={description ? 'block text-ink-400' : 'text-ink-400'}>
-                {descriptionZh}
-              </span>
+        <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:gap-6">
+          <div className="min-w-0 xl:flex-1">
+            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+              <h1 className="text-[21px] font-bold text-ink-900">
+                {title}
+                {titleZh && <span className="ml-2 font-semibold text-ink-500">/ {titleZh}</span>}
+              </h1>
+              {badge}
+            </div>
+            {(description || descriptionZh) && (
+              <p className="mt-1.5 text-[13px] leading-relaxed text-ink-500">
+                {description}
+                {descriptionZh && (
+                  <span className={description ? 'block text-ink-400' : 'text-ink-400'}>
+                    {descriptionZh}
+                  </span>
+                )}
+              </p>
             )}
-          </p>
-        )}
+          </div>
+          {headerAside && <div className="min-w-0 xl:w-[46%] xl:shrink-0">{headerAside}</div>}
+        </div>
         {metrics && <div className="mt-3.5">{metrics}</div>}
         {stepper && <div className="mt-4">{stepper}</div>}
       </header>
