@@ -54,10 +54,12 @@ import { useSolutionStore } from '@/data/solutionStore';
 import { useComponentStore } from '@/data/componentStore';
 import { useAnalysisStore } from '@/data/analysisStore';
 import { useOverviewStore } from '@/data/overviewStore';
-import { useDistributionStore } from '@/data/distributionStore';
+import { useDistributionResult } from '@/data/useDistributionResult';
 import { currentSourceRevision } from '@/data/sourceRevision';
 
 import { buildResultsOverview } from '@/thermal/overview/overviewAggregator';
+import { ambientHeadroom } from '@/thermal/analysis/ambientHeadroom';
+import { projectComponentLimits } from '@/thermal/graph/componentProjection';
 import { CRITICAL_COMPONENT_TOP_N } from '@/thermal/overview/criticalComponents';
 
 import { ResultsKpiBar } from './ResultsKpiBar';
@@ -67,7 +69,7 @@ import { SolverQualityPanel } from './SolverQualityPanel';
 import { DataCompletenessPanel } from './DataCompletenessPanel';
 import { CriticalComponentsTable } from './CriticalComponentsTable';
 import { BottleneckSummaryPanel } from './BottleneckSummaryPanel';
-import { DistributionSummary } from './DistributionSummary';
+import { AmbientHeadroomPanel } from './AmbientHeadroomPanel';
 import {
   NetworkSnapshot,
   SnapshotLegend,
@@ -197,9 +199,10 @@ export function ResultsOverviewView() {
   const solutionKey = useSolutionStore((s) => s.activeKey);
   const analyses = useAnalysisStore((s) => s.analyses);
   const snapshots = useOverviewStore((s) => s.snapshots);
-  const distributionResults = useDistributionStore((s) => s.results);
-  const distributionKey = useDistributionStore((s) => s.activeKey);
-  const distributionState = useDistributionStore((s) => s.state());
+  // Derived from the solution on screen rather than read back from a stored
+  // snapshot Screen 09 used to refresh; see `useDistributionResult`.
+  const { distribution, state: distributionState } = useDistributionResult();
+  const boundarySet = useBoundaryStore((s) => s.current());
 
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
@@ -213,7 +216,6 @@ export function ResultsOverviewView() {
   const analysis = solution
     ? (analyses[`${solution.network_id}::${solution.scenario_id}`] ?? null)
     : null;
-  const distribution = distributionKey ? (distributionResults[distributionKey] ?? null) : null;
 
   // --- load -----------------------------------------------------------------
   useEffect(() => {
@@ -231,7 +233,6 @@ export function ResultsOverviewView() {
     useBoundaryStore.getState().loadFor(projectId, scenarioId);
     useSolutionStore.getState().loadFor(projectId, scenarioId);
     useAnalysisStore.getState().loadFor(projectId, scenarioId);
-    useDistributionStore.getState().loadFor(projectId, scenarioId);
     useOverviewStore.getState().loadFor(projectId, scenarioId);
   }, [projectId]);
 
@@ -242,7 +243,6 @@ export function ResultsOverviewView() {
     useBoundaryStore.getState().loadFor(projectId, activeScenarioId);
     useSolutionStore.getState().loadFor(projectId, activeScenarioId);
     useAnalysisStore.getState().loadFor(projectId, activeScenarioId);
-    useDistributionStore.getState().loadFor(projectId, activeScenarioId);
     useOverviewStore.getState().loadFor(projectId, activeScenarioId);
     setSelectedNodeId(null);
     setSelectedEdgeId(null);
@@ -260,8 +260,6 @@ export function ResultsOverviewView() {
       solution,
       components,
       analysis,
-      distribution_result: distribution,
-      distribution_stale: distributionState !== 'CURRENT',
       current_source_revision: currentSourceRevision(projectId, network, scenario),
       solution_stale: stale || solverState === 'DIRTY',
       solver_settings: network.solver_settings,
@@ -284,6 +282,24 @@ export function ResultsOverviewView() {
   ]);
 
   const overview = built?.overview ?? null;
+
+  /*
+     The conclusion that replaced Screen 09: how much hotter the air can get.
+
+     Read off the same projected limits Screen 07 judges by, and off the same
+     stale flag the aggregate uses, so it never reports a headroom the current
+     inputs no longer support.
+  */
+  const headroom = useMemo(() => {
+    if (!network || !solution) return null;
+    const ambient =
+      boundarySet?.ambient.external_ambient_C ?? scenario?.ambient_C ?? null;
+    return ambientHeadroom(
+      projectComponentLimits(network, components),
+      stale || solverState === 'DIRTY' ? null : solution,
+      ambient,
+    );
+  }, [network, solution, components, boundarySet, scenario, stale, solverState]);
   const snapshot = activeScenarioId ? (snapshots[activeScenarioId] ?? null) : null;
   const snapshotCurrent = useMemo(() => {
     if (!snapshot || !overview) return false;
@@ -397,8 +413,8 @@ export function ResultsOverviewView() {
       }
       actionBar={
         <div className="flex w-full flex-wrap items-center gap-2">
-          <Button icon={<ArrowLeft className="size-4" />} onClick={() => go('temperature')}>
-            Back to 09 Temperature Distribution
+          <Button icon={<ArrowLeft className="size-4" />} onClick={() => go('bottleneck')}>
+            Back to 08 Bottleneck Analysis
           </Button>
           <Button
             icon={<RefreshCw className="size-4" />}
@@ -551,15 +567,12 @@ export function ResultsOverviewView() {
 
             <Section
               index={6}
-              title="Temperature Distribution Summary"
-              zh="溫度分佈總覽"
-              explanation={T10.temperatureRangeBar}
+              title="Ambient Headroom"
+              zh="環溫餘裕"
+              explanation={T10.maxAmbient}
               className="shrink-0"
             >
-              <DistributionSummary
-                summary={overview.distribution}
-                onOpenDistribution={() => go('temperature')}
-              />
+              <AmbientHeadroomPanel headroom={headroom} />
             </Section>
 
             <Section

@@ -7,7 +7,6 @@ import {
   loadComponentRevisions,
   loadComponents,
   loadExportPayloads,
-  loadDistributions,
   loadNetwork,
   loadProject,
   loadReportConfigs,
@@ -21,13 +20,13 @@ import { topologyVersionOf } from '@/data/boundaryStore';
 import { validateGraph } from '@/thermal/graph/graphValidation';
 import { evaluateSnapshot } from '@/report/snapshotAdapter';
 import { buildResultsOverview } from '@/thermal/overview/overviewAggregator';
+import { buildDistributionResult } from '@/thermal/analysis/distributionResult';
 import { useComponentStore } from '@/data/componentStore';
 import { useNetworkStore } from '@/data/networkStore';
 import { useScenarioStore } from '@/data/scenarioStore';
 import { useBoundaryStore } from '@/data/boundaryStore';
 import { useSolutionStore } from '@/data/solutionStore';
 import { useAnalysisStore } from '@/data/analysisStore';
-import { useDistributionStore } from '@/data/distributionStore';
 import { useOverviewStore } from '@/data/overviewStore';
 import { useSolverStore } from '@/data/solverStore';
 import { currentSourceRevision } from '@/data/sourceRevision';
@@ -164,7 +163,6 @@ describe('FR1 RRU Golden Demo', () => {
     const boundary = loadBoundarySets(DEMO_PROJECT_ID)[0];
     const solution = loadSolutions(DEMO_PROJECT_ID)[0];
     const analysis = loadAnalyses(DEMO_PROJECT_ID)[0];
-    const distribution = loadDistributions(DEMO_PROJECT_ID)[0];
     const snapshot = loadSnapshots(DEMO_PROJECT_ID)[0];
     const reportConfig = loadReportConfigs(DEMO_PROJECT_ID)[0];
     const payload = loadExportPayloads(DEMO_PROJECT_ID)[0];
@@ -196,8 +194,6 @@ describe('FR1 RRU Golden Demo', () => {
       solution,
       components,
       analysis,
-      distribution_result: distribution,
-      distribution_stale: false,
       current_source_revision: DEMO_SOURCE_REVISION,
       solution_stale: false,
       now: '2026-08-13T00:00:00.000Z',
@@ -234,11 +230,9 @@ describe('FR1 RRU Golden Demo', () => {
     useBoundaryStore.getState().loadFor(DEMO_PROJECT_ID, DEMO_SCENARIO_ID);
     useSolutionStore.getState().loadFor(DEMO_PROJECT_ID, DEMO_SCENARIO_ID);
     useAnalysisStore.getState().loadFor(DEMO_PROJECT_ID, DEMO_SCENARIO_ID);
-    useDistributionStore.getState().loadFor(DEMO_PROJECT_ID, DEMO_SCENARIO_ID);
     useOverviewStore.getState().loadFor(DEMO_PROJECT_ID, DEMO_SCENARIO_ID);
 
     expect(useAnalysisStore.getState().state()).toBe('COMPLETE');
-    expect(useDistributionStore.getState().state()).toBe('CURRENT');
     const pa = useComponentStore.getState().byId('CMP_FINAL_PA')!;
     useComponentStore.getState().patchComponent(
       pa.id,
@@ -255,16 +249,22 @@ describe('FR1 RRU Golden Demo', () => {
     expect(useSolutionStore.getState().isStale()).toBe(false);
     expect(useNetworkStore.getState().requiresReview).toBe(false);
     expect(useAnalysisStore.getState().state()).toBe('DIRTY');
-    expect(useDistributionStore.getState().state()).toBe('DIRTY');
 
     const project = loadProject(DEMO_PROJECT_ID)!;
     const scenario = useScenarioStore.getState().activeScenario()!;
     const network = useNetworkStore.getState().network!;
     const solution = useSolutionStore.getState().current()!;
     const analysis = useAnalysisStore.getState().current();
-    const distribution = useDistributionStore.getState().current();
     const snapshot = useOverviewStore.getState().current()!;
     const sourceRevision = currentSourceRevision(DEMO_PROJECT_ID, network, scenario);
+    // Derived, not stored: the rows are a projection of this very solution.
+    const distribution = buildDistributionResult({
+      projectId: DEMO_PROJECT_ID,
+      network,
+      solution,
+      components: useComponentStore.getState().components,
+      sourceRevision,
+    });
     const live = buildResultsOverview({
       project_id: project.project_id,
       scenario,
@@ -272,8 +272,6 @@ describe('FR1 RRU Golden Demo', () => {
       solution,
       components: useComponentStore.getState().components,
       analysis,
-      distribution_result: distribution,
-      distribution_stale: true,
       current_source_revision: sourceRevision,
       solution_stale: false,
     }).overview;

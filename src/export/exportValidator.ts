@@ -144,14 +144,14 @@ export function evaluateArtifact(type: ArtifactType, input: ReadinessInput): Art
     case 'temperature_csv':
       if (('distribution' in input || 'distribution_stale' in input) && !input.distribution) {
         return wrap('NOT_AVAILABLE', {
-          en: 'No formal Screen 09 distribution. Refresh Screen 09 first.',
-          zh: '尚無正式的 Screen 09 溫度分佈結果，請先重新整理 Screen 09。',
+          en: 'No solved temperatures to write. Solve on Screen 07 first.',
+          zh: '尚無可輸出的求解溫度，請先在 Screen 07 求解。',
         });
       }
       if (input.distribution_stale) {
         return wrap('BLOCKED', {
-          en: 'The Screen 09 distribution is stale. Refresh it before export.',
-          zh: 'Screen 09 溫度分佈已過期，請先重新整理。',
+          en: 'The solved temperatures are stale. Re-solve on Screen 07 before export.',
+          zh: '求解溫度已過期，請先在 Screen 07 重新求解。',
         });
       }
       return wrap(solvedResultStatus(input), solvedResultReason(input));
@@ -232,8 +232,8 @@ export function evaluateArtifact(type: ArtifactType, input: ReadinessInput): Art
         (!input.distribution || input.distribution_stale)
       ) {
         return wrap('WARNING', {
-          en: 'The Screen 09 distribution snapshot is unavailable; current 07/08 views still export.',
-          zh: 'Screen 09 分佈快照不可用；目前的 07/08 畫面仍可匯出。',
+          en: 'The temperature rows are unavailable; current 07/08 views still export.',
+          zh: '溫度資料列不可用；目前的 07/08 畫面仍可匯出。',
         });
       }
       return wrap('READY');

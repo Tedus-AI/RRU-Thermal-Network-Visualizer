@@ -4,7 +4,6 @@ import {
   saveComponentRevisions,
   saveComponents,
   saveExportPayload,
-  saveDistribution,
   saveNetwork,
   saveProject,
   saveReportConfig,
@@ -38,7 +37,6 @@ export async function seedDemoProject(): Promise<string> {
   saveBoundarySet(DEMO_PROJECT_ID, flow.boundary);
   saveSolution(DEMO_PROJECT_ID, flow.solution);
   saveAnalysis(DEMO_PROJECT_ID, flow.analysis);
-  saveDistribution(DEMO_PROJECT_ID, flow.distribution);
   saveSnapshot(DEMO_PROJECT_ID, flow.snapshot);
   saveReportConfig(DEMO_PROJECT_ID, flow.reportConfig);
   saveExportPayload(DEMO_PROJECT_ID, flow.reportPayload);

@@ -129,8 +129,8 @@ export const SECTION_DEFINITIONS: SectionDefinition[] = [
     title: 'Temperature Distribution Summary',
     zh: '溫度分佈摘要',
     required: false,
-    source_screen: '09',
-    source_zh: '09 溫度分佈',
+    source_screen: '07',
+    source_zh: '07 熱網路圖',
     requires: 'distribution',
     defaultContent: {
       show_range_summary: true,

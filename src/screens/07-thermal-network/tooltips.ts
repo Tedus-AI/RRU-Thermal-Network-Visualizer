@@ -15,6 +15,8 @@ export const T07 = {
     rejectedHeat:
       '經固定溫度或外部 Boundary sink 排出的淨熱量；不重複計算 internal edge heat flow。',
     energyResidual: 'Generated Heat 與 Rejected Heat 的差值比例，用來檢查數值與能量守恆。',
+    maxAmbient:
+      '最差餘裕的元件剛好到達上限時的環溫，等於目前環溫加上最小餘裕。溫升隨環溫變化極小（STARKCORE 實測每升 1 °C 環溫僅增加 0.023 °C 溫升），故以相加表示；若有節點被釘為固定溫度，此假設不成立。',
     solvedNodes: '本次求解中溫度已決定的節點數，包含固定溫度邊界節點。',
     solvedEdges: '本次求解中回算出 Q 與 ΔT 的連線數。',
   },

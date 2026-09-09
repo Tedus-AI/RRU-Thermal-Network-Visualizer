@@ -504,8 +504,6 @@ export async function buildDemoGoldenFlow(): Promise<DemoGoldenFlow> {
     solution: solve.solution,
     components,
     analysis,
-    distribution_result: distribution,
-    distribution_stale: false,
     current_source_revision: DEMO_SOURCE_REVISION,
     solution_stale: false,
     now: DEMO_TIMESTAMP,
