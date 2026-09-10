@@ -60,8 +60,6 @@ import { useDistributionResult } from '@/data/useDistributionResult';
 import { currentSourceRevision } from '@/data/sourceRevision';
 
 import { buildResultsOverview } from '@/thermal/overview/overviewAggregator';
-import { FloatingPanel } from '@/ui/FloatingPanel';
-import { SolvedGraphCanvas } from '@/screens/07-thermal-network/SolvedGraphCanvas';
 import { ResultsOverlay } from '@/screens/07-thermal-network/ResultsOverlay';
 import { ResultTree } from '@/screens/07-thermal-network/ResultTree';
 import { edgeRows, nodeRows, resultTree } from '@/screens/07-thermal-network/resultViewModel';
@@ -79,6 +77,7 @@ import { ResultsKpiBar } from './ResultsKpiBar';
 import { OverallStatusCard } from './OverallStatusCard';
 import { ScenarioSummaryPanel } from './ScenarioSummaryPanel';
 import { ReportReadinessPanel } from './ReportReadinessPanel';
+import { NetworkWindow } from './NetworkWindow';
 import { ImprovementActions, type ImprovementRow } from './ImprovementActions';
 import { T10 } from './tooltips';
 
@@ -182,44 +181,49 @@ function NotReady({
 
 // --- screen -----------------------------------------------------------------
 
-/** Read-only viewing: labels and power on, limits carried by the alarm dots. */
-const NETWORK_DISPLAY = {
-  showLabels: true,
-  showPower: true,
-  showLimits: true,
-  showBoundary: true,
-};
-const NO_HIDDEN: ReadonlySet<string> = new Set<string>();
-
 /**
  * A big, obvious way into one of Screen 07's windows.
  *
  * Deliberately large: it replaces a panel that occupied this space, and a
  * link-sized control in its place would read as the panel having simply gone.
+ *
+ * Painted rather than outlined, and one colour each, because these two are the
+ * only controls on Screen 10 that OPEN something — everything else on the
+ * screen reports. Two surfaces of white among panels of white is exactly the
+ * arrangement that hides a door. The colours are candy tokens rather than the
+ * severity ramps: see `--color-candy-*`.
  */
+const VIEW_BUTTON_TONES = {
+  yellow:
+    'border-candy-yellow-line bg-candy-yellow-400 hover:bg-candy-yellow-300',
+  green: 'border-candy-green-line bg-candy-green-400 hover:bg-candy-green-300',
+} as const;
+
 function ViewButton({
   icon,
   label,
   sub,
+  tone,
   onClick,
 }: {
   icon: ReactNode;
   label: string;
   sub: string;
+  tone: keyof typeof VIEW_BUTTON_TONES;
   onClick: () => void;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="flex min-w-0 items-center gap-3 rounded-lg border border-line bg-surface px-4 py-3 text-left transition-colors hover:border-accent-600 hover:bg-surface-muted"
+      className={`flex min-w-0 items-center gap-3 rounded-lg border px-4 py-3 text-left shadow-sm transition-colors ${VIEW_BUTTON_TONES[tone]}`}
     >
-      <span className="shrink-0 text-accent-700">{icon}</span>
+      <span className="shrink-0 text-ink-900">{icon}</span>
       <span className="min-w-0 flex-1">
         <span className="block truncate text-[14px] font-bold text-ink-900">{label}</span>
-        <span className="block truncate text-[11px] text-ink-400">{sub}</span>
+        <span className="block truncate text-[11px] font-medium text-ink-700">{sub}</span>
       </span>
-      <ArrowUpRight className="size-4 shrink-0 text-ink-400" />
+      <ArrowUpRight className="size-4 shrink-0 text-ink-700" />
     </button>
   );
 }
@@ -697,12 +701,14 @@ export function ResultsOverviewView() {
                 icon={<Table2 className="size-5" />}
                 label="關鍵元件熱分析結果"
                 sub={`Component results · ${rows.length} nodes`}
+                tone="yellow"
                 onClick={() => setResultsOpen(true)}
               />
               <ViewButton
                 icon={<Network className="size-5" />}
                 label="全域熱網路"
                 sub={`Whole thermal network · ${Object.keys(network.nodes).length} nodes`}
+                tone="green"
                 onClick={() => setNetworkOpen(true)}
               />
             </div>
@@ -760,38 +766,16 @@ export function ResultsOverviewView() {
       )}
 
       {networkOpen && (
-        <FloatingPanel
-          title="Thermal Network / 熱網路圖"
-          subtitle={`${scenario.name} · ${Object.keys(network.nodes).length} nodes`}
-          badge={<Badge tone={stale ? 'neutral' : 'ok'}>{stale ? 'STALE' : 'SOLVED'}</Badge>}
-          storageKey="tnv.10.network"
-          defaultWidth={1100}
-          defaultHeight={760}
-          bodyClassName="relative overflow-hidden p-0"
+        <NetworkWindow
+          network={network}
+          limitedNetwork={limitedNetwork}
+          solution={solution}
+          stale={stale}
+          scenarioId={activeScenarioId ?? ''}
+          scenarioName={scenario.name}
+          solverState={solverState}
           onClose={() => setNetworkOpen(false)}
-        >
-          {/* Pinned rather than flowed, for the same reason Screen 08 pins it:
-              Cytoscape sizes its layers to the client box, and inside a
-              scrollable parent that is a feedback loop at fractional heights. */}
-          <div className="absolute inset-0">
-            <SolvedGraphCanvas
-              network={limitedNetwork ?? network}
-              solution={stale ? null : solution}
-              mode="temperature"
-              display={NETWORK_DISPLAY}
-              scenarioId={activeScenarioId ?? ''}
-              selectedNodeId={selectedNodeId}
-              selectedEdgeId={null}
-              tool="select"
-              layoutMode="Auto"
-              hiddenComponentIds={NO_HIDDEN}
-              alertOverLimit
-              onSelectNode={setSelectedNodeId}
-              onSelectEdge={() => {}}
-              onZoomChange={() => {}}
-            />
-          </div>
-        </FloatingPanel>
+        />
       )}
     </ScreenWorkspace>
   );

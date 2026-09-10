@@ -59,6 +59,21 @@ export const ANALYSIS_RESULT_MODES = [
   RESULT_MODES[3], // Rth
 ] as const;
 
+/**
+ * What Screen 10's network window offers — the four result views.
+ *
+ * Node Type and Rth Source are dropped for the reason Screen 08 drops them:
+ * they say how the model was BUILT, which is 04/05/06's question. Screen 10 is
+ * read after the solve, so the four modes that colour by a solved number are
+ * the whole of it.
+ */
+export const OVERVIEW_RESULT_MODES = [
+  RESULT_MODES[0], // Temperature
+  RESULT_MODES[1], // Heat Flow
+  RESULT_MODES[2], // ΔT
+  RESULT_MODES[3], // Rth
+] as const;
+
 export type ResultMode = (typeof RESULT_MODES)[number]['id'] | typeof COMBINED_MODE.id;
 
 /** True where the node colouring is the temperature ramp. */
