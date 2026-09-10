@@ -3,9 +3,13 @@
  *
  * It used to hold a 22 rem column of the right rail for the whole session,
  * describing whichever section happened to be selected — usually the cover,
- * because nothing had been clicked yet. It is a detail view: it should appear
- * when a page or a section is clicked, be read, and go away again. Escape
- * closes it, as everywhere else in this tool.
+ * because nothing had been clicked yet. It is a detail view: it opens from the
+ * header when the reader wants it, and Escape closes it.
+ *
+ * `autoHeight` because the sections are not the same size: the cover has seven
+ * fields, Critical Components five options, and Overall Thermal Status none at
+ * all. One fixed height gives the short ones a field of empty surface and the
+ * tall ones a scrollbar, so the panel measures what is in it instead.
  */
 
 import { useEffect } from 'react';
@@ -72,6 +76,7 @@ export function SectionInspectorWindow({
       storageKey="tnv.11.inspector"
       defaultWidth={440}
       defaultHeight={620}
+      autoHeight
       onClose={onClose}
     >
       <div className="p-3">
