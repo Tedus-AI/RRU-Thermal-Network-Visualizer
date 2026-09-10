@@ -98,6 +98,7 @@ export function FloatingPanel({
   storageKey,
   defaultWidth = 560,
   defaultHeight = 900,
+  autoHeight = false,
   onClose,
   children,
 }: {
@@ -112,6 +113,20 @@ export function FloatingPanel({
   storageKey: string;
   defaultWidth?: number;
   defaultHeight?: number;
+  /**
+   * Fit the height to the content instead of restoring a remembered one.
+   *
+   * For a panel whose content changes size with what is being looked at — the
+   * section inspector, where one section has two options and another has
+   * eight. A fixed height gives the short one a field of empty surface and the
+   * tall one a scrollbar, and a remembered height is whichever section happened
+   * to be open when it was last dragged.
+   *
+   * The remembered POSITION still applies, and the first deliberate resize
+   * turns this off for the rest of the panel's life: a height the reader chose
+   * outranks one measured from the content.
+   */
+  autoHeight?: boolean;
   onClose: () => void;
   children: ReactNode;
 }) {
@@ -124,6 +139,10 @@ export function FloatingPanel({
     ),
   );
   const [maximized, setMaximized] = useState(false);
+  const bodyRef = useRef<HTMLDivElement | null>(null);
+  const contentRef = useRef<HTMLDivElement | null>(null);
+  /** Set by the first deliberate resize, after which the content stops deciding. */
+  const heightPinned = useRef(false);
   const [z, setZ] = useState(nextPanelZ);
   const raise = useCallback(() => setZ((current) => (current === panelZCursor ? current : nextPanelZ())), []);
   const drag = useRef<{ mode: 'move' | 'resize'; dx: number; dy: number; rect: PanelRect } | null>(
@@ -196,10 +215,44 @@ export function FloatingPanel({
 
   const startResize = (event: React.PointerEvent) => {
     if (maximized) return;
+    heightPinned.current = true;
     event.stopPropagation();
     drag.current = { mode: 'resize', dx: event.clientX, dy: event.clientY, rect };
     event.currentTarget.setPointerCapture(event.pointerId);
   };
+
+  /*
+     Measured rather than guessed.
+
+     The measurement is of the CONTENT wrapper, not of the scrolling body: the
+     body is sized by the panel, so its own height can never report that the
+     content wants less room, and a panel measured that way grows and never
+     shrinks. The wrapper is a plain block in a container with no fixed height,
+     so it stands at whatever height its children need.
+  */
+  useEffect(() => {
+    if (!autoHeight || maximized) return;
+    const body = bodyRef.current;
+    const content = contentRef.current;
+    if (!body || !content) return;
+    const fit = () => {
+      if (heightPinned.current) return;
+      const panel = body.closest('[role="dialog"]');
+      if (!panel) return;
+      const chrome = body.getBoundingClientRect().top - panel.getBoundingClientRect().top;
+      const style = window.getComputedStyle(body);
+      const padding = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
+      const wanted = Math.ceil(chrome + padding + content.scrollHeight + 2);
+      setRect((current) => {
+        const next = clampRect({ ...current, h: wanted }, window.innerWidth, window.innerHeight);
+        return next.h === current.h ? current : next;
+      });
+    };
+    fit();
+    const observer = new ResizeObserver(fit);
+    observer.observe(content);
+    return () => observer.disconnect();
+  }, [autoHeight, maximized, children]);
 
   const style = maximized
     ? { left: 16, top: 72, width: 'calc(100vw - 32px)', height: 'calc(100vh - 96px)' }
@@ -260,7 +313,9 @@ export function FloatingPanel({
         </button>
       </header>
 
-      <div className={`min-h-0 flex-1 overflow-auto ${bodyClassName}`}>{children}</div>
+      <div ref={bodyRef} className={`min-h-0 flex-1 overflow-auto ${bodyClassName}`}>
+        {autoHeight ? <div ref={contentRef}>{children}</div> : children}
+      </div>
 
       {!maximized && (
         <div

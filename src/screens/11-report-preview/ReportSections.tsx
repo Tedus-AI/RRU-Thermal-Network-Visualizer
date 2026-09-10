@@ -225,13 +225,9 @@ function OverallSection({ input }: { input: SectionRenderInput }) {
           value={signed(kpis.worst_margin_C, 1, '°C')}
           mode={mode}
         />
-        <Field
-          label="Top Bottleneck"
-          zh="首要瓶頸"
-          // 11 §14 — Not Available rather than a substitute.
-          value={kpis.top_bottleneck ?? 'Not Available'}
-          mode={mode}
-        />
+        {/* Top Bottleneck is gone with the Bottleneck Analysis Summary:
+            `kpis.top_bottleneck` comes from an analysis nothing runs, so the
+            row could only ever read "Not Available". */}
         <Field
           label="Energy Balance"
           zh="能量守恆誤差"
@@ -362,11 +358,11 @@ function NetworkSection({ input }: { input: SectionRenderInput }) {
           mode={mode}
         />
         <Field
-          label="Critical Path"
-          zh="關鍵路徑"
-          // 11 §16 — the top bottleneck path when 08 is current, and the hottest
-          // component path otherwise. Never a fabricated bottleneck.
-          value={snapshot.kpis.top_bottleneck ?? `Hottest: ${snapshot.kpis.max_temperature_node ?? 'N/A'}`}
+          label="Hottest Node"
+          zh="最高溫節點"
+          // The bottleneck half of this went with the analysis nothing runs;
+          // what is left is the hottest component, which the solve always has.
+          value={snapshot.kpis.max_temperature_node ?? 'N/A'}
           mode={mode}
         />
       </div>

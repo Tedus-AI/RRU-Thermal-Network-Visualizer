@@ -24,6 +24,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
   ArrowRight,
+  ListTree,
   RefreshCw,
   Save,
   Send,
@@ -75,6 +76,7 @@ import {
 } from '@/report/reportConfig';
 import { blocksExport, blocksPreview, evaluateSnapshot } from '@/report/snapshotAdapter';
 import { paginate, pageOfSection } from '@/report/pagination';
+import { sectionDefinition } from '@/report/sectionRegistry';
 import { previewReadiness, validateReport } from '@/report/reportValidator';
 import { buildExportPayload } from '@/report/exportPayloadBuilder';
 
@@ -462,7 +464,21 @@ export function ReportPreviewView() {
         </span>
       }
       headerAside={
-        <div className="flex justify-end">
+        <div className="flex flex-wrap justify-end gap-2">
+          {/* Opened deliberately rather than by clicking a page. A window that
+              appears because you looked at page 3 is a window you did not ask
+              for, and it lands over the page you were looking at. */}
+          <button
+            type="button"
+            onClick={() => setInspectorOpen(true)}
+            className="flex shrink-0 items-center gap-2 rounded-lg border border-candy-green-line bg-candy-green-400 px-4 py-2.5 text-left shadow-sm transition-colors hover:bg-candy-green-300"
+          >
+            <ListTree className="size-4 shrink-0 text-ink-900" aria-hidden />
+            <span className="text-[13px] font-bold text-ink-900">章節檢視器</span>
+            <span className="text-[11px] font-medium text-ink-700">
+              {sectionDefinition(selectedId).zh}
+            </span>
+          </button>
           <button
             type="button"
             onClick={() => setPageSetupOpen(true)}
@@ -607,14 +623,12 @@ export function ReportPreviewView() {
                   update(resetSections(config));
                   toast.success('已重設為預設版面');
                 }}
-                // 11 §9 — the Pages tab is what opens the inspector now: you
-                // click the page you want to argue with, and the section that
-                // fills it comes up over the preview.
+                // Selects, and turns the preview to that page. Opening the
+                // inspector is the header button's job.
                 onPage={(page) => {
                   setCurrentPage(page);
                   const first = pages.find((entry) => entry.page_number === page)?.section_ids?.[0];
                   if (first) setSelectedId(first);
-                  setInspectorOpen(true);
                 }}
               />
             </Panel>
@@ -650,10 +664,7 @@ export function ReportPreviewView() {
                 renderInput={renderInput}
                 scale={scale}
                 selectedId={selectedId}
-                onSelectSection={(id) => {
-                  setSelectedId(id);
-                  setInspectorOpen(true);
-                }}
+                onSelectSection={setSelectedId}
                 stale={evaluation.state === 'STALE'}
               />
             </div>
@@ -663,9 +674,9 @@ export function ReportPreviewView() {
           </section>
         </div>
 
-        {/* The inspector floats and closes on Escape: it is opened from a page
-            or a section in the preview, read, and dismissed — not a column held
-            open beside a preview it is describing. */}
+        {/* The inspector floats, fits its content and closes on Escape: it is
+            opened from the header, read, and dismissed — not a column held open
+            beside a preview it is describing. */}
         {inspectorOpen && (
           <SectionInspectorWindow
             sections={sections}
