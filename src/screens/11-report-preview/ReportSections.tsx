@@ -106,7 +106,7 @@ function Callout({ mode, snapshot }: { mode: LanguageMode; snapshot: ResultsOver
 // --- 11 §7 — cover ----------------------------------------------------------
 
 function CoverSection({ input }: { input: SectionRenderInput }) {
-  const { config, project, scenario, snapshot } = input;
+  const { config, project, scenario } = input;
   const mode = config.language_mode;
   const cover = config.cover;
 
@@ -142,8 +142,10 @@ function CoverSection({ input }: { input: SectionRenderInput }) {
           ['Prepared Date', '製作日期', cover.prepared_date],
           ['Company / Team', '公司 / 團隊', cover.company_team || '—'],
           ['Confidentiality', '機密等級', cover.confidentiality],
-          ['Result Mode', '結果模式', snapshot.result_mode],
-          ['Snapshot', '快照', snapshot.id],
+          // Result Mode and the snapshot id are provenance for the SCREEN, not
+          // for the reader of a printed report: one says the solve was
+          // analytical (which the Solver & Energy Quality section states
+          // properly) and the other is a 44-character machine key.
         ].map(([label, zh, value]) => (
           <div key={label} className="flex justify-between gap-3 border-b border-[#e4e9f0] pb-1">
             <span className="text-[#68748a]">{reportLabel(mode, label, zh)}</span>
@@ -194,8 +196,24 @@ function OverallSection({ input }: { input: SectionRenderInput }) {
   const { config, snapshot } = input;
   const mode = config.language_mode;
   const kpis = snapshot.kpis;
+
+  /**
+   * The parts the verdict is about, worst margin first.
+   *
+   * "Worst Thermal Margin: +0.8 °C" named one number and no part, which makes
+   * the reader turn to Critical Components to find out which. Everything at or
+   * inside the limit is listed here instead — over-limit in its own block,
+   * because a part that is FAILING is not a tighter version of one that is
+   * merely close.
+   */
+  const attention = [...snapshot.critical_components]
+    .filter((row) => row.status === 'FAIL' || row.status === 'NEAR LIMIT')
+    .sort((a, b) => (a.margin_C ?? Infinity) - (b.margin_C ?? Infinity));
+  const failing = attention.filter((row) => row.status === 'FAIL');
+  const warning = attention.filter((row) => row.status === 'NEAR LIMIT');
+
   return (
-    <div>
+    <div className="flex flex-col gap-2">
       <Callout mode={mode} snapshot={snapshot} />
       <div className="grid grid-cols-3">
         <Field
@@ -204,34 +222,92 @@ function OverallSection({ input }: { input: SectionRenderInput }) {
           value={snapshot.overall_status}
           mode={mode}
         />
-        <Field
-          label="Max Temperature"
-          zh="最高溫度"
-          value={num(kpis.max_temperature_C, 1, '°C')}
-          mode={mode}
-        />
-        <Field
-          label="Worst Thermal Margin"
-          zh="最小熱餘裕"
-          value={signed(kpis.worst_margin_C, 1, '°C')}
-          mode={mode}
-        />
-        {/* Top Bottleneck is gone with the Bottleneck Analysis Summary:
-            `kpis.top_bottleneck` comes from an analysis nothing runs, so the
-            row could only ever read "Not Available". */}
-        <Field
-          label="Energy Balance"
-          zh="能量守恆誤差"
-          value={pct(kpis.energy_error_pct)}
-          mode={mode}
-        />
+        {/* Max Temperature said the PA, every time, and Energy Balance judges
+            the SOLVE — which Solver & Energy Quality is the section for. Top
+            Bottleneck went earlier with the analysis nothing runs. */}
         <Field
           label="Total Power"
           zh="總熱功率"
           value={num(kpis.total_power_W, 1, 'W')}
           mode={mode}
         />
+        <Field
+          label="Parts At Or Over Limit"
+          zh="需注意元件"
+          value={`${attention.length}`}
+          mode={mode}
+        />
       </div>
+
+      {failing.length > 0 && <MarginList mode={mode} rows={failing} tone="fail" />}
+      {warning.length > 0 && <MarginList mode={mode} rows={warning} tone="warn" />}
+      {attention.length === 0 && (
+        <p className="border border-[#d7dde5] bg-[#f7f9fc] px-3 py-2 text-[10px] text-[#425067]">
+          {reportLabel(
+            mode,
+            'Every part with a limit is passing it.',
+            '所有具限制值的元件皆通過。',
+          )}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * A ranked block of parts, with the temperature the margin was measured at.
+ *
+ * Print colours rather than tokens, like every other section body: this is the
+ * report page, which is rendered on white paper regardless of the app's theme.
+ */
+function MarginList({
+  mode,
+  rows,
+  tone,
+}: {
+  mode: LanguageMode;
+  rows: ResultsOverviewSnapshot['critical_components'];
+  tone: 'fail' | 'warn';
+}) {
+  const skin =
+    tone === 'fail'
+      ? { border: '#e2b3b3', bg: '#fdf3f3', ink: '#a3222c', label: 'Over Limit', zh: '超出限制' }
+      : { border: '#e6cf9a', bg: '#fdf8ee', ink: '#8a5a12', label: 'Near Limit', zh: '接近限制' };
+
+  return (
+    <div style={{ borderColor: skin.border, backgroundColor: skin.bg }} className="border px-3 py-2">
+      <p className="mb-1 text-[8.5px] font-bold tracking-wide uppercase" style={{ color: skin.ink }}>
+        {reportLabel(mode, skin.label, skin.zh)} · {rows.length}
+      </p>
+      <table className="w-full border-collapse text-[10px]">
+        <tbody>
+          {rows.map((row, index) => (
+            <tr key={row.node_id}>
+              <td className="w-4 py-0.5 align-top font-bold tabular" style={{ color: skin.ink }}>
+                {index + 1}
+              </td>
+              <td className="py-0.5 pr-2 align-top font-semibold text-[#16202f]">
+                {row.component_name}
+                <span className="block text-[8.5px] font-normal text-[#68748a]">
+                  {row.node_name}
+                </span>
+              </td>
+              <td className="w-16 py-0.5 text-right align-top tabular text-[#425067]">
+                {num(row.temperature_C, 1, '°C')}
+              </td>
+              <td className="w-16 py-0.5 text-right align-top tabular text-[#68748a]">
+                {row.limit_C == null ? '—' : num(row.limit_C, 1, '°C')}
+              </td>
+              <td
+                className="w-16 py-0.5 text-right align-top font-bold tabular"
+                style={{ color: skin.ink }}
+              >
+                {row.margin_C == null ? '—' : signed(row.margin_C, 1, '°C')}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

@@ -711,3 +711,29 @@ describe('Display options move sections between pages', () => {
     expect(ids.filter((id) => id === 'network').length).toBeGreaterThan(1);
   });
 });
+
+// --- the Overall Thermal Status block ---------------------------------------
+
+describe('Overall Thermal Status lists the parts, not one number', () => {
+  it('splits the parts that need attention into FAIL and NEAR LIMIT, worst first', () => {
+    // The block's own rule, which the renderer applies to
+    // `snapshot.critical_components`.
+    const parts = [
+      { name: 'A', status: 'PASS', margin_C: 30 },
+      { name: 'B', status: 'NEAR LIMIT', margin_C: 3.8 },
+      { name: 'C', status: 'FAIL', margin_C: -2.1 },
+      { name: 'D', status: 'NEAR LIMIT', margin_C: 1.4 },
+      { name: 'E', status: 'NO LIMIT', margin_C: undefined },
+    ];
+    const attention = parts
+      .filter((row) => row.status === 'FAIL' || row.status === 'NEAR LIMIT')
+      .sort((a, b) => (a.margin_C ?? Infinity) - (b.margin_C ?? Infinity));
+
+    expect(attention.map((row) => row.name)).toEqual(['C', 'D', 'B']);
+    expect(attention.filter((row) => row.status === 'FAIL').map((row) => row.name)).toEqual(['C']);
+    expect(attention.filter((row) => row.status === 'NEAR LIMIT').map((row) => row.name)).toEqual([
+      'D',
+      'B',
+    ]);
+  });
+});

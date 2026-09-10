@@ -425,14 +425,23 @@ export function ResultsOverviewView() {
    * take depends on the parameters as they stand now. Copying a snapshot would
    * let this screen quote a target the model has since moved past.
    */
-  const improvementRows = useMemo<ImprovementRow[]>(() => {
+  /**
+   * The parts at or inside the limit, worst first.
+   *
+   * The same set Screen 08 opens on, from the same helper: a part cannot be
+   * worth listing there and not here. Both the margin tile's rank buttons and
+   * the Improvement Actions list read it.
+   */
+  const rankedParts = useMemo(() => {
     if (!solveNetwork || !solution || stale) return [];
-    const temperatures = solution.node_temperatures_C;
-    // The same set Screen 08 opens on, from the same helper: a part cannot be
-    // worth listing there and not here.
-    const ranked = partsNeedingAttention(marginRanking(solveNetwork, temperatures, 0)).filter(
+    return partsNeedingAttention(marginRanking(solveNetwork, solution.node_temperatures_C, 0)).filter(
       (part) => part.margin_C <= NEAR_LIMIT_MARGIN_C,
     );
+  }, [solveNetwork, solution, stale]);
+
+  const improvementRows = useMemo<ImprovementRow[]>(() => {
+    if (!solveNetwork || !solution || stale) return [];
+    const ranked = rankedParts;
     const byTarget = new Map(studies.map((study) => [study.target_node_id, study]));
 
     return ranked.map((part) => {
@@ -612,6 +621,7 @@ export function ResultsOverviewView() {
       }
       metrics={
         <ResultsKpiBar
+          ranked={rankedParts}
           status={overview.overall_status}
           kpis={overview.kpis}
           monitoredCount={monitoredCount}
