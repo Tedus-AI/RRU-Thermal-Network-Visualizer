@@ -199,6 +199,21 @@ export function ReportPreviewView() {
   /** Both are opened from something the reader clicked, never open by default. */
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const [pageSetupOpen, setPageSetupOpen] = useState(false);
+  const [previewFullscreen, setPreviewFullscreen] = useState(false);
+
+  // Escape leaves fullscreen. Captured, so it never also reaches a window that
+  // happens to be open behind the preview — the reader pressed it to get their
+  // screen back, not to lose the inspector they had set up.
+  useEffect(() => {
+    if (!previewFullscreen) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.stopPropagation();
+      setPreviewFullscreen(false);
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [previewFullscreen]);
   const [currentPage, setCurrentPage] = useState(1);
   const [zoom, setZoom] = useState<ZoomMode>(DEFAULT_ZOOM);
   const [refreshToken, setRefreshToken] = useState(0);
@@ -648,13 +663,21 @@ export function ReportPreviewView() {
           </ResizableSidebar>
 
           {/* --- RIGHT: the preview, with the whole of the rest ------------ */}
-          <section className="flex h-[36rem] min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-line bg-surface xl:h-auto">
+          <section
+            className={
+              previewFullscreen
+                ? 'fixed inset-0 z-40 flex min-h-0 min-w-0 flex-col overflow-hidden bg-surface'
+                : 'flex h-[36rem] min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-line bg-surface xl:h-auto'
+            }
+          >
             <PageToolbar
               page={currentPage}
               pageCount={pages.length}
               zoom={zoom}
+              fullscreen={previewFullscreen}
               onPage={setCurrentPage}
               onZoom={setZoom}
+              onToggleFullscreen={() => setPreviewFullscreen((open) => !open)}
             />
             <div ref={canvasRef} className="min-h-0 flex-1 overflow-auto bg-surface-muted">
               <ReportPageView

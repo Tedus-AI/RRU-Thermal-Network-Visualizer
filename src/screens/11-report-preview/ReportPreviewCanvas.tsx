@@ -7,7 +7,7 @@
  * proportionally what Screen 12 will lay out.
  */
 
-import { ChevronLeft, ChevronRight, Minus, Plus } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Maximize2, Minimize2, Minus, Plus } from 'lucide-react';
 
 import { Button, Select } from '@/ui/primitives';
 import { EngineeringInfo, biTitle } from '@/ui/FieldLabel';
@@ -34,14 +34,18 @@ export function PageToolbar({
   page,
   pageCount,
   zoom,
+  fullscreen,
   onPage,
   onZoom,
+  onToggleFullscreen,
 }: {
   page: number;
   pageCount: number;
   zoom: ZoomMode;
+  fullscreen: boolean;
   onPage: (page: number) => void;
   onZoom: (zoom: ZoomMode) => void;
+  onToggleFullscreen: () => void;
 }) {
   const step = (direction: -1 | 1) => {
     const index = NUMERIC_ZOOMS.indexOf(zoom);
@@ -119,8 +123,25 @@ export function PageToolbar({
         Fit Page
       </Button>
 
-      <span className="ml-auto flex items-center text-[10px] text-ink-400">
+      <span className="ml-auto flex items-center gap-1.5 text-[10px] text-ink-400">
         <EngineeringInfo zh={T11.zoom} label="Zoom" />
+        {/* An A4 page at Fit Page is about 560 px tall inside this card, which
+            is a report read through a letterbox. Fullscreen gives the page the
+            viewport; Escape gives it back. */}
+        <button
+          type="button"
+          title={biTitle(fullscreen ? 'Exit Fullscreen' : 'Fullscreen', fullscreen ? '離開全螢幕' : '全螢幕檢視')}
+          aria-label={biTitle(fullscreen ? 'Exit Fullscreen' : 'Fullscreen', fullscreen ? '離開全螢幕' : '全螢幕檢視')}
+          aria-pressed={fullscreen}
+          onClick={onToggleFullscreen}
+          className={`flex size-7 items-center justify-center rounded border transition-colors ${
+            fullscreen
+              ? 'border-accent-600 bg-accent-100 text-accent-700'
+              : 'border-line-strong text-ink-500 hover:bg-surface-muted'
+          }`}
+        >
+          {fullscreen ? <Minimize2 className="size-3.5" /> : <Maximize2 className="size-3.5" />}
+        </button>
       </span>
     </div>
   );
