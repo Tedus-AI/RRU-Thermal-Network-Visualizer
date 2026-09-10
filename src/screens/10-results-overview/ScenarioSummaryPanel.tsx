@@ -7,17 +7,16 @@
  * reader checking a conclusion wants beside the conclusion — so it is here,
  * read from the set Screen 07 solved with rather than recomputed.
  *
- * The other button stays but stops being a trip: the thermal network opens in
- * a window over this screen, so looking at the graph no longer costs the page
- * you were reading.
+ * The button that opened the network went with it — not because the window was
+ * wrong, but because the screen now carries a large, obvious 全域熱網路 button
+ * that opens the same one, and the same door twice on one page reads as two
+ * different doors.
  *
  * Still read-only. That used to be said in a footnote under the buttons; every
  * value renders as text and nothing here is an input, which says it better.
  */
 
-import { Network } from 'lucide-react';
-
-import { Badge, Button } from '@/ui/primitives';
+import { Badge } from '@/ui/primitives';
 import { EngineeringInfo, biTitle } from '@/ui/FieldLabel';
 import type { Scenario } from '@/domain/project';
 import type { SolverQualitySummary } from '@/thermal/overview/overviewTypes';
@@ -48,14 +47,12 @@ export function ScenarioSummaryPanel({
   solver,
   stale,
   boundary,
-  onOpenNetwork,
 }: {
   scenario: Scenario;
   solver: SolverQualitySummary;
   stale: boolean;
   /** Screen 06's set, as the solve used it. Null before one exists. */
   boundary: BoundarySummary | null;
-  onOpenNetwork: () => void;
 }) {
   return (
     <div className="flex flex-col gap-2">
@@ -146,7 +143,7 @@ export function ScenarioSummaryPanel({
                     </span>
                   )}
                   {surface.area_m2 != null && <span>A {num(surface.area_m2, 3)} m²</span>}
-                  {surface.completeness === 'warning' && (
+                  {surface.completeness === 'warning' && !surface.assumption_verified && (
                     <span
                       className="font-semibold text-warn-600"
                       title={biTitle(
@@ -157,14 +154,39 @@ export function ScenarioSummaryPanel({
                       assumption / 含假設
                     </span>
                   )}
+                  {surface.assumption_verified && (
+                    <span
+                      className="font-semibold text-ok-600"
+                      title={biTitle(
+                        'The solved surface temperature agrees with the one this h rests on',
+                        '求解後的表面溫度與此 h 所依據的假設相符',
+                      )}
+                    >
+                      已驗證
+                    </span>
+                  )}
                 </span>
                 {/* Why 1/(h·A) is not the whole path on a finned surface. */}
                 {surface.fin_conduction_C_per_W != null && surface.R_surface_C_per_W != null && (
                   <span className="mt-0.5 block text-[10px] tabular text-ink-400">
                     表面 {num(surface.R_surface_C_per_W, 3)} ＋ 鰭片導熱{' '}
                     {num(surface.fin_conduction_C_per_W, 3)} °C/W
-                    {surface.fin_effectiveness != null &&
-                      `（有效效率 ${num(surface.fin_effectiveness, 3)}）`}
+                    {surface.fin_effectiveness != null && (
+                      <span
+                        title={biTitle(
+                          'Fin efficiency from the geometry, times the process coefficient set in Screen 06',
+                          '由幾何算出的鰭片效率 × 06 設定的製程係數',
+                        )}
+                      >
+                        （有效效率 {num(surface.fin_effectiveness, 3)}
+                        {surface.fin_eta != null &&
+                          ` ＝ 鰭片效率 ${num(surface.fin_eta, 3)} × 製程係數 ${num(
+                            surface.fin_effectiveness / surface.fin_eta,
+                            2,
+                          )}`}
+                        ）
+                      </span>
+                    )}
                   </span>
                 )}
               </li>
@@ -173,15 +195,6 @@ export function ScenarioSummaryPanel({
         )}
       </div>
 
-      <div className="flex flex-wrap gap-1.5 pt-0.5">
-        <Button
-          className="!h-7 !px-2 !text-[11px]"
-          icon={<Network className="size-3.5" />}
-          onClick={onOpenNetwork}
-        >
-          View Thermal Network / 檢視熱網路
-        </Button>
-      </div>
     </div>
   );
 }

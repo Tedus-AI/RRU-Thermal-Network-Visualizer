@@ -13,6 +13,7 @@
  */
 
 import type { ThermalNetwork } from '../types';
+import { NEAR_LIMIT_MARGIN_C } from './temperatureDataset';
 import { componentNodes } from './affectedComponents';
 
 export interface MarginRank {
@@ -62,4 +63,22 @@ export function marginRanking(
   );
 
   return count > 0 ? ranked.slice(0, count) : ranked;
+}
+
+/**
+ * The parts a review has to talk about: every one at WARNING or FAIL.
+ *
+ * Screen 08 used to open on a fixed top three. Three is right when three are in
+ * trouble and wrong in both directions otherwise — it hides the fourth part
+ * over its limit, and on a healthy design it promotes two parts with 30 °C of
+ * room into a list that reads like a problem.
+ *
+ * The line is `NEAR_LIMIT_MARGIN_C`, the same one Screen 10's badge and status
+ * reason use, so a part cannot be worth listing on one screen and not on the
+ * other. When nothing is close, the tightest part is still returned: the screen
+ * is for working on a part, and an empty one would have nothing to work on.
+ */
+export function partsNeedingAttention(ranked: readonly MarginRank[]): MarginRank[] {
+  const flagged = ranked.filter((part) => part.margin_C <= NEAR_LIMIT_MARGIN_C);
+  return flagged.length > 0 ? flagged : ranked.slice(0, 1);
 }

@@ -443,8 +443,10 @@ describe('Test E — bottleneck analysis not run (10 §34 E)', () => {
     expect(overview.bottleneck_availability).toBe('not_run');
     expect(overview.bottlenecks).toEqual([]);
     expect(overview.kpis.top_bottleneck).toBeNull();
-    expect(overview.report_readiness).toBe('WARNING');
     expect(overview.recommended.action).toBe('Run Bottleneck Analysis');
+    // Report Readiness no longer holds a WARNING open for it: the stored
+    // analysis is an artifact nothing produces, so that row was permanent.
+    expect(overview.report_readiness).toBe('READY');
   });
 
   it('never asserts an improvement Screen 08 did not calculate', () => {
@@ -704,12 +706,10 @@ describe('Readiness (10 §16, §17)', () => {
     const checks = buildReadiness({
       solution_stale: false,
       solver,
-      bottleneck_availability: 'current',
-      distribution_available: true,
       completeness,
       monitored_node_count: 3,
     });
-    expect(checks).toHaveLength(6);
+    expect(checks).toHaveLength(4);
     expect(checks.every((check) => check.state === 'READY')).toBe(true);
     expect(evaluateReportReadiness(checks).readiness).toBe('READY');
   });
@@ -718,8 +718,6 @@ describe('Readiness (10 §16, §17)', () => {
     const checks = buildReadiness({
       solution_stale: false,
       solver,
-      bottleneck_availability: 'current',
-      distribution_available: true,
       completeness: {
         ...completeness,
         components_without_limits: 3,
@@ -738,22 +736,28 @@ describe('Readiness (10 §16, §17)', () => {
     const stale = buildReadiness({
       solution_stale: true,
       solver,
-      bottleneck_availability: 'current',
-      distribution_available: true,
       completeness,
       monitored_node_count: 3,
     });
     expect(evaluateReportReadiness(stale).readiness).toBe('BLOCKED');
 
-    const noBottleneck = buildReadiness({
+    // The bottleneck and distribution rows are gone: nothing produces either
+    // artifact any more, so both sat at MISSING forever and pinned Report
+    // Readiness to WARNING on a design with nothing wrong with it.
+    const items = buildReadiness({
       solution_stale: false,
       solver,
-      bottleneck_availability: 'not_run',
-      distribution_available: true,
       completeness,
       monitored_node_count: 3,
-    });
-    expect(evaluateReportReadiness(noBottleneck).readiness).toBe('WARNING');
+    }).map((check) => check.item);
+    expect(items).not.toContain('bottleneck_analysis');
+    expect(items).not.toContain('temperature_distribution');
+    expect(evaluateReportReadiness(buildReadiness({
+      solution_stale: false,
+      solver,
+      completeness,
+      monitored_node_count: 3,
+    })).readiness).toBe('READY');
   });
 });
 

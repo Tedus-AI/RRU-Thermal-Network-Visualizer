@@ -1,73 +1,28 @@
 /**
- * Overall Readiness checklist and Report Readiness — 10 §16, §17, §18.
+ * Report Readiness — 10 §17, §18.
  *
- * The checklist prints one line per supporting analysis with its state and the
- * reason for that state. Report Readiness rolls them up, and the snapshot button
- * lives beside it because that is the decision it gates: a BLOCKED report has
- * nothing worth freezing.
+ * The roll-up, and the snapshot button beside it because that is the decision
+ * it gates: a BLOCKED report has nothing worth freezing. The per-item checklist
+ * that used to sit above it is gone — it listed the state of every supporting
+ * analysis, which is the same set of facts the verdict beside the page title
+ * already reports, one screen-length further down.
  *
  * 10 §18 — `Prepare Report Snapshot` freezes metadata for Screen 11. It does not
  * generate a PDF, choose a layout, or pick an export format, and the panel says
  * so rather than leaving the reader to find out by pressing it.
  */
 
-import { AlertCircle, Camera, CheckCircle2, Circle, Clock } from 'lucide-react';
+import { Camera } from 'lucide-react';
 
 import { Badge, Button } from '@/ui/primitives';
 import { EngineeringInfo } from '@/ui/FieldLabel';
 import {
-  READINESS_ITEM_LABELS,
-  type ReadinessCheck,
-  type ReadinessState,
   type ReportReadiness,
   type ResultsOverviewSnapshot,
 } from '@/thermal/overview/overviewTypes';
 
-import { READINESS_TONE, REPORT_TONE, timeOf } from './overviewViewModel';
+import { REPORT_TONE, timeOf } from './overviewViewModel';
 import { T10 } from './tooltips';
-
-const ICONS: Record<ReadinessState, typeof CheckCircle2> = {
-  READY: CheckCircle2,
-  WARNING: AlertCircle,
-  MISSING: Circle,
-  STALE: Clock,
-};
-
-const ICON_COLOR: Record<ReadinessState, string> = {
-  READY: 'text-ok-600',
-  WARNING: 'text-warn-600',
-  MISSING: 'text-danger-600',
-  STALE: 'text-ink-400',
-};
-
-export function OverallReadinessPanel({ checks }: { checks: ReadinessCheck[] }) {
-  return (
-    <ul className="flex flex-col gap-1.5">
-      {checks.map((check) => {
-        const Icon = ICONS[check.state];
-        const meta = READINESS_ITEM_LABELS[check.item];
-        return (
-          <li key={check.item} className="flex gap-2">
-            <Icon className={`mt-0.5 size-3.5 shrink-0 ${ICON_COLOR[check.state]}`} aria-hidden />
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center justify-between gap-2">
-                <span className="truncate text-[11px] font-semibold text-ink-900">
-                  {meta.label}
-                  <span className="ml-1 font-normal text-ink-400">{meta.zh}</span>
-                </span>
-                <Badge tone={READINESS_TONE[check.state]}>{check.state}</Badge>
-              </div>
-              <p className="text-[10.5px] leading-relaxed text-ink-500">
-                {check.detail}
-                <span className="block text-ink-400">{check.detail_zh}</span>
-              </p>
-            </div>
-          </li>
-        );
-      })}
-    </ul>
-  );
-}
 
 export function ReportReadinessPanel({
   readiness,

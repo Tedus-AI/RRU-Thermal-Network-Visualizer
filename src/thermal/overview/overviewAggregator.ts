@@ -298,8 +298,6 @@ export function buildResultsOverview(input: OverviewInput): OverviewResult {
   const readiness = buildReadiness({
     solution_stale: input.solution_stale,
     solver: solverQuality,
-    bottleneck_availability: availability,
-    distribution_available: distribution != null,
     completeness,
     monitored_node_count: monitored,
   });

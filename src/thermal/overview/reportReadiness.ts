@@ -6,12 +6,11 @@
  * 07 result itself cannot be quoted, WARNING when it can but something behind it
  * is partial, READY when nothing is outstanding (AC-10-21, AC-10-22).
  *
- * Absence is never upgraded into a pass here. A missing bottleneck analysis is
- * MISSING; it is not "READY, nothing found".
+ * Absence is never upgraded into a pass here: a missing input is MISSING, not
+ * "READY, nothing found".
  */
 
 import type {
-  BottleneckAvailability,
   DataCompletenessSummary,
   ReadinessCheck,
   ReportReadiness,
@@ -21,8 +20,6 @@ import type {
 export interface ReadinessInput {
   solution_stale: boolean;
   solver: SolverQualitySummary;
-  bottleneck_availability: BottleneckAvailability;
-  distribution_available: boolean;
   completeness: DataCompletenessSummary;
   monitored_node_count: number;
 }
@@ -109,44 +106,17 @@ export function buildReadiness(input: ReadinessInput): ReadinessCheck[] {
     });
   }
 
-  // 4. Bottleneck analysis ---------------------------------------------------
-  checks.push({
-    item: 'bottleneck_analysis',
-    state:
-      input.bottleneck_availability === 'current'
-        ? 'READY'
-        : input.bottleneck_availability === 'stale'
-          ? 'STALE'
-          : 'MISSING',
-    detail:
-      input.bottleneck_availability === 'current'
-        ? 'Screen 08 results match the current solve.'
-        : input.bottleneck_availability === 'stale'
-          ? 'Screen 08 results predate the current solve.'
-          : input.bottleneck_availability === 'failed'
-            ? 'The last bottleneck analysis failed.'
-            : 'Bottleneck analysis has not been run for this scenario.',
-    detail_zh:
-      input.bottleneck_availability === 'current'
-        ? 'Screen 08 的結果與目前求解一致。'
-        : input.bottleneck_availability === 'stale'
-          ? 'Screen 08 的結果早於目前求解。'
-          : input.bottleneck_availability === 'failed'
-            ? '上次 bottleneck 分析失敗。'
-            : '此情境尚未執行 bottleneck 分析。',
-  });
+  /*
+     Rows 4 and 5 are gone.
 
-  // 5. Temperature distribution ---------------------------------------------
-  checks.push({
-    item: 'temperature_distribution',
-    state: input.distribution_available ? 'READY' : 'MISSING',
-    detail: input.distribution_available
-      ? 'Distribution rows are available for the current solve.'
-      : 'No distribution rows are available for this scenario.',
-    detail_zh: input.distribution_available
-      ? '目前求解有可用的溫度分佈資料。'
-      : '此情境沒有可用的溫度分佈資料。',
-  });
+     They reported whether a stored bottleneck analysis and a stored temperature
+     distribution were current. Nothing produces either any more — Screen 08 was
+     rebuilt around margin ranking and saved studies, and the temperature rows
+     are derived from the solution — so both rows named a state no action could
+     change, and Report Readiness sat at WARNING forever on a design with
+     nothing wrong with it. A readiness signal that is always amber tells the
+     reader nothing about the one time it matters.
+  */
 
   // 6. Data confidence -------------------------------------------------------
   if (input.completeness.low_confidence_critical_edges > 0) {

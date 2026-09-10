@@ -57,7 +57,7 @@ import { useAnalysisStore } from '@/data/analysisStore';
 import { DEFAULT_SOLVER_SETTINGS } from '@/thermal/types';
 import { solveNetwork } from '@/thermal/networkSolver';
 import { projectComponentLimits } from '@/thermal/graph/componentProjection';
-import { marginRanking } from '@/thermal/analysis/marginRanking';
+import { marginRanking, partsNeedingAttention } from '@/thermal/analysis/marginRanking';
 import {
   chainSegments,
   solutionWithWhatIf,
@@ -101,7 +101,6 @@ import { num } from './analysisViewModel';
  * rest of the path is what the reader is deciding against — a 0.4 °C segment
  * you can actually buy beats a 9 °C one you cannot.
  */
-const DECK_SIZE = 3;
 
 const EMPTY_SET: ReadonlySet<string> = new Set<string>();
 const GRAPH_DISPLAY = {
@@ -298,7 +297,7 @@ export function BottleneckAnalysisView() {
   const ranked = useMemo(
     () =>
       solveGraph && baselineTemperatures
-        ? marginRanking(solveGraph, baselineTemperatures, DECK_SIZE)
+        ? partsNeedingAttention(marginRanking(solveGraph, baselineTemperatures, 0))
         : [],
     [solveGraph, baselineTemperatures],
   );
