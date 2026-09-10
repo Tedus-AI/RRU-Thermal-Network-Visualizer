@@ -20,7 +20,7 @@ import {
   type ValidationEntry,
 } from './reportTypes';
 import { includedSections } from './reportConfig';
-import { REQUIRED_SECTION_IDS, sectionDefinition } from './sectionRegistry';
+import { RECOMMENDED_SECTION_IDS, sectionDefinition } from './sectionRegistry';
 import type { SnapshotEvaluation } from './snapshotAdapter';
 
 export interface ValidationInput {
@@ -113,25 +113,30 @@ export function validateReport(input: ValidationInput): ReportValidation {
     );
   }
 
-  // --- 2. required sections (11 §6, §35) -----------------------------------
+  // --- 2. recommended sections (11 §6, §35) --------------------------------
+  //
+  // A missing one WARNS rather than blocks. These four are what a full thermal
+  // report normally carries, but which sections this particular report carries
+  // is the engineer's call — see `toggleSection`.
   const included = new Set(includedSections(config).map((section) => section.id));
-  const missingRequired = REQUIRED_SECTION_IDS.filter((id) => !included.has(id));
+  const missingRequired = RECOMMENDED_SECTION_IDS.filter((id) => !included.has(id));
   entries.push({
     item: 'required_sections',
-    state: missingRequired.length > 0 ? 'MISSING' : 'READY',
+    state: missingRequired.length > 0 ? 'WARNING' : 'READY',
     detail:
       missingRequired.length > 0
-        ? `Missing required section(s): ${missingRequired.map((id) => sectionDefinition(id).title).join(', ')}.`
-        : `All ${REQUIRED_SECTION_IDS.length} required sections are included.`,
+        ? `Recommended section(s) left out: ${missingRequired.map((id) => sectionDefinition(id).title).join(', ')}.`
+        : `All ${RECOMMENDED_SECTION_IDS.length} recommended sections are included.`,
     detail_zh:
       missingRequired.length > 0
-        ? `缺少必要章節：${missingRequired.map((id) => sectionDefinition(id).zh).join('、')}。`
-        : `${REQUIRED_SECTION_IDS.length} 個必要章節皆已納入。`,
+        ? `未納入建議章節：${missingRequired.map((id) => sectionDefinition(id).zh).join('、')}。`
+        : `${RECOMMENDED_SECTION_IDS.length} 個建議章節皆已納入。`,
   });
   if (missingRequired.length > 0) {
-    block(
-      `Required section missing: ${missingRequired.map((id) => sectionDefinition(id).title).join(', ')}.`,
-      `缺少必要章節：${missingRequired.map((id) => sectionDefinition(id).zh).join('、')}。`,
+    warn(
+      `Recommended section left out: ${missingRequired.map((id) => sectionDefinition(id).title).join(', ')}.`,
+      `未納入建議章節：${missingRequired.map((id) => sectionDefinition(id).zh).join('、')}。`,
+      true,
     );
   }
 
@@ -200,16 +205,6 @@ export function validateReport(input: ValidationInput): ReportValidation {
   for (const id of evaluation.unavailable_sections) {
     if (!included.has(id)) continue;
     const definition = sectionDefinition(id);
-    if (REQUIRED_SECTION_IDS.includes(id)) {
-      // 11 §35 — a REQUIRED section with no data blocks: the report cannot
-      // explain where its results came from, which is why the section is
-      // required in the first place. An optional one only warns (§17).
-      block(
-        `Required section ${definition.title} references unavailable data.`,
-        `必要章節 ${definition.zh} 引用的資料不存在。`,
-      );
-      continue;
-    }
     warn(
       `${definition.title} has no data in this snapshot and will render as Not Available.`,
       `${definition.zh} 在此快照中沒有資料，將顯示為 Not Available。`,

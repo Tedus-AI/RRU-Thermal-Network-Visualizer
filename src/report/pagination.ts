@@ -16,8 +16,6 @@ import { sectionDefinition } from './sectionRegistry';
 
 export interface RowCounts {
   critical: number;
-  bottleneck: number;
-  hot_nodes: number;
 }
 
 /** How much of a page a section is expected to occupy, in page units. */
@@ -26,19 +24,12 @@ export function sectionHeight(section: ReportSectionConfig, rows: RowCounts): nu
   let height = definition.base_height;
 
   if (definition.row_height) {
+    // 0 means "All" (11 §15).
     const count =
-      section.id === 'critical'
-        ? // 0 means "All" (11 §15).
-          section.content.row_count === 0
-          ? rows.critical
-          : Math.min(section.content.row_count ?? 5, rows.critical)
-        : Math.min(section.content.top_n ?? 3, rows.bottleneck);
+      section.content.row_count === 0
+        ? rows.critical
+        : Math.min(section.content.row_count ?? 5, rows.critical);
     height += definition.row_height * Math.max(count, 0);
-  }
-
-  if (section.id === 'distribution') {
-    if (section.content.include_histogram_snapshot) height += 0.28;
-    if (section.content.include_hot_node_table) height += 0.06 + 0.03 * rows.hot_nodes;
   }
 
   // 11 §25 — compact spacing trims the section, it does not restructure it.

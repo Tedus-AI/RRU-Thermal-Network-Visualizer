@@ -6,6 +6,7 @@
  */
 
 import type { Tone } from '@/ui/primitives';
+import type { LanguageMode } from '@/report/reportTypes';
 import type { OverallThermalStatus } from '@/thermal/overview/overviewTypes';
 import type {
   ReportReadiness,
@@ -79,10 +80,7 @@ export const OVERALL_TONE: Record<OverallThermalStatus, Tone> = {
  * UI's English-primary rule (§1). In English mode the Chinese half is dropped
  * from the RENDERED REPORT only; the surrounding UI is unaffected.
  */
-export function reportLabel(
-  mode: 'english' | 'bilingual',
-  english: string,
-  chinese: string,
-): string {
+export function reportLabel(mode: LanguageMode, english: string, chinese: string): string {
+  if (mode === 'chinese') return chinese;
   return mode === 'bilingual' ? `${english} / ${chinese}` : english;
 }

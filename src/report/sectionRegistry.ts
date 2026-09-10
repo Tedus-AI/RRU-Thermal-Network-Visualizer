@@ -21,13 +21,18 @@ export interface SectionDefinition {
   id: SectionId;
   title: string;
   zh: string;
-  /** 11 §6 — required sections cannot be excluded. */
-  required: boolean;
+  /**
+   * 11 §6 named these "required", and until now they could not be unticked.
+   * A report the engineer cannot shape is not their report, so the flag now
+   * only sets what the default template includes and what the validator
+   * mentions when it is missing — never what the checkbox will allow.
+   */
+  recommended: boolean;
   /** 11 §26 — where this section's data originally came from. */
   source_screen: '01' | '05' | '07' | '08' | '09' | '10' | '11';
   source_zh: string;
   /** What the section needs from the snapshot; absence makes it unavailable. */
-  requires?: 'bottlenecks' | 'distribution';
+  requires?: 'distribution';
   defaultContent: SectionContentOptions;
   /**
    * Rough content height in page units, used only to estimate pagination
@@ -53,7 +58,7 @@ export const SECTION_DEFINITIONS: SectionDefinition[] = [
     id: 'cover',
     title: 'Cover',
     zh: '封面',
-    required: true,
+    recommended: true,
     source_screen: '11',
     source_zh: '報告設定',
     defaultContent: {},
@@ -64,7 +69,7 @@ export const SECTION_DEFINITIONS: SectionDefinition[] = [
     id: 'project',
     title: 'Project & Scenario Summary',
     zh: '專案與情境摘要',
-    required: true,
+    recommended: true,
     source_screen: '01',
     source_zh: '01 專案資訊 / 情境設定',
     defaultContent: {},
@@ -74,7 +79,7 @@ export const SECTION_DEFINITIONS: SectionDefinition[] = [
     id: 'overall',
     title: 'Overall Thermal Status',
     zh: '整體熱狀態',
-    required: true,
+    recommended: true,
     source_screen: '10',
     source_zh: '10 結果總覽',
     defaultContent: {},
@@ -84,7 +89,7 @@ export const SECTION_DEFINITIONS: SectionDefinition[] = [
     id: 'critical',
     title: 'Critical Components',
     zh: '關鍵元件',
-    required: false,
+    recommended: false,
     source_screen: '10',
     source_zh: '10 結果總覽（來源 07 / 09）',
     defaultContent: {
@@ -101,41 +106,22 @@ export const SECTION_DEFINITIONS: SectionDefinition[] = [
     id: 'network',
     title: 'Thermal Network Summary',
     zh: '熱網路摘要',
-    required: false,
+    recommended: false,
     source_screen: '07',
     source_zh: '07 熱網路求解',
     defaultContent: {},
     base_height: 0.55,
   },
   {
-    id: 'bottleneck',
-    title: 'Bottleneck Analysis Summary',
-    zh: '瓶頸分析摘要',
-    required: false,
-    source_screen: '08',
-    source_zh: '08 瓶頸分析',
-    requires: 'bottlenecks',
-    defaultContent: {
-      top_n: 3,
-      show_score: true,
-      show_sensitivity: true,
-      show_confidence: true,
-    },
-    base_height: 0.22,
-    row_height: 0.04,
-  },
-  {
     id: 'distribution',
     title: 'Temperature Distribution Summary',
     zh: '溫度分佈摘要',
-    required: false,
+    recommended: false,
     source_screen: '07',
     source_zh: '07 熱網路圖',
     requires: 'distribution',
     defaultContent: {
       show_range_summary: true,
-      include_histogram_snapshot: false,
-      include_hot_node_table: false,
     },
     base_height: 0.32,
   },
@@ -143,7 +129,7 @@ export const SECTION_DEFINITIONS: SectionDefinition[] = [
     id: 'quality',
     title: 'Solver & Energy Quality',
     zh: '求解與能量品質',
-    required: true,
+    recommended: true,
     source_screen: '07',
     source_zh: '07 熱網路求解',
     defaultContent: {},
@@ -153,7 +139,7 @@ export const SECTION_DEFINITIONS: SectionDefinition[] = [
     id: 'confidence',
     title: 'Data Completeness & Confidence',
     zh: '資料完整度與可信度',
-    required: false,
+    recommended: false,
     source_screen: '10',
     source_zh: '10 結果總覽（來源 04 / 05）',
     defaultContent: {},
@@ -163,7 +149,7 @@ export const SECTION_DEFINITIONS: SectionDefinition[] = [
     id: 'actions',
     title: 'Engineering Actions / Conclusions',
     zh: '工程行動與結論',
-    required: false,
+    recommended: false,
     source_screen: '10',
     source_zh: '10 結果總覽',
     defaultContent: {},
@@ -173,7 +159,7 @@ export const SECTION_DEFINITIONS: SectionDefinition[] = [
     id: 'appendix',
     title: 'Appendix: Source & Traceability',
     zh: '附錄：來源與追溯',
-    required: false,
+    recommended: false,
     source_screen: '10',
     source_zh: '10 結果總覽 / 專案 metadata',
     defaultContent: {},
@@ -189,7 +175,7 @@ export function sectionDefinition(id: SectionId): SectionDefinition {
   return definition;
 }
 
-/** 11 §6 — the four sections the specification requires by default. */
-export const REQUIRED_SECTION_IDS: SectionId[] = SECTION_DEFINITIONS.filter(
-  (entry) => entry.required,
+/** The sections the default template starts with ticked. */
+export const RECOMMENDED_SECTION_IDS: SectionId[] = SECTION_DEFINITIONS.filter(
+  (entry) => entry.recommended,
 ).map((entry) => entry.id);

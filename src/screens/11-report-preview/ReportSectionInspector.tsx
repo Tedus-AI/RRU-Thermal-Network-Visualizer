@@ -305,11 +305,6 @@ export function ReportSectionInspector({
                     onChange={(value) => onCover({ cover: { show_logo: value } })}
                   />
                 </Row>
-                <p className="pt-2 text-[10px] leading-relaxed text-ink-400">
-                  Report display overrides only. 11 §7 — none of these edit the project master data
-                  in Screen 01.
-                  <span className="block">僅為報告顯示用，不會修改 01 的專案主檔。</span>
-                </p>
               </>
             )}
 
@@ -375,51 +370,6 @@ export function ReportSectionInspector({
               </>
             )}
 
-            {section.id === 'bottleneck' && (
-              <>
-                <Row label="Top N" zh="列出筆數" explanation={T11.bottleneckTopN}>
-                  <Select
-                    className="h-7 !w-[7.5rem] !text-[11px]"
-                    aria-label="Top N"
-                    value={String(content.top_n ?? 3)}
-                    disabled={readOnly}
-                    items={[
-                      { value: '3', label: 'Top 3' },
-                      { value: '5', label: 'Top 5' },
-                      { value: '10', label: 'Top 10' },
-                    ]}
-                    onChange={(event) =>
-                      onContent(section.id, { top_n: Number(event.target.value) })
-                    }
-                  />
-                </Row>
-                <Row label="Show Score" zh="顯示分數">
-                  <Toggle
-                    label="Show Score"
-                    checked={content.show_score !== false}
-                    disabled={readOnly}
-                    onChange={(value) => onContent(section.id, { show_score: value })}
-                  />
-                </Row>
-                <Row label="Show Sensitivity" zh="顯示敏感度">
-                  <Toggle
-                    label="Show Sensitivity"
-                    checked={content.show_sensitivity !== false}
-                    disabled={readOnly}
-                    onChange={(value) => onContent(section.id, { show_sensitivity: value })}
-                  />
-                </Row>
-                <Row label="Show Confidence" zh="顯示可信度">
-                  <Toggle
-                    label="Show Confidence"
-                    checked={content.show_confidence !== false}
-                    disabled={readOnly}
-                    onChange={(value) => onContent(section.id, { show_confidence: value })}
-                  />
-                </Row>
-              </>
-            )}
-
             {section.id === 'distribution' && (
               <>
                 <Row label="Show Range Summary" zh="顯示範圍摘要">
@@ -430,39 +380,11 @@ export function ReportSectionInspector({
                     onChange={(value) => onContent(section.id, { show_range_summary: value })}
                   />
                 </Row>
-                <Row
-                  label="Include Histogram Snapshot"
-                  zh="嵌入直方圖快照"
-                  explanation={T11.includeHistogram}
-                >
-                  <Toggle
-                    label="Include Histogram Snapshot"
-                    checked={content.include_histogram_snapshot === true}
-                    disabled={readOnly}
-                    onChange={(value) =>
-                      onContent(section.id, { include_histogram_snapshot: value })
-                    }
-                  />
-                </Row>
-                <Row label="Include Hot Node Table" zh="嵌入熱點節點表">
-                  <Toggle
-                    label="Include Hot Node Table"
-                    checked={content.include_hot_node_table === true}
-                    disabled={readOnly}
-                    onChange={(value) => onContent(section.id, { include_hot_node_table: value })}
-                  />
-                </Row>
               </>
             )}
 
-            {!['critical', 'bottleneck', 'distribution'].includes(section.id) && (
-              <p className="py-4 text-[11px] leading-relaxed text-ink-400">
-                This section has no content options. Its fields are fixed by the specification so
-                the report always states the same things about the result.
-                <span className="block">
-                  此章節沒有內容選項；欄位由規格固定，確保報告對結果的陳述一致。
-                </span>
-              </p>
+            {!['critical', 'distribution'].includes(section.id) && (
+              <p className="py-4 text-[11px] text-ink-400">此章節沒有內容選項。</p>
             )}
           </div>
         )}
@@ -506,10 +428,6 @@ export function ReportSectionInspector({
                 onChange={(value) => onDisplay(section.id, { compact_spacing: value })}
               />
             </Row>
-            <p className="pt-2 text-[10px] leading-relaxed text-ink-400">
-              Layout options only. 11 §25 deliberately stops short of free-form word-processor
-              behaviour in V1.
-            </p>
           </div>
         )}
 
@@ -539,17 +457,12 @@ export function ReportSectionInspector({
 
             {unavailable.includes(section.id) && (
               <p className="rounded border border-warn-500/40 bg-warn-100 px-2 py-1.5 text-[10.5px] font-semibold text-warn-600">
-                No data for this section in the current snapshot. It renders as Not Available; no
-                rows are estimated.
+                此章節在目前快照中沒有資料，將顯示 Not Available。
                 <span className="block font-normal">
-                  此章節在目前快照中沒有資料，將顯示 Not Available，不會以估算值填補。
                 </span>
               </p>
             )}
 
-            <p className="mt-1 text-[10px] leading-relaxed text-ink-400">
-              Read-only. Screen 11 never recalculates a thermal value; edit inputs in Screens 04–07.
-            </p>
           </div>
         )}
 
