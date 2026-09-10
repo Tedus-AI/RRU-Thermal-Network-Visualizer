@@ -19,6 +19,7 @@ import type {
   ThermalReportConfig,
 } from '@/report/reportTypes';
 import { sectionDefinition } from '@/report/sectionRegistry';
+import { DEFAULT_LOGO_TEXT } from '@/report/defaultTemplate';
 
 import { num, pct, reportLabel, signed, timeOf } from './reportViewModel';
 
@@ -118,7 +119,7 @@ function CoverSection({ input }: { input: SectionRenderInput }) {
               5G
             </span>
             <span className="text-[11px] font-bold text-[#425067]">
-              5G FR1 Thermal Network Visualizer
+              {cover.logo_text ?? DEFAULT_LOGO_TEXT}
             </span>
           </div>
         )}
@@ -154,21 +155,18 @@ function CoverSection({ input }: { input: SectionRenderInput }) {
   );
 }
 
-// --- 11 §13 — project and scenario -----------------------------------------
+// --- 11 §13 — the scenario the result was solved at -------------------------
+//
+// The project half of this section is gone: name, id and customer are printed
+// on the cover, one page earlier, and Result Mode and Solver Status describe
+// the solve rather than the scenario — Solver & Energy Quality is the section
+// that judges the solve.
 
 function ProjectSection({ input }: { input: SectionRenderInput }) {
   const { config, project, scenario, snapshot } = input;
   const mode = config.language_mode;
   return (
     <div className="grid grid-cols-4 gap-x-0 gap-y-0">
-      <Field label="Project Name" zh="專案名稱" value={project.name} mode={mode} />
-      <Field label="Project ID" zh="專案代號" value={project.id} mode={mode} />
-      <Field
-        label="Customer / Program"
-        zh="客戶 / 專案"
-        value={config.cover.customer_program || project.customer || '—'}
-        mode={mode}
-      />
       <Field label="Stage" zh="階段" value={project.stage || '—'} mode={mode} />
       <Field label="Scenario" zh="情境" value={scenario.name} mode={mode} />
       <Field label="Ambient" zh="環境溫度" value={num(scenario.ambient_C, 1, '°C')} mode={mode} />
@@ -178,13 +176,6 @@ function ProjectSection({ input }: { input: SectionRenderInput }) {
         label="Power Scale"
         zh="功率倍率"
         value={`${(scenario.power_scale * 100).toFixed(0)}%`}
-        mode={mode}
-      />
-      <Field label="Result Mode" zh="結果模式" value={snapshot.result_mode} mode={mode} />
-      <Field
-        label="Solver Status"
-        zh="求解狀態"
-        value={snapshot.solver_quality.status}
         mode={mode}
       />
       <Field

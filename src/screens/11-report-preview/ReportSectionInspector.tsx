@@ -13,6 +13,7 @@ import { Badge, Select, TextArea, TextInput } from '@/ui/primitives';
 import { EngineeringInfo, biTitle } from '@/ui/FieldLabel';
 import type {
   ReportCoverConfig,
+  ReportPage,
   ReportSectionConfig,
   SectionContentOptions,
   SectionDisplayOptions,
@@ -20,6 +21,7 @@ import type {
   SnapshotSummary,
 } from '@/report/reportTypes';
 import { sectionDefinition } from '@/report/sectionRegistry';
+import { DEFAULT_LOGO_TEXT } from '@/report/defaultTemplate';
 
 import { SNAPSHOT_TONE, timeOf } from './reportViewModel';
 import { T11 } from './tooltips';
@@ -59,6 +61,15 @@ function Row({
   );
 }
 
+/**
+ * A labelled text field.
+ *
+ * The input was a fixed 10 rem against a label that took whatever it liked,
+ * which is how "FR1 RRU starkcore 12L Thermal Engineering Report" came to be
+ * edited four words at a time. The label is capped instead and the input takes
+ * the rest of the row — `wide` gives the longest fields (the title and the
+ * subtitle) a still narrower label.
+ */
 function TextRow({
   label,
   zh,
@@ -67,6 +78,7 @@ function TextRow({
   invalid,
   placeholder,
   type,
+  wide,
   onChange,
 }: {
   label: string;
@@ -76,16 +88,21 @@ function TextRow({
   invalid?: boolean;
   placeholder?: string;
   type?: string;
+  wide?: boolean;
   onChange: (value: string) => void;
 }) {
   return (
-    <label className="flex items-center justify-between gap-2 py-1">
-      <span className="flex min-w-0 items-center gap-1 text-[11px] text-ink-700">
+    <label className="flex items-center gap-2 py-1">
+      <span
+        className={`flex min-w-0 shrink-0 items-center gap-1 text-[11px] text-ink-700 ${
+          wide ? 'basis-[5.5rem]' : 'basis-[8.5rem]'
+        }`}
+      >
         <span className="truncate">{label}</span>
         <span className="shrink-0 text-[10px] text-ink-400">{zh}</span>
       </span>
       <TextInput
-        className="h-7 !w-[10rem] shrink-0 !text-[11px]"
+        className="h-7 min-w-0 flex-1 !text-[11px]"
         type={type}
         value={value}
         disabled={readOnly}
@@ -141,6 +158,7 @@ export interface CoverInput {
 
 export function ReportSectionInspector({
   sections,
+  pages,
   selectedId,
   snapshot,
   unavailable,
@@ -153,6 +171,8 @@ export function ReportSectionInspector({
   onCover,
 }: {
   sections: ReportSectionConfig[];
+  /** The current pagination, so the Display tab can say where this lands. */
+  pages: ReportPage[];
   selectedId: SectionId;
   snapshot: SnapshotSummary;
   unavailable: SectionId[];
@@ -174,6 +194,21 @@ export function ReportSectionInspector({
   if (!section) return null;
   const definition = sectionDefinition(section.id);
   const content = section.content;
+
+  const onPages = pages.filter((page) => page.section_ids.includes(section.id));
+  const placement = !section.included
+    ? '未納入報告，因此不佔任何頁面。'
+    : onPages.length === 0
+      ? '尚未配置頁面。'
+      : onPages.length > 1
+        ? `跨第 ${onPages[0].page_number}–${onPages[onPages.length - 1].page_number} 頁`
+        : (() => {
+            const page = onPages[0];
+            const others = page.section_ids.length - 1;
+            return others === 0
+              ? `位於第 ${page.page_number} 頁，獨占一頁`
+              : `位於第 ${page.page_number} 頁，與其他 ${others} 個章節同頁`;
+          })();
 
   return (
     <div className="flex min-h-0 flex-col gap-2">
@@ -231,6 +266,7 @@ export function ReportSectionInspector({
                 <TextRow
                   label="Report Title"
                   zh="報告標題"
+                  wide
                   value={cover.title}
                   readOnly={readOnly}
                   invalid={cover.title.trim().length === 0}
@@ -239,14 +275,19 @@ export function ReportSectionInspector({
                 <TextRow
                   label="Subtitle"
                   zh="副標題"
+                  wide
                   value={cover.subtitle ?? ''}
                   readOnly={readOnly}
                   onChange={(value) => onCover({ subtitle: value })}
                 />
+                {/* Screen 01's name, in the box, rather than behind it as grey
+                    placeholder text — a field that looks empty reads as one
+                    nobody filled in, and the cover has always printed the
+                    project's name. Clearing it falls back to 01 again. */}
                 <TextRow
                   label="Project Name"
                   zh="專案名稱"
-                  value={cover.config.project_name_override ?? ''}
+                  value={cover.config.project_name_override || cover.project_name}
                   readOnly={readOnly}
                   placeholder={cover.project_name}
                   onChange={(value) => onCover({ cover: { project_name_override: value } })}
@@ -305,6 +346,19 @@ export function ReportSectionInspector({
                     onChange={(value) => onCover({ cover: { show_logo: value } })}
                   />
                 </Row>
+                {/* The wordmark beside the mark. It is the team's report, not
+                    this tool's brochure, so the words are theirs to set. */}
+                {cover.config.show_logo && (
+                  <TextRow
+                    label="Logo Text"
+                    zh="標誌文字"
+                    wide
+                    value={cover.config.logo_text ?? DEFAULT_LOGO_TEXT}
+                    readOnly={readOnly}
+                    placeholder={DEFAULT_LOGO_TEXT}
+                    onChange={(value) => onCover({ cover: { logo_text: value } })}
+                  />
+                )}
               </>
             )}
 
@@ -392,6 +446,15 @@ export function ReportSectionInspector({
         {/* --- Display (11 §25) ------------------------------------------ */}
         {tab === 'display' && (
           <div className="flex flex-col">
+            {/* Where this section currently lands.
+                Page Break Before and Keep Table Together change PAGINATION,
+                not how a page is drawn, so on this screen they looked inert —
+                you toggle one and the page in front of you is identical. This
+                line moves the moment either does, which is the whole of what
+                they do. */}
+            <p className="mb-1 rounded border border-line bg-surface-muted px-2 py-1.5 text-[10.5px] text-ink-700">
+              {placement}
+            </p>
             <Row label="Section Title" zh="章節標題">
               <input
                 type="text"

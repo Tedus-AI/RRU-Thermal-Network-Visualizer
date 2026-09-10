@@ -44,6 +44,9 @@ export function defaultHeaderFooter(): HeaderFooterConfig {
   };
 }
 
+/** The wordmark a fresh report starts with; the cover editor can change it. */
+export const DEFAULT_LOGO_TEXT = '5G FR1 Thermal Network Visualizer';
+
 export function defaultCover(options: { preparedBy?: string; now: string }): ReportCoverConfig {
   return {
     customer_program: '',
@@ -52,6 +55,7 @@ export function defaultCover(options: { preparedBy?: string; now: string }): Rep
     company_team: '',
     confidentiality: 'Confidential',
     show_logo: true,
+    logo_text: DEFAULT_LOGO_TEXT,
   };
 }
 

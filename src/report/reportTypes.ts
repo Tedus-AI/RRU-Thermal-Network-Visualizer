@@ -156,6 +156,8 @@ export interface ReportCoverConfig {
   company_team: string;
   confidentiality: string;
   show_logo: boolean;
+  /** The wordmark beside the logo. Editable, because it is the team's, not ours. */
+  logo_text?: string;
 }
 
 export interface HeaderFooterConfig {
