@@ -57,6 +57,21 @@
   --color-mark-100: #fff6b8;
   --color-mark-300: #f0d975;
 
+  /* Candy. The two doors on Screen 10 — the only controls on that screen that
+     OPEN something rather than report it — and they need to be found at a
+     glance among panels of numbers.
+
+     Deliberately outside the severity ramps for the same reason orange is:
+     ok-* or warn-* on a permanently-present button would read as a verdict on
+     what is behind it, and these two say the same thing whether the design
+     passes or fails. Always under ink-900 / ink-700 text, never under ink-400. */
+  --color-candy-yellow-400: #ffd93d;
+  --color-candy-yellow-300: #ffe680;
+  --color-candy-yellow-line: #e0b400;
+  --color-candy-green-400: #86e57f;
+  --color-candy-green-300: #a8f0a2;
+  --color-candy-green-line: #4aba42;
+
   --color-ink-900: #0f1b30;
   --color-ink-700: #33405a;
   --color-ink-500: #5c6981;

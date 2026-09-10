@@ -26,9 +26,9 @@ import { Select } from '@/ui/primitives';
 import { LAYOUT_MODES } from '@/screens/05-thermal-path-builder/GraphToolbar';
 
 import { biTitle } from '@/ui/FieldLabel';
+import { ResultModePills } from './ResultModePills';
 import { RESULT_MODES, type ResultMode } from './resultViewModel';
 import type { GraphDisplayOptions, SolvedCanvasTool } from './SolvedGraphCanvas';
-import { T07 } from './tooltips';
 
 function IconButton({
   label,
@@ -130,36 +130,7 @@ export function ResultModeToolbar({
 }) {
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-      <div
-        className="flex items-center gap-0.5 rounded-md border border-line-strong p-0.5"
-        role="group"
-        aria-label={biTitle('Result mode', T07.field.resultMode)}
-      >
-        {RESULT_MODES.map((entry) => {
-          const disabled = entry.needsSolution && !hasResult;
-          return (
-            <button
-              key={entry.id}
-              type="button"
-              disabled={disabled}
-              aria-pressed={mode === entry.id}
-              title={
-                disabled
-                  ? biTitle(`${entry.label} — solve first`, `${entry.zh}：請先求解`)
-                  : biTitle(entry.label, entry.zh)
-              }
-              onClick={() => onMode(entry.id)}
-              className={`rounded px-2 py-1 text-[11px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
-                mode === entry.id
-                  ? 'bg-accent-600 text-white'
-                  : 'text-ink-500 hover:bg-surface-muted hover:text-ink-900'
-              }`}
-            >
-              {entry.label}
-            </button>
-          );
-        })}
-      </div>
+      <ResultModePills modes={RESULT_MODES} mode={mode} hasResult={hasResult} onMode={onMode} />
 
       <div className="flex items-center gap-1.5">
         {TOGGLES.map((toggle) => (

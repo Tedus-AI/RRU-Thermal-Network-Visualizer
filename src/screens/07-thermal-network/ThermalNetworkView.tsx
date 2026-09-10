@@ -33,7 +33,6 @@ import { useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
   ArrowRight,
-  ChevronDown,
   Network,
   Play,
   RefreshCw,
@@ -47,7 +46,6 @@ import { ScreenWorkspace } from '@/app/ScreenWorkspace';
 import { projectPath } from '@/app/navigation';
 import { useShellActions } from '@/app/shellActions';
 import { Badge, Button, Modal, Skeleton } from '@/ui/primitives';
-import { FloatingPanel } from '@/ui/FloatingPanel';
 import { biTitle } from '@/ui/FieldLabel';
 import { ResizableSidebar } from '@/ui/ResizableSidebar';
 import { toast } from '@/ui/toast';
@@ -90,8 +88,8 @@ import {
 } from './SolvedGraphCanvas';
 import { isLayoutMode } from '@/screens/05-thermal-path-builder/GraphToolbar';
 import { EnergyBalancePanel } from './EnergyBalancePanel';
-import { NodeResultInspector } from './NodeResultInspector';
-import { EdgeResultInspector } from './EdgeResultInspector';
+import { GraphLegend } from './GraphLegend';
+import { ResultInspectorWindow } from './ResultInspectorWindow';
 import { SolverStatusOverlay } from './SolverStatusOverlay';
 import { ResultsOverlay } from './ResultsOverlay';
 import { ResultTree } from './ResultTree';
@@ -657,8 +655,6 @@ export function ThermalNetworkView() {
 
 
   const legend = legendFor(mode, stale ? null : solution);
-  const selectedNode = selectedNodeId ? ((limited ?? network).nodes[selectedNodeId] ?? null) : null;
-  const selectedEdge = selectedEdgeId ? (network.edges[selectedEdgeId] ?? null) : null;
 
   return (
     <ScreenWorkspace
@@ -915,43 +911,12 @@ export function ThermalNetworkView() {
               />
             )}
 
-            {/* Legend — 07 §21 and §22 both require one.
-
-                Collapsible, and collapsed by default, as on Screen 05: it is an
-                overlay in the corner the graph starts in, so left open it sits
-                on the first two nodes. A scale you have read once does not need
-                to keep covering the picture it describes. */}
-            <div hidden={explorer.view === 'groups'} className="absolute top-3 left-3 z-10 w-[13rem] rounded-md border border-line bg-surface/95 p-2 shadow-sm">
-              <button
-                type="button"
-                onClick={() => setLegendOpen((value) => !value)}
-                aria-expanded={legendOpen}
-                title={biTitle('Legend', '圖例')}
-                className="flex w-full items-center gap-1.5 text-[10px] font-bold text-ink-700"
-              >
-                Legend <span className="font-normal text-ink-400">/ 圖例</span>
-                <ChevronDown
-                  size={12}
-                  className={`ml-auto text-ink-400 ${legendOpen ? '' : '-rotate-90'}`}
-                />
-              </button>
-              <ul className={`mt-1 flex-col gap-0.5 ${legendOpen ? 'flex' : 'hidden'}`}>
-                {legend.map((entry) => (
-                  <li
-                    key={`${entry.color}-${entry.label}`}
-                    title={entry.zh}
-                    className="flex items-center gap-1.5 text-[10px] text-ink-500"
-                  >
-                    <span
-                      aria-hidden
-                      className="size-2.5 shrink-0 rounded-sm"
-                      style={{ backgroundColor: entry.color }}
-                    />
-                    <span className="truncate">{entry.label}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
+            <GraphLegend
+              rows={legend}
+              open={legendOpen}
+              onToggle={() => setLegendOpen((value) => !value)}
+              hidden={explorer.view === 'groups'}
+            />
 
             <SolverStatusOverlay
               state={solverState}
@@ -1009,60 +974,26 @@ export function ThermalNetworkView() {
         />
       )}
 
-      {/* The inspector floats: it is a read-only detail view, so it should
-          appear where the reader asked for it and be pushable out of the way,
-          not hold a permanent column the graph could have had. */}
-      {(selectedNode || selectedEdge) && (
-        <FloatingPanel
-          storageKey="tnv.07.inspector"
-          defaultWidth={460}
-          defaultHeight={640}
-          title={selectedEdge ? selectedEdge.id : (selectedNode?.name ?? '')}
-          subtitle={
-            selectedEdge
-              ? `${network.nodes[selectedEdge.from]?.name ?? selectedEdge.from} → ${network.nodes[selectedEdge.to]?.name ?? selectedEdge.to}`
-              : (selectedNode?.id ?? '')
-          }
-          badge={
-            <Badge tone="neutral">
-              {selectedEdge ? 'Edge / 連線' : 'Node / 節點'}
-            </Badge>
-          }
-          onClose={() => {
-            setSelectedNodeId(null);
-            setSelectedEdgeId(null);
-          }}
-        >
-          <div className="p-3">
-            {selectedEdge ? (
-              <EdgeResultInspector
-                edge={selectedEdge}
-                network={network}
-                solution={solution}
-                stale={stale}
-                scenarioId={activeScenarioId ?? ''}
-                onSelectNode={(nodeId) => {
-                  setSelectedEdgeId(null);
-                  setSelectedNodeId(nodeId);
-                }}
-              />
-            ) : selectedNode ? (
-              <NodeResultInspector
-                node={selectedNode}
-                network={network}
-                solution={solution}
-                stale={stale}
-                scenarioName={scenario?.name ?? ''}
-                solverState={solverState}
-                onSelectEdge={(edgeId) => {
-                  setSelectedNodeId(null);
-                  setSelectedEdgeId(edgeId);
-                }}
-              />
-            ) : null}
-          </div>
-        </FloatingPanel>
-      )}
+      {/* The same window Screen 10's network opens — see
+          `ResultInspectorWindow`. */}
+      <ResultInspectorWindow
+        storageKey="tnv.07.inspector"
+        network={network}
+        limitedNetwork={limited}
+        solution={solution}
+        stale={stale}
+        scenarioId={activeScenarioId ?? ''}
+        scenarioName={scenario?.name ?? ''}
+        solverState={solverState}
+        selectedNodeId={selectedNodeId}
+        selectedEdgeId={selectedEdgeId}
+        onSelectNode={setSelectedNodeId}
+        onSelectEdge={setSelectedEdgeId}
+        onClose={() => {
+          setSelectedNodeId(null);
+          setSelectedEdgeId(null);
+        }}
+      />
 
       {confirmReset && (
         <Modal
