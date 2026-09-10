@@ -537,10 +537,6 @@ export async function buildDemoGoldenFlow(): Promise<DemoGoldenFlow> {
 
   const pages = paginate(reportConfig.sections, {
     critical: snapshot.critical_components.length,
-    bottleneck: snapshot.bottlenecks.length,
-    hot_nodes: overviewResult.rows.filter(
-      (row) => row.status === 'near_limit' || row.status === 'over_limit',
-    ).length,
   });
   const reportPayload = buildExportPayload({
     config: reportConfig,

@@ -769,11 +769,15 @@ export function ResultsOverviewView() {
         <NetworkWindow
           network={network}
           limitedNetwork={limitedNetwork}
+          components={components}
           solution={solution}
           stale={stale}
           scenarioId={activeScenarioId ?? ''}
           scenarioName={scenario.name}
+          projectName={draft?.project_name ?? ''}
           solverState={solverState}
+          nodeCount={rows.length}
+          edgeCount={flows.length}
           onClose={() => setNetworkOpen(false)}
         />
       )}

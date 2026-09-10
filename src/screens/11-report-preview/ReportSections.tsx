@@ -394,71 +394,6 @@ function NetworkSection({ input }: { input: SectionRenderInput }) {
   );
 }
 
-// --- 11 §17 — bottleneck summary -------------------------------------------
-
-function BottleneckSection({ input }: { input: SectionRenderInput }) {
-  const { config, section, snapshot, unavailable } = input;
-  const mode = config.language_mode;
-
-  if (unavailable || snapshot.bottlenecks.length === 0) {
-    return <NotAvailable mode={mode} what="Bottleneck Analysis" whatZh="瓶頸分析" />;
-  }
-
-  const options = section.content;
-  const rows = snapshot.bottlenecks.slice(0, options.top_n ?? 3);
-
-  return (
-    <table className="w-full border-collapse text-[10px]">
-      <thead>
-        <tr>
-          <th className={HEAD}>{reportLabel(mode, 'Rank', '排名')}</th>
-          <th className={HEAD}>{reportLabel(mode, 'Edge', '連線')}</th>
-          {options.show_score !== false && (
-            <th className={`${HEAD} text-right`}>{reportLabel(mode, 'Score', '分數')}</th>
-          )}
-          <th className={HEAD}>{reportLabel(mode, 'Classification', '分級')}</th>
-          {options.show_sensitivity !== false && (
-            <th className={`${HEAD} text-right`}>
-              {reportLabel(mode, 'Sensitivity Improvement', '敏感度改善')} (°C)
-            </th>
-          )}
-          <th className={`${HEAD} text-right`}>
-            {reportLabel(mode, 'Affected Components', '受影響元件')}
-          </th>
-          {options.show_confidence !== false && (
-            <th className={HEAD}>{reportLabel(mode, 'Confidence', '可信度')}</th>
-          )}
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((row) => (
-          <tr key={row.edge_id}>
-            <td className={`${CELL} font-bold tabular`}>{row.rank}</td>
-            <td className={`${CELL} font-semibold text-[#16202f]`}>{row.edge_label}</td>
-            {options.show_score !== false && (
-              <td className={`${CELL} text-right font-bold tabular`}>{row.score.toFixed(0)}</td>
-            )}
-            <td className={`${CELL} text-[#425067]`}>{row.classification}</td>
-            {options.show_sensitivity !== false && (
-              <td className={`${CELL} text-right tabular`}>
-                {row.sensitivity_improvement_C == null
-                  ? 'Not measured'
-                  : `${num(row.sensitivity_improvement_C, 1)} @ −${row.reduction_pct}%`}
-              </td>
-            )}
-            <td className={`${CELL} text-right tabular text-[#425067]`}>
-              {row.affected_components}
-            </td>
-            {options.show_confidence !== false && (
-              <td className={`${CELL} text-[#425067] capitalize`}>{row.confidence}</td>
-            )}
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  );
-}
-
 // --- 11 §18 — temperature distribution summary ------------------------------
 
 function DistributionSection({ input }: { input: SectionRenderInput }) {
@@ -530,22 +465,6 @@ function DistributionSection({ input }: { input: SectionRenderInput }) {
             <span>{num(distribution.min_C, 1, '°C')}</span>
             <span>{num(distribution.max_C, 1, '°C')}</span>
           </div>
-        </div>
-      )}
-
-      {section.content.include_histogram_snapshot && (
-        // 11 §18, AC-11-22 — an EXISTING Screen 09 chart may be embedded. Screen
-        // 11 never re-bins and never recomputes a percentile, so when no chart
-        // snapshot has been captured the placeholder says exactly that rather
-        // than drawing a histogram of its own.
-        <div className="border border-dashed border-[#c3ccd9] bg-[#f7f9fc] px-3 py-4 text-center">
-          <p className="text-[10px] font-bold text-[#425067]">
-            {reportLabel(mode, 'Histogram Snapshot', '直方圖快照')}
-          </p>
-          <p className="mt-1 text-[9px] text-[#68748a]">
-            Reserved for an existing Screen 09 chart snapshot. Screen 11 never re-bins temperatures
-            or recomputes percentiles.
-          </p>
         </div>
       )}
 
@@ -792,8 +711,6 @@ export function ReportSectionBody({ input }: { input: SectionRenderInput }) {
       return <CriticalSection input={input} />;
     case 'network':
       return <NetworkSection input={input} />;
-    case 'bottleneck':
-      return <BottleneckSection input={input} />;
     case 'distribution':
       return <DistributionSection input={input} />;
     case 'quality':

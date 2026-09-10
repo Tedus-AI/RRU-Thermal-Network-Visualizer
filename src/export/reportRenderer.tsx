@@ -50,8 +50,6 @@ export interface RenderedReport {
 function rowCountsOf(snapshot: ResultsOverviewSnapshot) {
   return {
     critical: snapshot.critical_components.length,
-    bottleneck: snapshot.bottlenecks.length,
-    hot_nodes: Math.min(snapshot.distribution?.row_count ?? 0, 10),
   };
 }
 

@@ -10,7 +10,7 @@
 import { useState } from 'react';
 import { ArrowDown, ArrowUp, GripVertical, RotateCcw } from 'lucide-react';
 
-import { Badge, Button, Select } from '@/ui/primitives';
+import { Badge, Button } from '@/ui/primitives';
 import { EngineeringInfo, biTitle } from '@/ui/FieldLabel';
 import type { ReportPage, ReportSectionConfig, SectionId } from '@/report/reportTypes';
 import { sectionDefinition } from '@/report/sectionRegistry';
@@ -21,15 +21,12 @@ export const OUTLINE_TABS = ['outline', 'pages'] as const;
 export type OutlineTab = (typeof OUTLINE_TABS)[number];
 
 export function ReportOutlinePanel({
-  templateName,
-  templates,
   sections,
   pages,
   selectedId,
   currentPage,
   unavailable,
   readOnly,
-  onTemplate,
   onSelect,
   onToggle,
   onMove,
@@ -37,8 +34,6 @@ export function ReportOutlinePanel({
   onReset,
   onPage,
 }: {
-  templateName: string;
-  templates: string[];
   sections: ReportSectionConfig[];
   pages: ReportPage[];
   selectedId: SectionId;
@@ -46,7 +41,6 @@ export function ReportOutlinePanel({
   /** Sections whose backing data is absent from the snapshot (11 §17, §18). */
   unavailable: SectionId[];
   readOnly: boolean;
-  onTemplate: (name: string) => void;
   onSelect: (id: SectionId) => void;
   onToggle: (id: SectionId) => void;
   onMove: (id: SectionId, direction: -1 | 1) => void;
@@ -60,26 +54,6 @@ export function ReportOutlinePanel({
 
   return (
     <div className="flex min-h-0 flex-col gap-2">
-      {/* --- template (11 §34) ------------------------------------------- */}
-      <div>
-        <label
-          htmlFor="rp-template"
-          className="flex items-center gap-1 text-[11px] font-semibold text-ink-700"
-        >
-          Report Template
-          <span className="font-normal text-ink-400">/ 報告模板</span>
-          <EngineeringInfo zh={T11.reportTemplate} label="Report Template" align="left" />
-        </label>
-        <Select
-          id="rp-template"
-          className="mt-1 h-8 !text-[11.5px]"
-          value={templateName}
-          disabled={readOnly}
-          items={templates.map((name) => ({ value: name, label: name }))}
-          onChange={(event) => onTemplate(event.target.value)}
-        />
-      </div>
-
       {/* --- Outline / Pages tabs (11 §11) ------------------------------- */}
       <div role="tablist" aria-label={biTitle('Left panel', '左側面板')} className="flex border-b border-line">
         {OUTLINE_TABS.map((entry) => (
@@ -158,9 +132,9 @@ export function ReportOutlinePanel({
                     </span>
                   </span>
 
-                  {definition.required && (
-                    <span title={biTitle('Required section', '必要章節')}>
-                      <Badge tone="warn">REQ</Badge>
+                  {definition.recommended && (
+                    <span title={biTitle('Recommended section', '建議章節')}>
+                      <Badge tone="neutral">建議</Badge>
                     </span>
                   )}
 
@@ -197,8 +171,7 @@ export function ReportOutlinePanel({
                     type="checkbox"
                     className="size-3.5 shrink-0 accent-accent-600"
                     checked={section.included}
-                    // 11 §6 — a required section cannot be excluded.
-                    disabled={readOnly || definition.required}
+                    disabled={readOnly}
                     aria-label={`Include ${definition.title}`}
                     onClick={(event) => event.stopPropagation()}
                     onChange={() => onToggle(section.id)}
@@ -210,18 +183,18 @@ export function ReportOutlinePanel({
 
           <div className="shrink-0 border-t border-line pt-2 text-[10px] text-ink-400">
             <p className="flex items-center gap-1">
-              <Badge tone="warn">REQ</Badge>
-              Required / 必要章節
-              <EngineeringInfo zh={T11.requiredSection} label="Required section" align="left" />
+              <Badge tone="neutral">建議</Badge>
+              建議章節，可自行取消
+              <EngineeringInfo zh={T11.requiredSection} label="Recommended section" align="left" />
             </p>
-            <p className="mt-1">Drag to reorder / 拖曳以重新排序</p>
+            <p className="mt-1">拖曳以重新排序</p>
             <Button
               className="mt-2 !h-7 !px-2 !text-[11px]"
               icon={<RotateCcw className="size-3.5" />}
               disabled={readOnly}
               onClick={onReset}
             >
-              Reset Layout / 重設版面
+              重設版面
             </Button>
           </div>
         </div>

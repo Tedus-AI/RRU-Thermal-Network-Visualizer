@@ -29,7 +29,9 @@ import { evaluateSnapshot, blocksExport, blocksPreview } from './snapshotAdapter
 import { paginate, pageOfSection, sectionHeight } from './pagination';
 import { previewReadiness, validateReport } from './reportValidator';
 import { buildExportPayload } from './exportPayloadBuilder';
-import { REQUIRED_SECTION_IDS, SECTION_DEFINITIONS } from './sectionRegistry';
+import { RECOMMENDED_SECTION_IDS, SECTION_DEFINITIONS } from './sectionRegistry';
+import { LANGUAGE_MODES } from './reportTypes';
+import { reportLabel } from '@/screens/11-report-preview/reportViewModel';
 
 // --- builders --------------------------------------------------------------
 
@@ -146,7 +148,7 @@ function config(now = '2026-02-01T00:00:00.000Z') {
   });
 }
 
-const ROWS = { critical: 18, bottleneck: 18, hot_nodes: 10 };
+const ROWS = { critical: 18 };
 
 function validate(options: Parameters<typeof snapshot>[0] = {}, overrides: { signature?: string; liveSignature?: string } = {}) {
   const snap = snapshot({ ...options, signature: overrides.signature ?? 'sig-1' });
@@ -241,19 +243,13 @@ describe('Test C — FAIL does not block reporting (11 §50 C, §30)', () => {
   });
 });
 
-// --- Test D — no bottleneck data (11 §50 D) ---------------------------------
+// --- Test D — missing section data (11 §50 D) -------------------------------
+//
+// The bottleneck half of this test went with the Bottleneck Analysis Summary
+// section: nothing in the tool runs `analysisStore.run`, so its data was always
+// absent and the section was permanently "Not Available".
 
-describe('Test D — bottleneck data unavailable (11 §50 D)', () => {
-  it('marks the section unavailable, warns, and fabricates no rows', () => {
-    const { evaluation, validation } = validate({ bottlenecks: 0, readiness: 'READY' });
-
-    expect(evaluation.unavailable_sections).toContain('bottleneck');
-    expect(evaluation.snapshot?.bottlenecks).toEqual([]);
-    expect(validation.readiness).toBe('WARNING');
-    expect(validation.warnings.join(' ')).toMatch(/Bottleneck Analysis Summary has no data/);
-    expect(validation.blocking).toEqual([]);
-  });
-
+describe('Test D — section data unavailable (11 §50 D)', () => {
   it('marks the distribution section unavailable when the snapshot has none', () => {
     const { evaluation } = validate({ distribution: false, readiness: 'READY' });
     expect(evaluation.unavailable_sections).toContain('distribution');
@@ -313,7 +309,6 @@ describe('Section selection and order (11 §5, §6)', () => {
       'overall',
       'critical',
       'network',
-      'bottleneck',
       'distribution',
       'quality',
       'confidence',
@@ -322,11 +317,11 @@ describe('Section selection and order (11 §5, §6)', () => {
     ]);
   });
 
-  it('refuses to exclude a required section', () => {
-    for (const id of REQUIRED_SECTION_IDS) {
+  it('lets a recommended section be excluded like any other', () => {
+    for (const id of RECOMMENDED_SECTION_IDS) {
       const result = toggleSection(config(), id);
-      expect(result.refused).toMatch(/required section/);
-      expect(result.config.sections.find((entry) => entry.id === id)?.included).toBe(true);
+      expect(result.refused).toBeUndefined();
+      expect(result.config.sections.find((entry) => entry.id === id)?.included).toBe(false);
     }
   });
 
@@ -347,7 +342,7 @@ describe('Section selection and order (11 §5, §6)', () => {
       'network',
     ]);
     expect(orderedSections(moved).map((entry) => entry.order)).toEqual([
-      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,
+      1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
     ]);
   });
 
@@ -409,19 +404,21 @@ describe('Pagination (11 §10, §40)', () => {
     expect(large).toBeGreaterThan(small);
   });
 
-  it('grows when an embedded histogram snapshot is included', () => {
-    const before = sectionHeight(
-      orderedSections(config()).find((entry) => entry.id === 'distribution')!,
+  it('grows with the number of critical rows asked for', () => {
+    const five = sectionHeight(
+      orderedSections(patchContent(config(), 'critical', { row_count: 5 })).find(
+        (entry) => entry.id === 'critical',
+      )!,
       ROWS,
     );
-    const withChart = patchContent(config(), 'distribution', {
-      include_histogram_snapshot: true,
-    });
-    const after = sectionHeight(
-      orderedSections(withChart).find((entry) => entry.id === 'distribution')!,
+    // 0 means "All" (11 §15), which on ROWS is 18.
+    const all = sectionHeight(
+      orderedSections(patchContent(config(), 'critical', { row_count: 0 })).find(
+        (entry) => entry.id === 'critical',
+      )!,
       ROWS,
     );
-    expect(after).toBeGreaterThan(before);
+    expect(all).toBeGreaterThan(five);
   });
 
   it('drops excluded sections from the page list', () => {
@@ -460,7 +457,7 @@ describe('Validation and readiness (11 §29, §35, §36)', () => {
     expect(validation.blocking.join(' ')).toMatch(/title is empty/i);
   });
 
-  it('blocks when a required section has been removed from the config', () => {
+  it('warns, but does not block, when a recommended section is left out', () => {
     const evaluation = evaluateSnapshot(snapshot({ readiness: 'READY', overall: 'PASS' }), live(), 'Baseline 55C');
     const broken = config();
     broken.sections = broken.sections.map((section) =>
@@ -473,47 +470,31 @@ describe('Validation and readiness (11 §29, §35, §36)', () => {
       project_id: 'TEST',
       scenario_name: 'Baseline 55C',
     });
-    expect(validation.readiness).toBe('BLOCKED');
-    expect(validation.blocking.join(' ')).toMatch(/Solver & Energy Quality/);
-  });
-
-  it('blocks when a REQUIRED section references unavailable data (11 §35)', () => {
-    // A required section with nothing behind it cannot explain where the
-    // report's numbers came from, which is the reason it is required.
-    const evaluation = evaluateSnapshot(
-      snapshot({ readiness: 'READY', overall: 'PASS' }),
-      live(),
-      'Baseline 55C',
-    );
-    const validation = validateReport({
-      config: config(),
-      evaluation: { ...evaluation, unavailable_sections: ['quality'] },
-      project_name: 'CBNG',
-      project_id: 'TEST',
-      scenario_name: 'Baseline 55C',
-    });
-    expect(validation.readiness).toBe('BLOCKED');
-    expect(validation.blocking.join(' ')).toMatch(
-      /Required section Solver & Energy Quality references unavailable data/,
-    );
-  });
-
-  it('only warns when an OPTIONAL section references unavailable data (11 §17)', () => {
-    const evaluation = evaluateSnapshot(
-      snapshot({ readiness: 'READY', overall: 'PASS' }),
-      live(),
-      'Baseline 55C',
-    );
-    const validation = validateReport({
-      config: config(),
-      evaluation: { ...evaluation, unavailable_sections: ['bottleneck'] },
-      project_name: 'CBNG',
-      project_id: 'TEST',
-      scenario_name: 'Baseline 55C',
-    });
     expect(validation.blocking).toEqual([]);
     expect(validation.readiness).toBe('WARNING');
-    expect(validation.warnings.join(' ')).toMatch(/Bottleneck Analysis Summary has no data/);
+    expect(validation.warnings.join(' ')).toMatch(/Solver & Energy Quality/);
+  });
+
+  it('warns when any section references unavailable data (11 §17)', () => {
+    // No section blocks on missing data any more. Which sections this report
+    // carries is the engineer's call, so an empty one is worth saying and not
+    // worth refusing over.
+    const evaluation = evaluateSnapshot(
+      snapshot({ readiness: 'READY', overall: 'PASS' }),
+      live(),
+      'Baseline 55C',
+    );
+    for (const id of ['quality', 'distribution'] as const) {
+      const validation = validateReport({
+        config: config(),
+        evaluation: { ...evaluation, unavailable_sections: [id] },
+        project_name: 'CBNG',
+        project_id: 'TEST',
+        scenario_name: 'Baseline 55C',
+      });
+      expect(validation.blocking).toEqual([]);
+      expect(validation.readiness).toBe('WARNING');
+    }
   });
 
   it('blocks an invalid page configuration (11 §35)', () => {
@@ -561,8 +542,8 @@ describe('Validation and readiness (11 §29, §35, §36)', () => {
     expect(demoted.validation.readiness).toBe('WARNING');
   });
 
-  it('demotes readiness when an included optional section has no data', () => {
-    const { validation } = validate({ readiness: 'READY', overall: 'PASS', bottlenecks: 0 });
+  it('demotes readiness when an included section has no data', () => {
+    const { validation } = validate({ readiness: 'READY', overall: 'PASS', distribution: false });
     expect(validation.readiness).toBe('WARNING');
   });
 });
@@ -580,8 +561,8 @@ describe('Export payload (11 §32, §38)', () => {
     });
 
     expect(payload.contains_file_bytes).toBe(false);
-    expect(payload.section_order).toHaveLength(11);
-    expect(payload.included_sections).toHaveLength(11);
+    expect(payload.section_order).toHaveLength(10);
+    expect(payload.included_sections).toHaveLength(10);
     expect(payload.estimated_page_count).toBe(8);
     expect(payload.readiness).toBe('EXPORT_READY');
 
@@ -621,5 +602,73 @@ describe('includedSections', () => {
     const ids = includedSections(trimmed).map((entry) => entry.id);
     expect(ids).not.toContain('network');
     expect(ids[0]).toBe('cover');
+  });
+});
+
+// --- what the tool still produces (the section audit) ------------------------
+//
+// Screens 09 and several Screen 10 panels went during the review rounds. A
+// report section whose data nothing produces any more is a heading that only
+// ever apologises for itself, so these guard the two that were removed and the
+// one rule that changed.
+
+describe('Report sections match what the tool produces', () => {
+  it('has no Bottleneck Analysis section', () => {
+    // Nothing in the tool calls `analysisStore.run`, so `snapshot.bottlenecks`
+    // was always empty and the section was permanently Not Available.
+    expect(SECTION_DEFINITIONS.map((entry) => entry.id)).not.toContain('bottleneck');
+  });
+
+  it('offers no distribution options that nothing can fill', () => {
+    // The histogram snapshot was reserved for a Screen 09 chart, and the hot
+    // node table was a checkbox that grew the page estimate and rendered
+    // nothing.
+    const distribution = SECTION_DEFINITIONS.find((entry) => entry.id === 'distribution')!;
+    expect(Object.keys(distribution.defaultContent)).toEqual(['show_range_summary']);
+  });
+
+  it('lets every section be unticked', () => {
+    let current = config();
+    for (const definition of SECTION_DEFINITIONS) {
+      const result = toggleSection(current, definition.id);
+      expect(result.refused).toBeUndefined();
+      current = result.config;
+    }
+    expect(includedSections(current)).toEqual([]);
+  });
+
+  it('warns rather than blocks on a report with nothing in it', () => {
+    let current = config();
+    for (const definition of SECTION_DEFINITIONS) current = toggleSection(current, definition.id).config;
+    const evaluation = evaluateSnapshot(
+      snapshot({ readiness: 'READY', overall: 'PASS' }),
+      live(),
+      'Baseline 55C',
+    );
+    const validation = validateReport({
+      config: current,
+      evaluation,
+      project_name: 'CBNG',
+      project_id: 'TEST',
+      scenario_name: 'Baseline 55C',
+    });
+    expect(validation.blocking).toEqual([]);
+    expect(validation.readiness).toBe('WARNING');
+  });
+});
+
+describe('Language modes', () => {
+  it('offers Chinese, English and bilingual', () => {
+    expect(LANGUAGE_MODES).toEqual(['chinese', 'english', 'bilingual']);
+  });
+
+  it('renders a label in each', () => {
+    expect(reportLabel('chinese', 'Overall Thermal Status', '整體熱狀態')).toBe('整體熱狀態');
+    expect(reportLabel('english', 'Overall Thermal Status', '整體熱狀態')).toBe(
+      'Overall Thermal Status',
+    );
+    expect(reportLabel('bilingual', 'Overall Thermal Status', '整體熱狀態')).toBe(
+      'Overall Thermal Status / 整體熱狀態',
+    );
   });
 });

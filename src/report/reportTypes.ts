@@ -55,12 +55,13 @@ export type PageSize = (typeof PAGE_SIZES)[number];
 export const ORIENTATIONS = ['portrait', 'landscape'] as const;
 export type Orientation = (typeof ORIENTATIONS)[number];
 
-export const LANGUAGE_MODES = ['english', 'bilingual'] as const;
+export const LANGUAGE_MODES = ['chinese', 'english', 'bilingual'] as const;
 export type LanguageMode = (typeof LANGUAGE_MODES)[number];
 
 export const LANGUAGE_MODE_LABELS: Record<LanguageMode, { label: string; zh: string }> = {
-  english: { label: 'English', zh: '英文' },
-  bilingual: { label: 'Bilingual', zh: '中英雙語' },
+  chinese: { label: '中文', zh: '中文' },
+  english: { label: '英文', zh: '英文' },
+  bilingual: { label: '雙語', zh: '中英雙語' },
 };
 
 /** Page geometry in millimetres, used to size the preview page and to paginate. */
@@ -104,7 +105,6 @@ export const SECTION_IDS = [
   'overall',
   'critical',
   'network',
-  'bottleneck',
   'distribution',
   'quality',
   'confidence',
@@ -122,15 +122,8 @@ export interface SectionContentOptions {
   show_limit_type?: boolean;
   show_margin?: boolean;
   show_status?: boolean;
-  /** Bottleneck — 3, 5 or 10 (11 §17). */
-  top_n?: number;
-  show_score?: boolean;
-  show_sensitivity?: boolean;
-  show_confidence?: boolean;
   /** Temperature Distribution (11 §18, §24). */
   show_range_summary?: boolean;
-  include_histogram_snapshot?: boolean;
-  include_hot_node_table?: boolean;
 }
 
 /** 11 §25 — display options. Deliberately not a word processor. */

@@ -16,7 +16,7 @@ import {
   type SectionId,
   type ThermalReportConfig,
 } from './reportTypes';
-import { REQUIRED_SECTION_IDS, sectionDefinition } from './sectionRegistry';
+import { RECOMMENDED_SECTION_IDS } from './sectionRegistry';
 import { defaultSections } from './defaultTemplate';
 
 function touched(config: ThermalReportConfig, sections: ReportSectionConfig[]): ThermalReportConfig {
@@ -40,20 +40,21 @@ export function includedSections(config: ThermalReportConfig): ReportSectionConf
  * 11 §6 — a required section cannot be excluded. The call is refused rather than
  * silently ignored, so the UI can say why instead of appearing not to respond.
  */
+/**
+ * Ticks or unticks a section. It never refuses.
+ *
+ * Four sections used to be locked on, and unticking one produced an error
+ * toast. That is a rule about what a THERMAL report ought to contain enforced
+ * on the engineer writing this one, who may be sending three pages to a
+ * supplier. The validator still says when a recommended section is missing —
+ * saying so is useful, preventing it was not.
+ */
 export function toggleSection(
   config: ThermalReportConfig,
   id: SectionId,
 ): { config: ThermalReportConfig; refused?: string } {
-  const definition = sectionDefinition(id);
   const current = config.sections.find((section) => section.id === id);
   if (!current) return { config };
-
-  if (definition.required && current.included) {
-    return {
-      config,
-      refused: `${definition.title} is a required section and cannot be excluded.`,
-    };
-  }
 
   return {
     config: touched(
@@ -234,4 +235,4 @@ export function applyTemplate(
   };
 }
 
-export { REQUIRED_SECTION_IDS };
+export { RECOMMENDED_SECTION_IDS };
