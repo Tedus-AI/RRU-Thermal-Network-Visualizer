@@ -565,7 +565,7 @@ export function ReportPreviewView() {
         )}
 
         <div className="flex min-h-0 flex-col gap-3 xl:flex-row">
-          {/* --- LEFT: the outline, on a seam ------------------------------ */}
+          {/* --- LEFT: the outline and the readiness, on one seam ---------- */}
           <ResizableSidebar
             id="tnv.11.outline"
             defaultWidth={296}
@@ -579,7 +579,7 @@ export function ReportPreviewView() {
               title="Report Layout"
               zh="報告版面"
               explanation={T11.sectionOrder}
-              className="h-[36rem] shrink-0"
+              className="h-[32rem] shrink-0"
             >
               <ReportOutlinePanel
                 sections={sections}
@@ -618,9 +618,22 @@ export function ReportPreviewView() {
                 }}
               />
             </Panel>
+
+            {/* Under the outline rather than in a rail of its own. It is a
+                short verdict with a handful of reasons, and a column held open
+                for it cost the preview 19 rem of the width the preview exists
+                to use. Collapsing the seam now puts BOTH away. */}
+            <Panel
+              title="Report Readiness"
+              zh="報告就緒狀態"
+              explanation={T11.reportReadiness}
+              className="shrink-0"
+            >
+              <ReportReadinessPanel readiness={readiness} validation={validation} />
+            </Panel>
           </ResizableSidebar>
 
-          {/* --- CENTRE: paginated preview -------------------------------- */}
+          {/* --- RIGHT: the preview, with the whole of the rest ------------ */}
           <section className="flex h-[36rem] min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-line bg-surface xl:h-auto">
             <PageToolbar
               page={currentPage}
@@ -648,13 +661,6 @@ export function ReportPreviewView() {
               本頁僅為 HTML 預覽與推估分頁，不產生 PDF；實際匯出由 12 負責。
             </p>
           </section>
-
-          {/* --- RIGHT: what is left of the rail --------------------------- */}
-          <div className="flex w-full shrink-0 flex-col gap-3 xl:w-[19rem]">
-            <Panel title="Report Readiness" zh="報告就緒狀態" explanation={T11.reportReadiness}>
-              <ReportReadinessPanel readiness={readiness} validation={validation} />
-            </Panel>
-          </div>
         </div>
 
         {/* The inspector floats and closes on Escape: it is opened from a page
