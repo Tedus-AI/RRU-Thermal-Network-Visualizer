@@ -27,14 +27,16 @@
  * a bottom action bar — and fills it with the sections the Markdown mandates.
  */
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
+  ArrowUpRight,
   ArrowLeft,
   ArrowRight,
   Camera,
-  Maximize,
   RefreshCw,
+  Network,
+  Table2,
   TriangleAlert,
   XCircle,
 } from 'lucide-react';
@@ -42,7 +44,7 @@ import {
 import { ScreenWorkspace } from '@/app/ScreenWorkspace';
 import { projectPath } from '@/app/navigation';
 import { Badge, Button, Skeleton } from '@/ui/primitives';
-import { EngineeringInfo, biTitle } from '@/ui/FieldLabel';
+import { EngineeringInfo } from '@/ui/FieldLabel';
 import { toast } from '@/ui/toast';
 
 import { useProjectStore } from '@/data/projectStore';
@@ -60,29 +62,24 @@ import { currentSourceRevision } from '@/data/sourceRevision';
 import { buildResultsOverview } from '@/thermal/overview/overviewAggregator';
 import { FloatingPanel } from '@/ui/FloatingPanel';
 import { SolvedGraphCanvas } from '@/screens/07-thermal-network/SolvedGraphCanvas';
-import { ambientHeadroom } from '@/thermal/analysis/ambientHeadroom';
+import { ResultsOverlay } from '@/screens/07-thermal-network/ResultsOverlay';
+import { ResultTree } from '@/screens/07-thermal-network/ResultTree';
+import { edgeRows, nodeRows, resultTree } from '@/screens/07-thermal-network/resultViewModel';
+import { marginRanking, partsNeedingAttention } from '@/thermal/analysis/marginRanking';
+import { segmentLevers } from '@/thermal/analysis/tunableParameters';
+import { exportFilename } from '@/export/exportNetworkGraph';
+import { triggerDownload } from '@/export/download';
 import { powerByCategory } from '@/thermal/overview/powerByCategory';
 import { boundarySummary } from '@/thermal/overview/boundarySummary';
+import { NEAR_LIMIT_MARGIN_C } from '@/thermal/analysis/temperatureDataset';
 import { projectComponentLimits } from '@/thermal/graph/componentProjection';
 import { CRITICAL_COMPONENT_TOP_N } from '@/thermal/overview/criticalComponents';
 
 import { ResultsKpiBar } from './ResultsKpiBar';
 import { OverallStatusCard } from './OverallStatusCard';
 import { ScenarioSummaryPanel } from './ScenarioSummaryPanel';
-import { DataCompletenessPanel } from './DataCompletenessPanel';
-import { CriticalComponentsTable } from './CriticalComponentsTable';
-import { BottleneckSummaryPanel } from './BottleneckSummaryPanel';
-import { AmbientHeadroomPanel } from './AmbientHeadroomPanel';
-import {
-  NetworkSnapshot,
-  SnapshotLegend,
-  type NetworkSnapshotHandle,
-} from './NetworkSnapshot';
-import {
-  EngineeringActionSummary,
-  RecommendedNextActionPanel,
-} from './EngineeringActionSummary';
-import { OverallReadinessPanel, ReportReadinessPanel } from './ReportReadinessPanel';
+import { ReportReadinessPanel } from './ReportReadinessPanel';
+import { ImprovementActions, type ImprovementRow } from './ImprovementActions';
 import { T10 } from './tooltips';
 
 // --- building blocks --------------------------------------------------------
@@ -194,6 +191,39 @@ const NETWORK_DISPLAY = {
 };
 const NO_HIDDEN: ReadonlySet<string> = new Set<string>();
 
+/**
+ * A big, obvious way into one of Screen 07's windows.
+ *
+ * Deliberately large: it replaces a panel that occupied this space, and a
+ * link-sized control in its place would read as the panel having simply gone.
+ */
+function ViewButton({
+  icon,
+  label,
+  sub,
+  onClick,
+}: {
+  icon: ReactNode;
+  label: string;
+  sub: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex min-w-0 items-center gap-3 rounded-lg border border-line bg-surface px-4 py-3 text-left transition-colors hover:border-accent-600 hover:bg-surface-muted"
+    >
+      <span className="shrink-0 text-accent-700">{icon}</span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-[14px] font-bold text-ink-900">{label}</span>
+        <span className="block truncate text-[11px] text-ink-400">{sub}</span>
+      </span>
+      <ArrowUpRight className="size-4 shrink-0 text-ink-400" />
+    </button>
+  );
+}
+
 export function ResultsOverviewView() {
   const { projectId } = useParams();
   const navigate = useNavigate();
@@ -216,9 +246,11 @@ export function ResultsOverviewView() {
   const { distribution, state: distributionState } = useDistributionResult();
   const boundarySet = useBoundaryStore((s) => s.current());
   const boundaryPorts = useBoundaryStore((s) => s.ports);
+  /** The solve input Screen 08 reasons about, so the levers match its numbers. */
+  const solveInput = useSolutionStore((s) => s.input);
+  const studies = useAnalysisStore((s) => s.proposals);
 
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
-  const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   /** Bumped by Refresh Overview so the aggregate is rebuilt on demand (10 §27). */
   const [refreshToken, setRefreshToken] = useState(0);
   /**
@@ -229,8 +261,10 @@ export function ResultsOverviewView() {
    * same canvas Screen 07 draws, in a window this screen owns.
    */
   const [networkOpen, setNetworkOpen] = useState(false);
+  /** The Screen 07 result table, over this screen. */
+  const [resultsOpen, setResultsOpen] = useState(false);
+  const [exportingTable, setExportingTable] = useState(false);
 
-  const snapshotRef = useRef<NetworkSnapshotHandle | null>(null);
 
   const solution = solutionKey ? (solutions[solutionKey] ?? null) : null;
   const scenario = scenarios.find((entry) => entry.id === activeScenarioId) ?? null;
@@ -266,7 +300,6 @@ export function ResultsOverviewView() {
     useAnalysisStore.getState().loadFor(projectId, activeScenarioId);
     useOverviewStore.getState().loadFor(projectId, activeScenarioId);
     setSelectedNodeId(null);
-    setSelectedEdgeId(null);
   }, [projectId, activeScenarioId]);
 
   const stale = useSolutionStore((s) => s.isStale());
@@ -311,6 +344,23 @@ export function ResultsOverviewView() {
      holds it — so a graph judged off the stored network would badge a junction
      over-limit that the tables here report as passing.
   */
+  /**
+   * The network the solver actually ran, with limits projected onto it.
+   *
+   * Boundary edges carry a resistance only on this clone, so a lever computed
+   * off the stored graph would report the fin link as having no parameters.
+   */
+  const solveNetwork = useMemo(() => {
+    const base = solveInput?.network ?? network;
+    if (!base) return null;
+    return components.length > 0 ? projectComponentLimits(base, components) : base;
+  }, [solveInput, network, components]);
+
+  const boundaryContext = useMemo(
+    () => ({ ports: boundaryPorts, set: boundarySet }),
+    [boundaryPorts, boundarySet],
+  );
+
   const limitedNetwork = useMemo(
     () => (network ? projectComponentLimits(network, components) : null),
     [network, components],
@@ -323,9 +373,86 @@ export function ResultsOverviewView() {
    * beside the conclusion are the ones the conclusion was computed from.
    */
   const boundaryConditions = useMemo(
-    () => boundarySummary(boundarySet, boundaryPorts),
-    [boundarySet, boundaryPorts],
+    () =>
+      boundarySummary(
+        boundarySet,
+        boundaryPorts,
+        stale ? null : (solution?.node_temperatures_C ?? null),
+      ),
+    [boundarySet, boundaryPorts, solution, stale],
   );
+
+  /*
+     The Screen 07 result table, built exactly as Screen 07 builds it.
+
+     Not a reduced copy: the same `nodeRows` / `edgeRows` / `resultTree` off the
+     same projected limits, so the window this screen opens and the screen it
+     came from cannot disagree about a margin.
+  */
+  const ambient =
+    boundarySet?.ambient.external_ambient_C ?? scenario?.ambient_C ?? null;
+  const rows = useMemo(
+    () =>
+      limitedNetwork
+        ? nodeRows(limitedNetwork, stale ? null : solution, {
+            ambient_C: ambient,
+            powerScale: scenario?.power_scale ?? 1,
+          })
+        : [],
+    [limitedNetwork, solution, stale, ambient, scenario?.power_scale],
+  );
+  const flows = useMemo(
+    () => (network ? edgeRows(network, stale ? null : solution) : []),
+    [network, solution, stale],
+  );
+  const tree = useMemo(
+    () =>
+      limitedNetwork
+        ? resultTree(limitedNetwork, stale ? null : solution, rows, components)
+        : [],
+    [limitedNetwork, solution, stale, rows, components],
+  );
+
+  /**
+   * Every part at WARNING or FAIL, worst first, with what Screen 08 saved.
+   *
+   * The levers are recomputed from the stored study rather than read out of it:
+   * a study records WHICH segments were cut and by how much, and what that would
+   * take depends on the parameters as they stand now. Copying a snapshot would
+   * let this screen quote a target the model has since moved past.
+   */
+  const improvementRows = useMemo<ImprovementRow[]>(() => {
+    if (!solveNetwork || !solution || stale) return [];
+    const temperatures = solution.node_temperatures_C;
+    // The same set Screen 08 opens on, from the same helper: a part cannot be
+    // worth listing there and not here.
+    const ranked = partsNeedingAttention(marginRanking(solveNetwork, temperatures, 0)).filter(
+      (part) => part.margin_C <= NEAR_LIMIT_MARGIN_C,
+    );
+    const byTarget = new Map(studies.map((study) => [study.target_node_id, study]));
+
+    return ranked.map((part) => {
+      const study = byTarget.get(part.node_id) ?? null;
+      return {
+        part,
+        status: part.margin_C < 0 ? ('over' as const) : ('warn' as const),
+        study,
+        levers:
+          study && activeScenarioId
+            ? study.segments.map((segment) =>
+                segmentLevers(
+                  solveNetwork,
+                  activeScenarioId,
+                  segment.edge_id,
+                  segment.label,
+                  segment.reduction_pct,
+                  boundaryContext,
+                ),
+              )
+            : [],
+      };
+    });
+  }, [solveNetwork, solution, stale, studies, activeScenarioId, boundaryContext]);
 
   /** What the Total Power card opens into: the same heat, split by category. */
   const powerSplit = useMemo(
@@ -341,23 +468,6 @@ export function ResultsOverviewView() {
     [network, components, scenario?.power_scale, solution],
   );
 
-  /*
-     The conclusion that replaced Screen 09: how much hotter the air can get.
-
-     Read off the same projected limits Screen 07 judges by, and off the same
-     stale flag the aggregate uses, so it never reports a headroom the current
-     inputs no longer support.
-  */
-  const headroom = useMemo(() => {
-    if (!network || !solution) return null;
-    const ambient =
-      boundarySet?.ambient.external_ambient_C ?? scenario?.ambient_C ?? null;
-    return ambientHeadroom(
-      limitedNetwork ?? network,
-      stale || solverState === 'DIRTY' ? null : solution,
-      ambient,
-    );
-  }, [network, limitedNetwork, solution, boundarySet, scenario, stale, solverState]);
   const snapshot = activeScenarioId ? (snapshots[activeScenarioId] ?? null) : null;
   const snapshotCurrent = useMemo(() => {
     if (!snapshot || !overview) return false;
@@ -367,16 +477,40 @@ export function ResultsOverviewView() {
     );
   }, [snapshot, overview]);
 
+  /** The same PDF Screen 07's window writes, from the same tree. */
+  const exportTablePdf = useCallback(async () => {
+    setExportingTable(true);
+    try {
+      const { exportResultTablePdf } = await import('@/export/exportResultTable');
+      const blob = await exportResultTablePdf({
+        table: (
+          <ResultTree
+            groups={tree}
+            hasSolution={!stale}
+            selectedNodeId={null}
+            selectedEdgeId={null}
+            onSelectNode={() => {}}
+            onSelectEdge={() => {}}
+            forceExpanded
+          />
+        ),
+        title: `${draft?.project_name || 'Thermal network'} — solved results`,
+        subtitle: `${rows.length} nodes · ${flows.length} edges · ${scenario?.name ?? ''}`.trim(),
+      });
+      const url = URL.createObjectURL(blob);
+      triggerDownload(url, exportFilename(draft?.project_name ?? '', 'pdf', { subject: 'results' }));
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      toast.success('Result table exported / 已輸出求解結果 PDF');
+    } catch (error) {
+      toast.error(
+        `Export failed: ${error instanceof Error ? error.message : 'unknown error'} / 輸出失敗`,
+      );
+    } finally {
+      setExportingTable(false);
+    }
+  }, [tree, stale, draft?.project_name, rows.length, flows.length, scenario?.name]);
+
   const go = (path: string) => navigate(projectPath(projectId ?? '', path));
-  const SCREEN_PATHS: Record<string, string> = {
-    '04': 'components',
-    '05': 'thermal-path',
-    '06': 'boundary',
-    '07': 'network',
-    '08': 'bottleneck',
-    '09': 'temperature',
-    '11': 'report',
-  };
 
   // --- gates ----------------------------------------------------------------
   if (projectStatus === 'loading' || (projectId && !draft)) return <LoadingState />;
@@ -542,172 +676,56 @@ export function ResultsOverviewView() {
                 solver={overview.solver_quality}
                 stale={stale}
                 boundary={boundaryConditions}
-                onOpenNetwork={() => setNetworkOpen(true)}
               />
             </Section>
 
+          </div>
+
+          {/* --- centre: the two views, then what to do about them ---------- */}
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
+            {/*
+               Two buttons rather than two panels.
+
+               Both used to be miniatures: a five-row Critical Components table
+               and a 20 rem graph, each a reduced copy of something Screen 07
+               draws properly. A reduction of a table is a table with rows
+               missing, and a reduction of a 113-node graph is a picture of
+               nothing. The real articles open over this screen instead.
+            */}
+            <div className="grid shrink-0 grid-cols-1 gap-3 sm:grid-cols-2">
+              <ViewButton
+                icon={<Table2 className="size-5" />}
+                label="關鍵元件熱分析結果"
+                sub={`Component results · ${rows.length} nodes`}
+                onClick={() => setResultsOpen(true)}
+              />
+              <ViewButton
+                icon={<Network className="size-5" />}
+                label="全域熱網路"
+                sub={`Whole thermal network · ${Object.keys(network.nodes).length} nodes`}
+                onClick={() => setNetworkOpen(true)}
+              />
+            </div>
 
             <Section
               index={2}
-              title="Data Completeness"
-              zh="資料完整度"
-              explanation={T10.dataCompleteness}
+              title="Improvement Actions"
+              zh="改善行動"
+              explanation={T10.improvementActions}
+              className="shrink-0"
             >
-              <DataCompletenessPanel
-                completeness={overview.completeness}
-                onOpenComponents={() => go('components')}
+              <ImprovementActions
+                rows={improvementRows}
+                projectId={projectId ?? ''}
+                onOpenBottleneck={() => go('bottleneck')}
               />
-            </Section>
-          </div>
-
-          {/* --- centre: the result blocks ---------------------------------- */}
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
-            <Section
-              index={3}
-              title="Critical Components"
-              zh="關鍵元件"
-              explanation={T10.criticalComponents}
-              className="shrink-0"
-              bodyClassName="px-3 pb-3"
-              actions={
-                <span className="text-[10.5px] text-ink-400">
-                  Top {criticalRows.length} by lowest margin · 依最小餘裕排序
-                </span>
-              }
-            >
-              <div className="min-w-0 overflow-x-auto">
-                <CriticalComponentsTable
-                  rows={criticalRows}
-                  selectedNodeId={selectedNodeId}
-                  onSelect={(nodeId) => {
-                    setSelectedNodeId(nodeId);
-                    snapshotRef.current?.center(nodeId);
-                  }}
-                />
-              </div>
-            </Section>
-
-            <Section
-              index={4}
-              title="Top Bottlenecks"
-              zh="主要瓶頸"
-              explanation={T10.topBottleneck}
-              className="shrink-0"
-              bodyClassName="px-3 pb-3"
-              actions={
-                <Button
-                  className="!h-7 !px-2 !text-[11px]"
-                  onClick={() => go('bottleneck')}
-                >
-                  Open Bottleneck Analysis
-                </Button>
-              }
-            >
-              <div className="min-w-0 overflow-x-auto">
-                <BottleneckSummaryPanel
-                  rows={overview.bottlenecks}
-                  availability={overview.bottleneck_availability}
-                  selectedEdgeId={selectedEdgeId}
-                  onSelect={setSelectedEdgeId}
-                  onOpenAnalysis={() => go('bottleneck')}
-                />
-              </div>
-            </Section>
-
-            <Section
-              index={5}
-              title="Ambient Headroom"
-              zh="環溫餘裕"
-              explanation={T10.maxAmbient}
-              className="shrink-0"
-            >
-              <AmbientHeadroomPanel headroom={headroom} />
-            </Section>
-
-            <Section
-              index={6}
-              title="Network Snapshot"
-              zh="熱網路快照"
-              explanation={T10.networkSnapshot}
-              // The fit is width-bound for a 20-plus node LR graph, so height past
-              // this point is dead space rather than a bigger picture. The full
-              // graph lives in Screen 07.
-              className="h-[20rem] shrink-0"
-              bodyClassName="flex min-h-0 flex-col p-0"
-              actions={
-                <>
-                  <button
-                    type="button"
-                    title={biTitle('Fit to view', '縮放至全圖')}
-                    aria-label={biTitle('Fit to view', '縮放至全圖')}
-                    onClick={() => snapshotRef.current?.fit()}
-                    className="flex size-7 items-center justify-center rounded border border-line-strong text-ink-500 transition-colors hover:bg-surface-muted"
-                  >
-                    <Maximize className="size-3.5" />
-                  </button>
-                  <Button className="!h-7 !px-2 !text-[11px]" onClick={() => go('network')}>
-                    Open Thermal Network
-                  </Button>
-                </>
-              }
-            >
-              <div className="shrink-0 border-b border-line px-3 py-1.5">
-                <SnapshotLegend path={built?.critical_path ?? { node_ids: [], edge_ids: [], origin: 'none', label: '' }} />
-              </div>
-              <div className="min-h-0 flex-1">
-                <NetworkSnapshot
-                  ref={snapshotRef}
-                  network={network}
-                  solution={solution}
-                  path={built?.critical_path ?? { node_ids: [], edge_ids: [], origin: 'none', label: '' }}
-                  selectedNodeId={selectedNodeId}
-                  onSelectNode={setSelectedNodeId}
-                />
-              </div>
-              <p className="shrink-0 border-t border-line px-3 py-1.5 text-[10px] text-ink-400">
-                Read-only. Nodes cannot be moved and nothing here writes to the topology.
-                <span className="ml-1">唯讀：無法拖曳節點，也不會寫回拓樸。</span>
-              </p>
             </Section>
           </div>
 
           {/* --- right rail: the conclusions -------------------------------- */}
           <div className="flex w-full shrink-0 flex-col gap-3 xl:w-[21rem]">
             <Section
-              index={7}
-              title="Engineering Action Summary"
-              zh="工程行動摘要"
-              explanation={T10.engineeringActionSummary}
-            >
-              <EngineeringActionSummary
-                lines={overview.action_summary}
-                linesZh={overview.action_summary_zh}
-              />
-            </Section>
-
-            <Section
-              index={8}
-              title="Recommended Next Action"
-              zh="建議下一步"
-              explanation={T10.recommendedNextAction}
-            >
-              <RecommendedNextActionPanel
-                recommended={overview.recommended}
-                onGoto={(code) => go(SCREEN_PATHS[code] ?? 'network')}
-              />
-            </Section>
-
-            <Section
-              index={9}
-              title="Overall Readiness"
-              zh="整體就緒度"
-              explanation={T10.overallReadiness}
-            >
-              <OverallReadinessPanel checks={overview.readiness} />
-            </Section>
-
-            <Section
-              index={10}
+              index={3}
               title="Report Readiness"
               zh="報告就緒狀態"
               explanation={T10.reportReadiness}
@@ -724,6 +742,22 @@ export function ResultsOverviewView() {
           </div>
         </div>
       </div>
+
+      {resultsOpen && (
+        <ResultsOverlay
+          groups={tree}
+          hasSolution={!stale}
+          nodeCount={rows.length}
+          edgeCount={flows.length}
+          selectedNodeId={selectedNodeId}
+          selectedEdgeId={null}
+          onSelectNode={setSelectedNodeId}
+          onSelectEdge={() => {}}
+          onExportPdf={exportTablePdf}
+          exporting={exportingTable}
+          onClose={() => setResultsOpen(false)}
+        />
+      )}
 
       {networkOpen && (
         <FloatingPanel

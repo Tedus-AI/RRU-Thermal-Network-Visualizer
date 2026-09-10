@@ -57,7 +57,14 @@ import type {
   ResultTreeGroupRow,
   ResultTreeNodeRow,
 } from './resultViewModel';
-import { NODE_ROLE_LABELS, num, rth, signed } from './resultViewModel';
+import {
+  MARGIN_STATUS_LABELS,
+  NODE_ROLE_LABELS,
+  num,
+  rth,
+  signed,
+  type MarginStatus,
+} from './resultViewModel';
 
 /*
  * No `/NN` opacity modifiers anywhere below.
@@ -75,9 +82,10 @@ const COLUMNS = [
   { id: 'q', label: 'Q', unit: 'W', zh: '功率', align: 'text-right' },
   { id: 'limit', label: 'Limit', zh: '限制值', align: 'text-right' },
   { id: 'margin', label: 'Margin', zh: '餘裕', align: 'text-right' },
+  { id: 'status', label: 'Status', zh: '狀態', align: 'text-left' },
 ] as const;
 
-const COLUMN_DEFAULTS = { name: 420, t: 92, q: 92, limit: 116, margin: 112 };
+const COLUMN_DEFAULTS = { name: 420, t: 92, q: 92, limit: 116, margin: 112, status: 104 };
 
 /**
  * The sized columns, plus one filler that takes whatever the panel has spare.
@@ -91,14 +99,15 @@ const COLUMN_DEFAULTS = { name: 420, t: 92, q: 92, limit: 116, margin: 112 };
 const SPAN = COLUMNS.length + 1;
 
 /** The rail down a block, by the tightest margin under it. */
-const RAIL: Record<'pass' | 'over' | 'na', string> = {
+const RAIL: Record<MarginStatus, string> = {
   pass: 'var(--color-ok-500)',
+  warn: 'var(--color-warn-500)',
   over: 'var(--color-danger-500)',
   na: 'var(--color-line-strong)',
 };
 
 /** Every row in a block carries the rail, so the stripe is continuous. */
-function railStyle(status: 'pass' | 'over' | 'na') {
+function railStyle(status: MarginStatus) {
   return { borderLeft: `3px solid ${RAIL[status]}` };
 }
 
@@ -147,7 +156,7 @@ function MarginCell({
   status,
 }: {
   margin_C: number | null;
-  status: 'pass' | 'over' | 'na';
+  status: MarginStatus;
 }) {
   if (margin_C == null) return <span className="text-ink-400">—</span>;
   if (status === 'over') {
@@ -157,7 +166,37 @@ function MarginCell({
       </span>
     );
   }
-  return <span className="font-bold tabular text-ok-600">{signed(margin_C, 1)}</span>;
+  return (
+    <span className={`font-bold tabular ${status === 'warn' ? 'text-warn-600' : 'text-ok-600'}`}>
+      {signed(margin_C, 1)}
+    </span>
+  );
+}
+
+/**
+ * The verdict, in the words the rest of the product uses.
+ *
+ * The margin was the only thing saying this, and `+0.8` in the same green as
+ * `+40.5` is a number the reader has to do the arithmetic on. The line is the
+ * one Screen 10 judges by, so a part cannot read NEAR LIMIT there and green
+ * here.
+ */
+function StatusCell({ status }: { status: MarginStatus }) {
+  if (status === 'na') return <span className="text-[11px] text-ink-400">—</span>;
+  const tone =
+    status === 'over'
+      ? 'border-danger-500 bg-danger-100 text-danger-600'
+      : status === 'warn'
+        ? 'border-warn-500 bg-warn-100 text-warn-600'
+        : 'border-ok-500 bg-ok-100 text-ok-600';
+  return (
+    <span
+      className={`inline-block rounded border px-1.5 py-0.5 text-[10px] leading-none font-bold ${tone}`}
+      title={`${MARGIN_STATUS_LABELS[status].label} / ${MARGIN_STATUS_LABELS[status].zh}`}
+    >
+      {MARGIN_STATUS_LABELS[status].label}
+    </span>
+  );
 }
 
 /**
@@ -187,7 +226,7 @@ function EdgeRow({
   onSelect,
 }: {
   edge: ResultTreeEdgeRow;
-  status: 'pass' | 'over' | 'na';
+  status: MarginStatus;
   selected: boolean;
   onSelect: () => void;
 }) {
@@ -251,7 +290,7 @@ function NodeRows({
   onSelectEdge,
 }: {
   node: ResultTreeNodeRow;
-  status: 'pass' | 'over' | 'na';
+  status: MarginStatus;
   expanded: boolean;
   selectedNodeId: string | null;
   selectedEdgeId: string | null;
@@ -313,6 +352,9 @@ function NodeRows({
         </td>
         <td className="py-1.5 pr-3 text-right text-[12px]">
           <MarginCell margin_C={row.margin_C} status={row.status} />
+        </td>
+        <td className="py-1.5 pr-3">
+          <StatusCell status={row.status} />
         </td>
         <td />
       </tr>
@@ -471,6 +513,9 @@ export function ResultTree({
                 </td>
                 <td className="py-2 pr-3 text-right text-[12px]">
                   <MarginCell margin_C={group.margin_C} status={group.status} />
+                </td>
+                <td className="py-2 pr-3">
+                  <StatusCell status={group.status} />
                 </td>
                 <td />
               </tr>

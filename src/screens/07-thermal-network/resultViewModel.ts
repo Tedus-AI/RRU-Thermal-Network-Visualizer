@@ -8,6 +8,7 @@
 
 import type { LimitType } from '@/domain/component';
 import type { ThermalNetwork, ThermalNode } from '@/thermal/types';
+import { NEAR_LIMIT_MARGIN_C } from '@/thermal/analysis/temperatureDataset';
 
 import { sortAlongHeatPath } from './heatPathOrder';
 import type {
@@ -242,9 +243,36 @@ export interface NodeResultRow {
   limit_C: number | null;
   /** 07 §16 — Limit − Temperature for this node only. Not a ranking. */
   margin_C: number | null;
-  status: 'pass' | 'over' | 'na';
+  status: MarginStatus;
   fixed: boolean;
 }
+
+/**
+ * Where a margin stands, in the four words the whole product uses.
+ *
+ * `warn` is new: a part 0.8 °C under its limit passed, in the same green as one
+ * 40 °C under it, and the table said nothing a reader could act on. The line is
+ * `NEAR_LIMIT_MARGIN_C`, the single constant Screen 10's badge, its status
+ * reason and its action summary already read, so a part cannot be NEAR LIMIT on
+ * one screen and green on another.
+ */
+export type MarginStatus = 'pass' | 'warn' | 'over' | 'na';
+
+export function marginStatus(margin_C: number | null | undefined): MarginStatus {
+  if (margin_C == null || !Number.isFinite(margin_C)) return 'na';
+  if (margin_C < 0) return 'over';
+  return margin_C <= NEAR_LIMIT_MARGIN_C ? 'warn' : 'pass';
+}
+
+/** What each state is called, and the tone it carries. */
+export const MARGIN_STATUS_LABELS: Record<
+  Exclude<MarginStatus, 'na'>,
+  { label: string; zh: string }
+> = {
+  pass: { label: 'PASS', zh: '通過' },
+  warn: { label: 'WARNING', zh: '警告' },
+  over: { label: 'FAIL', zh: '超限' },
+};
 
 export function nodeRows(
   network: ThermalNetwork,
@@ -272,7 +300,7 @@ export function nodeRows(
         power_W: (node.power_W || 0) * options.powerScale,
         limit_C: limit,
         margin_C: margin,
-        status: margin == null ? 'na' : margin >= 0 ? 'pass' : 'over',
+        status: marginStatus(margin),
         fixed: node.boundary_type === 'fixed_temperature' || node.boundary_role === 'placeholder',
       };
     });
@@ -435,7 +463,7 @@ export interface ResultTreeGroupRow {
   /** Which temperature the limit is stated against — Tj, Tc, Tb or Ts. */
   limit_type: LimitType | null;
   margin_C: number | null;
-  status: 'pass' | 'over' | 'na';
+  status: MarginStatus;
   nodes: ResultTreeNodeRow[];
 }
 
@@ -512,7 +540,7 @@ export function resultTree(
         limit_C: null,
         limit_type: null,
         margin_C: null,
-        status: 'na',
+        status: 'na' as MarginStatus,
         nodes: [],
       };
       groups.set(groupId, group);

@@ -13,10 +13,12 @@
  */
 
 import type {
+  BoundaryConditionProfile,
   BoundaryPort,
   ScenarioBoundaryConditionSet,
 } from '../boundary/types';
 import { BOUNDARY_TYPE_LABELS } from '../boundary/types';
+import { checkSurfaceAssumption } from '../boundary/assumptionCheck';
 
 export interface BoundarySurfaceRow {
   port_id: string;
@@ -57,11 +59,33 @@ export interface BoundarySurfaceRow {
   fin_conduction_C_per_W: number | null;
   /** Root to ambient: the surface plus the fin's conduction where there is one. */
   R_total_C_per_W: number | null;
-  /** `eta_fin × process` — fins only. */
+  /**
+   * `eta_fin × process` — fins only.
+   *
+   * Two factors, and readers ask which: `fin_eta` is the physics, the fraction
+   * of the fin's area pulling its weight (`tanh(mLc)/(mLc)`, from the height,
+   * the thickness and the conductivity), and the rest is the process
+   * coefficient typed on Screen 06. Both are carried so the panel can say so.
+   */
   fin_effectiveness: number | null;
+  /** The straight-fin efficiency alone, before the process coefficient. */
+  fin_eta: number | null;
 
-  /** Screen 06's own completeness for this port. */
+  /**
+   * Screen 06's own completeness for this port, after the same check 06 runs.
+   *
+   * The stored preview says `warning` for any surface whose `h` rests on a
+   * guessed temperature — which is every plate and every radiating surface,
+   * permanently, because the guess is an input and stays one. Screen 06
+   * discharges it by re-evaluating the boundary at the temperature Screen 07
+   * actually solved and comparing the resistances; if they agree it shows
+   * "Verified". This screen was reading the stored state and still saying
+   * "assumption" about a surface Screen 06 had just verified, which is two
+   * screens disagreeing about one fact.
+   */
   completeness: 'complete' | 'warning' | 'blocked';
+  /** True when the solve confirmed the temperature the coefficient rests on. */
+  assumption_verified: boolean;
 }
 
 export interface BoundarySummary {
@@ -83,6 +107,8 @@ export interface BoundarySummary {
 export function boundarySummary(
   set: ScenarioBoundaryConditionSet | null,
   ports: readonly BoundaryPort[],
+  /** Screen 07's node temperatures, for the same assumption check Screen 06 runs. */
+  temperatures?: Record<string, number> | null,
 ): BoundarySummary | null {
   if (!set) return null;
 
@@ -119,6 +145,19 @@ export function boundarySummary(
     const surface = numeric(preview.r_combined_C_per_W) ?? resistance;
     const total = fin?.R_C_per_W ?? surface;
 
+    // The same call Screen 06 makes, on the same inputs.
+    const profilesForPort = preview.profile_ids
+      .map((id) => profileById.get(id))
+      .filter((entry): entry is BoundaryConditionProfile => entry !== undefined);
+    const check =
+      port && temperatures
+        ? checkSurfaceAssumption(port, profilesForPort, {
+            ambient_C: set.ambient.external_ambient_C ?? null,
+            solvedSurface_C: temperatures[port.connected_node_id] ?? null,
+          })
+        : null;
+    const verified = check?.verdict === 'verified' && check.covers_every_assumption;
+
     surfaces.push({
       port_id: preview.boundary_port_id,
       name: port?.name ?? preview.boundary_port_id,
@@ -134,7 +173,9 @@ export function boundarySummary(
         fin && surface != null && fin.R_C_per_W > surface ? fin.R_C_per_W - surface : null,
       R_total_C_per_W: total,
       fin_effectiveness: fin?.effectiveness ?? null,
+      fin_eta: fin?.eta_fin ?? null,
       completeness: preview.completeness,
+      assumption_verified: verified,
     });
   }
 

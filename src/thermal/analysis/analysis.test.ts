@@ -22,6 +22,8 @@ import { solveScenario } from '../solver/solveScenario';
 
 import { runAnalysis, AnalysisCancelled, type AnalysisInput } from './bottleneckScore';
 import { selectCandidates } from './candidateSelector';
+import { partsNeedingAttention, type MarginRank } from './marginRanking';
+import { NEAR_LIMIT_MARGIN_C } from './temperatureDataset';
 import { normalizeAgainstMax, normalizeMagnitude } from './normalization';
 import { analysisKey, isAnalysisCurrent } from './analysisCache';
 import { worstComponentTemperature, worstThermalMargin } from './affectedComponents';
@@ -714,5 +716,51 @@ describe('Improvements are measured against the network being modified', () => {
   it('says nothing when the stored solution and its inputs agree', async () => {
     const analysis = await runAnalysis(analysisInputFor(net));
     expect(analysis.issues.map((entry) => entry.code)).not.toContain('baseline_input_drift');
+  });
+});
+
+/**
+ * Which parts Screen 08 opens on.
+ *
+ * A fixed top three is wrong in both directions: it hides a fourth part over
+ * its limit, and on a healthy design it promotes two parts with 30 °C of room
+ * into a list that reads like a problem. The line is the one Screen 10 judges
+ * by, so the two screens cannot disagree about what is worth listing.
+ */
+describe('partsNeedingAttention', () => {
+  const part = (name: string, margin_C: number): MarginRank => ({
+    node_id: name,
+    name,
+    component_id: name,
+    temperature_C: 100 - margin_C,
+    limit_C: 100,
+    limit_type: 'Tj',
+    margin_C,
+    power_W: 1,
+  });
+
+  it('returns every part at or inside the threshold, however many there are', () => {
+    const ranked = [part('A', -2), part('B', 0.8), part('C', NEAR_LIMIT_MARGIN_C), part('D', 5.1)];
+
+    expect(partsNeedingAttention(ranked).map((entry) => entry.name)).toEqual(['A', 'B', 'C']);
+  });
+
+  it('is not capped at three', () => {
+    const ranked = [part('A', -3), part('B', -2), part('C', -1), part('D', 1), part('E', 40)];
+
+    expect(partsNeedingAttention(ranked).map((entry) => entry.name)).toEqual([
+      'A',
+      'B',
+      'C',
+      'D',
+    ]);
+  });
+
+  /** The screen is for working on a part; an empty one has nothing to work on. */
+  it('falls back to the tightest part when everything is comfortable', () => {
+    const ranked = [part('A', 12), part('B', 40)];
+
+    expect(partsNeedingAttention(ranked).map((entry) => entry.name)).toEqual(['A']);
+    expect(partsNeedingAttention([])).toEqual([]);
   });
 });

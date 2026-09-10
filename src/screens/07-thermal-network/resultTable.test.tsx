@@ -21,7 +21,8 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ResultTree } from './ResultTree';
-import type { ResultTreeGroupRow } from './resultViewModel';
+import { marginStatus, type ResultTreeGroupRow } from './resultViewModel';
+import { NEAR_LIMIT_MARGIN_C } from '@/thermal/analysis/temperatureDataset';
 
 const GROUPS: ResultTreeGroupRow[] = [
   {
@@ -243,7 +244,7 @@ describe('an edge is not a node', () => {
 
     // Case-insensitive: `renderToStaticMarkup` echoes the JSX spelling, while
     // the browser DOM carries the real `colspan`. Both were checked.
-    expect(html.toLowerCase()).toContain('colspan="6"');
+    expect(html.toLowerCase()).toContain('colspan="7"');
     // …and its numbers sit next to its name, not at the far right.
     expect(edge.indexOf('79.5 K')).toBeGreaterThan(-1);
   });
@@ -260,20 +261,20 @@ describe('columns the engineer sized', () => {
   it('offers a resize handle per sized column, and none on the filler', () => {
     const html = render();
 
-    expect((html.match(/role="separator"/g) ?? []).length).toBe(5);
+    expect((html.match(/role="separator"/g) ?? []).length).toBe(6);
   });
 
   /**
    * `table-fixed` needs every width stated, and a table of stated widths stops
-   * where they stop — 832 px adrift in an 1180 px window. The filler takes the
+   * where they stop — 936 px adrift in an 1180 px window. The filler takes the
    * slack so the table fills its panel without disturbing the five real widths.
    */
   it('fills the panel through an unsized filler column', () => {
     const html = render();
 
     expect(html).toContain('width:100%');
-    expect(html).toContain('min-width:832px');
-    expect((html.match(/<col[ />]/g) ?? []).length).toBe(6);
+    expect(html).toContain('min-width:936px');
+    expect((html.match(/<col[ />]/g) ?? []).length).toBe(7);
   });
 
   /** A PDF has no draggable columns, and a stray hover style is a raster risk. */
@@ -299,5 +300,46 @@ describe('what the chips may not be', () => {
 
   it('keeps a chip on one line', () => {
     expect(render({ forceExpanded: true })).toContain('whitespace-nowrap');
+  });
+});
+
+/**
+ * The status column.
+ *
+ * `+0.8` in the same green as `+40.5` is a number the reader has to do the
+ * arithmetic on, and the arithmetic is the one Screen 10 already does to decide
+ * NEAR LIMIT. Both screens read `NEAR_LIMIT_MARGIN_C`, so what is pinned here
+ * is that the words and the line agree with it.
+ */
+describe('the status column', () => {
+  it('draws PASS, WARNING and FAIL at the shared threshold', () => {
+    expect(marginStatus(NEAR_LIMIT_MARGIN_C + 0.1)).toBe('pass');
+    expect(marginStatus(NEAR_LIMIT_MARGIN_C)).toBe('warn');
+    expect(marginStatus(0)).toBe('warn');
+    expect(marginStatus(-0.1)).toBe('over');
+    expect(marginStatus(null)).toBe('na');
+    expect(marginStatus(Number.NaN)).toBe('na');
+  });
+
+  it('renders the word and its colour beside the margin', () => {
+    const html = render();
+
+    expect(html).toContain('>Status<');
+    expect(html).toContain('>PASS<');
+    expect(html).toContain('border-ok-500 bg-ok-100 text-ok-600');
+  });
+
+  it('turns amber on a margin inside the threshold, and red past the limit', () => {
+    const near = render({
+      groups: [{ ...GROUPS[0], status: 'warn' as const, margin_C: 0.8 }],
+    });
+    expect(near).toContain('>WARNING<');
+    expect(near).toContain('border-warn-500 bg-warn-100 text-warn-600');
+    // The margin itself changes with it: green at +0.8 was the whole problem.
+    expect(near).toContain('font-bold tabular text-warn-600');
+
+    const over = render({ groups: [{ ...GROUPS[0], status: 'over' as const, margin_C: -1.9 }] });
+    expect(over).toContain('>FAIL<');
+    expect(over).toContain('border-danger-500 bg-danger-100 text-danger-600');
   });
 });

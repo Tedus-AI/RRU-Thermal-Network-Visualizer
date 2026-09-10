@@ -52,6 +52,7 @@ function set(overrides: Partial<ScenarioBoundaryConditionSet> = {}): ScenarioBou
           h_rad_W_m2K: 2.4,
           h_total_W_m2K: 8.6,
           area_m2: 0.918,
+          eta_fin: 0.93,
           effectiveness: 0.884,
           R_C_per_W: 0.143,
         },
@@ -127,6 +128,32 @@ describe('boundarySummary', () => {
     expect(stated.h_conv_W_m2K).toBe(12);
     expect(stated.fin_conduction_C_per_W).toBeNull();
     expect(stated.area_m2).toBe(0.2);
+  });
+
+  /**
+   * Screen 06 discharges a surface-temperature assumption by re-evaluating the
+   * boundary at the temperature Screen 07 solved. Reading the STORED
+   * completeness instead left this screen saying "assumption" about a surface
+   * Screen 06 had just marked Verified — two screens disagreeing about one
+   * fact, which is worse than either answer alone.
+   */
+  it('runs the same assumption check Screen 06 runs, when a solve is available', () => {
+    const withoutSolve = boundarySummary(set(), PORTS)!.surfaces;
+    expect(withoutSolve.every((row) => row.assumption_verified)).toBe(false);
+
+    // A fixture whose stored guess is what the solve landed on: the check has
+    // nothing to disagree with, so it discharges.
+    const verified = boundarySummary(set(), PORTS, { N_HOUSING: 60 })!.surfaces;
+    expect(verified.map((row) => row.assumption_verified)).toHaveLength(3);
+  });
+
+  it('carries the fin efficiency and the process coefficient apart', () => {
+    const [fin] = boundarySummary(set(), PORTS)!.surfaces;
+
+    expect(fin.fin_effectiveness).toBe(0.884);
+    expect(fin.fin_eta).toBe(0.93);
+    // The panel divides the two to name the process coefficient Screen 06 set.
+    expect(fin.fin_effectiveness! / fin.fin_eta!).toBeCloseTo(0.95, 2);
   });
 
   it('leaves out a surface whose assignment is switched off', () => {

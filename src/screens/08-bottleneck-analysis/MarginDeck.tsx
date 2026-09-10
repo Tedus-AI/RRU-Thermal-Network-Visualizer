@@ -1,11 +1,16 @@
 /**
- * The three parts closest to their spec, stacked as one card.
+ * Every part at WARNING or FAIL, stacked as one card.
  *
- * Three separate cards would take three columns of a header that already has to
- * fit the margin, the projection and the study count. So they are a deck: the
- * chosen one is on top, the other two show as offset edges behind it, and 1 / 2
- * / 3 selects between them. The depth is what makes it read as three records
- * rather than as one card with a segmented control on it.
+ * Separate cards would take a column each of a header that already has to fit
+ * the margin, the projection and the study count. So they are a deck: the
+ * chosen one is on top, the others show as offset edges behind it, and the
+ * numbers select between them. The depth is what makes it read as several
+ * records rather than as one card with a segmented control on it.
+ *
+ * It was a fixed top three, which was wrong in both directions — it hid a
+ * fourth part over its limit, and on a healthy design it promoted two parts
+ * with 30 °C of room into a list that read like a problem. See
+ * `partsNeedingAttention`.
  *
  * Selecting here is the screen's only navigation: everything below — the graph
  * focus, the segments offered, the projection — follows this choice.
@@ -14,8 +19,6 @@
 import type { MarginRank } from '@/thermal/analysis/marginRanking';
 
 import { num } from './analysisViewModel';
-
-const RANK_LABEL = ['1', '2', '3'];
 
 export function MarginDeck({
   ranked,
@@ -66,7 +69,7 @@ export function MarginDeck({
                     : 'bg-surface-muted text-ink-500 hover:text-ink-900'
                 }`}
               >
-                {RANK_LABEL[position] ?? position + 1}
+                {position + 1}
               </button>
             ))}
           </span>
