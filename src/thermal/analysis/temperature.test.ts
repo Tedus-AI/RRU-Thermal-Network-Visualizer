@@ -291,10 +291,12 @@ describe('rows with mixed limits', () => {
     expect(byId.N_PA.margin_C).toBeCloseTo(76.6, 10);
   });
 
-  it('classifies near limit at 10 °C without calling it a product verdict', () => {
+  it('classifies near limit at the threshold without calling it a product verdict', () => {
     expect(statusFor(13.2)).toBe('within_limit');
     expect(statusFor(NEAR_LIMIT_MARGIN_C)).toBe('near_limit');
-    expect(statusFor(7)).toBe('near_limit');
+    // The threshold moved 10 → 5; 7 is comfortable now, 3 is not.
+    expect(statusFor(7)).toBe('within_limit');
+    expect(statusFor(3)).toBe('near_limit');
     expect(statusFor(-2)).toBe('over_limit');
     expect(statusFor(undefined)).toBe('no_limit');
   });
