@@ -18,6 +18,7 @@ import { Badge } from '@/ui/primitives';
 import { FloatingPanel } from '@/ui/FloatingPanel';
 import type {
   ReportCoverConfig,
+  ReportPage,
   ReportSectionConfig,
   SectionContentOptions,
   SectionDisplayOptions,
@@ -30,6 +31,7 @@ import { ReportSectionInspector, type CoverInput } from './ReportSectionInspecto
 
 export function SectionInspectorWindow({
   sections,
+  pages,
   selectedId,
   snapshot,
   unavailable,
@@ -42,6 +44,7 @@ export function SectionInspectorWindow({
   onClose,
 }: {
   sections: ReportSectionConfig[];
+  pages: ReportPage[];
   selectedId: SectionId;
   snapshot: SnapshotSummary;
   unavailable: SectionId[];
@@ -82,6 +85,7 @@ export function SectionInspectorWindow({
       <div className="p-3">
         <ReportSectionInspector
           sections={sections}
+          pages={pages}
           selectedId={selectedId}
           snapshot={snapshot}
           unavailable={unavailable}

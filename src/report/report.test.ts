@@ -672,3 +672,42 @@ describe('Language modes', () => {
     );
   });
 });
+
+// --- the two display toggles that looked inert -------------------------------
+//
+// Page Break Before and Keep Table Together change PAGINATION, not how a page
+// is drawn, so on the preview they can be pressed with no visible effect. They
+// do work; these say so, and the Display tab now prints where the section lands
+// so the effect is visible where it is made.
+
+describe('Display options move sections between pages', () => {
+  const layout = (c: ReturnType<typeof config>) =>
+    paginate(orderedSections(c), ROWS).map((page) => page.section_ids.join(','));
+
+  it('page_break_before pushes the section onto a page of its own', () => {
+    const before = layout(config());
+    // Overall shares page 2 with Scenario Summary and Critical Components.
+    expect(before[1]).toContain('overall');
+
+    const after = layout(patchDisplay(config(), 'overall', { page_break_before: true }));
+    expect(after.length).toBe(before.length + 1);
+    expect(after[1]).toBe('project');
+    expect(after[2]).toContain('overall');
+  });
+
+  it('keep_table_together off lets a section flow across a page boundary', () => {
+    const tight = layout(config());
+    // Every section is kept together by default, so none appears twice.
+    expect(new Set(tight.join(',').split(',')).size).toBe(tight.join(',').split(',').length);
+
+    const loose = layout(
+      orderedSections(config()).reduce(
+        (current, section) => patchDisplay(current, section.id, { keep_table_together: false }),
+        config(),
+      ),
+    );
+    const ids = loose.join(',').split(',');
+    // `network` now starts on one page and continues on the next.
+    expect(ids.filter((id) => id === 'network').length).toBeGreaterThan(1);
+  });
+});

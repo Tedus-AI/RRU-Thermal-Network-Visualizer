@@ -680,6 +680,7 @@ export function ReportPreviewView() {
         {inspectorOpen && (
           <SectionInspectorWindow
             sections={sections}
+            pages={pages}
             selectedId={selectedId}
             snapshot={evaluation}
             unavailable={evaluation.unavailable_sections}

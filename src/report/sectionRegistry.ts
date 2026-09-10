@@ -67,13 +67,16 @@ export const SECTION_DEFINITIONS: SectionDefinition[] = [
   },
   {
     id: 'project',
-    title: 'Project & Scenario Summary',
-    zh: '專案與情境摘要',
+    // The project half went to the cover, which already prints the name, the
+    // id and the customer. What is left is the scenario the numbers were
+    // solved at, which is what a reader checks this section for.
+    title: 'Scenario Summary',
+    zh: '情境摘要',
     recommended: true,
     source_screen: '01',
-    source_zh: '01 專案資訊 / 情境設定',
+    source_zh: '06 邊界條件 / 情境設定',
     defaultContent: {},
-    base_height: 0.34,
+    base_height: 0.26,
   },
   {
     id: 'overall',
