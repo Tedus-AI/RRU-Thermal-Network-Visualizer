@@ -5,16 +5,19 @@
  * printed beside it, so a reader can check the verdict instead of trusting it.
  * A STALE result keeps its old numbers on screen (10 §21 permits it) but every
  * one of them is watermarked, and the primary action becomes "go and re-solve".
+ *
+ * It carried a Result Mode chip as well, which the badge row beside the page
+ * title already shows. Two of the same chip a hand's width apart reads as two
+ * different facts.
  */
 
 import { AlertTriangle, CheckCircle2, CircleSlash, Clock, XCircle } from 'lucide-react';
 
-import { Badge, Button } from '@/ui/primitives';
+import { Button } from '@/ui/primitives';
 import { EngineeringInfo } from '@/ui/FieldLabel';
 import {
   OVERALL_STATUS_LABELS,
   type OverallThermalStatus,
-  type ResultMode,
   type StatusReason,
 } from '@/thermal/overview/overviewTypes';
 
@@ -48,12 +51,10 @@ const TEXT: Record<OverallThermalStatus, string> = {
 export function OverallStatusCard({
   status,
   reasons,
-  resultMode,
   onResolve,
 }: {
   status: OverallThermalStatus;
   reasons: StatusReason[];
-  resultMode: ResultMode;
   /** Primary action for a status that needs one — 10 §21. */
   onResolve?: { label: string; zh: string; onClick: () => void };
 }) {
@@ -72,12 +73,6 @@ export function OverallStatusCard({
             / {OVERALL_STATUS_LABELS[status].zh}
           </span>
           <EngineeringInfo zh={T10.overallStatus} label="Overall Status" />
-          <Badge tone="neutral">
-            <span className="flex items-center gap-1">
-              Result Mode: {resultMode}
-              <EngineeringInfo zh={T10.resultMode} label="Result Mode" />
-            </span>
-          </Badge>
         </div>
 
         <ul className="mt-1.5 flex flex-col gap-1">

@@ -58,14 +58,17 @@ import { useDistributionResult } from '@/data/useDistributionResult';
 import { currentSourceRevision } from '@/data/sourceRevision';
 
 import { buildResultsOverview } from '@/thermal/overview/overviewAggregator';
+import { FloatingPanel } from '@/ui/FloatingPanel';
+import { SolvedGraphCanvas } from '@/screens/07-thermal-network/SolvedGraphCanvas';
 import { ambientHeadroom } from '@/thermal/analysis/ambientHeadroom';
+import { powerByCategory } from '@/thermal/overview/powerByCategory';
+import { boundarySummary } from '@/thermal/overview/boundarySummary';
 import { projectComponentLimits } from '@/thermal/graph/componentProjection';
 import { CRITICAL_COMPONENT_TOP_N } from '@/thermal/overview/criticalComponents';
 
 import { ResultsKpiBar } from './ResultsKpiBar';
 import { OverallStatusCard } from './OverallStatusCard';
 import { ScenarioSummaryPanel } from './ScenarioSummaryPanel';
-import { SolverQualityPanel } from './SolverQualityPanel';
 import { DataCompletenessPanel } from './DataCompletenessPanel';
 import { CriticalComponentsTable } from './CriticalComponentsTable';
 import { BottleneckSummaryPanel } from './BottleneckSummaryPanel';
@@ -182,6 +185,15 @@ function NotReady({
 
 // --- screen -----------------------------------------------------------------
 
+/** Read-only viewing: labels and power on, limits carried by the alarm dots. */
+const NETWORK_DISPLAY = {
+  showLabels: true,
+  showPower: true,
+  showLimits: true,
+  showBoundary: true,
+};
+const NO_HIDDEN: ReadonlySet<string> = new Set<string>();
+
 export function ResultsOverviewView() {
   const { projectId } = useParams();
   const navigate = useNavigate();
@@ -203,11 +215,20 @@ export function ResultsOverviewView() {
   // snapshot Screen 09 used to refresh; see `useDistributionResult`.
   const { distribution, state: distributionState } = useDistributionResult();
   const boundarySet = useBoundaryStore((s) => s.current());
+  const boundaryPorts = useBoundaryStore((s) => s.ports);
 
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   /** Bumped by Refresh Overview so the aggregate is rebuilt on demand (10 §27). */
   const [refreshToken, setRefreshToken] = useState(0);
+  /**
+   * The thermal network, over this screen rather than instead of it.
+   *
+   * "View Thermal Network" used to navigate to Screen 07, which costs the
+   * conclusion you were reading to look at the picture behind it. It is the
+   * same canvas Screen 07 draws, in a window this screen owns.
+   */
+  const [networkOpen, setNetworkOpen] = useState(false);
 
   const snapshotRef = useRef<NetworkSnapshotHandle | null>(null);
 
@@ -284,6 +305,43 @@ export function ResultsOverviewView() {
   const overview = built?.overview ?? null;
 
   /*
+     The same projected limits Screen 07 paints by.
+
+     Screen 04 owns a part's limit and its TYPE, and the type decides which node
+     holds it — so a graph judged off the stored network would badge a junction
+     over-limit that the tables here report as passing.
+  */
+  const limitedNetwork = useMemo(
+    () => (network ? projectComponentLimits(network, components) : null),
+    [network, components],
+  );
+
+  /**
+   * The boundary conditions the solve ran on, listed in the scenario panel.
+   *
+   * Read from Screen 06's stored set rather than recomputed, so the numbers
+   * beside the conclusion are the ones the conclusion was computed from.
+   */
+  const boundaryConditions = useMemo(
+    () => boundarySummary(boundarySet, boundaryPorts),
+    [boundarySet, boundaryPorts],
+  );
+
+  /** What the Total Power card opens into: the same heat, split by category. */
+  const powerSplit = useMemo(
+    () =>
+      network
+        ? powerByCategory({
+            network,
+            components,
+            powerScale: scenario?.power_scale ?? 1,
+            solar_W: solution?.energy_balance.solar_W ?? 0,
+          }).slices
+        : [],
+    [network, components, scenario?.power_scale, solution],
+  );
+
+  /*
      The conclusion that replaced Screen 09: how much hotter the air can get.
 
      Read off the same projected limits Screen 07 judges by, and off the same
@@ -295,11 +353,11 @@ export function ResultsOverviewView() {
     const ambient =
       boundarySet?.ambient.external_ambient_C ?? scenario?.ambient_C ?? null;
     return ambientHeadroom(
-      projectComponentLimits(network, components),
+      limitedNetwork ?? network,
       stale || solverState === 'DIRTY' ? null : solution,
       ambient,
     );
-  }, [network, solution, components, boundarySet, scenario, stale, solverState]);
+  }, [network, limitedNetwork, solution, boundarySet, scenario, stale, solverState]);
   const snapshot = activeScenarioId ? (snapshots[activeScenarioId] ?? null) : null;
   const snapshotCurrent = useMemo(() => {
     if (!snapshot || !overview) return false;
@@ -387,8 +445,7 @@ export function ResultsOverviewView() {
     <ScreenWorkspace
       title="Results Overview"
       titleZh="結果總覽"
-      description="A single engineering conclusion for the active scenario: thermal status, margins, bottlenecks, distribution and result quality, assembled from the Screen 07, 08 and 09 results. Nothing here is re-solved or re-analysed."
-      descriptionZh="彙整 07、08、09 的既有結果，呈現目前情境的熱狀態、餘裕、瓶頸、分佈與結果品質；本頁不重新求解，也不重新分析。"
+      descriptionZh="彙整 07、08 的既有結果，呈現目前情境的熱狀態、餘裕、瓶頸與環溫餘裕；本頁不重新求解，也不重新分析。"
       badge={
         <span className="flex flex-wrap items-center gap-1.5">
           <Badge tone={stale ? 'neutral' : 'ok'}>{stale ? 'STALE' : 'CURRENT'}</Badge>
@@ -402,13 +459,25 @@ export function ResultsOverviewView() {
           <Badge tone="neutral">{scenario.name}</Badge>
         </span>
       }
+      headerAside={
+        /* The verdict is the headline, so it sits with the title rather than
+           under a row of cards that only make sense once you know it. */
+        <OverallStatusCard
+          status={overview.overall_status}
+          reasons={overview.status_reasons}
+          onResolve={
+            overview.overall_status === 'STALE'
+              ? { label: 'Go to Thermal Network', zh: '前往熱網路求解', onClick: () => go('network') }
+              : undefined
+          }
+        />
+      }
       metrics={
         <ResultsKpiBar
           status={overview.overall_status}
           kpis={overview.kpis}
-          energyGrade={overview.solver_quality.quality}
-          bottleneckAvailable={overview.bottleneck_availability === 'current'}
           monitoredCount={monitoredCount}
+          power={powerSplit}
         />
       }
       actionBar={
@@ -453,18 +522,6 @@ export function ResultsOverviewView() {
       }
     >
       <div className="flex flex-col gap-3 px-6 pb-6">
-        {/* 10 §4, §21 — status with its reasons, and the primary action when stale. */}
-        <OverallStatusCard
-          status={overview.overall_status}
-          reasons={overview.status_reasons}
-          resultMode={overview.result_mode}
-          onResolve={
-            overview.overall_status === 'STALE'
-              ? { label: 'Go to Thermal Network', zh: '前往熱網路求解', onClick: () => go('network') }
-              : undefined
-          }
-        />
-
         {stale && (
           <p className="flex items-center gap-2 rounded-md border border-line-strong bg-surface-muted px-3 py-1.5 text-[11px] font-semibold text-ink-500">
             <XCircle className="size-4" aria-hidden />
@@ -484,22 +541,14 @@ export function ResultsOverviewView() {
                 scenario={scenario}
                 solver={overview.solver_quality}
                 stale={stale}
-                onOpenBoundary={() => go('boundary')}
-                onOpenNetwork={() => go('network')}
+                boundary={boundaryConditions}
+                onOpenNetwork={() => setNetworkOpen(true)}
               />
             </Section>
 
-            <Section
-              index={2}
-              title="Solver / Energy Quality"
-              zh="求解與能量品質"
-              explanation={T10.energyBalance}
-            >
-              <SolverQualityPanel solver={overview.solver_quality} />
-            </Section>
 
             <Section
-              index={3}
+              index={2}
               title="Data Completeness"
               zh="資料完整度"
               explanation={T10.dataCompleteness}
@@ -514,7 +563,7 @@ export function ResultsOverviewView() {
           {/* --- centre: the result blocks ---------------------------------- */}
           <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
             <Section
-              index={4}
+              index={3}
               title="Critical Components"
               zh="關鍵元件"
               explanation={T10.criticalComponents}
@@ -539,7 +588,7 @@ export function ResultsOverviewView() {
             </Section>
 
             <Section
-              index={5}
+              index={4}
               title="Top Bottlenecks"
               zh="主要瓶頸"
               explanation={T10.topBottleneck}
@@ -566,7 +615,7 @@ export function ResultsOverviewView() {
             </Section>
 
             <Section
-              index={6}
+              index={5}
               title="Ambient Headroom"
               zh="環溫餘裕"
               explanation={T10.maxAmbient}
@@ -576,7 +625,7 @@ export function ResultsOverviewView() {
             </Section>
 
             <Section
-              index={7}
+              index={6}
               title="Network Snapshot"
               zh="熱網路快照"
               explanation={T10.networkSnapshot}
@@ -625,7 +674,7 @@ export function ResultsOverviewView() {
           {/* --- right rail: the conclusions -------------------------------- */}
           <div className="flex w-full shrink-0 flex-col gap-3 xl:w-[21rem]">
             <Section
-              index={8}
+              index={7}
               title="Engineering Action Summary"
               zh="工程行動摘要"
               explanation={T10.engineeringActionSummary}
@@ -637,7 +686,7 @@ export function ResultsOverviewView() {
             </Section>
 
             <Section
-              index={9}
+              index={8}
               title="Recommended Next Action"
               zh="建議下一步"
               explanation={T10.recommendedNextAction}
@@ -649,7 +698,7 @@ export function ResultsOverviewView() {
             </Section>
 
             <Section
-              index={10}
+              index={9}
               title="Overall Readiness"
               zh="整體就緒度"
               explanation={T10.overallReadiness}
@@ -658,7 +707,7 @@ export function ResultsOverviewView() {
             </Section>
 
             <Section
-              index={11}
+              index={10}
               title="Report Readiness"
               zh="報告就緒狀態"
               explanation={T10.reportReadiness}
@@ -675,6 +724,41 @@ export function ResultsOverviewView() {
           </div>
         </div>
       </div>
+
+      {networkOpen && (
+        <FloatingPanel
+          title="Thermal Network / 熱網路圖"
+          subtitle={`${scenario.name} · ${Object.keys(network.nodes).length} nodes`}
+          badge={<Badge tone={stale ? 'neutral' : 'ok'}>{stale ? 'STALE' : 'SOLVED'}</Badge>}
+          storageKey="tnv.10.network"
+          defaultWidth={1100}
+          defaultHeight={760}
+          bodyClassName="relative overflow-hidden p-0"
+          onClose={() => setNetworkOpen(false)}
+        >
+          {/* Pinned rather than flowed, for the same reason Screen 08 pins it:
+              Cytoscape sizes its layers to the client box, and inside a
+              scrollable parent that is a feedback loop at fractional heights. */}
+          <div className="absolute inset-0">
+            <SolvedGraphCanvas
+              network={limitedNetwork ?? network}
+              solution={stale ? null : solution}
+              mode="temperature"
+              display={NETWORK_DISPLAY}
+              scenarioId={activeScenarioId ?? ''}
+              selectedNodeId={selectedNodeId}
+              selectedEdgeId={null}
+              tool="select"
+              layoutMode="Auto"
+              hiddenComponentIds={NO_HIDDEN}
+              alertOverLimit
+              onSelectNode={setSelectedNodeId}
+              onSelectEdge={() => {}}
+              onZoomChange={() => {}}
+            />
+          </div>
+        </FloatingPanel>
+      )}
     </ScreenWorkspace>
   );
 }

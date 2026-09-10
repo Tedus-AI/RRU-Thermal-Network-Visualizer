@@ -1,30 +1,32 @@
 /**
- * Six KPI cards — 10 §6.
+ * Three KPI cards, down from six.
  *
- * Exactly the six the specification names, in its order: Overall Status, Max
- * Temperature, Worst Thermal Margin, Top Bottleneck, Energy Balance, Total
- * Power. Top Bottleneck comes from Screen 08 and says `Not Available` when 08
- * has nothing current — it is never back-filled with the largest Rth, which is
- * the exact mistake Screen 08 exists to prevent (10 §6, AC-10-08).
+ * What went, and why:
+ *
+ *   Max Temperature — on an RRU it is the PA, every time. A card that always
+ *                     names the same part is a label, not a reading.
+ *   Top Bottleneck  — said what Worst Thermal Margin already says, one screen
+ *                     later and only when Screen 08 happened to be current.
+ *   Energy Balance  — Screen 07 carries it beside the solve it judges, which
+ *                     is where a reader checking whether to believe a number
+ *                     is already standing.
+ *
+ * What is left is the verdict, the number the verdict rests on, and how much
+ * heat the machine is being asked to move. The tile is Screen 06's and 07's —
+ * label and value on one line, Chinese and a note beneath — so the three
+ * screens read as one product rather than three.
  */
 
-import {
-  Activity,
-  BadgeCheck,
-  Gauge,
-  Shield,
-  Thermometer,
-  Zap,
-  type LucideIcon,
-} from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { BadgeCheck, Minus, Plus, Shield, Zap, type LucideIcon } from 'lucide-react';
 
-import { EngineeringInfo } from '@/ui/FieldLabel';
+import { EngineeringInfo, biTitle } from '@/ui/FieldLabel';
 import type { Tone } from '@/ui/primitives';
-import type { EnergyGrade } from '@/thermal/solver/solverTypes';
 import type { OverallThermalStatus, ResultsOverviewKpis } from '@/thermal/overview/overviewTypes';
 import { OVERALL_STATUS_LABELS } from '@/thermal/overview/overviewTypes';
+import type { PowerSlice } from '@/thermal/overview/powerByCategory';
 
-import { ENERGY_TONE, OVERALL_TONE, num, pct, signed } from './overviewViewModel';
+import { OVERALL_TONE, num, signed } from './overviewViewModel';
 import { T10 } from './tooltips';
 
 const TONE_TEXT: Record<Tone, string> = {
@@ -32,10 +34,10 @@ const TONE_TEXT: Record<Tone, string> = {
   warn: 'text-warn-600',
   danger: 'text-danger-600',
   accent: 'text-accent-700',
-  neutral: 'text-ink-700',
+  neutral: 'text-ink-900',
 };
 
-function KpiCard({
+function KpiTile({
   icon: Icon,
   label,
   zh,
@@ -43,7 +45,8 @@ function KpiCard({
   value,
   valueTone = 'neutral',
   note,
-  compact,
+  action,
+  children,
 }: {
   icon: LucideIcon;
   label: string;
@@ -52,46 +55,66 @@ function KpiCard({
   value: string;
   valueTone?: Tone;
   note?: string;
-  /** Long text values (an edge label) need a smaller type size to stay on one line. */
-  compact?: boolean;
+  /** A control on the header row — the power card's expander. */
+  action?: React.ReactNode;
+  /** Anything the tile opens into, rendered under the note. */
+  children?: React.ReactNode;
 }) {
   return (
-    <section className="flex min-w-0 flex-col gap-1 rounded-lg border border-line bg-surface px-3.5 py-3">
-      <header className="flex items-center gap-1.5">
-        <Icon className="size-3.5 shrink-0 text-ink-400" aria-hidden />
-        <span className="truncate text-[11.5px] font-bold text-ink-700">{label}</span>
+    <div className="min-w-0 rounded-lg border border-line bg-surface px-2 py-2">
+      <span className="flex min-w-0 items-baseline gap-1.5 text-[13px] font-semibold text-ink-900">
+        <Icon className="size-3.5 shrink-0 self-center text-ink-400" aria-hidden />
+        <span className="min-w-0 flex-1 truncate">{label}</span>
         <EngineeringInfo zh={explanation} label={label} />
-      </header>
-      <p className="text-[10px] text-ink-400">{zh}</p>
-      <p
-        className={`truncate font-bold tabular ${compact ? 'text-[15px]' : 'text-[22px]'} ${TONE_TEXT[valueTone]}`}
-        title={value}
-      >
-        {value}
-      </p>
-      <p className="truncate text-[10px] text-ink-400" title={note}>
-        {note ?? ' '}
-      </p>
-    </section>
+        {action}
+        <span className={`shrink-0 pl-2 font-bold tabular ${TONE_TEXT[valueTone]}`}>{value}</span>
+      </span>
+      <span className="mt-0.5 flex min-w-0 items-center gap-2 text-[11px] text-ink-400">
+        <span className="min-w-0 flex-1 truncate">{zh}</span>
+        {note && (
+          <span className="min-w-0 shrink truncate text-[10px]" title={note}>
+            {note}
+          </span>
+        )}
+      </span>
+      {children}
+    </div>
   );
 }
 
 export function ResultsKpiBar({
   status,
   kpis,
-  energyGrade,
-  bottleneckAvailable,
   monitoredCount,
+  power,
 }: {
   status: OverallThermalStatus;
   kpis: ResultsOverviewKpis;
-  energyGrade: EnergyGrade;
-  bottleneckAvailable: boolean;
   monitoredCount: number;
+  /** The Total Power card's breakdown, largest slice first. */
+  power: PowerSlice[];
 }) {
+  const [open, setOpen] = useState(false);
+  const powerRef = useRef<HTMLDivElement | null>(null);
+
+  // A breakdown left open behind a click elsewhere is a panel the reader has
+  // to dismiss twice; closing on an outside click is the behaviour they expect
+  // from something opened with a `+`.
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (event: PointerEvent) => {
+      if (!powerRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    window.addEventListener('pointerdown', onDown);
+    return () => window.removeEventListener('pointerdown', onDown);
+  }, [open]);
+
   return (
-    <div className="grid grid-cols-2 gap-2.5 md:grid-cols-3 xl:grid-cols-6">
-      <KpiCard
+    /* `items-start` so opening the power breakdown grows ONE card. A stretched
+       grid would pull the other two to the same height and leave them mostly
+       empty, which reads as three cards with something missing from two. */
+    <div className="grid grid-cols-1 items-start gap-1.5 sm:grid-cols-3">
+      <KpiTile
         icon={BadgeCheck}
         label="Overall Status"
         zh="整體熱狀態"
@@ -99,18 +122,8 @@ export function ResultsKpiBar({
         value={status}
         valueTone={OVERALL_TONE[status]}
         note={OVERALL_STATUS_LABELS[status].zh}
-        compact={status.length > 7}
       />
-      <KpiCard
-        icon={Thermometer}
-        label="Max Temperature"
-        zh="最高溫度"
-        explanation={T10.maxTemperature}
-        value={num(kpis.max_temperature_C, 1, '°C')}
-        valueTone="danger"
-        note={kpis.max_temperature_node ?? undefined}
-      />
-      <KpiCard
+      <KpiTile
         icon={Shield}
         label="Worst Thermal Margin"
         zh="最小熱餘裕"
@@ -131,35 +144,60 @@ export function ResultsKpiBar({
             : (kpis.worst_margin_node ?? undefined)
         }
       />
-      <KpiCard
-        icon={Activity}
-        label="Top Bottleneck"
-        zh="首要瓶頸"
-        explanation={T10.topBottleneck}
-        // 10 §6, §21 — absence is stated, never filled in.
-        value={kpis.top_bottleneck ?? 'Not Available'}
-        valueTone={kpis.top_bottleneck ? 'accent' : 'neutral'}
-        note={bottleneckAvailable ? 'From Screen 08 / 來自 08' : 'Run Screen 08 / 請先執行 08'}
-        compact
-      />
-      <KpiCard
-        icon={Gauge}
-        label="Energy Balance"
-        zh="能量守恆誤差"
-        explanation={T10.energyBalance}
-        value={pct(kpis.energy_error_pct)}
-        valueTone={ENERGY_TONE[energyGrade]}
-        note="Generated vs rejected / 產生對排出"
-      />
-      <KpiCard
-        icon={Zap}
-        label="Total Power"
-        zh="總熱功率"
-        explanation={T10.totalPower}
-        value={num(kpis.total_power_W, 1, 'W')}
-        valueTone="neutral"
-        note="Injected into the solve / 注入求解的總熱量"
-      />
+      <div ref={powerRef}>
+        <KpiTile
+          icon={Zap}
+          label="Total Power"
+          zh="總熱功率"
+          explanation={T10.totalPower}
+          value={num(kpis.total_power_W, 1, 'W')}
+          note={open ? undefined : 'Injected into the solve / 注入求解的總熱量'}
+          action={
+            power.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setOpen((current) => !current)}
+                aria-expanded={open}
+                title={biTitle(
+                  open ? 'Hide the split by category' : 'Split by component category',
+                  open ? '收合分類明細' : '依元件分類展開',
+                )}
+                className="flex size-4 shrink-0 items-center justify-center rounded border border-line-strong text-ink-500 hover:border-ink-400 hover:text-ink-900"
+              >
+                {open ? <Minus size={10} /> : <Plus size={10} />}
+              </button>
+            )
+          }
+        >
+          {open && <PowerSplit slices={power} />}
+        </KpiTile>
+      </div>
+    </div>
+  );
+}
+
+/** The categories, largest first, with a bar so the split reads at a glance. */
+function PowerSplit({ slices }: { slices: PowerSlice[] }) {
+  return (
+    <div className="mt-1.5 flex flex-col gap-0.5 border-t border-line pt-1.5">
+      {slices.map((slice) => (
+        <div key={slice.label} className="flex items-center gap-1.5 text-[10px]">
+          <span className="w-12 shrink-0 truncate font-semibold text-ink-700">{slice.label}</span>
+          <span className="w-8 shrink-0 truncate text-ink-400">{slice.zh}</span>
+          <span className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-surface-muted">
+            <span
+              className="block h-full rounded-full bg-accent-600"
+              style={{ width: `${Math.max(slice.share_pct, 1)}%` }}
+            />
+          </span>
+          <span className="w-14 shrink-0 text-right font-semibold tabular text-ink-900">
+            {num(slice.watts, 1, 'W')}
+          </span>
+          <span className="w-9 shrink-0 text-right tabular text-ink-400">
+            {slice.share_pct.toFixed(0)}%
+          </span>
+        </div>
+      ))}
     </div>
   );
 }

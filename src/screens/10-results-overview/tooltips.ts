@@ -13,7 +13,12 @@
 
 export const T10 = {
   overallStatus:
-    '整體熱狀態：依目前求解是否有效、元件 thermal margin、資料完整度與 solver quality 綜合判定 PASS / WARNING / FAIL / STALE / INCOMPLETE。',
+    '整體熱狀態。五種狀態依優先順序判定，先觸發者勝：' +
+    'STALE — 求解後輸入又被改過，畫面數值已不對應目前設計；' +
+    'FAIL — 有元件超出 thermal limit，或 solver 失敗，或能量守恆誤差超出可接受範圍；' +
+    'INCOMPLETE — 沒有任何節點有 thermal limit（無從判定），或有元件缺 limit（判定未涵蓋）；' +
+    'WARNING — 有元件餘裕在 10 °C 以內，或 solver 回報警告，或能量守恆誤差偏高，或 08 瓶頸分析不是最新；' +
+    'PASS — 以上皆未觸發。卡片下方列出的就是實際觸發的理由。',
   worstThermalMargin:
     '所有 monitored nodes 中最小的 Limit - Temperature；數值越小代表越接近 thermal limit。',
   topBottleneck:
@@ -63,15 +68,22 @@ export const T10 = {
     '逐項檢查報告可引用的支援分析狀態：READY / WARNING / MISSING / STALE。',
   scenarioSummary:
     '目前 Active Scenario 的邊界設定摘要，唯讀；要修改請回到 06 Boundary Conditions。',
+  boundarySummary:
+    '本次求解實際採用的散熱面，依熱阻由小到大排列（熱阻最小者承擔最多熱量）。R 為該面到環境的總熱阻，h 與 A 為推得該熱阻的係數與面積；數值直接取自 06 的推導結果，不在本頁重算。標示「含假設」者代表 06 判定該面帶有假設（例如表面溫度為估計值）。',
   monitoredNodes: '帶有 thermal limit、因此可以判定通過與否的節點；沒有 limit 的節點不列入判定。',
 } as const;
 
-/** 10 §32 — the exact label list that must carry a zh-TW engineering tooltip. */
+/**
+ * Labels that must carry a zh-TW engineering tooltip.
+ *
+ * Top Bottleneck and Energy Balance left with their KPI cards — the first said
+ * what Worst Thermal Margin says, the second lives on Screen 07 beside the
+ * solve it judges. Their tooltip text stays above, because the Top Bottlenecks
+ * section and the solver panels still use it.
+ */
 export const REQUIRED_TOOLTIP_LABELS: Array<{ label: string; zh: string }> = [
   { label: 'Overall Status', zh: T10.overallStatus },
   { label: 'Worst Thermal Margin', zh: T10.worstThermalMargin },
-  { label: 'Top Bottleneck', zh: T10.topBottleneck },
-  { label: 'Energy Balance', zh: T10.energyBalance },
   { label: 'Critical Components', zh: T10.criticalComponents },
   { label: 'Near Limit', zh: T10.nearLimit },
   { label: 'Data Completeness', zh: T10.dataCompleteness },
