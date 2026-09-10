@@ -75,7 +75,12 @@ export function ScreenWorkspace({
               </p>
             )}
           </div>
-          {headerAside && <div className="min-w-0 xl:w-[46%] xl:shrink-0">{headerAside}</div>}
+          {headerAside && (
+            /* Sized by its content up to about half the band. It used to be a
+               fixed 46 %, which a one-line panel filled with air and pushed the
+               title's own column into matching emptiness. */
+            <div className="min-w-0 xl:max-w-[46%] xl:shrink-0">{headerAside}</div>
+          )}
         </div>
         {metrics && <div className="mt-3.5">{metrics}</div>}
         {stepper && <div className="mt-4">{stepper}</div>}

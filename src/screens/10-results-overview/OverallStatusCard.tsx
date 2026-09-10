@@ -1,27 +1,33 @@
 /**
- * Overall Thermal Status banner — 10 §4, §20, §21.
+ * The verdict, in one line until you ask for more.
  *
- * The status badge is never shown alone: the reasons that produced it are
- * printed beside it, so a reader can check the verdict instead of trusting it.
- * A STALE result keeps its old numbers on screen (10 §21 permits it) but every
- * one of them is watermarked, and the primary action becomes "go and re-solve".
+ * It began as a full-width banner with every reason printed as a two-line
+ * bilingual paragraph. In the header band beside the title that is four or five
+ * lines of prose for a WARNING, which pushed the card to twice the height of
+ * anything beside it and left the column under the title empty to match.
  *
- * It carried a Result Mode chip as well, which the badge row beside the page
- * title already shows. Two of the same chip a hand's width apart reads as two
- * different facts.
+ * So: the state and the leading reason on one line, the rest behind a
+ * disclosure. Chinese only in the reasons — the reader of this screen works in
+ * it, and the English half was the same sentence twice at a size nobody reads
+ * twice.
+ *
+ * A reason about parts NAMES them. "3 monitored components are within 5 °C of
+ * their limit" is a sentence that sends the reader somewhere else to find out
+ * which three; the names make it the answer. Past four they collapse behind a
+ * count, because the point is to be readable at a glance, not exhaustive.
  */
 
-import { AlertTriangle, CheckCircle2, CircleSlash, Clock, XCircle } from 'lucide-react';
+import { useState } from 'react';
+import { AlertTriangle, CheckCircle2, ChevronDown, CircleSlash, Clock, XCircle } from 'lucide-react';
 
 import { Button } from '@/ui/primitives';
-import { EngineeringInfo } from '@/ui/FieldLabel';
+import { EngineeringInfo, biTitle } from '@/ui/FieldLabel';
 import {
   OVERALL_STATUS_LABELS,
   type OverallThermalStatus,
   type StatusReason,
 } from '@/thermal/overview/overviewTypes';
 
-import { OVERALL_TONE } from './overviewViewModel';
 import { T10 } from './tooltips';
 
 const ICONS = {
@@ -48,6 +54,9 @@ const TEXT: Record<OverallThermalStatus, string> = {
   INCOMPLETE: 'text-warn-600',
 };
 
+/** Enough names to be useful at a glance; the rest are a count. */
+const NAMES_SHOWN = 4;
+
 export function OverallStatusCard({
   status,
   reasons,
@@ -58,40 +67,90 @@ export function OverallStatusCard({
   /** Primary action for a status that needs one — 10 §21. */
   onResolve?: { label: string; zh: string; onClick: () => void };
 }) {
+  const [open, setOpen] = useState(false);
   const Icon = ICONS[status];
+  const [lead, ...rest] = reasons;
 
   return (
-    <section
-      className={`flex flex-wrap items-start gap-3 rounded-lg border px-4 py-3 ${RING[status]}`}
-    >
-      <Icon className={`mt-0.5 size-6 shrink-0 ${TEXT[status]}`} aria-hidden />
+    <section className={`rounded-lg border px-3 py-2 ${RING[status]}`}>
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <Icon className={`size-4 shrink-0 ${TEXT[status]}`} aria-hidden />
+        <span className={`text-[14px] font-bold ${TEXT[status]}`}>{status}</span>
+        <span className="text-[11px] font-semibold text-ink-500">
+          / {OVERALL_STATUS_LABELS[status].zh}
+        </span>
+        <EngineeringInfo zh={T10.overallStatus} label="Overall Status" />
 
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className={`text-[17px] font-bold ${TEXT[status]}`}>{status}</span>
-          <span className="text-[12px] font-semibold text-ink-500">
-            / {OVERALL_STATUS_LABELS[status].zh}
+        {lead && (
+          <span className="min-w-0 flex-1 truncate text-[12px] text-ink-700" title={lead.zh}>
+            {lead.zh}
           </span>
-          <EngineeringInfo zh={T10.overallStatus} label="Overall Status" />
-        </div>
+        )}
 
-        <ul className="mt-1.5 flex flex-col gap-1">
-          {reasons.map((reason) => (
-            <li key={reason.code} className="text-[12px] leading-relaxed text-ink-700">
-              {reason.text}
-              <span className="block text-[11px] text-ink-500">{reason.zh}</span>
+        {rest.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setOpen((current) => !current)}
+            aria-expanded={open}
+            title={biTitle(
+              open ? 'Hide the other reasons' : 'Show the other reasons',
+              open ? '收合其他原因' : '顯示其他原因',
+            )}
+            className="flex shrink-0 items-center gap-0.5 rounded border border-line-strong bg-surface/70 px-1.5 py-0.5 text-[10px] font-semibold text-ink-500 hover:text-ink-900"
+          >
+            +{rest.length}
+            <ChevronDown size={11} className={open ? 'rotate-180 transition-transform' : 'transition-transform'} />
+          </button>
+        )}
+
+        {onResolve && (
+          <Button variant="primary" className="!h-7 !px-2 !text-[11px]" onClick={onResolve.onClick}>
+            {onResolve.zh}
+          </Button>
+        )}
+      </div>
+
+      {lead?.components && lead.components.length > 0 && <Names names={lead.components} />}
+
+      {open && rest.length > 0 && (
+        <ul className="mt-1.5 flex flex-col gap-1 border-t border-line/60 pt-1.5">
+          {rest.map((reason) => (
+            <li key={reason.code} className="text-[11px] leading-relaxed text-ink-700">
+              {reason.zh}
+              {reason.components && reason.components.length > 0 && (
+                <Names names={reason.components} />
+              )}
             </li>
           ))}
         </ul>
-      </div>
-
-      {onResolve && (
-        <Button variant="primary" onClick={onResolve.onClick}>
-          {onResolve.label} / {onResolve.zh}
-        </Button>
       )}
     </section>
   );
 }
 
-export { OVERALL_TONE };
+/** The parts a reason is about, as chips. */
+function Names({ names }: { names: string[] }) {
+  const shown = names.slice(0, NAMES_SHOWN);
+  const hidden = names.length - shown.length;
+
+  return (
+    <span className="mt-1 flex flex-wrap items-center gap-1">
+      {shown.map((name) => (
+        <span
+          key={name}
+          className="max-w-[14rem] truncate rounded border border-line-strong bg-surface/80 px-1.5 py-0.5 text-[10px] font-semibold text-ink-700"
+          title={name}
+        >
+          {name}
+        </span>
+      ))}
+      {hidden > 0 && (
+        <span className="text-[10px] text-ink-500" title={names.slice(NAMES_SHOWN).join('、')}>
+          +{hidden}
+        </span>
+      )}
+    </span>
+  );
+}
+
+export { OVERALL_TONE } from './overviewViewModel';

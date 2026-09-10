@@ -63,6 +63,16 @@ export interface StatusReason {
   code: string;
   text: string;
   zh: string;
+  /**
+   * The parts this reason is about, when it is about parts.
+   *
+   * "3 monitored component(s) are within 5 °C of their limit" is a sentence a
+   * reader has to leave the card to act on. The names make it the whole answer,
+   * and carrying them as data rather than baked into `zh` lets the card lay
+   * them out — chips, an expander past the first few — instead of printing a
+   * comma-separated line that grows without limit.
+   */
+  components?: string[];
 }
 
 // --- result mode (10 §20) ---------------------------------------------------

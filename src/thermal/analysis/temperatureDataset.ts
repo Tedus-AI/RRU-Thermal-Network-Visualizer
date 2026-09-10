@@ -33,8 +33,16 @@ export type LimitType = 'Tj' | 'Tc' | 'Tb' | 'Ts' | 'Custom';
 /** 09 §31 — the display classification, not a product pass/fail (09 §32). */
 export type LimitStatus = 'within_limit' | 'near_limit' | 'over_limit' | 'no_limit';
 
-/** 09 §32 — V1 display rule. A project setting may override it in future. */
-export const NEAR_LIMIT_MARGIN_C = 10;
+/**
+ * How close to the limit counts as "near".
+ *
+ * 5 °C, down from 10. At 10 a third of the monitored parts on a normal RRU
+ * raise a warning, which is a screen that says WARNING on a design nobody is
+ * worried about — and a status that is always amber is one nobody reads. It is
+ * the single source for the row status, the Critical Components badge, the
+ * overall-status reason and the action summary, so all four move together.
+ */
+export const NEAR_LIMIT_MARGIN_C = 5;
 
 /**
  * Default "runs hot" threshold for the Nodes Above Warning count (09 §5).

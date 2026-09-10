@@ -36,19 +36,32 @@ function set(overrides: Partial<ScenarioBoundaryConditionSet> = {}): ScenarioBou
         boundary_port_id: 'HOUSING',
         profile_ids: ['P_PLATE'],
         r_conv_C_per_W: 1.4,
+        h_rad_W_m2K: 7.1,
+        r_combined_C_per_W: 0.52,
         plate_convection: { h_conv_W_m2K: 6.2 },
         completeness: 'warning',
       },
       {
+        // The real shape: 1/(h·A) is the surface, and `fin.R` adds the fin's
+        // own conduction on top of it.
         boundary_port_id: 'FIN',
         profile_ids: ['P_FIN'],
-        fin_array: { h_total_W_m2K: 11.5, area_m2: 1.8, R_C_per_W: 0.09 },
+        r_combined_C_per_W: 0.126,
+        fin_array: {
+          h_conv_W_m2K: 6.2,
+          h_rad_W_m2K: 2.4,
+          h_total_W_m2K: 8.6,
+          area_m2: 0.918,
+          effectiveness: 0.884,
+          R_C_per_W: 0.143,
+        },
         completeness: 'complete',
       },
       {
         boundary_port_id: 'STATED',
         profile_ids: ['P_STATED'],
         r_conv_C_per_W: 0.7,
+        r_combined_C_per_W: 0.7,
         completeness: 'complete',
       },
     ],
@@ -62,26 +75,57 @@ describe('boundarySummary', () => {
   it('lists the surfaces smallest resistance first — the one carrying the heat', () => {
     const summary = boundarySummary(set(), PORTS)!;
 
-    expect(summary.surfaces.map((row) => [row.name, row.R_C_per_W])).toEqual([
-      ['Fin Surface', 0.09],
+    expect(summary.surfaces.map((row) => [row.name, row.R_total_C_per_W])).toEqual([
+      ['Fin Surface', 0.143],
+      ['Housing', 0.52],
       ['Lid', 0.7],
-      ['Housing', 1.4],
     ]);
   });
 
+  /**
+   * The half that was missing. Convection and radiation reach the same air in
+   * parallel, so the conductances add — and a screen that showed only h_conv
+   * beside a resistance built from both left the reader unable to reproduce
+   * the number in front of them.
+   */
+  it('carries both halves of the coefficient, and their sum', () => {
+    const [fin, housing] = boundarySummary(set(), PORTS)!.surfaces;
+
+    expect(housing.h_conv_W_m2K).toBe(6.2);
+    expect(housing.h_rad_W_m2K).toBe(7.1);
+    expect(housing.h_total_W_m2K).toBeCloseTo(13.3, 6);
+
+    expect(fin.h_conv_W_m2K).toBe(6.2);
+    expect(fin.h_rad_W_m2K).toBe(2.4);
+    expect(fin.h_total_W_m2K).toBeCloseTo(8.6, 6);
+  });
+
+  /**
+   * A fin's efficiency is the METAL's, not the air's, so it is a series step on
+   * its own edge. Reporting only `1/(h·A)` would understate the path; reporting
+   * only `fin.R` would leave `1/(h·A)` looking wrong.
+   */
+  it('splits a fin into its surface and its own conduction', () => {
+    const [fin] = boundarySummary(set(), PORTS)!.surfaces;
+
+    expect(fin.R_surface_C_per_W).toBe(0.126);
+    expect(fin.fin_conduction_C_per_W).toBeCloseTo(0.017, 6);
+    expect(fin.R_total_C_per_W).toBe(0.143);
+    expect(fin.fin_effectiveness).toBe(0.884);
+  });
+
   it('says how each coefficient was arrived at, not only what it is', () => {
-    const [fin, stated, housing] = boundarySummary(set(), PORTS)!.surfaces;
+    const [fin, housing, stated] = boundarySummary(set(), PORTS)!.surfaces;
 
     expect(fin.derivation).toBe('fin_array');
-    expect(fin.h_W_m2K).toBe(11.5);
     // Geometry knows the wetted area; the port's own figure would be the base.
-    expect(fin.area_m2).toBe(1.8);
+    expect(fin.area_m2).toBe(0.918);
     expect(housing.derivation).toBe('flat_plate');
-    expect(housing.h_W_m2K).toBe(6.2);
     expect(housing.completeness).toBe('warning');
-    // Stated: no derivation, and the h is the one the engineer typed.
+    // Stated: no derivation, no fin conduction, and the h is what was typed.
     expect(stated.derivation).toBeNull();
-    expect(stated.h_W_m2K).toBe(12);
+    expect(stated.h_conv_W_m2K).toBe(12);
+    expect(stated.fin_conduction_C_per_W).toBeNull();
     expect(stated.area_m2).toBe(0.2);
   });
 

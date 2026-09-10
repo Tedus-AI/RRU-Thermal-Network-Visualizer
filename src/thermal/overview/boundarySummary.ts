@@ -30,10 +30,36 @@ export interface BoundarySurfaceRow {
    * one: fin geometry, or a plate correlation. Null when it was stated.
    */
   derivation: 'fin_array' | 'flat_plate' | null;
-  h_W_m2K: number | null;
+
+  /*
+     The coefficient, in the two halves it is made of.
+
+     Convection and radiation reach the same air in PARALLEL, so their
+     conductances add: h_total = h_conv + h_rad, and R = 1/(h_total·A). Showing
+     only one half beside a resistance computed from both is how a reader ends
+     up unable to reproduce the number in front of them.
+  */
+  h_conv_W_m2K: number | null;
+  h_rad_W_m2K: number | null;
+  h_total_W_m2K: number | null;
   area_m2: number | null;
-  /** The resistance the solve used for this surface, °C/W. */
-  R_C_per_W: number | null;
+
+  /** `1 / (h_total · A)` — the resistance the boundary edge carries. */
+  R_surface_C_per_W: number | null;
+  /**
+   * A fin's own conduction, root to surface, °C/W — null for anything else.
+   *
+   * It is a SERIES step and it is a separate edge in the solve: the fin
+   * efficiency belongs to the metal, not to the air, so folding it into the
+   * boundary coefficient would hide the gradient it represents. Carried here so
+   * the panel can show why `1/(h·A)` is not the whole path.
+   */
+  fin_conduction_C_per_W: number | null;
+  /** Root to ambient: the surface plus the fin's conduction where there is one. */
+  R_total_C_per_W: number | null;
+  /** `eta_fin × process` — fins only. */
+  fin_effectiveness: number | null;
+
   /** Screen 06's own completeness for this port. */
   completeness: 'complete' | 'warning' | 'blocked';
 }
@@ -79,24 +105,40 @@ export function boundarySummary(
       preview.r_combined_C_per_W ?? preview.r_conv_C_per_W ?? preview.r_rad_C_per_W ?? null;
     if (resistance == null && !preview.fin_array && !preview.plate_convection) continue;
 
+    const fin = preview.fin_array ?? null;
+    const hConv =
+      fin?.h_conv_W_m2K ??
+      preview.plate_convection?.h_conv_W_m2K ??
+      numeric(profile?.parameters.h_W_m2K);
+    const hRad = fin?.h_rad_W_m2K ?? numeric(preview.h_rad_W_m2K);
+    const hTotal = hConv == null && hRad == null ? null : (hConv ?? 0) + (hRad ?? 0);
+    const area = fin?.area_m2 ?? numeric(profile?.parameters.area_m2) ?? port?.area_m2 ?? null;
+
+    // `r_combined` is 1/(h_total·A) for both kinds; a fin's own conduction is a
+    // separate series step and `fin.R_C_per_W` is the two of them together.
+    const surface = numeric(preview.r_combined_C_per_W) ?? resistance;
+    const total = fin?.R_C_per_W ?? surface;
+
     surfaces.push({
       port_id: preview.boundary_port_id,
       name: port?.name ?? preview.boundary_port_id,
       kind: profile ? BOUNDARY_TYPE_LABELS[profile.type].label : 'Boundary',
       kind_zh: profile ? BOUNDARY_TYPE_LABELS[profile.type].zh : '邊界',
-      derivation: preview.fin_array ? 'fin_array' : preview.plate_convection ? 'flat_plate' : null,
-      h_W_m2K:
-        preview.fin_array?.h_total_W_m2K ??
-        preview.plate_convection?.h_conv_W_m2K ??
-        numeric(profile?.parameters.h_W_m2K) ??
-        null,
-      area_m2: preview.fin_array?.area_m2 ?? port?.area_m2 ?? null,
-      R_C_per_W: preview.fin_array?.R_C_per_W ?? resistance,
+      derivation: fin ? 'fin_array' : preview.plate_convection ? 'flat_plate' : null,
+      h_conv_W_m2K: hConv,
+      h_rad_W_m2K: hRad,
+      h_total_W_m2K: hTotal,
+      area_m2: area,
+      R_surface_C_per_W: surface,
+      fin_conduction_C_per_W:
+        fin && surface != null && fin.R_C_per_W > surface ? fin.R_C_per_W - surface : null,
+      R_total_C_per_W: total,
+      fin_effectiveness: fin?.effectiveness ?? null,
       completeness: preview.completeness,
     });
   }
 
-  surfaces.sort((a, b) => (a.R_C_per_W ?? Infinity) - (b.R_C_per_W ?? Infinity));
+  surfaces.sort((a, b) => (a.R_total_C_per_W ?? Infinity) - (b.R_total_C_per_W ?? Infinity));
 
   return {
     external_ambient_C: set.ambient.external_ambient_C ?? null,

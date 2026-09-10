@@ -121,15 +121,30 @@ export function ScenarioSummaryPanel({
                     {surface.name}
                   </span>
                   <span className="shrink-0 text-[11px] font-bold tabular text-accent-700">
-                    {surface.R_C_per_W == null ? '—' : `${num(surface.R_C_per_W, 3)} °C/W`}
+                    {surface.R_total_C_per_W == null
+                      ? '—'
+                      : `${num(surface.R_total_C_per_W, 3)} °C/W`}
                   </span>
                 </span>
                 <span className="block truncate text-[10px] text-ink-400" title={surface.kind}>
                   {surface.kind_zh}
                   {surface.derivation && ` · ${DERIVATION[surface.derivation].zh}`}
                 </span>
+                {/* h in the two halves it is made of: they reach the same air in
+                    parallel, so the conductances add and R = 1/(h_total·A). One
+                    half beside a resistance built from both is unreproducible. */}
                 <span className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[10px] tabular text-ink-500">
-                  {surface.h_W_m2K != null && <span>h {num(surface.h_W_m2K, 1)} W/m²K</span>}
+                  {surface.h_total_W_m2K != null && (
+                    <span>
+                      h {num(surface.h_total_W_m2K, 2)} W/m²K
+                      {surface.h_conv_W_m2K != null && surface.h_rad_W_m2K != null && (
+                        <span className="text-ink-400">
+                          {' '}
+                          = {num(surface.h_conv_W_m2K, 2)} 對流 + {num(surface.h_rad_W_m2K, 2)} 輻射
+                        </span>
+                      )}
+                    </span>
+                  )}
                   {surface.area_m2 != null && <span>A {num(surface.area_m2, 3)} m²</span>}
                   {surface.completeness === 'warning' && (
                     <span
@@ -143,6 +158,15 @@ export function ScenarioSummaryPanel({
                     </span>
                   )}
                 </span>
+                {/* Why 1/(h·A) is not the whole path on a finned surface. */}
+                {surface.fin_conduction_C_per_W != null && surface.R_surface_C_per_W != null && (
+                  <span className="mt-0.5 block text-[10px] tabular text-ink-400">
+                    表面 {num(surface.R_surface_C_per_W, 3)} ＋ 鰭片導熱{' '}
+                    {num(surface.fin_conduction_C_per_W, 3)} °C/W
+                    {surface.fin_effectiveness != null &&
+                      `（有效效率 ${num(surface.fin_effectiveness, 3)}）`}
+                  </span>
+                )}
               </li>
             ))}
           </ul>

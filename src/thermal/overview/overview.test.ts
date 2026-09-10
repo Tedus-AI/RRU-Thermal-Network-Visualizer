@@ -366,23 +366,30 @@ describe('Test A — PASS (10 §34 A)', () => {
 // --- Test B — WARNING (10 §34 B) -------------------------------------------
 
 describe('Test B — WARNING near limit (10 §34 B)', () => {
-  it('classifies a +7 °C margin as NEAR LIMIT and the screen as WARNING', () => {
-    // 103.8 against a 110.8 limit is a margin of exactly +7.
+  it('classifies a +3 °C margin as NEAR LIMIT and the screen as WARNING', () => {
+    // 99.8 against a 96.8 reading is a margin of exactly +3.
     const overview = overviewOf({
-      limit: 103.8,
+      limit: 99.8,
       temperature: 96.8,
       analysis: analysis({ results: [{ edge_id: 'E1', edge_label: 'A → B' }] }),
     });
 
-    expect(overview.critical_components[0].margin_C).toBeCloseTo(7, 5);
+    expect(overview.critical_components[0].margin_C).toBeCloseTo(3, 5);
     expect(overview.critical_components[0].status).toBe('NEAR LIMIT');
     expect(overview.overall_status).toBe('WARNING');
     expect(overview.recommended.action).toBe('Review Near-Limit Component');
   });
 
-  it('reuses Screen 09 near-limit rule at exactly 10 °C', () => {
-    expect(classifyComponent(10)).toBe('NEAR LIMIT');
-    expect(classifyComponent(10.1)).toBe('PASS');
+  /**
+   * The threshold moved 10 → 5. At 10 a third of the monitored parts on a
+   * normal RRU raised a warning, and a status that is always amber is one
+   * nobody reads. `classifyComponent` is the one place it is applied, so this
+   * is where the move is pinned.
+   */
+  it('draws the near-limit line at exactly 5 °C', () => {
+    expect(classifyComponent(5)).toBe('NEAR LIMIT');
+    expect(classifyComponent(5.1)).toBe('PASS');
+    expect(classifyComponent(10)).toBe('PASS');
     expect(classifyComponent(0)).toBe('NEAR LIMIT');
     expect(classifyComponent(-0.1)).toBe('FAIL');
     expect(classifyComponent(undefined)).toBe('NO LIMIT');
@@ -490,21 +497,22 @@ describe('Overall status priority (10 §4)', () => {
     solution_stale: false,
     solver_status: 'SOLVED' as const,
     energy_grade: 'green' as const,
-    component_statuses: [] as CriticalComponentSummary['status'][],
+    components: [] as { name: string; status: CriticalComponentSummary['status'] }[],
     solver_warning_count: 0,
     components_without_limits: 0,
     monitored_node_count: 3,
-    bottleneck_available: true,
-    distribution_available: true,
     low_confidence_critical_edges: 0,
   };
+  /** Named parts, because a reason that lists them has to get the names right. */
+  const parts = (...statuses: CriticalComponentSummary['status'][]) =>
+    statuses.map((status, index) => ({ name: `CMP_${index + 1}`, status }));
 
   it('picks STALE over FAIL, INCOMPLETE and WARNING together', () => {
     expect(
       evaluateOverallStatus({
         ...base,
         solution_stale: true,
-        component_statuses: ['FAIL', 'NEAR LIMIT'],
+        components: parts('FAIL', 'NEAR LIMIT'),
         components_without_limits: 2,
       }).status,
     ).toBe('STALE');
@@ -514,7 +522,7 @@ describe('Overall status priority (10 §4)', () => {
     expect(
       evaluateOverallStatus({
         ...base,
-        component_statuses: ['FAIL'],
+        components: parts('FAIL'),
         components_without_limits: 2,
       }).status,
     ).toBe('FAIL');
@@ -524,23 +532,61 @@ describe('Overall status priority (10 §4)', () => {
     expect(
       evaluateOverallStatus({
         ...base,
-        component_statuses: ['NEAR LIMIT'],
+        components: parts('NEAR LIMIT'),
         components_without_limits: 1,
       }).status,
     ).toBe('INCOMPLETE');
   });
 
   it('is PASS only when nothing at all fires', () => {
-    expect(evaluateOverallStatus({ ...base, component_statuses: ['PASS'] }).status).toBe('PASS');
+    expect(evaluateOverallStatus({ ...base, components: parts('PASS') }).status).toBe('PASS');
     expect(
-      evaluateOverallStatus({ ...base, component_statuses: ['PASS'], bottleneck_available: false })
-        .status,
+      evaluateOverallStatus({ ...base, components: parts('PASS'), solver_warning_count: 1 }).status,
     ).toBe('WARNING');
+  });
+
+  /**
+   * The reason has to name the parts, not only count them: "3 components are
+   * within 5 °C" sends the reader off the screen to find out which three.
+   */
+  it('names the parts a component reason is about', () => {
+    const warning = evaluateOverallStatus({
+      ...base,
+      components: [
+        { name: 'PA1', status: 'NEAR LIMIT' },
+        { name: 'FPGA', status: 'PASS' },
+        { name: 'DDR', status: 'NEAR LIMIT' },
+      ],
+    });
+
+    const reason = warning.reasons.find((entry) => entry.code === 'near_limit')!;
+    expect(reason.components).toEqual(['PA1', 'DDR']);
+    expect(reason.zh).toContain('2');
+
+    const failed = evaluateOverallStatus({
+      ...base,
+      components: [{ name: 'PA1', status: 'FAIL' }],
+    });
+    expect(failed.reasons.find((entry) => entry.code === 'component_over_limit')!.components).toEqual(
+      ['PA1'],
+    );
+  });
+
+  /**
+   * Both were raised by artifacts nothing produces any more. A warning that no
+   * action can clear is the one that teaches readers to ignore the rest.
+   */
+  it('no longer raises the bottleneck or distribution reasons', () => {
+    const codes = evaluateOverallStatus({ ...base, components: parts('PASS') }).reasons.map(
+      (entry) => entry.code,
+    );
+    expect(codes).not.toContain('bottleneck_missing');
+    expect(codes).not.toContain('distribution_missing');
   });
 
   it('treats a total absence of limits as INCOMPLETE, never PASS', () => {
     expect(
-      evaluateOverallStatus({ ...base, monitored_node_count: 0, component_statuses: ['NO LIMIT'] })
+      evaluateOverallStatus({ ...base, monitored_node_count: 0, components: parts('NO LIMIT') })
         .status,
     ).toBe('INCOMPLETE');
   });

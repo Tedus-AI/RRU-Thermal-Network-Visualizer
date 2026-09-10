@@ -284,13 +284,14 @@ export function buildResultsOverview(input: OverviewInput): OverviewResult {
     solution_stale: input.solution_stale,
     solver_status: input.solution.status,
     energy_grade: solverQuality.quality,
-    component_statuses: criticalComponents.map((row) => row.status),
+    components: criticalComponents.map((row) => ({
+      name: row.component_name,
+      status: row.status,
+    })),
     solver_warning_count: input.solution.warnings.filter((issue) => issue.severity === 'warning')
       .length,
     components_without_limits: completeness.components_without_limits,
     monitored_node_count: monitored,
-    bottleneck_available: availability === 'current',
-    distribution_available: distribution != null,
     low_confidence_critical_edges: completeness.low_confidence_critical_edges,
   });
 

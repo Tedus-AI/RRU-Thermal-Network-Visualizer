@@ -5,6 +5,21 @@
  * (AC-10-02, AC-10-03). Each candidate state is raised with a reason, and the
  * highest-priority one wins — so the badge can always say WHY, and a PASS is
  * only ever a PASS because nothing else fired.
+ *
+ * Two reasons have been removed rather than left to fire forever:
+ *
+ *   bottleneck_missing   — "Bottleneck analysis is not current". Nothing
+ *                          produces that artifact any more: Screen 08 was
+ *                          rebuilt around margin ranking and saved what-if
+ *                          studies, and the ranking engine behind the old
+ *                          stored analysis lost its last caller with it. The
+ *                          sentence named a state no button could clear.
+ *   distribution_missing — the temperature rows are derived from the solution
+ *                          now, so they exist exactly when a solution does,
+ *                          which the STALE and solver reasons already cover.
+ *
+ * A warning a reader cannot act on teaches them to ignore the warnings they
+ * can, which is the real cost of leaving either in.
  */
 
 import type {
@@ -21,17 +36,14 @@ export interface StatusInput {
   solution_stale: boolean;
   solver_status: 'SOLVED' | 'WARNING' | 'FAILED';
   energy_grade: EnergyGrade;
-  /** Component statuses from 10 §8. */
-  component_statuses: ComponentThermalStatus[];
+  /** The monitored parts and where each stands — 10 §8. */
+  components: { name: string; status: ComponentThermalStatus }[];
   /** Solver warnings carried with the 07 result. */
   solver_warning_count: number;
   /** 10 §12 — components whose thermal limit is missing. */
   components_without_limits: number;
   /** Monitored nodes; zero means there is nothing to judge against. */
   monitored_node_count: number;
-  /** 10 §3 — 08 and 09 may be partial; that is a WARNING, never a fabrication. */
-  bottleneck_available: boolean;
-  distribution_available: boolean;
   /** 10 §12 — critical edges resting on low-confidence inputs. */
   low_confidence_critical_edges: number;
 }
@@ -55,7 +67,8 @@ export function evaluateOverallStatus(input: StatusInput): StatusOutcome {
     code: string,
     text: string,
     zh: string,
-  ) => candidates.push({ status, reason: { code, text, zh } });
+    components?: string[],
+  ) => candidates.push({ status, reason: { code, text, zh, components } });
 
   // --- STALE (10 §4, §21) ---------------------------------------------------
   if (input.solution_stale) {
@@ -68,13 +81,14 @@ export function evaluateOverallStatus(input: StatusInput): StatusOutcome {
   }
 
   // --- FAIL (10 §4) ---------------------------------------------------------
-  const failed = input.component_statuses.filter((status) => status === 'FAIL').length;
-  if (failed > 0) {
+  const failed = input.components.filter((entry) => entry.status === 'FAIL');
+  if (failed.length > 0) {
     raise(
       'FAIL',
       'component_over_limit',
-      `${failed} monitored component(s) are over their thermal limit.`,
-      `有 ${failed} 個受監控元件已超出 thermal limit。`,
+      `${failed.length} monitored component(s) are over their thermal limit.`,
+      `有 ${failed.length} 個受監控元件已超出 thermal limit。`,
+      failed.map((entry) => entry.name),
     );
   }
   if (input.solver_status === 'FAILED') {
@@ -112,13 +126,14 @@ export function evaluateOverallStatus(input: StatusInput): StatusOutcome {
   }
 
   // --- WARNING (10 §4) ------------------------------------------------------
-  const nearLimit = input.component_statuses.filter((status) => status === 'NEAR LIMIT').length;
-  if (nearLimit > 0) {
+  const nearLimit = input.components.filter((entry) => entry.status === 'NEAR LIMIT');
+  if (nearLimit.length > 0) {
     raise(
       'WARNING',
       'near_limit',
-      `${nearLimit} monitored component(s) are within ${NEAR_LIMIT_MARGIN_C} °C of their limit.`,
-      `有 ${nearLimit} 個受監控元件的餘裕在 ${NEAR_LIMIT_MARGIN_C} °C 以內。`,
+      `${nearLimit.length} monitored component(s) are within ${NEAR_LIMIT_MARGIN_C} °C of their limit.`,
+      `有 ${nearLimit.length} 個受監控元件的餘裕在 ${NEAR_LIMIT_MARGIN_C} °C 以內。`,
+      nearLimit.map((entry) => entry.name),
     );
   }
   if (input.solver_status === 'WARNING' || input.solver_warning_count > 0) {
@@ -135,22 +150,6 @@ export function evaluateOverallStatus(input: StatusInput): StatusOutcome {
       'energy_warning',
       'Energy balance error is elevated; the result is usable but wants review.',
       '能量守恆誤差偏高，結果可用但建議覆核。',
-    );
-  }
-  if (!input.bottleneck_available) {
-    raise(
-      'WARNING',
-      'bottleneck_missing',
-      'Bottleneck analysis is not current, so improvement priorities are unknown.',
-      'Bottleneck 分析不是最新的，因此無法得知改善優先順序。',
-    );
-  }
-  if (!input.distribution_available) {
-    raise(
-      'WARNING',
-      'distribution_missing',
-      'Temperature distribution is not available for this scenario.',
-      '此情境沒有可用的溫度分佈資料。',
     );
   }
   if (input.low_confidence_critical_edges > 0) {
