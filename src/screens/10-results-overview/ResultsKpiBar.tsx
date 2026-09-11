@@ -25,11 +25,21 @@ import { ResultKpiTile } from '@/ui/ResultKpiTile';
 import type { OverallThermalStatus, ResultsOverviewKpis } from '@/thermal/overview/overviewTypes';
 import { OVERALL_STATUS_LABELS } from '@/thermal/overview/overviewTypes';
 import type { PowerSlice } from '@/thermal/overview/powerByCategory';
+import type { MarginRank } from '@/thermal/analysis/marginRanking';
+import { NEAR_LIMIT_MARGIN_C } from '@/thermal/analysis/temperatureDataset';
 
 import { OVERALL_TONE, num, signed } from './overviewViewModel';
 import { T10 } from './tooltips';
 
+/** The same three bands the result table's Status column uses. */
+function marginTone(margin: number | null): 'neutral' | 'danger' | 'warn' | 'ok' {
+  if (margin == null) return 'neutral';
+  if (margin < 0) return 'danger';
+  return margin <= NEAR_LIMIT_MARGIN_C ? 'warn' : 'ok';
+}
+
 export function ResultsKpiBar({
+  ranked,
   status,
   kpis,
   monitoredCount,
@@ -38,10 +48,16 @@ export function ResultsKpiBar({
   status: OverallThermalStatus;
   kpis: ResultsOverviewKpis;
   monitoredCount: number;
+  /** Every part at or inside the limit, worst first — Screen 08's own set. */
+  ranked: readonly MarginRank[];
   /** The Total Power card's breakdown, largest slice first. */
   power: PowerSlice[];
 }) {
   const [open, setOpen] = useState(false);
+  /** Which of `ranked` the margin tile is showing. */
+  const [rank, setRank] = useState(0);
+  // A part that leaves the list must not leave the tile pointing past its end.
+  const shown = ranked[Math.min(rank, Math.max(ranked.length - 1, 0))] ?? null;
   const powerRef = useRef<HTMLDivElement | null>(null);
 
   // A breakdown left open behind a click elsewhere is a panel the reader has
@@ -70,25 +86,45 @@ export function ResultsKpiBar({
         valueTone={OVERALL_TONE[status]}
         note={OVERALL_STATUS_LABELS[status].zh}
       />
+      {/* Rank buttons, as on Screen 08's deck. The tile named the worst part
+          and stopped, which on a design with two parts inside the limit means
+          the second one is only findable by scrolling to Improvement Actions.
+          Same set, same order, same control. */}
       <ResultKpiTile
         icon={Shield}
         label="Worst Thermal Margin"
         zh="最小熱餘裕"
         explanation={T10.worstThermalMargin}
-        value={signed(kpis.worst_margin_C, 1, '°C')}
-        valueTone={
-          kpis.worst_margin_C == null
-            ? 'neutral'
-            : kpis.worst_margin_C < 0
-              ? 'danger'
-              : kpis.worst_margin_C <= 10
-                ? 'warn'
-                : 'ok'
+        value={shown ? signed(shown.margin_C, 1, '°C') : signed(kpis.worst_margin_C, 1, '°C')}
+        valueTone={marginTone(shown ? shown.margin_C : kpis.worst_margin_C)}
+        action={
+          ranked.length > 1 ? (
+            <span className="flex shrink-0 gap-0.5">
+              {ranked.map((entry, position) => (
+                <button
+                  key={entry.node_id}
+                  type="button"
+                  aria-pressed={position === rank}
+                  title={`${entry.name} — ${signed(entry.margin_C, 1, '°C')}`}
+                  onClick={() => setRank(position)}
+                  className={`size-4 rounded text-[10px] font-bold transition-colors ${
+                    position === rank
+                      ? 'bg-orange-600 text-white'
+                      : 'bg-surface-muted text-ink-500 hover:text-ink-900'
+                  }`}
+                >
+                  {position + 1}
+                </button>
+              ))}
+            </span>
+          ) : undefined
         }
         note={
-          kpis.worst_margin_C == null
-            ? `No monitored node · ${monitoredCount} with limits`
-            : (kpis.worst_margin_node ?? undefined)
+          shown
+            ? shown.name
+            : kpis.worst_margin_C == null
+              ? `No monitored node · ${monitoredCount} with limits`
+              : (kpis.worst_margin_node ?? undefined)
         }
       />
       <div ref={powerRef}>

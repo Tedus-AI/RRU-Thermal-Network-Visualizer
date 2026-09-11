@@ -198,6 +198,17 @@ export function ReportPageView({
 
   const onPage = page.section_ids;
   const header = config.header_footer;
+  /**
+   * The running header's project name, resolved the way the cover resolves it.
+   *
+   * It read `config.cover.project_name_override` alone, which is unset until
+   * someone edits it — so on every untouched report the header fell through to
+   * `Snapshot: SNAP_SCN_001_2026-…`, printing a machine key across the top of
+   * every page. The override is a display override, not the name.
+   */
+  const projectName =
+    config.cover.project_name_override?.trim() ||
+    (sections[0] ? (renderInput(sections[0])?.project.name ?? '') : '');
 
   return (
     <div className={printMode ? '' : 'flex justify-center py-4'}>
@@ -235,11 +246,11 @@ export function ReportPageView({
           <div className="flex shrink-0 items-center justify-between border-b border-[#d7dde5] pb-1 text-[8.5px] text-[#68748a]">
             <span className="truncate">
               {[
-                header.show_project_name ? config.cover.project_name_override : null,
+                header.show_project_name ? projectName : null,
                 header.show_report_title ? config.title : null,
               ]
                 .filter(Boolean)
-                .join(' · ') || `Snapshot: ${config.snapshot_id}`}
+                .join(' · ')}
             </span>
             <span className="truncate">
               {header.show_scenario ? config.subtitle : ''}
