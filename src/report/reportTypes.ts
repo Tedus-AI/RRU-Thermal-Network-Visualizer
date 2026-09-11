@@ -105,11 +105,7 @@ export const SECTION_IDS = [
   'overall',
   'critical',
   'network',
-  'distribution',
-  'quality',
-  'confidence',
   'actions',
-  'appendix',
 ] as const;
 export type SectionId = (typeof SECTION_IDS)[number];
 
@@ -122,8 +118,18 @@ export interface SectionContentOptions {
   show_limit_type?: boolean;
   show_margin?: boolean;
   show_status?: boolean;
-  /** Temperature Distribution (11 §18, §24). */
-  show_range_summary?: boolean;
+  /**
+   * Scenario Summary — one switch per field, so a report can carry the two
+   * numbers its reader cares about rather than all seven every time. Absent
+   * means on.
+   */
+  show_stage?: boolean;
+  show_scenario?: boolean;
+  show_ambient?: boolean;
+  show_wind?: boolean;
+  show_solar?: boolean;
+  show_power_scale?: boolean;
+  show_last_solved?: boolean;
 }
 
 /** 11 §25 — display options. Deliberately not a word processor. */
@@ -317,6 +323,13 @@ export interface ReportPage {
   title_zh: string;
   /** Sections that begin or continue on this page, in order. */
   section_ids: SectionId[];
+  /**
+   * For a section spread over several pages, which part this page carries —
+   * 0 for the first. A section renders `part` of `parts` so the continuation
+   * shows the ROWS that did not fit, rather than the whole section a second
+   * time.
+   */
+  parts?: Partial<Record<SectionId, { part: number; parts: number }>>;
 }
 
 export interface SnapshotSummary {

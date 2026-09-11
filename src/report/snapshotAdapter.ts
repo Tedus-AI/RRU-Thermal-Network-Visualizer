@@ -50,13 +50,11 @@ export function evaluateSnapshot(
     };
   }
 
-  // Only Temperature Distribution can be missing now. The Bottleneck Analysis
-  // section went with the analysis behind it: nothing in the tool runs
-  // `analysisStore.run`, so `snapshot.bottlenecks` was always empty and the
-  // section was permanently "Not Available" — a heading that only ever
-  // apologised for itself.
+  // Nothing can be missing any more. Every remaining section draws from the
+  // snapshot's own status, KPIs and critical components, or from the live
+  // network; the two sections that could be empty — Bottleneck Analysis and
+  // Temperature Distribution — are gone with the screens behind them.
   const unavailable: SectionId[] = [];
-  if (!snapshot.distribution) unavailable.push('distribution');
 
   let state: SnapshotState;
   if (!live) {

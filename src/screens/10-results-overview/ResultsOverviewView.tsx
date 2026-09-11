@@ -73,6 +73,7 @@ import { NEAR_LIMIT_MARGIN_C } from '@/thermal/analysis/temperatureDataset';
 import { projectComponentLimits } from '@/thermal/graph/componentProjection';
 import { CRITICAL_COMPONENT_TOP_N } from '@/thermal/overview/criticalComponents';
 
+import { ResizableSidebar } from '@/ui/ResizableSidebar';
 import { ResultsKpiBar } from './ResultsKpiBar';
 import { OverallStatusCard } from './OverallStatusCard';
 import { ScenarioSummaryPanel } from './ScenarioSummaryPanel';
@@ -682,8 +683,21 @@ export function ResultsOverviewView() {
         )}
 
         <div className="flex min-h-0 flex-col gap-3 xl:flex-row">
-          {/* --- left rail: scenario, solver quality, completeness ---------- */}
-          <div className="flex w-full shrink-0 flex-col gap-3 xl:w-[19rem]">
+          {/* --- left rail, on a seam: the inputs and the verdict ----------
+             Report Readiness used to hold a third column of its own on the far
+             right for a one-word state and a button. Stacked under the
+             scenario it costs nothing, the seam puts both away at once, and
+             the middle — the two view buttons and the actions — gets the
+             width back. */}
+          <ResizableSidebar
+            id="tnv.10.rail"
+            defaultWidth={304}
+            side="left"
+            labelEn="Scenario & Readiness"
+            labelZh="情境與就緒狀態"
+            shortEn="SCN"
+            shortZh="情境"
+          >
             <Section index={1} title="Scenario Summary" zh="情境摘要" explanation={T10.scenarioSummary}>
               <ScenarioSummaryPanel
                 scenario={scenario}
@@ -693,7 +707,23 @@ export function ResultsOverviewView() {
               />
             </Section>
 
-          </div>
+            <Section
+              index={3}
+              title="Report Readiness"
+              zh="報告就緒狀態"
+              explanation={T10.reportReadiness}
+              className="shrink-0"
+            >
+              <ReportReadinessPanel
+                readiness={overview.report_readiness}
+                reasons={overview.report_readiness_reasons}
+                reasonsZh={overview.report_readiness_reasons_zh}
+                snapshot={snapshot}
+                snapshotCurrent={snapshotCurrent}
+                onPrepare={prepareSnapshot}
+              />
+            </Section>
+          </ResizableSidebar>
 
           {/* --- centre: the two views, then what to do about them ---------- */}
           <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
@@ -734,25 +764,6 @@ export function ResultsOverviewView() {
                 rows={improvementRows}
                 projectId={projectId ?? ''}
                 onOpenBottleneck={() => go('bottleneck')}
-              />
-            </Section>
-          </div>
-
-          {/* --- right rail: the conclusions -------------------------------- */}
-          <div className="flex w-full shrink-0 flex-col gap-3 xl:w-[21rem]">
-            <Section
-              index={3}
-              title="Report Readiness"
-              zh="報告就緒狀態"
-              explanation={T10.reportReadiness}
-            >
-              <ReportReadinessPanel
-                readiness={overview.report_readiness}
-                reasons={overview.report_readiness_reasons}
-                reasonsZh={overview.report_readiness_reasons_zh}
-                snapshot={snapshot}
-                snapshotCurrent={snapshotCurrent}
-                onPrepare={prepareSnapshot}
               />
             </Section>
           </div>

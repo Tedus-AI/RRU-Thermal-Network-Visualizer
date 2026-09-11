@@ -32,6 +32,7 @@ import { buildExportPayload } from './exportPayloadBuilder';
 import { RECOMMENDED_SECTION_IDS, SECTION_DEFINITIONS } from './sectionRegistry';
 import { LANGUAGE_MODES } from './reportTypes';
 import { reportLabel } from '@/screens/11-report-preview/reportViewModel';
+import { sliceForPart } from '@/screens/11-report-preview/ReportSections';
 
 // --- builders --------------------------------------------------------------
 
@@ -250,9 +251,11 @@ describe('Test C — FAIL does not block reporting (11 §50 C, §30)', () => {
 // absent and the section was permanently "Not Available".
 
 describe('Test D — section data unavailable (11 §50 D)', () => {
-  it('marks the distribution section unavailable when the snapshot has none', () => {
+  it('has nothing left that can be unavailable', () => {
+    // Both sections that could be empty — Bottleneck Analysis and Temperature
+    // Distribution — went with the screens behind them.
     const { evaluation } = validate({ distribution: false, readiness: 'READY' });
-    expect(evaluation.unavailable_sections).toContain('distribution');
+    expect(evaluation.unavailable_sections).toEqual([]);
   });
 });
 
@@ -285,7 +288,7 @@ describe('Test E — Save As Template stores layout only (11 §50 E)', () => {
   it('re-applies a template onto another config without importing results', () => {
     let source = config();
     source = patchDisplay(source, 'critical', { page_break_before: true });
-    source = toggleSection(source, 'appendix').config;
+    source = toggleSection(source, 'actions').config;
 
     const template = toTemplate(source, 'Layout A', '2026-02-02T00:00:00.000Z');
     const target = applyTemplate(config(), template);
@@ -293,7 +296,7 @@ describe('Test E — Save As Template stores layout only (11 §50 E)', () => {
     expect(target.sections.find((entry) => entry.id === 'critical')?.display.page_break_before).toBe(
       true,
     );
-    expect(target.sections.find((entry) => entry.id === 'appendix')?.included).toBe(false);
+    expect(target.sections.find((entry) => entry.id === 'actions')?.included).toBe(false);
     expect(target.scenario_id).toBe('SCN_A');
     expect(target.snapshot_id).toBe('SNAP_1');
   });
@@ -309,11 +312,7 @@ describe('Section selection and order (11 §5, §6)', () => {
       'overall',
       'critical',
       'network',
-      'distribution',
-      'quality',
-      'confidence',
       'actions',
-      'appendix',
     ]);
   });
 
@@ -326,10 +325,10 @@ describe('Section selection and order (11 §5, §6)', () => {
   });
 
   it('excludes and re-includes an optional section', () => {
-    const off = toggleSection(config(), 'appendix').config;
-    expect(off.sections.find((entry) => entry.id === 'appendix')?.included).toBe(false);
-    const on = toggleSection(off, 'appendix').config;
-    expect(on.sections.find((entry) => entry.id === 'appendix')?.included).toBe(true);
+    const off = toggleSection(config(), 'actions').config;
+    expect(off.sections.find((entry) => entry.id === 'actions')?.included).toBe(false);
+    const on = toggleSection(off, 'actions').config;
+    expect(on.sections.find((entry) => entry.id === 'actions')?.included).toBe(true);
   });
 
   it('moves a section up and down, keeping order numbers contiguous', () => {
@@ -341,9 +340,7 @@ describe('Section selection and order (11 §5, §6)', () => {
       'overall',
       'network',
     ]);
-    expect(orderedSections(moved).map((entry) => entry.order)).toEqual([
-      1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
-    ]);
+    expect(orderedSections(moved).map((entry) => entry.order)).toEqual([1, 2, 3, 4, 5, 6]);
   });
 
   it('does not move past either end', () => {
@@ -353,16 +350,16 @@ describe('Section selection and order (11 §5, §6)', () => {
   });
 
   it('drops a dragged section at the requested index', () => {
-    const dragged = reorderSection(config(), 'appendix', 1);
+    const dragged = reorderSection(config(), 'actions', 1);
     expect(orderedSections(dragged).map((entry) => entry.id).slice(0, 3)).toEqual([
       'cover',
-      'appendix',
+      'actions',
       'project',
     ]);
   });
 
   it('resets order, inclusion and options together', () => {
-    let edited = toggleSection(config(), 'appendix').config;
+    let edited = toggleSection(config(), 'actions').config;
     edited = moveSection(edited, 'critical', -1);
     edited = patchContent(edited, 'critical', { row_count: 0 });
 
@@ -422,15 +419,15 @@ describe('Pagination (11 §10, §40)', () => {
   });
 
   it('drops excluded sections from the page list', () => {
-    const without = toggleSection(config(), 'appendix').config;
+    const without = toggleSection(config(), 'actions').config;
     const pages = paginate(orderedSections(without), ROWS);
-    expect(pages.some((page) => page.section_ids.includes('appendix'))).toBe(false);
+    expect(pages.some((page) => page.section_ids.includes('actions'))).toBe(false);
   });
 
   it('locates the page a section starts on', () => {
     const pages = paginate(orderedSections(config()), ROWS);
     expect(pageOfSection(pages, 'cover')).toBe(1);
-    expect(pageOfSection(pages, 'quality')).toBeGreaterThan(1);
+    expect(pageOfSection(pages, 'network')).toBeGreaterThan(1);
   });
 });
 
@@ -461,7 +458,7 @@ describe('Validation and readiness (11 §29, §35, §36)', () => {
     const evaluation = evaluateSnapshot(snapshot({ readiness: 'READY', overall: 'PASS' }), live(), 'Baseline 55C');
     const broken = config();
     broken.sections = broken.sections.map((section) =>
-      section.id === 'quality' ? { ...section, included: false } : section,
+      section.id === 'overall' ? { ...section, included: false } : section,
     );
     const validation = validateReport({
       config: broken,
@@ -472,7 +469,7 @@ describe('Validation and readiness (11 §29, §35, §36)', () => {
     });
     expect(validation.blocking).toEqual([]);
     expect(validation.readiness).toBe('WARNING');
-    expect(validation.warnings.join(' ')).toMatch(/Solver & Energy Quality/);
+    expect(validation.warnings.join(' ')).toMatch(/Overall Thermal Status/);
   });
 
   it('warns when any section references unavailable data (11 §17)', () => {
@@ -484,7 +481,7 @@ describe('Validation and readiness (11 §29, §35, §36)', () => {
       live(),
       'Baseline 55C',
     );
-    for (const id of ['quality', 'distribution'] as const) {
+    for (const id of ['overall', 'critical'] as const) {
       const validation = validateReport({
         config: config(),
         evaluation: { ...evaluation, unavailable_sections: [id] },
@@ -542,9 +539,12 @@ describe('Validation and readiness (11 §29, §35, §36)', () => {
     expect(demoted.validation.readiness).toBe('WARNING');
   });
 
-  it('demotes readiness when an included section has no data', () => {
-    const { validation } = validate({ readiness: 'READY', overall: 'PASS', distribution: false });
-    expect(validation.readiness).toBe('WARNING');
+  it('is EXPORT_READY on a current snapshot with every section included', () => {
+    // Nothing can be unavailable now, so a snapshot that is current and whose
+    // source readiness is READY has nothing left to demote it.
+    const { validation } = validate({ readiness: 'READY', overall: 'PASS' });
+    expect(validation.readiness).toBe('EXPORT_READY');
+    expect(validation.blocking).toEqual([]);
   });
 });
 
@@ -561,8 +561,8 @@ describe('Export payload (11 §32, §38)', () => {
     });
 
     expect(payload.contains_file_bytes).toBe(false);
-    expect(payload.section_order).toHaveLength(10);
-    expect(payload.included_sections).toHaveLength(10);
+    expect(payload.section_order).toHaveLength(6);
+    expect(payload.included_sections).toHaveLength(6);
     expect(payload.estimated_page_count).toBe(8);
     expect(payload.readiness).toBe('EXPORT_READY');
 
@@ -572,15 +572,15 @@ describe('Export payload (11 §32, §38)', () => {
   });
 
   it('records only the included sections', () => {
-    const trimmed = toggleSection(config(), 'appendix').config;
+    const trimmed = toggleSection(config(), 'actions').config;
     const payload = buildExportPayload({
       config: trimmed,
       snapshot_id: 'SNAP_1',
       readiness: 'EXPORT_READY',
       estimated_page_count: 7,
     });
-    expect(payload.section_order).toContain('appendix');
-    expect(payload.included_sections).not.toContain('appendix');
+    expect(payload.section_order).toContain('actions');
+    expect(payload.included_sections).not.toContain('actions');
   });
 
   it('downgrades a preview-only readiness to BLOCKED rather than exporting it', () => {
@@ -619,12 +619,26 @@ describe('Report sections match what the tool produces', () => {
     expect(SECTION_DEFINITIONS.map((entry) => entry.id)).not.toContain('bottleneck');
   });
 
-  it('offers no distribution options that nothing can fill', () => {
-    // The histogram snapshot was reserved for a Screen 09 chart, and the hot
-    // node table was a checkbox that grew the page estimate and rendered
+  it('has no Temperature Distribution section', () => {
+    // Screen 09 is gone, and the section's own options were a histogram
+    // reserved for one of its charts and a hot-node table that rendered
     // nothing.
-    const distribution = SECTION_DEFINITIONS.find((entry) => entry.id === 'distribution')!;
-    expect(Object.keys(distribution.defaultContent)).toEqual(['show_range_summary']);
+    expect(SECTION_DEFINITIONS.map((entry) => entry.id)).not.toContain('distribution');
+  });
+
+  it('gives Scenario Summary a switch per field', () => {
+    const project = SECTION_DEFINITIONS.find((entry) => entry.id === 'project')!;
+    expect(Object.keys(project.defaultContent).sort()).toEqual([
+      'show_ambient',
+      'show_last_solved',
+      'show_power_scale',
+      'show_scenario',
+      'show_solar',
+      'show_stage',
+      'show_wind',
+    ]);
+    // All on, so an untouched report prints what it printed before.
+    expect(Object.values(project.defaultContent).every((value) => value === true)).toBe(true);
   });
 
   it('lets every section be unticked', () => {
@@ -695,20 +709,40 @@ describe('Display options move sections between pages', () => {
     expect(after[2]).toContain('overall');
   });
 
-  it('keep_table_together off lets a section flow across a page boundary', () => {
-    const tight = layout(config());
-    // Every section is kept together by default, so none appears twice.
-    expect(new Set(tight.join(',').split(',')).size).toBe(tight.join(',').split(',').length);
-
-    const loose = layout(
-      orderedSections(config()).reduce(
-        (current, section) => patchDisplay(current, section.id, { keep_table_together: false }),
-        config(),
-      ),
+  it('only a splittable section gets a continuation page', () => {
+    // A section that cannot render "rows 11 onward" used to be drawn WHOLE on
+    // its continuation page, so the reader saw the same clipped content twice.
+    // Only `critical` and `network` declare `splittable`.
+    const loose = orderedSections(config()).reduce(
+      (current, section) => patchDisplay(current, section.id, { keep_table_together: false }),
+      config(),
     );
-    const ids = loose.join(',').split(',');
-    // `network` now starts on one page and continues on the next.
-    expect(ids.filter((id) => id === 'network').length).toBeGreaterThan(1);
+    const pages = paginate(orderedSections(loose), { critical: 40 });
+    const repeated = new Set<string>();
+    const seen = new Set<string>();
+    for (const page of pages) {
+      for (const id of page.section_ids) {
+        if (seen.has(id)) repeated.add(id);
+        seen.add(id);
+      }
+    }
+    for (const id of repeated) {
+      expect(SECTION_DEFINITIONS.find((entry) => entry.id === id)?.splittable).toBe(true);
+    }
+  });
+
+  it('numbers the parts of a section that spans pages', () => {
+    // row_count 0 means "All" (11 §15), which on 60 rows is three pages' worth.
+    const all = patchContent(config(), 'critical', { row_count: 0 });
+    const pages = paginate(orderedSections(all), { critical: 60 });
+    const criticalPages = pages.filter((page) => page.section_ids.includes('critical'));
+    expect(criticalPages.length).toBeGreaterThan(1);
+    expect(criticalPages.map((page) => page.parts?.critical?.part)).toEqual(
+      criticalPages.map((_, index) => index),
+    );
+    for (const page of criticalPages) {
+      expect(page.parts?.critical?.parts).toBe(criticalPages.length);
+    }
   });
 });
 
@@ -735,5 +769,29 @@ describe('Overall Thermal Status lists the parts, not one number', () => {
       'D',
       'B',
     ]);
+  });
+});
+
+// --- the slice a continuation page carries -----------------------------------
+
+describe('sliceForPart', () => {
+  it('gives the whole list when there is one part', () => {
+    expect(sliceForPart([1, 2, 3], 0, 1)).toEqual([1, 2, 3]);
+  });
+
+  it('covers every item exactly once across the parts', () => {
+    const items = Array.from({ length: 17 }, (_, index) => index);
+    for (const parts of [2, 3, 4, 5]) {
+      const seen = Array.from({ length: parts }, (_, part) => sliceForPart(items, part, parts));
+      expect(seen.flat()).toEqual(items);
+    }
+  });
+
+  it('never repeats the section on its continuation page', () => {
+    // This is the bug it exists to prevent: the same rows drawn twice, and the
+    // ones in between drawn nowhere.
+    const items = ['a', 'b', 'c', 'd'];
+    expect(sliceForPart(items, 0, 2)).toEqual(['a', 'b']);
+    expect(sliceForPart(items, 1, 2)).toEqual(['c', 'd']);
   });
 });

@@ -38,6 +38,17 @@ const TAB_LABELS: Record<InspectorTab, { label: string; zh: string }> = {
 
 const NOTE_LIMIT = 500;
 
+/** Scenario Summary's seven fields, in the order the section prints them. */
+const SCENARIO_FIELDS = [
+  { key: 'show_stage', label: 'Stage', zh: '階段' },
+  { key: 'show_scenario', label: 'Scenario', zh: '情境' },
+  { key: 'show_ambient', label: 'Ambient', zh: '環境溫度' },
+  { key: 'show_wind', label: 'Wind', zh: '風速' },
+  { key: 'show_solar', label: 'Solar', zh: '太陽輻射' },
+  { key: 'show_power_scale', label: 'Power Scale', zh: '功率倍率' },
+  { key: 'show_last_solved', label: 'Last Solved', zh: '最後求解' },
+] as const;
+
 function Row({
   label,
   zh,
@@ -424,20 +435,22 @@ export function ReportSectionInspector({
               </>
             )}
 
-            {section.id === 'distribution' && (
+            {section.id === 'project' && (
               <>
-                <Row label="Show Range Summary" zh="顯示範圍摘要">
-                  <Toggle
-                    label="Show Range Summary"
-                    checked={content.show_range_summary !== false}
-                    disabled={readOnly}
-                    onChange={(value) => onContent(section.id, { show_range_summary: value })}
-                  />
-                </Row>
+                {SCENARIO_FIELDS.map(({ key, label, zh }) => (
+                  <Row key={key} label={label} zh={zh}>
+                    <Toggle
+                      label={label}
+                      checked={content[key] !== false}
+                      disabled={readOnly}
+                      onChange={(value) => onContent(section.id, { [key]: value })}
+                    />
+                  </Row>
+                ))}
               </>
             )}
 
-            {!['critical', 'distribution'].includes(section.id) && (
+            {!['critical', 'project'].includes(section.id) && (
               <p className="py-4 text-[11px] text-ink-400">此章節沒有內容選項。</p>
             )}
           </div>

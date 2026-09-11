@@ -32,7 +32,6 @@ export interface SectionDefinition {
   source_screen: '01' | '05' | '07' | '08' | '09' | '10' | '11';
   source_zh: string;
   /** What the section needs from the snapshot; absence makes it unavailable. */
-  requires?: 'distribution';
   defaultContent: SectionContentOptions;
   /**
    * Rough content height in page units, used only to estimate pagination
@@ -42,6 +41,16 @@ export interface SectionDefinition {
   base_height: number;
   /** Extra height per data row, for sections whose length follows a row count. */
   row_height?: number;
+  /**
+   * Whether this section can be drawn a page at a time.
+   *
+   * Only a section that knows how to render "rows 11 onward" may be given a
+   * continuation page. Everything else is clamped to one page, because the
+   * paginator's height is an ESTIMATE and the page box clips: a section that
+   * overflowed used to be drawn WHOLE on the next page too, so the reader saw
+   * the same clipped table twice and the rows in between nowhere.
+   */
+  splittable?: boolean;
 }
 
 export function defaultDisplay(pageBreakBefore = false): SectionDisplayOptions {
@@ -75,7 +84,15 @@ export const SECTION_DEFINITIONS: SectionDefinition[] = [
     recommended: true,
     source_screen: '01',
     source_zh: '06 邊界條件 / 情境設定',
-    defaultContent: {},
+    defaultContent: {
+      show_stage: true,
+      show_scenario: true,
+      show_ambient: true,
+      show_wind: true,
+      show_solar: true,
+      show_power_scale: true,
+      show_last_solved: true,
+    },
     base_height: 0.26,
   },
   {
@@ -92,6 +109,7 @@ export const SECTION_DEFINITIONS: SectionDefinition[] = [
     id: 'critical',
     title: 'Critical Components',
     zh: '關鍵元件',
+    splittable: true,
     recommended: false,
     source_screen: '10',
     source_zh: '10 結果總覽（來源 07 / 09）',
@@ -109,44 +127,16 @@ export const SECTION_DEFINITIONS: SectionDefinition[] = [
     id: 'network',
     title: 'Thermal Network Summary',
     zh: '熱網路摘要',
+    splittable: true,
     recommended: false,
     source_screen: '07',
     source_zh: '07 熱網路求解',
     defaultContent: {},
-    base_height: 0.55,
-  },
-  {
-    id: 'distribution',
-    title: 'Temperature Distribution Summary',
-    zh: '溫度分佈摘要',
-    recommended: false,
-    source_screen: '07',
-    source_zh: '07 熱網路圖',
-    requires: 'distribution',
-    defaultContent: {
-      show_range_summary: true,
-    },
-    base_height: 0.32,
-  },
-  {
-    id: 'quality',
-    title: 'Solver & Energy Quality',
-    zh: '求解與能量品質',
-    recommended: true,
-    source_screen: '07',
-    source_zh: '07 熱網路求解',
-    defaultContent: {},
-    base_height: 0.36,
-  },
-  {
-    id: 'confidence',
-    title: 'Data Completeness & Confidence',
-    zh: '資料完整度與可信度',
-    recommended: false,
-    source_screen: '10',
-    source_zh: '10 結果總覽（來源 04 / 05）',
-    defaultContent: {},
-    base_height: 0.4,
+    // A figure plus its caption is about a third of a page; two to a page is
+    // what makes them readable. Without this the section claimed half a page
+    // however many graphs it was drawing, and the page box CLIPPED the rest.
+    base_height: 0.06,
+    row_height: 0.42,
   },
   {
     id: 'actions',
@@ -155,16 +145,6 @@ export const SECTION_DEFINITIONS: SectionDefinition[] = [
     recommended: false,
     source_screen: '10',
     source_zh: '10 結果總覽',
-    defaultContent: {},
-    base_height: 0.45,
-  },
-  {
-    id: 'appendix',
-    title: 'Appendix: Source & Traceability',
-    zh: '附錄：來源與追溯',
-    recommended: false,
-    source_screen: '10',
-    source_zh: '10 結果總覽 / 專案 metadata',
     defaultContent: {},
     base_height: 0.45,
   },

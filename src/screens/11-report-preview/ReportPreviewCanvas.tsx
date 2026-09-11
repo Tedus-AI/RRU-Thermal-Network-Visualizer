@@ -263,8 +263,11 @@ export function ReportPageView({
             {onPage.map((id) => {
               const section = sections.find((entry) => entry.id === id);
               if (!section) return null;
-              const input = renderInput(section);
-              if (!input) return null;
+              const base = renderInput(section);
+              if (!base) return null;
+              // Which slice of a multi-page section this page carries.
+              const slice = page.parts?.[id];
+              const input = { ...base, part: slice?.part ?? 0, parts: slice?.parts ?? 1 };
               const index = sections.findIndex((entry) => entry.id === id) + 1;
               const definition = sectionDefinition(id);
               const title = section.display.title_override || definition.title;

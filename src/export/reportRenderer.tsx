@@ -34,6 +34,9 @@ export interface ReportRenderInput {
   unavailable: SectionRenderInput['section']['id'][];
   /** True when the snapshot is stale — the HTML report says so in a banner. */
   stale: boolean;
+  /** The live network the Thermal Network figures are drawn from, when there is one. */
+  network_context?: SectionRenderInput['network_context'];
+  network_figures?: SectionRenderInput['network_figures'];
 }
 
 export interface RenderedReport {
@@ -86,6 +89,13 @@ export function renderReport(input: ReportRenderInput): RenderedReport {
     project: input.project,
     scenario: input.scenario,
     unavailable: input.unavailable.includes(section.id),
+    // Screen 12's export renders the same page components, so it must supply
+    // the same inputs. It is given the network context when it has one; the
+    // figures then draw exactly as they do in the preview.
+    network_context: input.network_context ?? null,
+    network_figures: input.network_figures ?? [],
+    part: 0,
+    parts: 1,
   });
 
   for (const model of pageModels) {
