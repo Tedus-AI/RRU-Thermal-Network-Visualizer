@@ -12,7 +12,7 @@
  */
 
 import type { ResultsOverviewSnapshot } from '@/thermal/overview/overviewTypes';
-import { RTH_SOURCE_BUCKETS } from '@/thermal/overview/overviewTypes';
+import type { NetworkFigure } from '@/report/networkFigures';
 import type {
   LanguageMode,
   ReportSectionConfig,
@@ -21,7 +21,8 @@ import type {
 import { sectionDefinition } from '@/report/sectionRegistry';
 import { DEFAULT_LOGO_TEXT } from '@/report/defaultTemplate';
 
-import { num, pct, reportLabel, signed, timeOf } from './reportViewModel';
+import { num, reportLabel, signed, timeOf } from './reportViewModel';
+import { ReportNetworkFigures, type NetworkFigureContext } from './ReportNetworkFigures';
 
 export interface SectionRenderInput {
   config: ThermalReportConfig;
@@ -37,6 +38,36 @@ export interface SectionRenderInput {
   };
   /** Sections whose backing data is absent from the snapshot. */
   unavailable: boolean;
+  /**
+   * The live network the figures are drawn from.
+   *
+   * Everything else on this page reads the frozen snapshot, which is the rule
+   * (§12, §37). A snapshot never carried a TOPOLOGY, though, so the pictures
+   * come from the model — the same one the snapshot's numbers were solved on,
+   * which the STALE banner is there to police.
+   */
+  network_context: NetworkFigureContext | null;
+  network_figures: NetworkFigure[];
+  /**
+   * Which slice of a section this page carries, for the two sections that can
+   * span pages. `part` 0 of `parts` 1 is the ordinary whole-section case.
+   */
+  part: number;
+  parts: number;
+}
+
+/**
+ * The slice of `items` that page `part` of `parts` carries.
+ *
+ * Even slices rather than a measured fit: the paginator's height is an estimate
+ * and this renderer has no layout to measure against, so an even split is the
+ * honest reading of "this section takes three pages". Every item appears
+ * exactly once across the parts, which is the property that matters.
+ */
+export function sliceForPart<T>(items: readonly T[], part: number, parts: number): T[] {
+  if (parts <= 1) return [...items];
+  const perPage = Math.ceil(items.length / parts);
+  return items.slice(part * perPage, (part + 1) * perPage);
 }
 
 const CELL = 'border border-[#d7dde5] px-2 py-1 align-middle';
@@ -165,27 +196,42 @@ function CoverSection({ input }: { input: SectionRenderInput }) {
 // that judges the solve.
 
 function ProjectSection({ input }: { input: SectionRenderInput }) {
-  const { config, project, scenario, snapshot } = input;
+  const { config, section, project, scenario, snapshot } = input;
   const mode = config.language_mode;
+  const show = section.content;
+
+  // One switch per field — a report sent to a supplier may want the ambient and
+  // nothing else. Absent means on, so an older config keeps all seven.
+  const fields: Array<[boolean, string, string, string]> = [
+    [show.show_stage !== false, 'Stage', '階段', project.stage || '—'],
+    [show.show_scenario !== false, 'Scenario', '情境', scenario.name],
+    [show.show_ambient !== false, 'Ambient', '環境溫度', num(scenario.ambient_C, 1, '°C')],
+    [show.show_wind !== false, 'Wind', '風速', num(scenario.wind_mps, 1, 'm/s')],
+    [show.show_solar !== false, 'Solar', '太陽輻射', num(scenario.solar_W_m2, 0, 'W/m²')],
+    [
+      show.show_power_scale !== false,
+      'Power Scale',
+      '功率倍率',
+      `${(scenario.power_scale * 100).toFixed(0)}%`,
+    ],
+    [
+      show.show_last_solved !== false,
+      'Last Solved',
+      '最後求解',
+      timeOf(snapshot.solver_quality.solved_at),
+    ],
+  ];
+  const on = fields.filter(([enabled]) => enabled);
+
+  if (on.length === 0) {
+    return <NotAvailable mode={mode} what="Scenario Summary" whatZh="情境摘要" />;
+  }
+
   return (
     <div className="grid grid-cols-4 gap-x-0 gap-y-0">
-      <Field label="Stage" zh="階段" value={project.stage || '—'} mode={mode} />
-      <Field label="Scenario" zh="情境" value={scenario.name} mode={mode} />
-      <Field label="Ambient" zh="環境溫度" value={num(scenario.ambient_C, 1, '°C')} mode={mode} />
-      <Field label="Wind" zh="風速" value={num(scenario.wind_mps, 1, 'm/s')} mode={mode} />
-      <Field label="Solar" zh="太陽輻射" value={num(scenario.solar_W_m2, 0, 'W/m²')} mode={mode} />
-      <Field
-        label="Power Scale"
-        zh="功率倍率"
-        value={`${(scenario.power_scale * 100).toFixed(0)}%`}
-        mode={mode}
-      />
-      <Field
-        label="Last Solved"
-        zh="最後求解"
-        value={timeOf(snapshot.solver_quality.solved_at)}
-        mode={mode}
-      />
+      {on.map(([, label, zh, value]) => (
+        <Field key={label} label={label} zh={zh} value={value} mode={mode} />
+      ))}
     </div>
   );
 }
@@ -319,11 +365,17 @@ function CriticalSection({ input }: { input: SectionRenderInput }) {
   const mode = config.language_mode;
   const options = section.content;
 
-  const rows = [...snapshot.critical_components];
+  // A node with no limit has no margin and no status to report, so it cannot
+  // be critical — it was filling the foot of the table with N/A rows.
+  const rows = snapshot.critical_components.filter((row) => row.status !== 'NO LIMIT');
   if (options.sort_mode === 'highest_temperature') {
     rows.sort((a, b) => b.temperature_C - a.temperature_C);
   }
-  const shown = options.row_count === 0 ? rows : rows.slice(0, options.row_count ?? 5);
+  const wanted = options.row_count === 0 ? rows : rows.slice(0, options.row_count ?? 5);
+  // The slice this page carries. A table that overflowed used to be drawn whole
+  // on the continuation page too, so the same clipped rows appeared twice and
+  // the ones in between appeared nowhere.
+  const shown = sliceForPart(wanted, input.part, input.parts);
 
   if (shown.length === 0) {
     return <NotAvailable mode={mode} what="Critical Components" whatZh="關鍵元件" />;
@@ -397,270 +449,29 @@ function CriticalSection({ input }: { input: SectionRenderInput }) {
 
 // --- 11 §16 — thermal network summary --------------------------------------
 
+/**
+ * The solved network, one board at a time and then one part at a time.
+ *
+ * It used to be six solver counters and a four-box schematic strip reading
+ * "Heat Sources → Shared Base → HSK → Boundary" — a diagram of the IDEA of a
+ * heat path, identical on every project. The counters went with Solver &
+ * Energy Quality; the strip is replaced by the actual graph, filtered the way
+ * Screen 07 filters it. See `networkFigures`.
+ */
 function NetworkSection({ input }: { input: SectionRenderInput }) {
-  const { config, snapshot } = input;
+  const { config, network_context, network_figures } = input;
   const mode = config.language_mode;
-  const solver = snapshot.solver_quality;
-  return (
-    <div className="flex flex-col gap-2">
-      <div className="grid grid-cols-3">
-        <Field label="Node Count" zh="節點數" value={`${solver.solved_nodes}`} mode={mode} />
-        <Field label="Edge Count" zh="連線數" value={`${solver.solved_edges}`} mode={mode} />
-        <Field
-          label="Energy Balance"
-          zh="能量守恆誤差"
-          value={pct(solver.energy_error_pct)}
-          mode={mode}
-        />
-        <Field
-          label="Generated Heat"
-          zh="產生熱量"
-          value={num(solver.generated_W, 1, 'W')}
-          mode={mode}
-        />
-        <Field
-          label="Rejected Heat"
-          zh="排出熱量"
-          value={num(solver.rejected_W, 1, 'W')}
-          mode={mode}
-        />
-        <Field
-          label="Hottest Node"
-          zh="最高溫節點"
-          // The bottleneck half of this went with the analysis nothing runs;
-          // what is left is the hottest component, which the solve always has.
-          value={snapshot.kpis.max_temperature_node ?? 'N/A'}
-          mode={mode}
-        />
-      </div>
 
-      {/* A schematic strip standing in for the solved network. It is a picture
-          of the path, not an editable graph — 11 §16 forbids topology editing. */}
-      <div className="flex items-center gap-1 overflow-hidden border border-[#d7dde5] bg-[#f7f9fc] px-3 py-3">
-        {['Heat Sources', 'Shared Base', 'HSK', 'Boundary'].map((label, index, all) => (
-          <span key={label} className="flex min-w-0 flex-1 items-center gap-1">
-            <span className="min-w-0 flex-1 truncate rounded border border-[#b6c2d3] bg-white px-2 py-1.5 text-center text-[9px] font-semibold text-[#16202f]">
-              {label}
-            </span>
-            {index < all.length - 1 && <span className="shrink-0 text-[10px] text-[#8a5a12]">→</span>}
-          </span>
-        ))}
-      </div>
-      <p className="text-[8.5px] text-[#68748a]">
-        {reportLabel(
-          mode,
-          'Read-only network summary. Topology and boundary conditions are edited in Screens 05 and 06.',
-          '唯讀熱網路摘要；拓樸與邊界條件請於 05、06 修改。',
-        )}
-      </p>
-    </div>
-  );
-}
-
-// --- 11 §18 — temperature distribution summary ------------------------------
-
-function DistributionSection({ input }: { input: SectionRenderInput }) {
-  const { config, section, snapshot, unavailable } = input;
-  const mode = config.language_mode;
-  const distribution = snapshot.distribution;
-
-  if (unavailable || !distribution) {
-    return <NotAvailable mode={mode} what="Temperature Distribution" whatZh="溫度分佈" />;
+  if (!network_context) {
+    return <NotAvailable mode={mode} what="Thermal Network" whatZh="熱網路" />;
   }
 
-  const span = (distribution.max_C ?? 0) - (distribution.min_C ?? 0);
-  const position = (value: number | null) =>
-    value == null || span <= 0 ? null : ((value - (distribution.min_C ?? 0)) / span) * 100;
-
   return (
-    <div className="flex flex-col gap-2">
-      <div className="grid grid-cols-5">
-        <Field
-          label="Average"
-          zh="平均溫度"
-          value={num(distribution.average_C, 1, '°C')}
-          mode={mode}
-        />
-        <Field label="P95" zh="第 95 百分位" value={num(distribution.p95_C, 1, '°C')} mode={mode} />
-        <Field
-          label="Nodes Above Warning"
-          zh="高於警示的節點"
-          value={`${distribution.nodes_above_warning}`}
-          mode={mode}
-        />
-        <Field label="Min" zh="最低溫度" value={num(distribution.min_C, 1, '°C')} mode={mode} />
-        <Field label="Max" zh="最高溫度" value={num(distribution.max_C, 1, '°C')} mode={mode} />
-      </div>
-
-      {section.content.show_range_summary !== false && (
-        <div className="border border-[#d7dde5] px-3 pt-3 pb-5">
-          <p className="mb-3 text-[8.5px] font-semibold tracking-wide text-[#68748a] uppercase">
-            {reportLabel(mode, 'Temperature Range', '溫度範圍')}
-          </p>
-          <div className="relative h-2 rounded-full bg-gradient-to-r from-[#2563eb] via-[#22c55e] to-[#dc2626]">
-            {[
-              { key: 'avg', label: 'Avg', value: distribution.average_C, color: '#16a34a' },
-              { key: 'p95', label: 'P95', value: distribution.p95_C, color: '#7c3aed' },
-            ].map((marker) => {
-              const left = position(marker.value);
-              if (left == null) return null;
-              return (
-                <span
-                  key={marker.key}
-                  className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2"
-                  style={{ left: `${left}%` }}
-                >
-                  <span
-                    className="block size-2.5 rounded-full border-2 border-white"
-                    style={{ backgroundColor: marker.color }}
-                  />
-                  <span
-                    className="absolute top-3 left-1/2 -translate-x-1/2 text-[8px] font-bold whitespace-nowrap"
-                    style={{ color: marker.color }}
-                  >
-                    {marker.label} {num(marker.value, 1)}
-                  </span>
-                </span>
-              );
-            })}
-          </div>
-          <div className="mt-1 flex justify-between text-[8.5px] font-semibold text-[#68748a] tabular">
-            <span>{num(distribution.min_C, 1, '°C')}</span>
-            <span>{num(distribution.max_C, 1, '°C')}</span>
-          </div>
-        </div>
-      )}
-
-      <p className="text-[8.5px] text-[#68748a]">
-        {reportLabel(
-          mode,
-          `Scope: ${distribution.scope_label} · ${distribution.row_count} rows · warning threshold ${distribution.warning_threshold_C} °C.`,
-          `範圍：${distribution.scope_label}，共 ${distribution.row_count} 列，警示門檻 ${distribution.warning_threshold_C} °C。`,
-        )}
-      </p>
-    </div>
-  );
-}
-
-// --- 11 §19 — solver and energy quality -------------------------------------
-
-function QualitySection({ input }: { input: SectionRenderInput }) {
-  const { config, snapshot } = input;
-  const mode = config.language_mode;
-  const solver = snapshot.solver_quality;
-  const grade =
-    solver.quality === 'green' ? 'GOOD' : solver.quality === 'warning' ? 'WARNING' : 'ERROR';
-
-  return (
-    <div className="flex flex-col gap-2">
-      <div className="grid grid-cols-4">
-        <Field label="Solver Status" zh="求解狀態" value={solver.status} mode={mode} />
-        <Field label="Solved Nodes" zh="已求解節點" value={`${solver.solved_nodes}`} mode={mode} />
-        <Field label="Solved Edges" zh="已求解連線" value={`${solver.solved_edges}`} mode={mode} />
-        <Field label="Quality" zh="品質" value={grade} mode={mode} />
-        <Field
-          label="Generated Heat"
-          zh="產生熱量"
-          value={num(solver.generated_W, 1, 'W')}
-          mode={mode}
-        />
-        <Field
-          label="Rejected Heat"
-          zh="排出熱量"
-          value={num(solver.rejected_W, 1, 'W')}
-          mode={mode}
-        />
-        <Field label="Residual" zh="能量殘差" value={num(solver.residual_W, 3, 'W')} mode={mode} />
-        <Field
-          label="Energy Error"
-          zh="能量誤差"
-          value={pct(solver.energy_error_pct)}
-          mode={mode}
-        />
-      </div>
-      <p className="text-[8.5px] text-[#68748a]">
-        {reportLabel(
-          mode,
-          'Quality thresholds inherited from Screen 07: <0.5% GOOD · 0.5–2.0% WARNING · >2.0% ERROR.',
-          '品質門檻沿用 Screen 07：<0.5% 良好，0.5–2.0% 警告，>2.0% 錯誤。',
-        )}
-      </p>
-    </div>
-  );
-}
-
-// --- 11 §20 — data completeness and confidence ------------------------------
-
-function ConfidenceSection({ input }: { input: SectionRenderInput }) {
-  const { config, snapshot } = input;
-  const mode = config.language_mode;
-  const completeness = snapshot.completeness;
-
-  return (
-    <div className="flex flex-col gap-2">
-      <div className="grid grid-cols-3">
-        <Field
-          label="Components With Limits"
-          zh="有熱限制的元件"
-          value={`${completeness.components_with_limits}`}
-          mode={mode}
-        />
-        <Field
-          label="Components Without Limits"
-          zh="缺少熱限制的元件"
-          value={`${completeness.components_without_limits}`}
-          mode={mode}
-        />
-        <Field
-          label="Low-confidence Critical Edges"
-          zh="低可信度關鍵連線"
-          value={`${completeness.low_confidence_critical_edges}`}
-          mode={mode}
-        />
-        <Field label="Result Mode" zh="結果模式" value={snapshot.result_mode} mode={mode} />
-        <Field
-          label="External CFD Validation"
-          zh="外部 CFD 驗證"
-          // 11 §20 — Deferred while Screen 03 has no parser, and that is not a
-          // failure by itself.
-          value={`FloTHERM: ${completeness.external_cfd_validation}`}
-          mode={mode}
-        />
-        <Field
-          label="Data Confidence"
-          zh="資料可信度"
-          value={completeness.data_confidence}
-          mode={mode}
-        />
-      </div>
-
-      <table className="w-full border-collapse text-[10px]">
-        <thead>
-          <tr>
-            <th className={HEAD}>{reportLabel(mode, 'Rth Source', '熱阻來源')}</th>
-            {RTH_SOURCE_BUCKETS.map((bucket) => (
-              <th key={bucket} className={`${HEAD} text-right`}>
-                {bucket}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td className={`${CELL} text-[#425067]`}>
-              {reportLabel(mode, 'Edge count', '連線數')}
-            </td>
-            {RTH_SOURCE_BUCKETS.map((bucket) => (
-              <td key={bucket} className={`${CELL} text-right font-semibold tabular`}>
-                {bucket === 'FloTHERM' && completeness.rth_source_counts[bucket] === 0
-                  ? '0 · Deferred'
-                  : completeness.rth_source_counts[bucket]}
-              </td>
-            ))}
-          </tr>
-        </tbody>
-      </table>
-    </div>
+    <ReportNetworkFigures
+      figures={sliceForPart(network_figures, input.part, input.parts)}
+      context={network_context}
+      mode={mode}
+    />
   );
 }
 
@@ -712,54 +523,6 @@ function ActionsSection({ input }: { input: SectionRenderInput }) {
   );
 }
 
-// --- 11 §22 — appendix ------------------------------------------------------
-
-function AppendixSection({ input }: { input: SectionRenderInput }) {
-  const { config, snapshot, project } = input;
-  const mode = config.language_mode;
-  const counts = snapshot.completeness.rth_source_counts;
-
-  return (
-    <div className="grid grid-cols-2">
-      <Field label="Project ID" zh="專案代號" value={project.id} mode={mode} />
-      <Field label="Scenario ID" zh="情境代號" value={snapshot.scenario_id} mode={mode} />
-      <Field label="Snapshot ID" zh="快照代號" value={snapshot.id} mode={mode} />
-      <Field
-        label="Snapshot Created"
-        zh="快照建立時間"
-        value={timeOf(snapshot.created_at)}
-        mode={mode}
-      />
-      <Field label="Report Config ID" zh="報告設定代號" value={config.id} mode={mode} />
-      <Field label="Solver Version" zh="求解器版本" value="v1.0" mode={mode} />
-      <Field
-        label="Component Data Sources"
-        zh="元件資料來源"
-        value={`${snapshot.completeness.components_with_limits} with limits · ${snapshot.completeness.components_without_limits} without`}
-        mode={mode}
-      />
-      <Field
-        label="Rth Source Counts"
-        zh="熱阻來源統計"
-        value={`A ${counts.Analytical} · M ${counts.Manual} · Meas ${counts.Measurement} · FT ${counts.FloTHERM}`}
-        mode={mode}
-      />
-      <Field
-        label="External Mapping Status"
-        zh="外部對應狀態"
-        value="FloTHERM: Deferred (Screen 03)"
-        mode={mode}
-      />
-      <Field
-        label="Report Generated"
-        zh="報告產生時間"
-        value={timeOf(config.updated_at)}
-        mode={mode}
-      />
-    </div>
-  );
-}
-
 // --- dispatch ---------------------------------------------------------------
 
 export function ReportSectionBody({ input }: { input: SectionRenderInput }) {
@@ -774,16 +537,8 @@ export function ReportSectionBody({ input }: { input: SectionRenderInput }) {
       return <CriticalSection input={input} />;
     case 'network':
       return <NetworkSection input={input} />;
-    case 'distribution':
-      return <DistributionSection input={input} />;
-    case 'quality':
-      return <QualitySection input={input} />;
-    case 'confidence':
-      return <ConfidenceSection input={input} />;
     case 'actions':
       return <ActionsSection input={input} />;
-    case 'appendix':
-      return <AppendixSection input={input} />;
     default:
       return null;
   }

@@ -16,6 +16,8 @@ import { sectionDefinition } from './sectionRegistry';
 
 export interface RowCounts {
   critical: number;
+  /** How many figures the Thermal Network Summary is drawing. */
+  network_figures?: number;
 }
 
 /** How much of a page a section is expected to occupy, in page units. */
@@ -24,11 +26,13 @@ export function sectionHeight(section: ReportSectionConfig, rows: RowCounts): nu
   let height = definition.base_height;
 
   if (definition.row_height) {
-    // 0 means "All" (11 §15).
     const count =
-      section.content.row_count === 0
-        ? rows.critical
-        : Math.min(section.content.row_count ?? 5, rows.critical);
+      section.id === 'network'
+        ? (rows.network_figures ?? 0)
+        : // 0 means "All" (11 §15).
+          section.content.row_count === 0
+          ? rows.critical
+          : Math.min(section.content.row_count ?? 5, rows.critical);
     height += definition.row_height * Math.max(count, 0);
   }
 
@@ -46,7 +50,14 @@ export function sectionHeight(section: ReportSectionConfig, rows: RowCounts): nu
  *   - `page_break_before` starts a new page (11 §25);
  *   - a section that does not fit in what is left of the page moves to the next
  *     one when `keep_table_together` is set, and otherwise flows across;
- *   - a section taller than a whole page always spans several pages.
+ *   - a SPLITTABLE section taller than a whole page spans several pages, and
+ *     each page records which part it carries.
+ *
+ * A section that is not splittable never gets a continuation page. It used to:
+ * the height here is an estimate and the page box clips, so an overflowing
+ * section was drawn WHOLE on the next page as well — the reader saw the same
+ * clipped content twice and what fell off the first page nowhere. A section
+ * that cannot say "rows 11 onward" is better drawn once and clipped once.
  */
 export function paginate(sections: ReportSectionConfig[], rows: RowCounts): ReportPage[] {
   const included = sections.filter((section) => section.included);
@@ -90,17 +101,39 @@ export function paginate(sections: ReportSectionConfig[], rows: RowCounts): Repo
 
     used += height;
 
-    // A section too tall for one page continues onto further pages. Those
-    // continuation pages carry the same title so the thumbnail reads sensibly.
-    while (used > 1) {
-      used -= 1;
-      pages.push({
+    if (!definition.splittable) {
+      // Clamped: whatever it is, it is one page's worth as far as the layout
+      // is concerned, and the next section starts on a fresh page.
+      if (used > 1) used = 1;
+      continue;
+    }
+
+    // A splittable section too tall for one page continues onto further pages.
+    // Those pages carry the same title so the thumbnail reads sensibly, and a
+    // part index so the renderer can show what did not fit.
+    const continuations: ReportPage[] = [];
+    let remaining = used;
+    while (remaining > 1) {
+      remaining -= 1;
+      const page: ReportPage = {
         page_number: pages.length + 1,
         title: `${section.display.title_override || definition.title} (cont.)`,
         title_zh: `${definition.zh}（續）`,
         section_ids: [section.id],
+      };
+      pages.push(page);
+      continuations.push(page);
+      current = page;
+    }
+    used = remaining;
+
+    if (continuations.length > 0) {
+      const parts = continuations.length + 1;
+      const first = pages.find((page) => page.section_ids.includes(section.id));
+      if (first) first.parts = { ...first.parts, [section.id]: { part: 0, parts } };
+      continuations.forEach((page, index) => {
+        page.parts = { ...page.parts, [section.id]: { part: index + 1, parts } };
       });
-      current = pages[pages.length - 1];
     }
   }
 

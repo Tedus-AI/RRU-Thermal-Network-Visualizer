@@ -25,9 +25,9 @@ export function defaultSections(): ReportSectionConfig[] {
     included: true,
     order: index + 1,
     content: { ...definition.defaultContent },
-    // The cover owns its page, and the appendix starts a fresh one so the
-    // traceability block is not stranded at the foot of a results page.
-    display: defaultDisplay(definition.id === 'appendix'),
+    // The network figures start a fresh page: a run of pictures stranded at
+    // the foot of a results page reads as an afterthought.
+    display: defaultDisplay(definition.id === 'network'),
   }));
 }
 

@@ -53,6 +53,11 @@ import { useDistributionResult } from '@/data/useDistributionResult';
 import { currentSourceRevision } from '@/data/sourceRevision';
 
 import { buildResultsOverview } from '@/thermal/overview/overviewAggregator';
+import { projectComponentLimits } from '@/thermal/graph/componentProjection';
+import { marginRanking, partsNeedingAttention } from '@/thermal/analysis/marginRanking';
+import { segmentLevers, type SegmentLevers } from '@/thermal/analysis/tunableParameters';
+import { NEAR_LIMIT_MARGIN_C } from '@/thermal/analysis/temperatureDataset';
+import { networkFigures } from '@/report/networkFigures';
 
 import {
   DEFAULT_ZOOM,
@@ -187,8 +192,14 @@ export function ReportPreviewView() {
   const activeScenarioId = useScenarioStore((s) => s.activeScenarioId);
 
   const solutions = useSolutionStore((s) => s.solutions);
+  /** The solve input Screen 08 reasons about, so the levers match its numbers. */
+  const solveInput = useSolutionStore((s) => s.input);
   const solutionKey = useSolutionStore((s) => s.activeKey);
   const analyses = useAnalysisStore((s) => s.analyses);
+  /** Screen 08's saved studies and Screen 06's ports, for the network figures. */
+  const studies = useAnalysisStore((s) => s.proposals);
+  const boundarySet = useBoundaryStore((s) => s.current());
+  const boundaryPorts = useBoundaryStore((s) => s.ports);
   const snapshots = useOverviewStore((s) => s.snapshots);
 
   const configs = useReportStore((s) => s.configs);
@@ -321,11 +332,73 @@ export function ReportPreviewView() {
   const sections = useMemo(() => (config ? orderedSections(config) : []), [config]);
   const included = useMemo(() => (config ? includedSections(config) : []), [config]);
 
+  /**
+   * The pictures the Thermal Network Summary carries, and what Screen 08 says
+   * could be done about each part that needs attention.
+   *
+   * Built here rather than in the section because it is the same derivation
+   * Screen 10 runs for Improvement Actions — the same ranking helper, the same
+   * saved studies, the same recomputed levers — and a second copy of it would
+   * be a second answer to "which parts matter".
+   */
+  const networkContext = useMemo(() => {
+    // The solve INPUT, not the stored graph — the same base Screen 10 reasons
+    // about. A fin link's parameters live on the network the solve ran on, so
+    // levers read off the stored graph come back empty and the report would
+    // say a part has nothing adjustable when Screen 08 has just said it has
+    // six things.
+    const base = solveInput?.network ?? network;
+    if (!base) return null;
+    return {
+      network: components.length > 0 ? projectComponentLimits(base, components) : base,
+      solution: stale ? null : solution,
+      scenarioId: activeScenarioId ?? '',
+    };
+  }, [solveInput, network, components, solution, stale, activeScenarioId]);
+
+  const figures = useMemo(() => {
+    if (!networkContext || !networkContext.solution) return [];
+    const ranked = partsNeedingAttention(
+      marginRanking(networkContext.network, networkContext.solution.node_temperatures_C, 0),
+    ).filter((part) => part.margin_C <= NEAR_LIMIT_MARGIN_C);
+
+    const byTarget = new Map(studies.map((study) => [study.target_node_id, study]));
+    const leversByNode = new Map<string, SegmentLevers[] | null>();
+    for (const part of ranked) {
+      const study = byTarget.get(part.node_id);
+      // null means "no study"; an empty array means "a study whose segments
+      // have nothing adjustable". The report says different things about them.
+      leversByNode.set(
+        part.node_id,
+        study && activeScenarioId
+          ? study.segments.map((segment) =>
+              segmentLevers(
+                networkContext.network,
+                activeScenarioId,
+                segment.edge_id,
+                segment.label,
+                segment.reduction_pct,
+                { ports: boundaryPorts, set: boundarySet },
+              ),
+            )
+          : null,
+      );
+    }
+
+    return networkFigures({
+      network: networkContext.network,
+      components,
+      ranked,
+      leversByNode,
+    });
+  }, [networkContext, components, studies, activeScenarioId, boundaryPorts, boundarySet]);
+
   const rowCounts = useMemo(
     () => ({
       critical: snapshot?.critical_components.length ?? 0,
+      network_figures: figures.length,
     }),
-    [snapshot],
+    [snapshot, figures.length],
   );
 
   const pages = useMemo(() => paginate(sections, rowCounts), [sections, rowCounts]);
@@ -382,6 +455,11 @@ export function ReportPreviewView() {
   const go = (path: string) => navigate(projectPath(projectId ?? '', path));
 
   // --- gates ----------------------------------------------------------------
+  //
+  // EVERY hook belongs above this line. A `useMemo` added below one of these
+  // returns runs on some renders and not others, which React reports as
+  // "rendered more hooks than during the previous render" and the screen shows
+  // as a crash card.
   if (projectStatus === 'loading' || (projectId && !draft)) return <LoadingState />;
 
   if (!snapshot || !scenario || blocksPreview(evaluation.state)) {
@@ -425,6 +503,12 @@ export function ReportPreviewView() {
         power_scale: scenario.power_scale,
       },
       unavailable: evaluation.unavailable_sections.includes(section.id),
+      network_context: networkContext,
+      network_figures: figures,
+      // Overridden per page by `ReportPageView`, which knows which slice of a
+      // multi-page section the page it is drawing carries.
+      part: 0,
+      parts: 1,
     };
   };
 
