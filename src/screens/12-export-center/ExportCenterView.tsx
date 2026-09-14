@@ -60,7 +60,7 @@ import { useDistributionResult } from '@/data/useDistributionResult';
 import { currentSourceRevision } from '@/data/sourceRevision';
 
 import { buildResultsOverview } from '@/thermal/overview/overviewAggregator';
-import { evaluateSnapshot } from '@/report/snapshotAdapter';
+import { evaluateSnapshot, withTranslatedActions } from '@/report/snapshotAdapter';
 
 import {
   ARTIFACT_DEFINITIONS,
@@ -467,7 +467,10 @@ export function ExportCenterView() {
     if (!reportConfig || !snapshot || !scenario) return null;
     return {
       config: reportConfig,
-      snapshot,
+      // The same recovery Screen 11's preview does, so the exported document
+      // and the preview of it do not disagree about which language the
+      // Engineering Actions are in. See `withTranslatedActions`.
+      snapshot: withTranslatedActions(snapshot, liveOverview),
       project: {
         name: draft?.project_name ?? projectId ?? '',
         id: projectId ?? '',
@@ -484,7 +487,7 @@ export function ExportCenterView() {
       unavailable: snapshotEvaluation.unavailable_sections,
       stale: snapshotEvaluation.state === 'STALE',
     };
-  }, [reportConfig, snapshot, scenario, draft, projectId, snapshotEvaluation]);
+  }, [reportConfig, snapshot, liveOverview, scenario, draft, projectId, snapshotEvaluation]);
 
   const execute = useCallback(
     async (mode: 'selected' | 'package') => {
