@@ -864,6 +864,18 @@ describe('Report snapshot (10 §18, §19)', () => {
     expect(isSnapshotCurrent(snapshot, overview)).toBe(true);
   });
 
+  it('carries the Chinese action lines, one for one with the English', () => {
+    const overview = overviewOf({ limit: 150 });
+    const snapshot = buildSnapshot(overview, { now: '2026-02-01T00:00:00.000Z' });
+
+    // The aggregator has always produced both halves; the snapshot used to
+    // drop the Chinese one, which left Engineering Actions as the report's
+    // only untranslated section.
+    expect(snapshot.action_summary_zh).toEqual(overview.action_summary_zh);
+    expect(snapshot.action_summary_zh).toHaveLength(snapshot.action_summary.length);
+    expect(snapshot.action_summary_zh?.every((line) => line.trim().length > 0)).toBe(true);
+  });
+
   it('goes stale when a temperature moves', () => {
     const before = overviewOf({ limit: 150, temperature: 96.8 });
     const snapshot = buildSnapshot(before, { now: '2026-02-01T00:00:00.000Z' });

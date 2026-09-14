@@ -44,6 +44,7 @@ export function buildSnapshot(
     solver_quality: overview.solver_quality,
     completeness: overview.completeness,
     action_summary: overview.action_summary,
+    action_summary_zh: overview.action_summary_zh,
     readiness: overview.readiness,
     report_readiness: overview.report_readiness,
 
