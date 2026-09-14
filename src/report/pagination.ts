@@ -16,8 +16,25 @@ import { sectionDefinition } from './sectionRegistry';
 
 export interface RowCounts {
   critical: number;
-  /** How many figures the Thermal Network Summary is drawing. */
+  /** Board chains in Thermal Network Summary. */
   network_figures?: number;
+  /** Part chains in Bottleneck Thermal Network. */
+  bottleneck_figures?: number;
+}
+
+/**
+ * How many items a section is drawing — table rows, figures — or null when it
+ * is not made of items and therefore cannot be split.
+ */
+function itemCount(section: ReportSectionConfig, rows: RowCounts): number | null {
+  const definition = sectionDefinition(section.id);
+  if (!definition.splittable || !definition.row_height) return null;
+  if (section.id === 'network') return rows.network_figures ?? 0;
+  if (section.id === 'bottleneck') return rows.bottleneck_figures ?? 0;
+  // 0 means "All" (11 §15).
+  return section.content.row_count === 0
+    ? rows.critical
+    : Math.min(section.content.row_count ?? 5, rows.critical);
 }
 
 /** How much of a page a section is expected to occupy, in page units. */
@@ -26,13 +43,7 @@ export function sectionHeight(section: ReportSectionConfig, rows: RowCounts): nu
   let height = definition.base_height;
 
   if (definition.row_height) {
-    const count =
-      section.id === 'network'
-        ? (rows.network_figures ?? 0)
-        : // 0 means "All" (11 §15).
-          section.content.row_count === 0
-          ? rows.critical
-          : Math.min(section.content.row_count ?? 5, rows.critical);
+    const count = itemCount(section, rows) ?? 0;
     height += definition.row_height * Math.max(count, 0);
   }
 
@@ -69,12 +80,13 @@ export function paginate(sections: ReportSectionConfig[], rows: RowCounts): Repo
 
   // Returns the opened page rather than assigning `current` itself: assigning a
   // narrowed local from inside a closure would defeat the null-narrowing below.
-  const open = (section: ReportSectionConfig): ReportPage => {
+  const open = (section: ReportSectionConfig, continued = false): ReportPage => {
     const definition = sectionDefinition(section.id);
+    const title = section.display.title_override || definition.title;
     const page: ReportPage = {
       page_number: pages.length + 1,
-      title: section.display.title_override || definition.title,
-      title_zh: definition.zh,
+      title: continued ? `${title} (cont.)` : title,
+      title_zh: continued ? `${definition.zh}（續）` : definition.zh,
       section_ids: [section.id],
     };
     pages.push(page);
@@ -99,40 +111,51 @@ export function paginate(sections: ReportSectionConfig[], rows: RowCounts): Repo
       current.section_ids.push(section.id);
     }
 
-    used += height;
-
-    if (!definition.splittable) {
-      // Clamped: whatever it is, it is one page's worth as far as the layout
-      // is concerned, and the next section starts on a fresh page.
+    const items = itemCount(section, rows);
+    if (items == null) {
+      used += height;
+      // Clamped: whatever it is, it is one page's worth as far as the layout is
+      // concerned, and the next section starts on a fresh page. A section that
+      // cannot say "rows 11 onward" is better drawn once and clipped once than
+      // drawn WHOLE on a continuation page the reader then sees twice.
       if (used > 1) used = 1;
       continue;
     }
 
-    // A splittable section too tall for one page continues onto further pages.
-    // Those pages carry the same title so the thumbnail reads sensibly, and a
-    // part index so the renderer can show what did not fit.
-    const continuations: ReportPage[] = [];
-    let remaining = used;
-    while (remaining > 1) {
-      remaining -= 1;
-      const page: ReportPage = {
-        page_number: pages.length + 1,
-        title: `${section.display.title_override || definition.title} (cont.)`,
-        title_zh: `${definition.zh}（續）`,
-        section_ids: [section.id],
-      };
-      pages.push(page);
-      continuations.push(page);
-      current = page;
-    }
-    used = remaining;
+    // --- an item-based section, filled page by page ------------------------
+    //
+    // Each page takes as many items as the room LEFT ON IT allows, so a section
+    // that starts two-thirds down a page puts a few rows there and the bulk on
+    // the next, rather than splitting evenly and leaving the first page's foot
+    // blank.
+    const overhead = definition.base_height;
+    const per = definition.row_height ?? 0.03;
+    const ranges: Array<{ page: ReportPage; from: number; to: number }> = [];
+    let from = 0;
 
-    if (continuations.length > 0) {
-      const parts = continuations.length + 1;
-      const first = pages.find((page) => page.section_ids.includes(section.id));
-      if (first) first.parts = { ...first.parts, [section.id]: { part: 0, parts } };
-      continuations.forEach((page, index) => {
-        page.parts = { ...page.parts, [section.id]: { part: index + 1, parts } };
+    do {
+      const free = 1 - used - overhead;
+      // At least one item per page, or a section whose heading alone fills the
+      // page would loop forever.
+      const capacity = Math.max(Math.floor(free / per), 1);
+      const to = Math.min(from + capacity, items);
+      ranges.push({ page: current, from, to });
+      used += overhead + (to - from) * per;
+      from = to;
+      if (from < items) current = open(section, true);
+    } while (from < items);
+
+    if (ranges.length > 0) {
+      ranges.forEach((range, index) => {
+        range.page.slices = {
+          ...range.page.slices,
+          [section.id]: {
+            from: range.from,
+            to: range.to,
+            part: index,
+            parts: ranges.length,
+          },
+        };
       });
     }
   }

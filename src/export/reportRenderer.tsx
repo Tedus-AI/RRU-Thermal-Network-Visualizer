@@ -94,6 +94,8 @@ export function renderReport(input: ReportRenderInput): RenderedReport {
     // figures then draw exactly as they do in the preview.
     network_context: input.network_context ?? null,
     network_figures: input.network_figures ?? [],
+    from: 0,
+    to: Number.POSITIVE_INFINITY,
     part: 0,
     parts: 1,
   });

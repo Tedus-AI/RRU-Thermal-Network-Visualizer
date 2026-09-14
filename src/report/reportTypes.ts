@@ -105,6 +105,7 @@ export const SECTION_IDS = [
   'overall',
   'critical',
   'network',
+  'bottleneck',
   'actions',
 ] as const;
 export type SectionId = (typeof SECTION_IDS)[number];
@@ -324,12 +325,16 @@ export interface ReportPage {
   /** Sections that begin or continue on this page, in order. */
   section_ids: SectionId[];
   /**
-   * For a section spread over several pages, which part this page carries —
-   * 0 for the first. A section renders `part` of `parts` so the continuation
-   * shows the ROWS that did not fit, rather than the whole section a second
-   * time.
+   * For a section spread over several pages, the half-open range of its items
+   * this page carries.
+   *
+   * A range rather than "part 2 of 3" because the parts are not equal: the page
+   * a section STARTS on may already be two-thirds full, and the page after it
+   * is empty. Splitting evenly left the first page's foot blank and crowded the
+   * rest. `from`/`to` index the section's own items — table rows, figures — so
+   * the renderer draws exactly what fits and the numbering carries across.
    */
-  parts?: Partial<Record<SectionId, { part: number; parts: number }>>;
+  slices?: Partial<Record<SectionId, { from: number; to: number; part: number; parts: number }>>;
 }
 
 export interface SnapshotSummary {

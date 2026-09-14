@@ -21,6 +21,23 @@ const network = (ids: string[]): ThermalNetwork =>
     edges: {},
   }) as unknown as ThermalNetwork;
 
+/** A ×N part: one node per instance, all under the same component. */
+const repeated = (componentId: string, instances: string[]): ThermalNetwork =>
+  ({
+    nodes: Object.fromEntries(
+      instances.map((instance) => [
+        `N_${componentId}_${instance}`,
+        {
+          id: `N_${componentId}_${instance}`,
+          name: `${componentId} ${instance}`,
+          component_ref: componentId,
+          metadata: { instance },
+        },
+      ]),
+    ),
+    edges: {},
+  }) as unknown as ThermalNetwork;
+
 const part = (nodeId: string, componentId: string, margin: number): MarginRank =>
   ({
     node_id: nodeId,
@@ -39,7 +56,7 @@ describe('networkFigures', () => {
     component('pm', 'Power'),
   ];
 
-  it('groups the boards, with Filter read as RF', () => {
+  it('gives each board its own figure, Filter included', () => {
     const figures = networkFigures({
       network: network(['pa', 'cavity', 'fpga', 'pm']),
       components,
@@ -47,12 +64,17 @@ describe('networkFigures', () => {
       leversByNode: new Map(),
     });
 
-    expect(figures.map((figure) => figure.key)).toEqual(['group-rf', 'group-digital', 'group-pw']);
+    expect(figures.map((figure) => figure.key)).toEqual([
+      'group-rf',
+      'group-digital',
+      'group-pw',
+      'group-filter',
+    ]);
 
-    // The RF figure keeps the PA and the cavity filter and hides the rest.
+    // The RF figure keeps the PA alone; the cavity filter has its own.
     const rf = figures[0];
     expect(rf.hidden_component_ids.has('pa')).toBe(false);
-    expect(rf.hidden_component_ids.has('cavity')).toBe(false);
+    expect(rf.hidden_component_ids.has('cavity')).toBe(true);
     expect(rf.hidden_component_ids.has('fpga')).toBe(true);
     expect(rf.hidden_component_ids.has('pm')).toBe(true);
   });
@@ -113,11 +135,64 @@ describe('networkFigures', () => {
     expect(figures.find((f) => f.key === 'part-N_fpga_j')?.status).toBe('warn');
   });
 
-  it('names the three groups the review asked for', () => {
-    expect(FIGURE_GROUPS.slice(0, 3).map((group) => group.title)).toEqual([
+  it('draws one chain per repeated part, and says how many it stands for', () => {
+    // A ×4 PA is four identical chains. Four of them side by side is what made
+    // the RF figure a grey mat.
+    const figures = networkFigures({
+      network: repeated('pa', ['1', '2', '3', '4']),
+      components: [component('pa', 'RF')],
+      ranked: [],
+      leversByNode: new Map(),
+    });
+
+    const rf = figures[0];
+    expect(rf.hidden_node_ids.size).toBe(3);
+    expect(rf.hidden_node_ids.has('N_pa_1')).toBe(false);
+    for (const instance of ['2', '3', '4']) {
+      expect(rf.hidden_node_ids.has(`N_pa_${instance}`)).toBe(true);
+    }
+    expect(rf.note_zh).toContain('各取一條');
+  });
+
+  it('hides nothing when a part has one instance', () => {
+    const figures = networkFigures({
+      network: network(['pa']),
+      components: [component('pa', 'RF')],
+      ranked: [],
+      leversByNode: new Map(),
+    });
+    expect(figures[0].hidden_node_ids.size).toBe(0);
+    expect(figures[0].note_zh).not.toContain('各取一條');
+  });
+
+  it('numbers a part figure\'s cut segments so the list can match them', () => {
+    const figures = networkFigures({
+      network: network(['pm']),
+      components: [component('pm', 'Power')],
+      ranked: [part('N_pm_body', 'pm', 1.4)],
+      leversByNode: new Map([
+        [
+          'N_pm_body',
+          [
+            { edge_id: 'E1', label: 'TIM', reduction_pct: 20, levers: [] },
+            { edge_id: 'E2', label: 'Fin Surface', reduction_pct: 18, levers: [] },
+          ] as never,
+        ],
+      ]),
+    });
+    const figure = figures.find((entry) => entry.key === 'part-N_pm_body')!;
+    expect([...(figure.tuned_edges ?? [])]).toEqual([
+      ['E1', { rank: 1, active: true }],
+      ['E2', { rank: 2, active: true }],
+    ]);
+  });
+
+  it('names the groups the review asked for', () => {
+    expect(FIGURE_GROUPS.slice(0, 4).map((group) => group.title)).toEqual([
       'RF',
       'Digital',
       'PW',
+      'Filter',
     ]);
   });
 });

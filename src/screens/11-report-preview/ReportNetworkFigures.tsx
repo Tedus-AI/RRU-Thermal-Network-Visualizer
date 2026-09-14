@@ -16,6 +16,7 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { buildElements, resultScales } from '@/screens/07-thermal-network/SolvedGraphCanvas';
+import { COMBINED_MODE } from '@/screens/07-thermal-network/resultViewModel';
 import { renderGraphImage } from '@/export/exportNetworkGraph';
 import type { NetworkFigure } from '@/report/networkFigures';
 import type { SegmentLevers } from '@/thermal/analysis/tunableParameters';
@@ -33,7 +34,16 @@ export interface NetworkFigureContext {
 
 /** Labels, power and limits on; the boundary drawn, as Screen 10's window has it. */
 const DISPLAY = { showLabels: true, showPower: true, showLimits: true, showBoundary: true };
-const NO_HIDDEN_NODES: ReadonlySet<string> = new Set<string>();
+
+/**
+ * Node temperature AND edge ΔT, which is Screen 08's own mode.
+ *
+ * The figures were drawn in plain Temperature, whose edge labels are watts. A
+ * reader looking at a heat path wants to know where the temperature is being
+ * spent, and the wattage is the same all the way down a series chain — it says
+ * nothing about which link is the expensive one.
+ */
+const FIGURE_MODE = COMBINED_MODE.id;
 
 export function ReportNetworkFigures({
   figures,
@@ -69,13 +79,17 @@ export function ReportNetworkFigures({
         const elements = buildElements(
           context.network,
           context.solution,
-          'temperature',
+          FIGURE_MODE,
           DISPLAY,
           context.scenarioId,
           'Auto',
           scales,
           figure.hidden_component_ids,
-          NO_HIDDEN_NODES,
+          figure.hidden_node_ids,
+          undefined,
+          // The segments a saved study cuts, numbered on the picture, so the
+          // list underneath can say WHICH link each row is about.
+          figure.tuned_edges,
         );
         if (elements.length === 0) continue;
         try {
@@ -180,11 +194,15 @@ function LeverTable({
         {reportLabel(mode, 'Planned Improvement · from Screen 08', '預計改善段 · 來自 08')}
       </p>
       <ul className="flex flex-col gap-1">
-        {levers.map((segment) => (
+        {levers.map((segment, index) => (
           <li key={segment.edge_id}>
-            <p className="text-[9.5px] font-semibold text-[#16202f]">
+            <p className="flex items-baseline gap-1.5 text-[9.5px] font-semibold text-[#16202f]">
+              {/* The same number the chain above carries on this segment. */}
+              <span className="flex size-3.5 shrink-0 items-center justify-center rounded-full bg-[#cb5410] text-[8px] font-bold text-white tabular">
+                {index + 1}
+              </span>
               {segment.label}
-              <span className="ml-1 font-normal text-[#68748a]">−{segment.reduction_pct}%</span>
+              <span className="font-normal text-[#68748a]">−{segment.reduction_pct}%</span>
             </p>
             {segment.levers.length === 0 ? (
               <p className="text-[8.5px] text-[#68748a]">

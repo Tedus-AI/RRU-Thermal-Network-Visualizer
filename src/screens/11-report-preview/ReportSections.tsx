@@ -49,25 +49,25 @@ export interface SectionRenderInput {
   network_context: NetworkFigureContext | null;
   network_figures: NetworkFigure[];
   /**
-   * Which slice of a section this page carries, for the two sections that can
-   * span pages. `part` 0 of `parts` 1 is the ordinary whole-section case.
+   * The half-open range of this section's items the page carries, and which
+   * part of how many it is. `from` 0 / `to` Infinity is the whole-section case.
    */
+  from: number;
+  to: number;
   part: number;
   parts: number;
 }
 
 /**
- * The slice of `items` that page `part` of `parts` carries.
+ * The slice of `items` this page carries, as the paginator worked it out.
  *
- * Even slices rather than a measured fit: the paginator's height is an estimate
- * and this renderer has no layout to measure against, so an even split is the
- * honest reading of "this section takes three pages". Every item appears
- * exactly once across the parts, which is the property that matters.
+ * The range comes from `paginate`, which knows how much of each page was
+ * already used — an even split left the first page's foot blank and crowded
+ * the rest. `from` is also what the table numbers its rows from, so a
+ * continuation carries on from 6 rather than restarting at 1.
  */
-export function sliceForPart<T>(items: readonly T[], part: number, parts: number): T[] {
-  if (parts <= 1) return [...items];
-  const perPage = Math.ceil(items.length / parts);
-  return items.slice(part * perPage, (part + 1) * perPage);
+export function sliceRange<T>(items: readonly T[], from: number, to: number): T[] {
+  return items.slice(from, Number.isFinite(to) ? to : undefined);
 }
 
 const CELL = 'border border-[#d7dde5] px-2 py-1 align-middle';
@@ -375,7 +375,7 @@ function CriticalSection({ input }: { input: SectionRenderInput }) {
   // The slice this page carries. A table that overflowed used to be drawn whole
   // on the continuation page too, so the same clipped rows appeared twice and
   // the ones in between appeared nowhere.
-  const shown = sliceForPart(wanted, input.part, input.parts);
+  const shown = sliceRange(wanted, input.from, input.to);
 
   if (shown.length === 0) {
     return <NotAvailable mode={mode} what="Critical Components" whatZh="關鍵元件" />;
@@ -404,7 +404,9 @@ function CriticalSection({ input }: { input: SectionRenderInput }) {
       <tbody>
         {shown.map((row, index) => (
           <tr key={row.node_id}>
-            <td className={`${CELL} tabular text-[#68748a]`}>{index + 1}</td>
+            {/* Numbered from the slice's own offset, so a continuation page
+                carries on from 6 rather than restarting at 1. */}
+            <td className={`${CELL} tabular text-[#68748a]`}>{input.from + index + 1}</td>
             <td className={`${CELL} font-semibold text-[#16202f]`}>{row.component_name}</td>
             <td className={`${CELL} text-[#425067]`}>{row.node_name}</td>
             <td className={`${CELL} text-right font-bold tabular`}>{num(row.temperature_C, 1)}</td>
@@ -466,9 +468,51 @@ function NetworkSection({ input }: { input: SectionRenderInput }) {
     return <NotAvailable mode={mode} what="Thermal Network" whatZh="熱網路" />;
   }
 
+  // The board chains only. The per-part figures moved to their own section —
+  // see `BottleneckSection`.
+  const groups = network_figures.filter((figure) => !figure.part);
   return (
     <ReportNetworkFigures
-      figures={sliceForPart(network_figures, input.part, input.parts)}
+      figures={sliceRange(groups, input.from, input.to)}
+      context={network_context}
+      mode={mode}
+    />
+  );
+}
+
+// --- 11 §17 — the parts that need attention, one chain each -----------------
+
+/**
+ * One chain per part at or inside its limit, with what Screen 08 would change.
+ *
+ * It was the tail of Thermal Network Summary, which made that section two
+ * different readings under one heading: what the machine looks like, and what
+ * is wrong with it. They are read by different people at different times.
+ */
+function BottleneckSection({ input }: { input: SectionRenderInput }) {
+  const { config, network_context, network_figures } = input;
+  const mode = config.language_mode;
+
+  if (!network_context) {
+    return <NotAvailable mode={mode} what="Bottleneck Thermal Network" whatZh="瓶頸元件熱網分析" />;
+  }
+
+  const parts = network_figures.filter((figure) => Boolean(figure.part));
+  if (parts.length === 0) {
+    return (
+      <p className="border border-[#d7dde5] bg-[#f7f9fc] px-3 py-2 text-[10px] text-[#425067]">
+        {reportLabel(
+          mode,
+          'Every part with a limit is passing it.',
+          '所有具限制值的元件皆通過。',
+        )}
+      </p>
+    );
+  }
+
+  return (
+    <ReportNetworkFigures
+      figures={sliceRange(parts, input.from, input.to)}
       context={network_context}
       mode={mode}
     />
@@ -537,6 +581,8 @@ export function ReportSectionBody({ input }: { input: SectionRenderInput }) {
       return <CriticalSection input={input} />;
     case 'network':
       return <NetworkSection input={input} />;
+    case 'bottleneck':
+      return <BottleneckSection input={input} />;
     case 'actions':
       return <ActionsSection input={input} />;
     default:

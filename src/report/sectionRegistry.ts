@@ -139,6 +139,22 @@ export const SECTION_DEFINITIONS: SectionDefinition[] = [
     row_height: 0.42,
   },
   {
+    id: 'bottleneck',
+    // Not Screen 08's old "Bottleneck Analysis Summary", which was removed with
+    // the analysis nothing ran. This is the per-part half of the network
+    // section: one chain per part at or inside its limit, with the segments a
+    // saved study would cut marked on it.
+    title: 'Bottleneck Thermal Network',
+    zh: '瓶頸元件熱網分析',
+    splittable: true,
+    recommended: true,
+    source_screen: '08',
+    source_zh: '08 瓶頸分析 / 07 熱網路求解',
+    defaultContent: {},
+    base_height: 0.06,
+    row_height: 0.34,
+  },
+  {
     id: 'actions',
     title: 'Engineering Actions / Conclusions',
     zh: '工程行動與結論',

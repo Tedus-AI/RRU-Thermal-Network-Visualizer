@@ -396,9 +396,10 @@ export function ReportPreviewView() {
   const rowCounts = useMemo(
     () => ({
       critical: snapshot?.critical_components.length ?? 0,
-      network_figures: figures.length,
+      network_figures: figures.filter((figure) => !figure.part).length,
+      bottleneck_figures: figures.filter((figure) => Boolean(figure.part)).length,
     }),
-    [snapshot, figures.length],
+    [snapshot, figures],
   );
 
   const pages = useMemo(() => paginate(sections, rowCounts), [sections, rowCounts]);
@@ -481,7 +482,17 @@ export function ReportPreviewView() {
   const page = pages.find((entry) => entry.page_number === currentPage) ?? pages[0] ?? null;
   const exportBlocked = blocksExport(evaluation.state) || validation.readiness === 'BLOCKED';
 
-  const update = (next: typeof config) => useReportStore.getState().setConfig(next);
+  /**
+   * Every other screen in this tool writes as you work — the header says "Saved
+   * to JSON" and means it. Screen 11 alone kept the layout in memory until
+   * someone found the Save Report Layout button, so a session's worth of
+   * section choices and page settings vanished on reload. It saves on change
+   * now; the button stays for an explicit save and to show the timestamp.
+   */
+  const update = (next: typeof config) => {
+    useReportStore.getState().setConfig(next);
+    if (projectId) useReportStore.getState().save(projectId);
+  };
 
   const renderInput = (section: (typeof sections)[number]): SectionRenderInput | null => {
     if (!snapshot) return null;
@@ -507,6 +518,8 @@ export function ReportPreviewView() {
       network_figures: figures,
       // Overridden per page by `ReportPageView`, which knows which slice of a
       // multi-page section the page it is drawing carries.
+      from: 0,
+      to: Number.POSITIVE_INFINITY,
       part: 0,
       parts: 1,
     };

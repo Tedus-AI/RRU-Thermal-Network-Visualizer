@@ -40,11 +40,11 @@ export interface ComponentGraphPage {
   hidden_node_ids: ReadonlySet<string>;
 }
 
-function componentOf(node: ThermalNode): string | null {
+export function componentOf(node: ThermalNode): string | null {
   return node.origin?.component_id ?? node.component_ref ?? null;
 }
 
-function instanceOf(node: ThermalNode): string | null {
+export function instanceOf(node: ThermalNode): string | null {
   const value = node.metadata?.instance;
   return typeof value === 'string' && value.length > 0 ? value : null;
 }

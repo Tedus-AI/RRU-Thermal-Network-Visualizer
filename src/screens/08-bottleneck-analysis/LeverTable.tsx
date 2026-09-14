@@ -58,9 +58,15 @@ export function LeverTable({
 
   return (
     <div className="grid gap-2.5">
-      {segments.map((segment) => (
+      {segments.map((segment, index) => (
         <section key={segment.edge_id} className="rounded-md border border-line bg-surface-muted">
           <header className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 border-b border-line px-2.5 py-1.5">
+            {/* The same number the graph puts on this segment's badge. Without
+                it a reader with four cut segments has to match them by name
+                against a picture that shows only digits. */}
+            <span className="flex size-4 shrink-0 translate-y-0.5 items-center justify-center rounded-full bg-orange-600 text-[10px] font-bold text-white tabular">
+              {index + 1}
+            </span>
             <span className="min-w-0 flex-1 truncate text-[11px] font-bold text-ink-900" title={segment.label}>
               {segment.label}
             </span>
