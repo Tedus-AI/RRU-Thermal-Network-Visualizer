@@ -56,6 +56,12 @@ export interface SectionRenderInput {
   to: number;
   part: number;
   parts: number;
+  /**
+   * This is the offscreen copy the paginator measures, so items tag themselves
+   * with their index and the measurer can read a height per row rather than
+   * guessing one from the registry.
+   */
+  measuring?: boolean;
 }
 
 /**
@@ -371,7 +377,8 @@ function CriticalSection({ input }: { input: SectionRenderInput }) {
   if (options.sort_mode === 'highest_temperature') {
     rows.sort((a, b) => b.temperature_C - a.temperature_C);
   }
-  const wanted = options.row_count === 0 ? rows : rows.slice(0, options.row_count ?? 5);
+  const limit = options.row_count ?? 0;
+  const wanted = limit === 0 ? rows : rows.slice(0, limit);
   // The slice this page carries. A table that overflowed used to be drawn whole
   // on the continuation page too, so the same clipped rows appeared twice and
   // the ones in between appeared nowhere.
@@ -381,71 +388,88 @@ function CriticalSection({ input }: { input: SectionRenderInput }) {
     return <NotAvailable mode={mode} what="Critical Components" whatZh="關鍵元件" />;
   }
 
+  // Only ever true when the reader chose Top 5 / Top 10 themselves. Saying so
+  // on the last page of the table is the difference between a report that
+  // shows a chosen extract and one that appears to have lost four parts.
+  const dropped = rows.length - wanted.length;
+  const lastPart = input.part >= input.parts - 1;
+
   return (
-    <table className="w-full border-collapse text-[10px]">
-      <thead>
-        <tr>
-          <th className={HEAD}>#</th>
-          <th className={HEAD}>{reportLabel(mode, 'Component', '元件')}</th>
-          <th className={HEAD}>{reportLabel(mode, 'Node', '節點')}</th>
-          <th className={`${HEAD} text-right`}>{reportLabel(mode, 'Temperature', '溫度')} (°C)</th>
-          {options.show_limit_type !== false && (
-            <th className={HEAD}>{reportLabel(mode, 'Limit Type', '限制類型')}</th>
-          )}
-          <th className={`${HEAD} text-right`}>{reportLabel(mode, 'Limit', '限制值')} (°C)</th>
-          {options.show_margin !== false && (
-            <th className={`${HEAD} text-right`}>{reportLabel(mode, 'Margin', '餘裕')} (°C)</th>
-          )}
-          {options.show_status !== false && (
-            <th className={HEAD}>{reportLabel(mode, 'Status', '狀態')}</th>
-          )}
-        </tr>
-      </thead>
-      <tbody>
-        {shown.map((row, index) => (
-          <tr key={row.node_id}>
-            {/* Numbered from the slice's own offset, so a continuation page
-                carries on from 6 rather than restarting at 1. */}
-            <td className={`${CELL} tabular text-[#68748a]`}>{input.from + index + 1}</td>
-            <td className={`${CELL} font-semibold text-[#16202f]`}>{row.component_name}</td>
-            <td className={`${CELL} text-[#425067]`}>{row.node_name}</td>
-            <td className={`${CELL} text-right font-bold tabular`}>{num(row.temperature_C, 1)}</td>
+    <>
+      <table className="w-full border-collapse text-[10px]">
+        <thead>
+          <tr>
+            <th className={HEAD}>#</th>
+            <th className={HEAD}>{reportLabel(mode, 'Component', '元件')}</th>
+            <th className={HEAD}>{reportLabel(mode, 'Node', '節點')}</th>
+            <th className={`${HEAD} text-right`}>{reportLabel(mode, 'Temperature', '溫度')} (°C)</th>
             {options.show_limit_type !== false && (
-              <td className={`${CELL} text-[#425067]`}>{row.limit_type ?? '—'}</td>
+              <th className={HEAD}>{reportLabel(mode, 'Limit Type', '限制類型')}</th>
             )}
-            <td className={`${CELL} text-right tabular text-[#425067]`}>
-              {row.limit_C == null ? '—' : row.limit_C.toFixed(0)}
-            </td>
+            <th className={`${HEAD} text-right`}>{reportLabel(mode, 'Limit', '限制值')} (°C)</th>
             {options.show_margin !== false && (
-              <td
-                className={`${CELL} text-right font-bold tabular ${
-                  row.status === 'FAIL'
-                    ? 'text-[#c53030]'
-                    : row.status === 'NEAR LIMIT'
-                      ? 'text-[#b7791f]'
-                      : 'text-[#2f855a]'
-                }`}
-              >
-                {signed(row.margin_C, 1)}
-              </td>
+              <th className={`${HEAD} text-right`}>{reportLabel(mode, 'Margin', '餘裕')} (°C)</th>
             )}
             {options.show_status !== false && (
-              <td
-                className={`${CELL} font-bold ${
-                  row.status === 'FAIL'
-                    ? 'text-[#c53030]'
-                    : row.status === 'NEAR LIMIT'
-                      ? 'text-[#b7791f]'
-                      : 'text-[#2f855a]'
-                }`}
-              >
-                {row.status}
-              </td>
+              <th className={HEAD}>{reportLabel(mode, 'Status', '狀態')}</th>
             )}
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {shown.map((row, index) => (
+            <tr key={row.node_id} data-measure-item={input.measuring ? index : undefined}>
+              {/* Numbered from the slice's own offset, so a continuation page
+                  carries on from 6 rather than restarting at 1. */}
+              <td className={`${CELL} tabular text-[#68748a]`}>{input.from + index + 1}</td>
+              <td className={`${CELL} font-semibold text-[#16202f]`}>{row.component_name}</td>
+              <td className={`${CELL} text-[#425067]`}>{row.node_name}</td>
+              <td className={`${CELL} text-right font-bold tabular`}>{num(row.temperature_C, 1)}</td>
+              {options.show_limit_type !== false && (
+                <td className={`${CELL} text-[#425067]`}>{row.limit_type ?? '—'}</td>
+              )}
+              <td className={`${CELL} text-right tabular text-[#425067]`}>
+                {row.limit_C == null ? '—' : row.limit_C.toFixed(0)}
+              </td>
+              {options.show_margin !== false && (
+                <td
+                  className={`${CELL} text-right font-bold tabular ${
+                    row.status === 'FAIL'
+                      ? 'text-[#c53030]'
+                      : row.status === 'NEAR LIMIT'
+                        ? 'text-[#b7791f]'
+                        : 'text-[#2f855a]'
+                  }`}
+                >
+                  {signed(row.margin_C, 1)}
+                </td>
+              )}
+              {options.show_status !== false && (
+                <td
+                  className={`${CELL} font-bold ${
+                    row.status === 'FAIL'
+                      ? 'text-[#c53030]'
+                      : row.status === 'NEAR LIMIT'
+                        ? 'text-[#b7791f]'
+                        : 'text-[#2f855a]'
+                  }`}
+                >
+                  {row.status}
+                </td>
+              )}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {dropped > 0 && lastPart && (
+        <p className="mt-1 text-[8.5px] text-[#68748a]">
+          {reportLabel(
+            mode,
+            `Showing ${wanted.length} of ${rows.length} components with a limit — Row Count is set to Top ${wanted.length}.`,
+            `顯示 ${rows.length} 個有限制值的元件中的 ${wanted.length} 個 — 列數設定為前 ${wanted.length} 名。`,
+          )}
+        </p>
+      )}
+    </>
   );
 }
 
@@ -476,6 +500,7 @@ function NetworkSection({ input }: { input: SectionRenderInput }) {
       figures={sliceRange(groups, input.from, input.to)}
       context={network_context}
       mode={mode}
+      measuring={input.measuring}
     />
   );
 }
@@ -515,6 +540,7 @@ function BottleneckSection({ input }: { input: SectionRenderInput }) {
       figures={sliceRange(parts, input.from, input.to)}
       context={network_context}
       mode={mode}
+      measuring={input.measuring}
     />
   );
 }

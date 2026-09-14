@@ -13,7 +13,7 @@
  * report is not making, and printing "9.099 mm" would read as a decision.
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { buildElements, resultScales } from '@/screens/07-thermal-network/SolvedGraphCanvas';
 import { COMBINED_MODE } from '@/screens/07-thermal-network/resultViewModel';
@@ -45,68 +45,137 @@ const DISPLAY = { showLabels: true, showPower: true, showLimits: true, showBound
  */
 const FIGURE_MODE = COMBINED_MODE.id;
 
+/**
+ * Every figure ever drawn, by solve and figure key.
+ *
+ * Module scope rather than component state because the figures are now drawn
+ * TWICE over: once in the page the reader is looking at, and once in the
+ * offscreen pass that measures how tall each section really is. A cache per
+ * component instance would have rendered every graph twice, and again on every
+ * page flip — a Cytoscape layout per figure is the most expensive thing this
+ * screen does. Keyed by the solve's own signature, so a re-solve draws afresh
+ * rather than showing the previous run's pictures.
+ */
+const IMAGE_CACHE = new Map<string, string>();
+/** Subscribers to wake when a figure finishes drawing. */
+const CACHE_WATCHERS = new Set<() => void>();
+/** Draws in flight, so two copies await one render rather than starting two. */
+const IN_FLIGHT = new Map<string, Promise<void>>();
+/** Tail of the draw queue; see `ensureFigure`. */
+let QUEUE: Promise<unknown> = Promise.resolve();
+
+/**
+ * What a figure's picture depends on, beyond the solve.
+ *
+ * The key was the solve signature and the figure's own id, which meant a
+ * figure drawn BEFORE a Screen 08 study was saved kept its cached picture
+ * afterwards: the marks changed, the key did not, and the chain showed no
+ * numbered segments until the next re-solve threw the cache away. The marks
+ * decide what is drawn, so they belong in the key that remembers it.
+ */
+function figureCacheKey(signature: string, figure: NetworkFigure): string {
+  const marks = [...(figure.tuned_edges ?? new Map())]
+    .map(([edgeId, mark]) => `${edgeId}@${mark.rank}${mark.active ? '!' : ''}`)
+    .sort()
+    .join(',');
+  return `${signature}:${figure.key}:${marks}`;
+}
+
+function publish(key: string, dataUrl: string): void {
+  IMAGE_CACHE.set(key, dataUrl);
+  for (const watcher of CACHE_WATCHERS) watcher();
+}
+
+/**
+ * Draw a figure once, however many copies ask for it.
+ *
+ * Deliberately NOT abandoned when the component that started it unmounts. A
+ * figure was previously claimed by whichever copy got there first and dropped
+ * if that copy's effect was torn down mid-queue — the key stayed claimed, so no
+ * one ever drew it and the figure sat on "Drawing…" for the life of the screen.
+ * The cache is module-wide and the work is useful to whoever is still mounted,
+ * so the render always runs to completion and only the re-render is conditional.
+ */
+function ensureFigure(key: string, draw: () => Promise<string>): Promise<void> {
+  const existing = IN_FLIGHT.get(key);
+  if (existing) return existing;
+
+  // One at a time. Each draw stands up its own Cytoscape instance on a
+  // 1600x1000 canvas and runs a dagre layout on it; half a dozen of those at
+  // once is a lot of memory for pictures that are wanted in order anyway.
+  const task = QUEUE.then(draw)
+    .then((dataUrl) => {
+      publish(key, dataUrl);
+    })
+    .catch(() => {
+      // A figure that cannot be drawn says so on the page rather than throwing
+      // the whole report away, and is allowed to be retried.
+      IN_FLIGHT.delete(key);
+    });
+
+  IN_FLIGHT.set(key, task);
+  QUEUE = task;
+  return task;
+}
+
 export function ReportNetworkFigures({
   figures,
   context,
   mode,
+  measuring = false,
 }: {
   figures: readonly NetworkFigure[];
   context: NetworkFigureContext;
   mode: LanguageMode;
+  /**
+   * This copy is the offscreen one the paginator measures. It tags each figure
+   * so the measurer can read a per-figure height, and it never claims a draw
+   * it would then have to wait for — it consumes what the visible copy caches.
+   */
+  measuring?: boolean;
 }) {
-  const [images, setImages] = useState<Record<string, string>>({});
-  // Rendering N graphs offscreen is not free, so a figure is drawn once per
-  // (figure, solve) and kept. The ref survives the state updates that arrive
-  // one figure at a time.
-  const done = useRef(new Set<string>());
+  const [, bump] = useState(0);
   const signature = context.solution?.metadata.input_signature ?? 'unsolved';
 
+  // Re-render this copy whenever any figure finishes drawing, wherever it was
+  // started from.
   useEffect(() => {
-    done.current = new Set();
-    setImages({});
-  }, [signature]);
+    const watcher = () => bump((n) => n + 1);
+    CACHE_WATCHERS.add(watcher);
+    return () => {
+      CACHE_WATCHERS.delete(watcher);
+    };
+  }, []);
 
   useEffect(() => {
-    let cancelled = false;
     const scales = resultScales(context.solution);
 
-    (async () => {
-      for (const figure of figures) {
-        const cacheKey = `${signature}:${figure.key}`;
-        if (done.current.has(cacheKey)) continue;
-        done.current.add(cacheKey);
+    for (const figure of figures) {
+      const cacheKey = figureCacheKey(signature, figure);
+      if (IMAGE_CACHE.has(cacheKey) || IN_FLIGHT.has(cacheKey)) continue;
 
-        const elements = buildElements(
-          context.network,
-          context.solution,
-          FIGURE_MODE,
-          DISPLAY,
-          context.scenarioId,
-          'Auto',
-          scales,
-          figure.hidden_component_ids,
-          figure.hidden_node_ids,
-          undefined,
-          // The segments a saved study cuts, numbered on the picture, so the
-          // list underneath can say WHICH link each row is about.
-          figure.tuned_edges,
-        );
-        if (elements.length === 0) continue;
-        try {
-          const image = await renderGraphImage(elements, 'Auto');
-          if (cancelled) return;
-          setImages((current) => ({ ...current, [figure.key]: image.dataUrl }));
-        } catch {
-          // A figure that cannot be drawn says so below rather than throwing
-          // the whole report away.
-          done.current.delete(cacheKey);
-        }
-      }
-    })();
+      const elements = buildElements(
+        context.network,
+        context.solution,
+        FIGURE_MODE,
+        DISPLAY,
+        context.scenarioId,
+        'Auto',
+        scales,
+        figure.hidden_component_ids,
+        figure.hidden_node_ids,
+        undefined,
+        // The segments a saved study cuts, numbered on the picture, so the
+        // list underneath can say WHICH link each row is about.
+        figure.tuned_edges,
+      );
+      if (elements.length === 0) continue;
 
-    return () => {
-      cancelled = true;
-    };
+      void ensureFigure(cacheKey, async () => {
+        const image = await renderGraphImage(elements, 'Auto');
+        return image.dataUrl;
+      });
+    }
   }, [figures, context.network, context.solution, context.scenarioId, signature]);
 
   if (figures.length === 0) {
@@ -119,8 +188,12 @@ export function ReportNetworkFigures({
 
   return (
     <div className="flex flex-col gap-3">
-      {figures.map((figure) => (
-        <figure key={figure.key} className="flex flex-col gap-1">
+      {figures.map((figure, index) => (
+        <figure
+          key={figure.key}
+          data-measure-item={measuring ? index : undefined}
+          className="flex flex-col gap-1"
+        >
           <figcaption className="flex items-baseline gap-2">
             <span className="text-[11px] font-bold text-[#16202f]">
               {reportLabel(mode, figure.title, figure.title_zh)}
@@ -140,9 +213,9 @@ export function ReportNetworkFigures({
           </figcaption>
 
           <div className="flex min-h-[4rem] items-center justify-center border border-[#d7dde5] bg-white p-1">
-            {images[figure.key] ? (
+            {IMAGE_CACHE.get(figureCacheKey(signature, figure)) ? (
               <img
-                src={images[figure.key]}
+                src={IMAGE_CACHE.get(figureCacheKey(signature, figure))}
                 alt={figure.title}
                 className="max-h-[52mm] w-auto max-w-full object-contain"
               />

@@ -25,6 +25,7 @@ import { layoutOptions } from '@/screens/05-thermal-path-builder/ThermalGraphCan
 import {
   edgeLabelsOf,
   layoutSubject,
+  positionTunedBadges,
   solvedStylesheet,
 } from '@/screens/07-thermal-network/SolvedGraphCanvas';
 
@@ -106,6 +107,13 @@ export async function renderGraphImage(
       });
       // The bus is drawn FROM the settled positions, so it is placed after.
       positionViewBuses(cy, true);
+      // So are the numbered segment badges. They are `view-only`, which keeps
+      // them out of the layout so they cannot push the chain around — and left
+      // them wherever Cytoscape first put them, which is the origin. The live
+      // canvas has always placed them here; the offscreen render did not, so a
+      // report figure drew its badges in a heap below the graph and `full:true`
+      // stretched the picture to enclose them.
+      positionTunedBadges(cy);
     }
 
     return await measureImage(

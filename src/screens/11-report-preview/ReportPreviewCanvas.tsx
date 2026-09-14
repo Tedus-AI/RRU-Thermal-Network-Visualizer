@@ -15,6 +15,7 @@ import {
   ZOOM_LABELS,
   ZOOM_MODES,
   pageBoxMm,
+  type LanguageMode,
   type ReportPage,
   type ReportSectionConfig,
   type SectionId,
@@ -259,7 +260,10 @@ export function ReportPageView({
           </div>
 
           {/* --- body ---------------------------------------------------- */}
-          <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden pt-3">
+          <div
+            data-report-body
+            className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden pt-3"
+          >
             {onPage.map((id) => {
               const section = sections.find((entry) => entry.id === id);
               if (!section) return null;
@@ -275,33 +279,17 @@ export function ReportPageView({
                 parts: slice?.parts ?? 1,
               };
               const index = sections.findIndex((entry) => entry.id === id) + 1;
-              const definition = sectionDefinition(id);
-              const title = section.display.title_override || definition.title;
 
               return (
-                <section
+                <ReportSection
                   key={id}
+                  section={section}
+                  input={input}
+                  index={index}
+                  mode={mode}
                   onClick={printMode ? undefined : () => onSelectSection(id)}
-                  className={`rounded-sm ${printMode ? '' : 'cursor-pointer transition-colors'} ${
-                    !printMode && selectedId === id
-                      ? 'outline outline-2 outline-offset-2 outline-accent-500/60'
-                      : ''
-                  } ${section.display.compact_spacing ? 'leading-tight' : ''}`}
-                >
-                  {id !== 'cover' && (
-                    <h2 className="mb-1.5 flex items-baseline gap-2 text-[13px] font-bold text-[#16202f]">
-                      <span className="text-[#1d4ed8] tabular">{index}</span>
-                      {reportLabel(mode, title, definition.zh)}
-                    </h2>
-                  )}
-                  <ReportSectionBody input={input} />
-                  {section.note?.trim() && (
-                    <p className="mt-1.5 border-l-2 border-[#b6c2d3] pl-2 text-[9px] text-[#68748a] italic">
-                      {section.note}
-                      <span className="ml-1 not-italic">· report-only text</span>
-                    </p>
-                  )}
-                </section>
+                  selected={!printMode && selectedId === id}
+                />
               );
             })}
           </div>
@@ -321,5 +309,67 @@ export function ReportPageView({
         </div>
       </div>
     </div>
+  );
+}
+
+
+/**
+ * One section as it appears on the page: its number, its heading, its body and
+ * its note.
+ *
+ * Shared with the offscreen pass that measures how tall each section is. The
+ * heading and the note used to be written inline in the page above, which meant
+ * a measurement taken from `ReportSectionBody` alone came back one heading
+ * short — and an UNDER-measurement is the dangerous direction, because the page
+ * box clips whatever does not fit.
+ */
+export function ReportSection({
+  section,
+  input,
+  index,
+  mode,
+  onClick,
+  selected,
+}: {
+  section: ReportSectionConfig;
+  input: SectionRenderInput;
+  /** The section's position in the report, which is what the outline shows. */
+  index: number;
+  mode: LanguageMode;
+  onClick?: () => void;
+  selected?: boolean;
+}) {
+  const definition = sectionDefinition(section.id);
+  const title = section.display.title_override || definition.title;
+
+  return (
+    <section
+      onClick={onClick}
+      className={`rounded-sm ${onClick ? 'cursor-pointer transition-colors' : ''} ${
+        selected ? 'outline outline-2 outline-offset-2 outline-accent-500/60' : ''
+      } ${section.display.compact_spacing ? 'leading-tight' : ''}`}
+    >
+      {section.id !== 'cover' && (
+        <h2 className="mb-1.5 flex items-baseline gap-2 text-[13px] font-bold text-[#16202f]">
+          <span className="text-[#1d4ed8] tabular">{index}</span>
+          {reportLabel(mode, title, definition.zh)}
+          {/* Without this a section carried over reads as a second section
+              with the same number: the reader sees "6 Bottleneck Thermal
+              Network" twice and no reason for it. */}
+          {input.part > 0 && (
+            <span className="text-[10px] font-semibold text-[#68748a]">
+              {reportLabel(mode, '(continued)', '（續）')}
+            </span>
+          )}
+        </h2>
+      )}
+      <ReportSectionBody input={input} />
+      {section.note?.trim() && (
+        <p className="mt-1.5 border-l-2 border-[#b6c2d3] pl-2 text-[9px] text-[#68748a] italic">
+          {section.note}
+          <span className="ml-1 not-italic">· report-only text</span>
+        </p>
+      )}
+    </section>
   );
 }

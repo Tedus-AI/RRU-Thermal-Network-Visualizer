@@ -15,9 +15,10 @@ import { flushSync } from 'react-dom';
 import { ReportPageView } from '@/screens/11-report-preview/ReportPreviewCanvas';
 import type { SectionRenderInput } from '@/screens/11-report-preview/ReportSections';
 import { includedSections, orderedSections } from '@/report/reportConfig';
-import { paginate } from '@/report/pagination';
+import { paginate, type RowCounts } from '@/report/pagination';
 import { pageBoxMm, type ReportPage, type ThermalReportConfig } from '@/report/reportTypes';
 import type { ResultsOverviewSnapshot } from '@/thermal/overview/overviewTypes';
+import type { NetworkFigure } from '@/report/networkFigures';
 
 export interface ReportRenderInput {
   config: ThermalReportConfig;
@@ -49,10 +50,21 @@ export interface RenderedReport {
   dispose: () => void;
 }
 
-/** Row counts drive the page estimate, exactly as Screen 11 computes them. */
-function rowCountsOf(snapshot: ResultsOverviewSnapshot) {
+/**
+ * Row counts drive the page estimate, exactly as Screen 11 computes them.
+ *
+ * The figure counts were missing, so the two splittable figure sections were
+ * paginated as though they held nothing and the export put every chain on one
+ * page for the page box to clip.
+ */
+function rowCountsOf(
+  snapshot: ResultsOverviewSnapshot,
+  figures: readonly NetworkFigure[],
+): RowCounts {
   return {
     critical: snapshot.critical_components.length,
+    network_figures: figures.filter((figure) => !figure.part).length,
+    bottleneck_figures: figures.filter((figure) => Boolean(figure.part)).length,
   };
 }
 
@@ -67,7 +79,12 @@ export function renderReport(input: ReportRenderInput): RenderedReport {
   const { config, snapshot } = input;
   const sections = orderedSections(config);
   const included = includedSections(config);
-  const pageModels = paginate(sections, rowCountsOf(snapshot));
+  const figures = input.network_figures ?? [];
+  // NOTE: no measured heights here, so this is still the registry's ESTIMATE
+  // and can differ from what Screen 11's preview showed. Screen 12 has not
+  // been reviewed yet; measuring needs the figures to have finished drawing,
+  // which this synchronous render cannot wait for.
+  const pageModels = paginate(sections, rowCountsOf(snapshot, figures));
   const box = pageBoxMm(config.page_size, config.orientation);
 
   const container = document.createElement('div');

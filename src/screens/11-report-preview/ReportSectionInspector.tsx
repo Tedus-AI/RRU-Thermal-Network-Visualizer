@@ -379,7 +379,7 @@ export function ReportSectionInspector({
                   <Select
                     className="h-7 !w-[7.5rem] !text-[11px]"
                     aria-label="Row count"
-                    value={String(content.row_count ?? 5)}
+                    value={String(content.row_count ?? 0)}
                     disabled={readOnly}
                     items={[
                       { value: '5', label: 'Top 5' },
@@ -488,14 +488,19 @@ export function ReportSectionInspector({
                 onChange={(value) => onDisplay(section.id, { page_break_before: value })}
               />
             </Row>
-            <Row label="Keep Table Together" zh="表格不分頁" explanation={T11.keepTableTogether}>
-              <Toggle
-                label="Keep Table Together"
-                checked={section.display.keep_table_together}
-                disabled={readOnly}
-                onChange={(value) => onDisplay(section.id, { keep_table_together: value })}
-              />
-            </Row>
+            {/* A splittable section carries on overleaf by design, so there is
+                nothing here to keep together — the control would only be a
+                switch that does nothing. */}
+            {!sectionDefinition(section.id).splittable && (
+              <Row label="Keep Table Together" zh="表格不分頁" explanation={T11.keepTableTogether}>
+                <Toggle
+                  label="Keep Table Together"
+                  checked={section.display.keep_table_together}
+                  disabled={readOnly}
+                  onChange={(value) => onDisplay(section.id, { keep_table_together: value })}
+                />
+              </Row>
+            )}
             <Row label="Compact Spacing" zh="緊湊行距" explanation={T11.compactSpacing}>
               <Toggle
                 label="Compact Spacing"
