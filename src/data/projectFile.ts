@@ -24,7 +24,11 @@ import type { ThermalSolution } from '@/thermal/solver/solverTypes';
 import type { BottleneckAnalysis, ImprovementStudy } from '@/thermal/analysis/analysisTypes';
 import type { ResultsOverviewSnapshot } from '@/thermal/overview/overviewTypes';
 import type { TemperatureDistributionResult } from '@/thermal/analysis/distributionResult';
-import type { ReportExportPayload, ThermalReportConfig } from '@/report/reportTypes';
+import type {
+  ReportExportPayload,
+  ReportTemplate,
+  ThermalReportConfig,
+} from '@/report/reportTypes';
 
 import {
   loadAnalyses,
@@ -38,6 +42,8 @@ import {
   loadProject,
   loadProposals,
   loadReportConfigs,
+  loadReportTemplates,
+  saveReportTemplate,
   loadScenarios,
   loadSnapshots,
   loadSolutions,
@@ -79,6 +85,15 @@ export interface ProjectBundle {
   proposals: ImprovementStudy[];
   snapshots: ResultsOverviewSnapshot[];
   report_configs: ThermalReportConfig[];
+  /**
+   * Saved report templates.
+   *
+   * They live in a browser-global list, which is what a template library is —
+   * but that made them the one thing on Screen 11 the .tnv.json did not carry,
+   * so a template survived a reload and not a machine. They travel with the
+   * file now and merge back into the library on import.
+   */
+  report_templates: ReportTemplate[];
   export_payloads: ReportExportPayload[];
   export_stamp: ExportStamp | null;
 }
@@ -144,6 +159,7 @@ export function collectProject(projectId: string, appBuild: string): ProjectFile
       proposals: loadProposals(projectId),
       snapshots: loadSnapshots(projectId),
       report_configs: loadReportConfigs(projectId),
+      report_templates: loadReportTemplates(),
       export_payloads: loadExportPayloads(projectId),
       export_stamp: loadExportStamp(projectId),
     },
@@ -342,6 +358,13 @@ export function applyProjectFile(file: ProjectFile, mode: ImportMode): ImportOut
 
   for (const config of data.report_configs ?? []) saveReportConfig(targetId, config);
   note('report configs', (data.report_configs ?? []).length);
+  // Merged, not replaced: the library belongs to the browser and may already
+  // hold templates this file has never heard of.
+  const existingTemplates = new Set(loadReportTemplates().map((entry) => entry.name));
+  for (const template of data.report_templates ?? []) {
+    if (!existingTemplates.has(template.name)) saveReportTemplate(template);
+  }
+  note('report templates', (data.report_templates ?? []).length);
 
   for (const payload of data.export_payloads ?? []) saveExportPayload(targetId, payload);
   note('report payloads', (data.export_payloads ?? []).length);

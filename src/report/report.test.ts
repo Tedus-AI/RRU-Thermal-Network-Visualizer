@@ -32,7 +32,7 @@ import { buildExportPayload } from './exportPayloadBuilder';
 import { RECOMMENDED_SECTION_IDS, SECTION_DEFINITIONS } from './sectionRegistry';
 import { LANGUAGE_MODES } from './reportTypes';
 import { reportLabel } from '@/screens/11-report-preview/reportViewModel';
-import { sliceForPart } from '@/screens/11-report-preview/ReportSections';
+import { sliceRange } from '@/screens/11-report-preview/ReportSections';
 
 // --- builders --------------------------------------------------------------
 
@@ -312,6 +312,7 @@ describe('Section selection and order (11 §5, §6)', () => {
       'overall',
       'critical',
       'network',
+      'bottleneck',
       'actions',
     ]);
   });
@@ -340,7 +341,7 @@ describe('Section selection and order (11 §5, §6)', () => {
       'overall',
       'network',
     ]);
-    expect(orderedSections(moved).map((entry) => entry.order)).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(orderedSections(moved).map((entry) => entry.order)).toEqual([1, 2, 3, 4, 5, 6, 7]);
   });
 
   it('does not move past either end', () => {
@@ -561,8 +562,8 @@ describe('Export payload (11 §32, §38)', () => {
     });
 
     expect(payload.contains_file_bytes).toBe(false);
-    expect(payload.section_order).toHaveLength(6);
-    expect(payload.included_sections).toHaveLength(6);
+    expect(payload.section_order).toHaveLength(7);
+    expect(payload.included_sections).toHaveLength(7);
     expect(payload.estimated_page_count).toBe(8);
     expect(payload.readiness).toBe('EXPORT_READY');
 
@@ -613,10 +614,19 @@ describe('includedSections', () => {
 // one rule that changed.
 
 describe('Report sections match what the tool produces', () => {
-  it('has no Bottleneck Analysis section', () => {
-    // Nothing in the tool calls `analysisStore.run`, so `snapshot.bottlenecks`
-    // was always empty and the section was permanently Not Available.
-    expect(SECTION_DEFINITIONS.map((entry) => entry.id)).not.toContain('bottleneck');
+  it('has no Bottleneck ANALYSIS section, only the network one', () => {
+    // Screen 08's old summary went with the analysis nothing ran. The
+    // `bottleneck` id now belongs to the per-part network figures, which draw
+    // from the live model and the saved studies.
+    const bottleneck = SECTION_DEFINITIONS.find((entry) => entry.id === 'bottleneck')!;
+    expect(bottleneck.title).toBe('Bottleneck Thermal Network');
+    expect(bottleneck.zh).toBe('瓶頸元件熱網分析');
+    expect(bottleneck.splittable).toBe(true);
+  });
+
+  it('puts the bottleneck section before Engineering Actions', () => {
+    const ids = SECTION_DEFINITIONS.map((entry) => entry.id);
+    expect(ids.indexOf('bottleneck')).toBeLessThan(ids.indexOf('actions'));
   });
 
   it('has no Temperature Distribution section', () => {
@@ -732,16 +742,16 @@ describe('Display options move sections between pages', () => {
   });
 
   it('numbers the parts of a section that spans pages', () => {
-    // row_count 0 means "All" (11 §15), which on 60 rows is three pages' worth.
+    // row_count 0 means "All" (11 §15), which on 60 rows is several pages.
     const all = patchContent(config(), 'critical', { row_count: 0 });
     const pages = paginate(orderedSections(all), { critical: 60 });
     const criticalPages = pages.filter((page) => page.section_ids.includes('critical'));
     expect(criticalPages.length).toBeGreaterThan(1);
-    expect(criticalPages.map((page) => page.parts?.critical?.part)).toEqual(
+    expect(criticalPages.map((page) => page.slices?.critical?.part)).toEqual(
       criticalPages.map((_, index) => index),
     );
     for (const page of criticalPages) {
-      expect(page.parts?.critical?.parts).toBe(criticalPages.length);
+      expect(page.slices?.critical?.parts).toBe(criticalPages.length);
     }
   });
 });
@@ -774,24 +784,42 @@ describe('Overall Thermal Status lists the parts, not one number', () => {
 
 // --- the slice a continuation page carries -----------------------------------
 
-describe('sliceForPart', () => {
-  it('gives the whole list when there is one part', () => {
-    expect(sliceForPart([1, 2, 3], 0, 1)).toEqual([1, 2, 3]);
+describe('sliceRange', () => {
+  it('gives the whole list for the default range', () => {
+    expect(sliceRange([1, 2, 3], 0, Number.POSITIVE_INFINITY)).toEqual([1, 2, 3]);
   });
 
-  it('covers every item exactly once across the parts', () => {
-    const items = Array.from({ length: 17 }, (_, index) => index);
-    for (const parts of [2, 3, 4, 5]) {
-      const seen = Array.from({ length: parts }, (_, part) => sliceForPart(items, part, parts));
-      expect(seen.flat()).toEqual(items);
-    }
-  });
-
-  it('never repeats the section on its continuation page', () => {
-    // This is the bug it exists to prevent: the same rows drawn twice, and the
-    // ones in between drawn nowhere.
+  it('takes exactly the half-open range the paginator worked out', () => {
     const items = ['a', 'b', 'c', 'd'];
-    expect(sliceForPart(items, 0, 2)).toEqual(['a', 'b']);
-    expect(sliceForPart(items, 1, 2)).toEqual(['c', 'd']);
+    expect(sliceRange(items, 0, 2)).toEqual(['a', 'b']);
+    expect(sliceRange(items, 2, 4)).toEqual(['c', 'd']);
+  });
+});
+
+describe('a section spread over pages fills each one', () => {
+  const ROWS_MANY = { critical: 40 };
+
+  it('gives the page a section STARTS on fewer rows than the empty page after it', () => {
+    // The bug: an even split left the first page's foot blank and crowded the
+    // rest, because the page a section starts on is already part full.
+    const all = patchContent(config(), 'critical', { row_count: 0 });
+    const loose = orderedSections(all).reduce(
+      (current, section) => patchDisplay(current, section.id, { keep_table_together: false }),
+      all,
+    );
+    const pages = paginate(orderedSections(loose), ROWS_MANY);
+    const slices = pages
+      .map((page) => page.slices?.critical)
+      .filter((slice): slice is NonNullable<typeof slice> => Boolean(slice));
+
+    expect(slices.length).toBeGreaterThan(1);
+    // Contiguous, covering every row exactly once, starting at 0.
+    expect(slices[0].from).toBe(0);
+    expect(slices.at(-1)!.to).toBe(40);
+    for (let i = 1; i < slices.length; i++) {
+      expect(slices[i].from).toBe(slices[i - 1].to);
+    }
+    // The shared first page takes fewer rows than a page of its own.
+    expect(slices[0].to - slices[0].from).toBeLessThan(slices[1].to - slices[1].from);
   });
 });
