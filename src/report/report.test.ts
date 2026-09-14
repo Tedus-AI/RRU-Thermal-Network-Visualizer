@@ -26,7 +26,12 @@ import {
   toggleSection,
 } from './reportConfig';
 import { createReportConfig } from './defaultTemplate';
-import { evaluateSnapshot, blocksExport, blocksPreview } from './snapshotAdapter';
+import {
+  evaluateSnapshot,
+  blocksExport,
+  blocksPreview,
+  withTranslatedActions,
+} from './snapshotAdapter';
 import { paginate, pageOfSection, sectionHeight } from './pagination';
 import { previewReadiness, validateReport } from './reportValidator';
 import { buildExportPayload } from './exportPayloadBuilder';
@@ -381,6 +386,48 @@ describe('Section selection and order (11 §5, §6)', () => {
 function drop(config: ThermalReportConfig, id: SectionId): ThermalReportConfig {
   return toggleSection(config, id).config;
 }
+
+describe('An action summary frozen before it carried Chinese', () => {
+  const frozen = (lines: string[]): ResultsOverviewSnapshot =>
+    ({ ...snapshot(), action_summary: lines, action_summary_zh: undefined }) as ResultsOverviewSnapshot;
+
+  const overview = (lines: string[], zh: string[]) =>
+    ({ action_summary: lines, action_summary_zh: zh }) as ResultsOverview;
+
+  it('recovers the Chinese when the English is character-for-character the same', () => {
+    const result = withTranslatedActions(
+      frozen(['A.', 'B.']),
+      overview(['A.', 'B.'], ['甲。', '乙。']),
+    );
+    expect(result.action_summary_zh).toEqual(['甲。', '乙。']);
+    // The sentences themselves still come from the snapshot.
+    expect(result.action_summary).toEqual(['A.', 'B.']);
+  });
+
+  it('refuses when the live summary says something different', () => {
+    const result = withTranslatedActions(
+      frozen(['A.', 'B.']),
+      overview(['A.', 'B CHANGED.'], ['甲。', '乙改。']),
+    );
+    expect(result.action_summary_zh).toBeUndefined();
+  });
+
+  it('refuses when the live summary is a different length', () => {
+    const result = withTranslatedActions(frozen(['A.']), overview(['A.', 'B.'], ['甲。', '乙。']));
+    expect(result.action_summary_zh).toBeUndefined();
+  });
+
+  it('leaves a snapshot that already carries its own Chinese alone', () => {
+    const carried = { ...frozen(['A.']), action_summary_zh: ['原本的。'] };
+    const result = withTranslatedActions(carried, overview(['A.'], ['別的。']));
+    expect(result.action_summary_zh).toEqual(['原本的。']);
+  });
+
+  it('leaves the snapshot alone when there is no live overview', () => {
+    const result = withTranslatedActions(frozen(['A.']), null);
+    expect(result.action_summary_zh).toBeUndefined();
+  });
+});
 
 describe('Pagination (11 §10, §40)', () => {
   it('gives the cover its own page and never shares it', () => {

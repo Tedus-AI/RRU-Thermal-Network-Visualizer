@@ -79,7 +79,12 @@ import {
   setSectionNote,
   toggleSection,
 } from '@/report/reportConfig';
-import { blocksExport, blocksPreview, evaluateSnapshot } from '@/report/snapshotAdapter';
+import {
+  blocksExport,
+  blocksPreview,
+  evaluateSnapshot,
+  withTranslatedActions,
+} from '@/report/snapshotAdapter';
 import { paginate, pageOfSection } from '@/report/pagination';
 import { readMeasuredHeights, type MeasuredHeights } from '@/report/measuredHeights';
 import { sectionDefinition } from '@/report/sectionRegistry';
@@ -309,6 +314,17 @@ export function ReportPreviewView() {
   const evaluation = useMemo(
     () => evaluateSnapshot(snapshot, liveOverview, scenario?.name ?? ''),
     [snapshot, liveOverview, scenario],
+  );
+
+  /**
+   * The snapshot the report draws from, with the Chinese action lines restored
+   * if it was frozen before it carried any. See `withTranslatedActions` — the
+   * sentences are still the frozen ones; only their translation is recovered,
+   * and only when the English text is identical.
+   */
+  const reportSnapshot = useMemo(
+    () => (snapshot ? withTranslatedActions(snapshot, liveOverview) : null),
+    [snapshot, liveOverview],
   );
 
   // --- the config -----------------------------------------------------------
@@ -548,11 +564,11 @@ export function ReportPreviewView() {
   };
 
   const renderInput = (section: (typeof sections)[number]): SectionRenderInput | null => {
-    if (!snapshot) return null;
+    if (!reportSnapshot) return null;
     return {
       config,
       section,
-      snapshot,
+      snapshot: reportSnapshot,
       project: {
         name: draft?.project_name ?? projectId ?? '',
         id: projectId ?? '',

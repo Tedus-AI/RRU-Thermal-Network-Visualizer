@@ -85,6 +85,35 @@ export function evaluateSnapshot(
   };
 }
 
+/**
+ * Put the Chinese action lines back on a snapshot frozen before it carried any.
+ *
+ * The report reads the frozen snapshot and nothing else (§12, §37), and that
+ * rule is kept here: the SENTENCES still come from the snapshot. Only their
+ * translation is taken from the live overview, and only when the two English
+ * arrays are character-for-character identical — which is proof that the live
+ * Chinese lines are the translations of exactly these sentences and not of some
+ * later result. Anything else is left alone and the report prints English.
+ *
+ * Without this, a snapshot frozen before the field existed shows an English-only
+ * Engineering Actions for ever, and the only way to get the Chinese is to know
+ * that Prepare Report Snapshot has to be pressed again — which nothing says.
+ */
+export function withTranslatedActions(
+  snapshot: ResultsOverviewSnapshot,
+  live: ResultsOverview | null,
+): ResultsOverviewSnapshot {
+  if (snapshot.action_summary_zh && snapshot.action_summary_zh.length > 0) return snapshot;
+  if (!live) return snapshot;
+
+  const frozen = snapshot.action_summary;
+  const current = live.action_summary;
+  if (current.length !== frozen.length) return snapshot;
+  if (!frozen.every((line, index) => line === current[index])) return snapshot;
+
+  return { ...snapshot, action_summary_zh: live.action_summary_zh };
+}
+
 /** 11 §3 — a stale or missing snapshot may still preview, but never export. */
 export function blocksExport(state: SnapshotState): boolean {
   return state === 'STALE' || state === 'MISSING';
