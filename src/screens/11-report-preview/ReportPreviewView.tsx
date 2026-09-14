@@ -81,6 +81,7 @@ import {
 } from '@/report/reportConfig';
 import { blocksExport, blocksPreview, evaluateSnapshot } from '@/report/snapshotAdapter';
 import { paginate, pageOfSection } from '@/report/pagination';
+import { readMeasuredHeights, type MeasuredHeights } from '@/report/measuredHeights';
 import { sectionDefinition } from '@/report/sectionRegistry';
 import { previewReadiness, validateReport } from '@/report/reportValidator';
 import { buildExportPayload } from '@/report/exportPayloadBuilder';
@@ -88,7 +89,7 @@ import { buildExportPayload } from '@/report/exportPayloadBuilder';
 import { ReportHeaderSummary } from './ReportHeaderSummary';
 import { ReportOutlinePanel } from './ReportOutlinePanel';
 import { PageSetupWindow } from './PageSetupWindow';
-import { PageToolbar, ReportPageView } from './ReportPreviewCanvas';
+import { PageToolbar, ReportPageView, ReportSection } from './ReportPreviewCanvas';
 import { SectionInspectorWindow } from './SectionInspectorWindow';
 import { ReportReadinessPanel } from './ReportReadinessPanel';
 import type { SectionRenderInput } from './ReportSections';
@@ -402,7 +403,59 @@ export function ReportPreviewView() {
     [snapshot, figures],
   );
 
-  const pages = useMemo(() => paginate(sections, rowCounts), [sections, rowCounts]);
+  /**
+   * What each section really occupies, read back off an offscreen copy.
+   *
+   * The registry's constants are guesses that have to be generous — the page
+   * box clips, so an underestimate loses content — and a generous guess breaks
+   * the page early and leaves its foot blank, which is exactly what the report
+   * was doing on every page. See `measuredHeights`.
+   */
+  const [measured, setMeasured] = useState<MeasuredHeights>({});
+  const measureRef = useRef<HTMLDivElement>(null);
+
+  const pages = useMemo(
+    () => paginate(sections, rowCounts, measured),
+    [sections, rowCounts, measured],
+  );
+
+  /**
+   * Re-measure whenever the offscreen copy changes shape.
+   *
+   * A figure arrives asynchronously — the graph is laid out and rasterized
+   * before it has a height — so a one-shot measurement after the first paint
+   * would record every figure as its placeholder. The observer catches each one
+   * as it lands, and the equality check below stops the state update that
+   * follows from measuring the same thing again.
+   */
+  useEffect(() => {
+    const host = measureRef.current;
+    if (!host) return;
+
+    const measure = () => {
+      // The live page's own body box, unscaled: `offsetHeight` ignores the
+      // preview's zoom transform, which `getBoundingClientRect` would fold in
+      // and make every measurement a function of the zoom level.
+      const body = document.querySelector<HTMLElement>('[data-report-page] [data-report-body]');
+      if (!body || body.offsetHeight <= 0) return;
+      host.style.width = `${body.offsetWidth}px`;
+
+      const gap = Number.parseFloat(getComputedStyle(body).rowGap) || 0;
+      const next = readMeasuredHeights(host, body.offsetHeight, gap);
+      setMeasured((current) => (sameHeights(current, next) ? current : next));
+    };
+
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(host);
+    for (const child of host.querySelectorAll('[data-measure-section]')) observer.observe(child);
+    return () => observer.disconnect();
+    // Deliberately no dependency array: the offscreen copy changes shape for
+    // more reasons than this component can list — a section ticked, a row
+    // limit, a language, a figure finishing — and re-measuring is cheap next
+    // to getting the page count wrong. `sameHeights` above is what stops it
+    // looping: an unchanged measurement sets no state, so the render settles.
+  });
 
   const validation = useMemo(() => {
     if (!config) return null;
@@ -842,7 +895,59 @@ export function ReportPreviewView() {
             onClose={() => setPageSetupOpen(false)}
           />
         )}
+
+        {/* --- the offscreen copy the paginator measures ------------------ *
+         * Every included section, rendered whole at the page's own content
+         * width, out of the flow and out of the accessibility tree. Its width
+         * is set from the live page in the effect above, so a line wraps here
+         * exactly where it wraps there. `visibility: hidden` rather than
+         * `display: none`, which would give every element a height of zero. */}
+        <div
+          ref={measureRef}
+          aria-hidden
+          data-report-measure
+          className="pointer-events-none invisible absolute top-0 left-[-200vw] flex flex-col gap-3"
+        >
+          {included.map((section, index) => {
+            const base = renderInput(section);
+            if (!base) return null;
+            return (
+              <div key={section.id} data-measure-section={section.id}>
+                <ReportSection
+                  section={section}
+                  input={{ ...base, measuring: true }}
+                  index={index + 1}
+                  mode={config.language_mode}
+                />
+              </div>
+            );
+          })}
+        </div>
       </div>
     </ScreenWorkspace>
   );
+}
+
+/**
+ * Whether two measurements are the same to within a pixel or so of a page.
+ *
+ * Without a tolerance the ResizeObserver's own sub-pixel jitter would keep
+ * producing a "new" measurement, which would re-paginate, which would re-render
+ * the offscreen copy, which would measure again.
+ */
+const HEIGHT_EPSILON = 0.001;
+
+function sameHeights(a: MeasuredHeights, b: MeasuredHeights): boolean {
+  const ids = new Set([...Object.keys(a), ...Object.keys(b)]);
+  for (const id of ids) {
+    const left = a[id as SectionId];
+    const right = b[id as SectionId];
+    if (!left || !right) return false;
+    if (Math.abs(left.base - right.base) > HEIGHT_EPSILON) return false;
+    if (left.items.length !== right.items.length) return false;
+    for (let index = 0; index < left.items.length; index += 1) {
+      if (Math.abs(left.items[index] - right.items[index]) > HEIGHT_EPSILON) return false;
+    }
+  }
+  return true;
 }

@@ -114,7 +114,12 @@ export const SECTION_DEFINITIONS: SectionDefinition[] = [
     source_screen: '10',
     source_zh: '10 結果總覽（來源 07 / 09）',
     defaultContent: {
-      row_count: 5,
+      // 0 is "All". It used to be 5, which meant a report of a nine-part
+      // machine dropped four of them with nothing on the page to say so —
+      // the reader saw five rows and a section that simply ended. The
+      // paginator splits a long table across pages properly now, so length
+      // is no longer a reason to truncate by default.
+      row_count: 0,
       sort_mode: 'lowest_margin',
       show_limit_type: true,
       show_margin: true,

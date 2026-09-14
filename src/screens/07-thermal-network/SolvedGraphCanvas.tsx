@@ -332,7 +332,7 @@ export function solvedStylesheet(): StylesheetCSS[] {
  * fighting for the same 20 px is how a marker becomes noise. Called from the
  * same snapshot the buses are placed in, which is after the layout has settled.
  */
-function positionTunedBadges(cy: Core): void {
+export function positionTunedBadges(cy: Core): void {
   cy.nodes('.tuned-badge, .alert-badge').forEach((badge) => {
     const anchorId = badge.data('anchorNodeId') as string | undefined;
     if (anchorId) {

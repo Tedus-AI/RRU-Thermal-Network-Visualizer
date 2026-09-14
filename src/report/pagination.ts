@@ -11,6 +11,8 @@
  * per-row height in the registry; nothing here reads a thermal value.
  */
 
+import type { MeasuredHeights } from './measuredHeights';
+import { measuredTotal } from './measuredHeights';
 import type { ReportPage, ReportSectionConfig, SectionId } from './reportTypes';
 import { sectionDefinition } from './sectionRegistry';
 
@@ -31,15 +33,26 @@ function itemCount(section: ReportSectionConfig, rows: RowCounts): number | null
   if (!definition.splittable || !definition.row_height) return null;
   if (section.id === 'network') return rows.network_figures ?? 0;
   if (section.id === 'bottleneck') return rows.bottleneck_figures ?? 0;
-  // 0 means "All" (11 §15).
-  return section.content.row_count === 0
-    ? rows.critical
-    : Math.min(section.content.row_count ?? 5, rows.critical);
+  // 0 means "All" (11 §15), and is the default.
+  const limit = section.content.row_count ?? 0;
+  return limit === 0 ? rows.critical : Math.min(limit, rows.critical);
 }
 
 /** How much of a page a section is expected to occupy, in page units. */
-export function sectionHeight(section: ReportSectionConfig, rows: RowCounts): number {
+export function sectionHeight(
+  section: ReportSectionConfig,
+  rows: RowCounts,
+  measured?: MeasuredHeights,
+): number {
   const definition = sectionDefinition(section.id);
+  const entry = measured?.[section.id];
+
+  // A measured section is not an estimate at all, and the compact-spacing
+  // factor below would be double-counting: the offscreen copy is rendered with
+  // the same display options, so whatever compact spacing does is already in
+  // the number.
+  if (entry) return measuredTotal(entry);
+
   let height = definition.base_height;
 
   if (definition.row_height) {
@@ -59,8 +72,10 @@ export function sectionHeight(section: ReportSectionConfig, rows: RowCounts): nu
  * Rules, in the order they apply:
  *   - the cover always owns page 1 (11 §7);
  *   - `page_break_before` starts a new page (11 §25);
- *   - a section that does not fit in what is left of the page moves to the next
- *     one when `keep_table_together` is set, and otherwise flows across;
+ *   - a NON-splittable section that does not fit in what is left of the page
+ *     moves whole to the next one, because it would otherwise be clipped;
+ *   - a splittable section starts wherever there is room and carries on
+ *     overleaf, which is what makes a page fill to its foot;
  *   - a SPLITTABLE section taller than a whole page spans several pages, and
  *     each page records which part it carries.
  *
@@ -70,7 +85,12 @@ export function sectionHeight(section: ReportSectionConfig, rows: RowCounts): nu
  * clipped content twice and what fell off the first page nowhere. A section
  * that cannot say "rows 11 onward" is better drawn once and clipped once.
  */
-export function paginate(sections: ReportSectionConfig[], rows: RowCounts): ReportPage[] {
+export function paginate(
+  sections: ReportSectionConfig[],
+  rows: RowCounts,
+  /** Real heights read off the rendered page; the registry is the fallback. */
+  measured?: MeasuredHeights,
+): ReportPage[] {
   const included = sections.filter((section) => section.included);
   if (included.length === 0) return [];
 
@@ -96,14 +116,23 @@ export function paginate(sections: ReportSectionConfig[], rows: RowCounts): Repo
 
   for (const section of included) {
     const definition = sectionDefinition(section.id);
-    const height = sectionHeight(section, rows);
+    const entry = measured?.[section.id];
+    const height = sectionHeight(section, rows, measured);
 
     const breaksFrom = (page: ReportPage) =>
       section.id === 'cover' ||
       section.display.page_break_before ||
       // The cover never shares its page with the section that follows it.
       page.section_ids.includes('cover') ||
-      (section.display.keep_table_together && used + height > 1);
+      // A section that does not fit in what is left of the page.
+      //
+      // Only a section that CANNOT be split is moved whole. A splittable one
+      // starts here and carries on overleaf, which is the entire point of its
+      // being splittable — "Keep Table Together" used to move it too, and
+      // since it defaults to on, every section refused to share a page unless
+      // it fitted entirely. That is what left a third of each page blank on a
+      // report with no page breaks set at all.
+      (!definition.splittable && used + height > 1);
 
     if (current == null || breaksFrom(current)) {
       current = open(section);
@@ -128,22 +157,49 @@ export function paginate(sections: ReportSectionConfig[], rows: RowCounts): Repo
     // that starts two-thirds down a page puts a few rows there and the bulk on
     // the next, rather than splitting evenly and leaving the first page's foot
     // blank.
-    const overhead = definition.base_height;
-    const per = definition.row_height ?? 0.03;
+    //
+    // Item by item rather than by a capacity count, because measured items are
+    // not all the same height: two network figures on one page can differ
+    // threefold, and dividing the free space by an average would either clip
+    // the tall one or waste the page on the short one.
+    const overhead = entry ? entry.base : definition.base_height;
+    const fallbackPer = definition.row_height ?? 0.03;
+    const heightOf = (index: number) => entry?.items[index] ?? fallbackPer;
+
     const ranges: Array<{ page: ReportPage; from: number; to: number }> = [];
     let from = 0;
 
-    do {
-      const free = 1 - used - overhead;
-      // At least one item per page, or a section whose heading alone fills the
-      // page would loop forever.
-      const capacity = Math.max(Math.floor(free / per), 1);
-      const to = Math.min(from + capacity, items);
+    while (from < items) {
+      const fresh = used === 0;
+      let free = 1 - used - overhead;
+      let to = from;
+
+      while (to < items) {
+        const itemHeight = heightOf(to);
+        // The first item on an EMPTY page is taken whether it fits or not: one
+        // that is taller than a whole page fits nowhere, and refusing it would
+        // loop forever. Everywhere else a poor fit moves to the next page.
+        if (itemHeight <= free || (to === from && fresh)) {
+          free -= itemHeight;
+          to += 1;
+        } else break;
+      }
+
+      if (to === from) {
+        // Nothing fits in what is left of a page already carrying something
+        // else. Start a fresh one and try again rather than emitting an empty
+        // range — `fresh` is true next time round, so this cannot spin.
+        current = open(section, from > 0);
+        continue;
+      }
+
       ranges.push({ page: current, from, to });
-      used += overhead + (to - from) * per;
+      // `free` is what is left of the page after this section's heading and the
+      // items just taken, so the page is exactly that much short of full.
+      used = 1 - free;
       from = to;
       if (from < items) current = open(section, true);
-    } while (from < items);
+    }
 
     if (ranges.length > 0) {
       ranges.forEach((range, index) => {

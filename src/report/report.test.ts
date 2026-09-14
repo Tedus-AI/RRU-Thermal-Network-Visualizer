@@ -10,6 +10,7 @@ import type {
   ResultsOverview,
   ResultsOverviewSnapshot,
 } from '@/thermal/overview/overviewTypes';
+import type { SectionId, ThermalReportConfig } from './reportTypes';
 
 import {
   applyTemplate,
@@ -362,18 +363,24 @@ describe('Section selection and order (11 §5, §6)', () => {
   it('resets order, inclusion and options together', () => {
     let edited = toggleSection(config(), 'actions').config;
     edited = moveSection(edited, 'critical', -1);
-    edited = patchContent(edited, 'critical', { row_count: 0 });
+    edited = patchContent(edited, 'critical', { row_count: 10 });
 
     const reset = resetSections(edited);
     expect(orderedSections(reset).map((entry) => entry.id)).toEqual(
       SECTION_DEFINITIONS.map((entry) => entry.id),
     );
     expect(reset.sections.every((entry) => entry.included)).toBe(true);
-    expect(reset.sections.find((entry) => entry.id === 'critical')?.content.row_count).toBe(5);
+    // 0 is "All", which is what the registry now defaults to.
+    expect(reset.sections.find((entry) => entry.id === 'critical')?.content.row_count).toBe(0);
   });
 });
 
 // --- pagination (11 §10, §40) -----------------------------------------------
+
+/** Untick one section, for the pagination cases that want a short report. */
+function drop(config: ThermalReportConfig, id: SectionId): ThermalReportConfig {
+  return toggleSection(config, id).config;
+}
 
 describe('Pagination (11 §10, §40)', () => {
   it('gives the cover its own page and never shares it', () => {
@@ -393,6 +400,61 @@ describe('Pagination (11 §10, §40)', () => {
     const pages = paginate(orderedSections(withBreak), ROWS);
     const page = pages.find((entry) => entry.section_ids.includes('overall'));
     expect(page?.section_ids[0]).toBe('overall');
+  });
+
+  it('lets a splittable section start on a page that is already part-used', () => {
+    // 'critical' follows 'project' and 'overall'. With measured heights that
+    // leave room for some of its rows, it must begin on that page rather than
+    // moving whole to the next — "Keep Table Together" defaults to on, and
+    // honouring it for a section built to split is what left every page's
+    // foot blank.
+    const measured = {
+      project: { base: 0.1, items: [] },
+      overall: { base: 0.24, items: [] },
+      critical: { base: 0.07, items: Array.from({ length: 12 }, () => 0.04) },
+    };
+    const pages = paginate(orderedSections(config()), { ...ROWS, critical: 12 }, measured);
+    const first = pages.find((page) => page.section_ids.includes('critical'));
+    expect(first?.section_ids).toContain('overall');
+    expect(first?.slices?.critical?.from).toBe(0);
+    // 1 - 0.1 - 0.24 - 0.07 = 0.59 of a page left, so 14 rows would fit; there
+    // are only 12, and they all land on the page that was already part-used.
+    expect(first?.slices?.critical?.to).toBe(12);
+  });
+
+  it('moves a NON-splittable section whole rather than clipping it', () => {
+    // 'actions' cannot be split, so it may not start in a gap it overflows.
+    const measured = {
+      project: { base: 0.4, items: [] },
+      overall: { base: 0.4, items: [] },
+      actions: { base: 0.5, items: [] },
+    };
+    const trimmed = (['critical', 'network', 'bottleneck'] as SectionId[]).reduce(drop, config());
+    const pages = paginate(orderedSections(trimmed), ROWS, measured);
+    const page = pages.find((entry) => entry.section_ids.includes('actions'));
+    // 0.4 + 0.4 leaves 0.2, and 'actions' wants 0.5, so it gets its own page
+    // rather than starting in a gap it would overflow and be clipped in.
+    expect(page?.section_ids).toEqual(['actions']);
+  });
+
+  it('carries a splittable section across pages by measured item height', () => {
+    // Items of unequal height: a capacity computed from an average would have
+    // put the same number on each page and either clipped or wasted one.
+    const measured = {
+      network: { base: 0.05, items: [0.5, 0.5, 0.2, 0.2] },
+    };
+    const only = (
+      ['project', 'overall', 'critical', 'bottleneck', 'actions'] as SectionId[]
+    ).reduce(drop, config());
+    const pages = paginate(orderedSections(only), { ...ROWS, network_figures: 4 }, measured);
+    const slices = pages
+      .filter((page) => page.slices?.network)
+      .map((page) => [page.slices!.network!.from, page.slices!.network!.to]);
+    // 0.05 + 0.5 + 0.5 = 1.05 > 1, so the first page takes two and the rest
+    // follow; every item appears exactly once, in order.
+    expect(slices[0][0]).toBe(0);
+    expect(slices[slices.length - 1][1]).toBe(4);
+    for (let i = 1; i < slices.length; i += 1) expect(slices[i][0]).toBe(slices[i - 1][1]);
   });
 
   it('grows the page count when more rows are included', () => {
