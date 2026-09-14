@@ -554,12 +554,31 @@ function ActionsSection({ input }: { input: SectionRenderInput }) {
   return (
     <div className="flex flex-col gap-2">
       <ol className="flex flex-col gap-1">
-        {snapshot.action_summary.map((line, index) => (
-          <li key={line} className="flex gap-2 text-[10px] leading-relaxed text-[#16202f]">
-            <span className="shrink-0 font-bold text-[#68748a] tabular">{index + 1}.</span>
-            <span>{line}</span>
-          </li>
-        ))}
+        {snapshot.action_summary.map((line, index) => {
+          // A snapshot frozen before the Chinese lines were carried has none;
+          // the English sentence stands in rather than the entry going blank.
+          const zh = snapshot.action_summary_zh?.[index];
+          const showEnglish = mode !== 'chinese' || !zh;
+          const showChinese = mode !== 'english' && Boolean(zh);
+
+          return (
+            <li
+              key={`${index}-${line}`}
+              className="flex gap-2 text-[10px] leading-relaxed text-[#16202f]"
+            >
+              <span className="shrink-0 font-bold text-[#68748a] tabular">{index + 1}.</span>
+              {/* Stacked, not joined with a slash the way a LABEL is: these are
+                  whole sentences, and "…at 94.2 °C). / …溫度 94.2 °C）。" reads
+                  as one run-on rather than as the same statement twice. */}
+              <span className="min-w-0">
+                {showEnglish && <span className="block">{line}</span>}
+                {showChinese && (
+                  <span className={`block ${showEnglish ? 'text-[#425067]' : ''}`}>{zh}</span>
+                )}
+              </span>
+            </li>
+          );
+        })}
       </ol>
 
       {(config.notes?.trim() || config.conclusion_notes?.trim()) && (
@@ -585,7 +604,11 @@ function ActionsSection({ input }: { input: SectionRenderInput }) {
           {/* 11 §21 — notes are marked as report-only so nobody mistakes them
               for an engineering result. */}
           <p className="mt-1 text-[8px] text-[#68748a]">
-            Report-only text · does not modify engineering results.
+            {reportLabel(
+              mode,
+              'Report-only text · does not modify engineering results.',
+              '報告專用文字 · 不會影響工程分析結果。',
+            )}
           </p>
         </div>
       )}

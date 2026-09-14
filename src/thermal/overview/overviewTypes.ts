@@ -340,6 +340,16 @@ export interface ResultsOverviewSnapshot {
   solver_quality: SolverQualitySummary;
   completeness: DataCompletenessSummary;
   action_summary: string[];
+  /**
+   * The same lines in Chinese, one for one with `action_summary`.
+   *
+   * Optional because a snapshot frozen before this field existed does not have
+   * it; the report falls back to the English line rather than printing a gap.
+   * The aggregator has always produced both halves — the snapshot simply never
+   * carried the Chinese one, so the report's only untranslated section was the
+   * one made entirely of sentences.
+   */
+  action_summary_zh?: string[];
   readiness: ReadinessCheck[];
   report_readiness: ReportReadiness;
 
