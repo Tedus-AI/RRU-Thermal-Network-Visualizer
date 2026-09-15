@@ -14,22 +14,26 @@
  */
 
 import { renderReport, type ReportRenderInput } from './reportRenderer';
-import type { PngScale } from './exportTypes';
 
 export interface PdfResult {
   blob: Blob;
   page_count: number;
 }
 
-/** Device pixels per CSS pixel used when rasterizing. 2x is the §25 default. */
-function scaleFactor(scale: PngScale): number {
-  return scale === '2x' ? 2 : 1;
-}
+/**
+ * Device pixels per CSS pixel used when rasterizing the report.
+ *
+ * Fixed, and deliberately not the Export Center's PNG Scale setting. That
+ * setting is about the chart snapshots -- how sharp a picture of a graph an
+ * engineer wants -- and it was being handed to this rasterizer as well, so
+ * turning it down to 1x halved the report's resolution and changed how
+ * html2canvas measured and cut every line of text. The report is the one
+ * artifact that must come out identical to what Screen 11 displayed, and no
+ * export option is allowed a say in it.
+ */
+const REPORT_RASTER_SCALE = 2;
 
-export async function exportPdfReport(
-  input: ReportRenderInput,
-  scale: PngScale = '2x',
-): Promise<PdfResult> {
+export async function exportPdfReport(input: ReportRenderInput): Promise<PdfResult> {
   const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
     import('html2canvas'),
     import('jspdf'),
@@ -48,9 +52,14 @@ export async function exportPdfReport(
       compress: true,
     });
 
+    // See `withNeutralLineHeight`: html2canvas measures the font's baseline in
+    // a probe it appends to `document.body`, so the app's own line-height
+    // decides where every glyph in the PDF lands.
+    const restoreLineHeight = neutraliseBodyLineHeight();
+
     for (const [index, element] of rendered.pages.entries()) {
       const canvas = await html2canvas(element, {
-        scale: scaleFactor(scale),
+        scale: REPORT_RASTER_SCALE,
         backgroundColor: '#ffffff',
         logging: false,
         useCORS: true,
@@ -62,10 +71,39 @@ export async function exportPdfReport(
       pdf.addImage(image, 'JPEG', 0, 0, rendered.width_mm, rendered.height_mm, undefined, 'FAST');
     }
 
+    restoreLineHeight();
     return { blob: pdf.output('blob'), page_count: rendered.pages.length };
   } finally {
     rendered.dispose();
   }
+}
+
+/**
+ * Stop the app's line-height from pushing every line of the PDF downwards.
+ *
+ * html2canvas draws each run of text at `rect.top + baseline`, where `rect`
+ * is the browser's own layout but `baseline` is a number html2canvas measures
+ * for itself: it appends a probe div to `document.body`, sets only the font
+ * family and size on it, and reads where a baseline-aligned image lands.
+ *
+ * The probe therefore INHERITS `body`'s line-height. Ours is 1.5, so for the
+ * report's 10px text the probe measures its baseline inside a 15px line box
+ * and reports 15 -- about 3.3px below where the browser actually puts it. Every
+ * line in the PDF was drawn that much low, which in a table cell reads as text
+ * sitting on the bottom border of a cell the preview had centred it in.
+ *
+ * `normal` is the leading the probe's own arithmetic assumes, so measuring
+ * against it brings the baseline back to within a fraction of a pixel of the
+ * browser's. The report itself is unaffected: `renderReport` pins its
+ * container's line-height to 1.5 explicitly, so it no longer inherits this.
+ */
+function neutraliseBodyLineHeight(): () => void {
+  const body = document.body;
+  const previous = body.style.lineHeight;
+  body.style.lineHeight = 'normal';
+  return () => {
+    body.style.lineHeight = previous;
+  };
 }
 
 /**
