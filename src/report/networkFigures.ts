@@ -177,9 +177,9 @@ export function networkFigures(input: {
       hidden_component_ids: new Set([...modelled].filter((id) => !keep.has(id))),
       hidden_node_ids: hidden,
       tuned_edges: new Map(
-        (input.leversByNode.get(part.node_id) ?? []).map((segment, index) => [
+        (input.leversByNode.get(part.node_id) ?? []).map((segment) => [
           segment.edge_id,
-          { rank: index + 1, active: true },
+          { rank: segment.rank, active: true },
         ]),
       ),
       part,

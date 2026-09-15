@@ -77,7 +77,7 @@ export function reportFigureSource(input: FigureSourceInput): FigureSource {
     leversByNode.set(
       part.node_id,
       study && input.scenario_id
-        ? study.segments.map((segment) =>
+        ? study.segments.map((segment, index) =>
             segmentLevers(
               context.network,
               input.scenario_id as string,
@@ -85,6 +85,10 @@ export function reportFigureSource(input: FigureSourceInput): FigureSource {
               segment.label,
               segment.reduction_pct,
               { ports: input.boundary_ports, set: input.boundary_set },
+              // A saved study records the segments the reader cut, not where
+              // each sat in the chain, so the study's own order is the number
+              // the report shows -- on the figure and in the list alike.
+              index + 1,
             ),
           )
         : null,

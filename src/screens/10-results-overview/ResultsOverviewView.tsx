@@ -453,7 +453,7 @@ export function ResultsOverviewView() {
         study,
         levers:
           study && activeScenarioId
-            ? study.segments.map((segment) =>
+            ? study.segments.map((segment, index) =>
                 segmentLevers(
                   solveNetwork,
                   activeScenarioId,
@@ -461,6 +461,7 @@ export function ResultsOverviewView() {
                   segment.label,
                   segment.reduction_pct,
                   boundaryContext,
+                  index + 1,
                 ),
               )
             : [],
