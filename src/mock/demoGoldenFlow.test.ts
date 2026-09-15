@@ -292,10 +292,12 @@ describe('FR1 RRU Golden Demo', () => {
       components_without_limits: snapshot.completeness.components_without_limits,
       low_confidence_edges: snapshot.completeness.low_confidence_critical_edges,
     });
-    expect(artifacts.temperature_csv.status).toBe('BLOCKED');
-    expect(artifacts.bottleneck_csv.status).toBe('BLOCKED');
     expect(artifacts.pdf_report.status).toBe('BLOCKED');
-    expect(artifacts.network_json.status).toBe('READY');
+    expect(artifacts.html_report.status).toBe('BLOCKED');
+    // The solve is still current, so the network still draws; the bottleneck
+    // overlay stands down because this case leaves Screen 08's analysis stale.
+    expect(artifacts.png_snapshots.status).toBe('WARNING');
+    expect(artifacts.png_snapshots.reason).toMatch(/overlay/i);
   });
 });
 

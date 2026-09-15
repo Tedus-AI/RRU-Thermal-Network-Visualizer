@@ -141,81 +141,9 @@ export function evaluateArtifact(type: ArtifactType, input: ReadinessInput): Art
     case 'html_report':
       return wrap(reportReadiness(input), reportReason(input));
 
-    case 'temperature_csv':
-      if (('distribution' in input || 'distribution_stale' in input) && !input.distribution) {
-        return wrap('NOT_AVAILABLE', {
-          en: 'No solved temperatures to write. Solve on Screen 07 first.',
-          zh: '尚無可輸出的求解溫度，請先在 Screen 07 求解。',
-        });
-      }
-      if (input.distribution_stale) {
-        return wrap('BLOCKED', {
-          en: 'The solved temperatures are stale. Re-solve on Screen 07 before export.',
-          zh: '求解溫度已過期，請先在 Screen 07 重新求解。',
-        });
-      }
-      return wrap(solvedResultStatus(input), solvedResultReason(input));
 
-    case 'bottleneck_csv': {
-      if (!input.analysis) {
-        return wrap('NOT_AVAILABLE', {
-          en: 'No bottleneck analysis. Run one in Screen 08.',
-          zh: '尚無瓶頸分析，請於 08 執行。',
-        });
-      }
-      if (input.analysis.state === 'FAILED') {
-        return wrap('BLOCKED', { en: 'The last analysis failed.', zh: '上次分析失敗。' });
-      }
-      // 12 §13 — a ranking built on a superseded solve is blocked, not caveated.
-      if (input.analysis_stale || input.solution_stale) {
-        return wrap('BLOCKED', {
-          en: 'The analysis was built on a superseded solve. Re-run Screen 08.',
-          zh: '分析基於已被取代的求解結果，請於 08 重新分析。',
-        });
-      }
-      if (input.analysis.state === 'WARNING') {
-        return wrap('WARNING', {
-          en: 'Screen 08 completed with warnings.',
-          zh: '08 分析完成但有警告。',
-        });
-      }
-      return wrap('READY');
-    }
 
-    case 'network_json':
-    case 'network_csv': {
-      if (!input.network || Object.keys(input.network.nodes).length === 0) {
-        return wrap('NOT_AVAILABLE', {
-          en: 'No thermal network. Build one in Screen 05.',
-          zh: '尚無熱網路，請於 05 建立。',
-        });
-      }
-      // 12 §45 — the graph is a CONFIGURATION. It stays exportable when the
-      // solve is stale; the document says so rather than the export refusing.
-      if (input.solution_stale || !input.solution) {
-        return wrap('WARNING', {
-          en: 'Exported as configuration — the solved result is marked stale or absent.',
-          zh: '以設定形式匯出，求解結果標記為過期或不存在。',
-        });
-      }
-      return wrap('READY');
-    }
 
-    case 'scenario_json': {
-      if (!input.boundary) {
-        return wrap('NOT_AVAILABLE', {
-          en: 'No boundary set for this scenario. Configure Screen 06.',
-          zh: '此情境尚無邊界設定，請於 06 設定。',
-        });
-      }
-      if (input.boundary.status === 'draft') {
-        return wrap('WARNING', {
-          en: 'The boundary set is still a draft.',
-          zh: '邊界設定仍為草稿。',
-        });
-      }
-      return wrap('READY');
-    }
 
     case 'png_snapshots': {
       const solved = solvedResultStatus(input);
@@ -239,13 +167,9 @@ export function evaluateArtifact(type: ArtifactType, input: ReadinessInput): Art
       return wrap('READY');
     }
 
-    case 'manifest':
-      // 12 §17 — the manifest describes the session and is always producible.
-      return wrap('READY');
-
     case 'package_zip': {
       const others = ARTIFACT_DEFINITIONS.filter(
-        (definition) => definition.type !== 'package_zip' && definition.type !== 'manifest',
+        (definition) => definition.type !== 'package_zip',
       );
       const usable = others.filter((definition) =>
         isExportable(evaluateArtifact(definition.type, input).status),

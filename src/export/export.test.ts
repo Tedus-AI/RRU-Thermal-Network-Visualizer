@@ -1,16 +1,18 @@
 /**
  * Export layer tests — 12 §58 A–F, plus the serialization contracts of
- * §10, §11, §12, §13, §14, §17, §18, §21, §26 and §27.
+ * §17, §18, §21, §26 and §27.
  *
  * Everything here is the pure part of Screen 12: readiness, validation,
- * filenames, CSV/JSON serialization and the manifest. The generators that need
- * a DOM (PDF, PNG, ZIP) are exercised in the browser verification instead.
+ * filenames, CSV encoding and the manifest. The generators that need a DOM
+ * (PDF, PNG, ZIP) are exercised in the browser verification instead.
+ *
+ * The §10–§14 serialization cases went with the artifacts they covered: the
+ * temperature CSV, the two thermal network exports, the bottleneck CSV and the
+ * scenario/boundary JSON are no longer produced.
  */
 
 import { describe, expect, it } from 'vitest';
 
-import type { Component } from '@/domain/component';
-import type { Scenario } from '@/domain/project';
 import type { BottleneckAnalysis } from '@/thermal/analysis/analysisTypes';
 import type { ScenarioBoundaryConditionSet } from '@/thermal/boundary/types';
 import type { ResultsOverviewSnapshot } from '@/thermal/overview/overviewTypes';
@@ -19,12 +21,6 @@ import type { ThermalNetwork } from '@/thermal/types';
 import type { ReportExportPayload } from '@/report/reportTypes';
 
 import { buildCsv, encodeCsv, encodeJson } from './csv';
-import { exportBottleneckCsv } from './exportBottleneckCsv';
-import { exportNetworkCsv } from './exportNetworkCsv';
-import { exportedNetwork } from './exportRunner';
-import { exportNetworkJson } from './exportNetworkJson';
-import { exportScenarioJson } from './exportScenarioJson';
-import { exportTemperatureCsv } from './exportTemperatureCsv';
 import { createExportSession } from './exportSession';
 import { buildManifest } from './manifestBuilder';
 import {
@@ -270,19 +266,6 @@ function analysis(state: BottleneckAnalysis['state'] = 'COMPLETE'): BottleneckAn
   };
 }
 
-function scenario(): Scenario {
-  return {
-    id: 'SCN_1',
-    project_id: 'CBNG_FR1_RRU_EVT2',
-    name: 'Baseline 55C / 0 m/s',
-    ambient_C: 55,
-    wind_mps: 0,
-    solar_W_m2: 0,
-    power_scale: 1,
-    notes: '',
-    is_default: true,
-  };
-}
 
 function boundary(
   status: ScenarioBoundaryConditionSet['status'] = 'ready_for_solve',
@@ -331,22 +314,6 @@ function boundary(
   };
 }
 
-function components(): Component[] {
-  return [
-    {
-      id: 'CMP_PA',
-      name: 'Final PA',
-      category: 'RF',
-      enabled: true,
-      qty: 4,
-      power_W: { value: 52.13 },
-      thermal_spec: {},
-      architecture_prep: {},
-      provenance: {},
-      external_mappings: {},
-    } as unknown as Component,
-  ];
-}
 
 function payload(
   readiness: ReportExportPayload['readiness'] = 'EXPORT_READY',
@@ -410,10 +377,7 @@ describe('Test A — Engineering Package (12 §58 A)', () => {
     const all = evaluateAllArtifacts(input);
 
     expect(all.pdf_report.status).toBe('WARNING');
-    expect(all.temperature_csv.status).toBe('READY');
-    expect(all.bottleneck_csv.status).toBe('READY');
-    expect(all.network_json.status).toBe('READY');
-    expect(all.scenario_json.status).toBe('READY');
+    expect(all.html_report.status).toBe('WARNING');
     expect(all.png_snapshots.status).toBe('READY');
     expect(all.package_zip.status).toBe('READY');
 
@@ -478,10 +442,9 @@ describe('Test B — stale report only (12 §58 B, §43)', () => {
 
     expect(all.pdf_report.status).toBe('BLOCKED');
     expect(all.html_report.status).toBe('BLOCKED');
-    // §43 — a BLOCKED report takes the PDF down and nothing else.
-    expect(all.network_json.status).toBe('READY');
-    expect(all.scenario_json.status).toBe('READY');
-    expect(all.temperature_csv.status).toBe('READY');
+    // §43 — a stale snapshot takes the report down and nothing else. The
+    // snapshots are drawn from the solve, which is still current.
+    expect(all.png_snapshots.status).toBe('READY');
   });
 
   it('still allows a package built from the artifacts that pass', () => {
@@ -491,7 +454,7 @@ describe('Test B — stale report only (12 §58 B, §43)', () => {
 
     const validation = validateExport({
       ...input,
-      selected: ['network_json', 'scenario_json'],
+      selected: ['png_snapshots'],
       base_filename: CONFIG.base_filename,
       readiness: all,
       analytical_only: true,
@@ -504,7 +467,7 @@ describe('Test B — stale report only (12 §58 B, §43)', () => {
     const all = evaluateAllArtifacts(input);
     const validation = validateExport({
       ...input,
-      selected: ['pdf_report', 'network_json'],
+      selected: ['pdf_report', 'png_snapshots'],
       base_filename: CONFIG.base_filename,
       readiness: all,
       analytical_only: false,
@@ -516,16 +479,16 @@ describe('Test B — stale report only (12 §58 B, §43)', () => {
 // --- Test C — Thermal FAIL (12 §58 C, §44) ----------------------------------
 
 describe('Test C — thermal FAIL does not block export (12 §58 C, §44)', () => {
-  it('keeps the PDF and the temperature CSV exportable', () => {
+  it('keeps the report and the snapshots exportable', () => {
     const input = readiness({ snapshot: snapshot('FAIL') });
     const all = evaluateAllArtifacts(input);
 
     expect(all.pdf_report.status).toBe('READY');
-    expect(all.temperature_csv.status).toBe('READY');
+    expect(all.png_snapshots.status).toBe('READY');
 
     const validation = validateExport({
       ...input,
-      selected: ['pdf_report', 'temperature_csv'],
+      selected: ['pdf_report', 'png_snapshots'],
       base_filename: CONFIG.base_filename,
       readiness: all,
       analytical_only: false,
@@ -539,48 +502,20 @@ describe('Test C — thermal FAIL does not block export (12 §58 C, §44)', () =
 // --- Test D — Stale 07 (12 §58 D, §45) --------------------------------------
 
 describe('Test D — stale Screen 07 solution (12 §58 D, §45)', () => {
-  it('blocks the result artifacts and downgrades the network export to configuration', () => {
+  it('blocks the artifacts drawn from the solve', () => {
     const all = evaluateAllArtifacts(readiness({ solution_stale: true }));
 
-    expect(all.temperature_csv.status).toBe('BLOCKED');
-    expect(all.bottleneck_csv.status).toBe('BLOCKED');
+    // The snapshots are pictures OF the solve, so a superseded one has nothing
+    // honest to draw. §45's "export it as configuration anyway" applied to the
+    // thermal network files, which this build no longer produces.
     expect(all.png_snapshots.status).toBe('BLOCKED');
-    // §45 — the graph is configuration and may still export, clearly marked.
-    expect(all.network_json.status).toBe('WARNING');
-    expect(all.network_csv.status).toBe('WARNING');
   });
 
-  it('marks the exported document STALE rather than shipping stale temperatures', () => {
-    const document = exportNetworkJson({
-      project_id: 'CBNG_FR1_RRU_EVT2',
-      project_name: 'CBNG FR1 RRU EVT2',
-      scenario_id: 'SCN_1',
-      scenario_name: 'Baseline 55C',
-      network: network(),
-      solution: solution(),
-      solution_status: 'STALE',
-      exported_at: '2026-08-12T12:50:00.000Z',
-      export_session_id: 'EXP_1',
-    });
-
-    expect(document.solution_status).toBe('STALE');
-    expect(document.solution).toBeUndefined();
-    expect(document.network.nodes.N_PA_J.name).toBe('PA Junction');
-  });
-
-  it('leaves Q and Delta T blank in the node/edge CSV when there is no current solve', () => {
-    const tables = exportNetworkCsv({
-      network: network(),
-      scenario_name: 'Baseline 55C',
-      solution: null,
-      config: CONFIG,
-    });
-
-    const edgeLine = tables.edges.split('\r\n')[1].split(',');
-    // …,Active Rth, Rth Source, Q, Delta T, Confidence, Enabled
-    expect(edgeLine[7]).toBe('');
-    expect(edgeLine[8]).toBe('');
-    expect(tables.nodes).toMatch(/N_PA_J/);
+  it('leaves the report to its own snapshot rather than the solve', () => {
+    // 11 §3 — the report reads the frozen snapshot, so it is the snapshot's
+    // freshness that governs it, not Screen 07's.
+    const all = evaluateAllArtifacts(readiness({ solution_stale: true }));
+    expect(all.pdf_report.status).not.toBe('NOT_AVAILABLE');
   });
 });
 
@@ -590,7 +525,7 @@ describe('Test E — one artifact failure (12 §58 E, §30)', () => {
   it('reports PARTIAL when some artifacts succeeded and one failed', () => {
     const status = globalStatus({
       validation: { blocking: [], blocking_zh: [], warnings: [], warnings_zh: [] },
-      selected: ['pdf_report', 'temperature_csv'],
+      selected: ['pdf_report', 'png_snapshots'],
       exporting: false,
       results: [{ status: 'FAILED' }, { status: 'EXPORTED' }],
     });
@@ -634,10 +569,10 @@ describe('Test E — one artifact failure (12 §58 E, §30)', () => {
         },
         {
           id: 'r2',
-          type: 'temperature_csv',
-          filename: 'temps.csv',
+          type: 'png_snapshots',
+          filename: 'snapshots.png',
           status: 'EXPORTED',
-          mime_type: 'text/csv',
+          mime_type: 'image/png',
           warnings: [],
         },
       ],
@@ -645,7 +580,7 @@ describe('Test E — one artifact failure (12 §58 E, §30)', () => {
       now: '2026-08-12T12:50:00.000Z',
     });
 
-    expect(manifest.artifacts.map((entry) => entry.filename)).toEqual(['temps.csv']);
+    expect(manifest.artifacts.map((entry) => entry.filename)).toEqual(['snapshots.png']);
     expect(manifest.warnings.join(' ')).toMatch(/PDF Report failed to generate: Renderer threw/);
   });
 });
@@ -678,33 +613,33 @@ describe('Test F — filename sanitization (12 §58 F, §18, §21)', () => {
   });
 
   it('builds the §18 convention', () => {
-    const name = filenameFor('temperature_csv', {
+    const name = filenameFor('pdf_report', {
       config: { ...CONFIG, base_filename: 'CBNG_FR1_RRU_EVT2_55C_0mps' },
       project_id: 'CBNG_FR1_RRU_EVT2',
       scenario_name: 'Baseline 55C / 0 m/s',
       now: NOW,
     });
-    expect(name).toBe('CBNG_FR1_RRU_EVT2_55C_0mps_Temperature_Results_20260812_1250.csv');
+    expect(name).toBe('CBNG_FR1_RRU_EVT2_55C_0mps_Thermal_Report_20260812_1250.pdf');
   });
 
   it('falls back to project and scenario when no base filename is given', () => {
-    const name = filenameFor('network_json', {
+    const name = filenameFor('pdf_report', {
       config: { ...CONFIG, base_filename: '' },
       project_id: 'CBNG_FR1_RRU_EVT2',
       scenario_name: 'Baseline 55C',
       now: NOW,
     });
-    expect(name).toBe('CBNG_FR1_RRU_EVT2_Baseline_55C_Thermal_Network_20260812_1250.json');
+    expect(name).toBe('CBNG_FR1_RRU_EVT2_Baseline_55C_Thermal_Report_20260812_1250.pdf');
   });
 
   it('honours the timestamp switch', () => {
-    const name = filenameFor('network_json', {
+    const name = filenameFor('pdf_report', {
       config: { ...CONFIG, base_filename: 'X', timestamp: false },
       project_id: 'P',
       scenario_name: 'S',
       now: NOW,
     });
-    expect(name).toBe('X_Thermal_Network.json');
+    expect(name).toBe('X_Thermal_Report.pdf');
   });
 
   it('auto-renames a collision instead of overwriting', () => {
@@ -726,79 +661,6 @@ describe('Test F — filename sanitization (12 §58 F, §18, §21)', () => {
 
 // --- serialization contracts ------------------------------------------------
 
-describe('Temperature CSV (12 §10)', () => {
-  it('emits §10 columns in §10 order', () => {
-    const csv = exportTemperatureCsv({
-      project_id: 'CBNG_FR1_RRU_EVT2',
-      project_name: 'CBNG FR1 RRU EVT2',
-      scenario_name: 'Baseline 55C',
-      network: network(),
-      solution: solution(),
-      components: components(),
-      config: { ...CONFIG, csv_include_units: false },
-    });
-
-    expect(csv.split('\r\n')[0]).toBe(
-      'Project,Scenario,Node ID,Node Name,Component,Category,Node Type,Zone,Temperature,Limit Type,Limit,Margin,Result Source,Solved At',
-    );
-  });
-
-  it('leaves the margin blank for a node with no limit, never 0', () => {
-    const csv = exportTemperatureCsv({
-      project_id: 'P',
-      project_name: 'P',
-      scenario_name: 'S',
-      network: network(),
-      solution: solution(),
-      components: components(),
-      config: CONFIG,
-    });
-    const base = csv.split('\r\n').find((line) => line.includes('Main Base'));
-    expect(base).toBeDefined();
-    // …,Temperature,Limit Type,Limit,Margin,…
-    const cells = (base as string).split(',');
-    expect(cells[9]).toBe('');
-    expect(cells[10]).toBe('');
-    expect(cells[11]).toBe('');
-  });
-
-  it('applies the decimal precision to the serialized value only', () => {
-    const two = exportTemperatureCsv({
-      project_id: 'P',
-      project_name: 'P',
-      scenario_name: 'S',
-      network: network(),
-      solution: solution(),
-      components: components(),
-      config: { ...CONFIG, decimal_precision: 2 },
-    });
-    const four = exportTemperatureCsv({
-      project_id: 'P',
-      project_name: 'P',
-      scenario_name: 'S',
-      network: network(),
-      solution: solution(),
-      components: components(),
-      config: { ...CONFIG, decimal_precision: 4 },
-    });
-    expect(two).toMatch(/102\.40/);
-    expect(four).toMatch(/102\.4000/);
-  });
-
-  it('adds units to the header only when asked', () => {
-    const withUnits = exportTemperatureCsv({
-      project_id: 'P',
-      project_name: 'P',
-      scenario_name: 'S',
-      network: network(),
-      solution: solution(),
-      components: components(),
-      config: { ...CONFIG, csv_include_units: true },
-    });
-    expect(withUnits.split('\r\n')[0]).toMatch(/Temperature \(°C\)/);
-  });
-});
-
 describe('CSV encoding (12 §27)', () => {
   it('prefixes a BOM when asked, and not otherwise', () => {
     expect(encodeCsv('a,b\r\n', 'utf8_bom').charCodeAt(0)).toBe(0xfeff);
@@ -818,191 +680,6 @@ describe('CSV encoding (12 §27)', () => {
   });
 });
 
-describe('Network JSON (12 §11)', () => {
-  it('preserves metadata fields this build does not model', () => {
-    const document = exportNetworkJson({
-      project_id: 'P',
-      project_name: 'P',
-      scenario_id: 'SCN_1',
-      scenario_name: 'S',
-      network: network(),
-      solution: solution(),
-      solution_status: 'SOLVED',
-      exported_at: 'now',
-      export_session_id: 'EXP_1',
-    });
-
-    expect(document.network.edges.E_1.metadata).toEqual({ supplier_note: 'keep me' });
-    expect(document.network.metadata).toEqual({ origin: 'unit-test' });
-    expect(document.network.edges.E_1.rth.provenance.Analytical?.source).toBe('Analytical');
-    expect(document.solution?.node_temperatures_C.N_PA_J).toBe(102.4);
-    expect(document.external_cfd_validation).toBe('Deferred');
-  });
-
-  it('does not alias the live network', () => {
-    const live = network();
-    const document = exportNetworkJson({
-      project_id: 'P',
-      project_name: 'P',
-      scenario_id: 'SCN_1',
-      scenario_name: 'S',
-      network: live,
-      solution: null,
-      solution_status: 'NONE',
-      exported_at: 'now',
-      export_session_id: 'EXP_1',
-    });
-    document.network.nodes.N_PA_J.name = 'mutated';
-    expect(live.nodes.N_PA_J.name).toBe('PA Junction');
-  });
-});
-
-describe('Network CSV (12 §12)', () => {
-  it('emits both tables with §12 columns', () => {
-    const tables = exportNetworkCsv({
-      network: network(),
-      scenario_name: 'S',
-      solution: solution(),
-      config: { ...CONFIG, csv_include_units: false },
-    });
-    expect(tables.nodes.split('\r\n')[0]).toBe(
-      'Node ID,Name,Type,Component,Zone,Power,Limit Type,Limit,Temperature,Scenario',
-    );
-    expect(tables.edges.split('\r\n')[0]).toBe(
-      'Edge ID,From,To,Type,Method,Active Rth,Rth Source,Q,Delta T,Confidence,Enabled',
-    );
-    expect(tables.edges).toMatch(/52\.130/);
-  });
-});
-
-describe('Network exports judge a limit where its type says (12 §11, §12)', () => {
-  /**
-   * The graph as Screen 05 leaves it: the limit still sits on the junction it
-   * was first written to, and `CMP_PA` has since been re-stated as a CASE
-   * limit. Every result surface projects the limit onto the case before
-   * reading it; the two network exports have to do the same, or the data file
-   * scores a part against a temperature its datasheet never bounded.
-   */
-  function staleLimitNetwork(): ThermalNetwork {
-    const base = network();
-    base.nodes.N_PA_J = {
-      ...base.nodes.N_PA_J,
-      origin: { kind: 'template', template_id: 'T_PA', role: 'JUNCTION' },
-    } as ThermalNetwork['nodes'][string];
-    // The case the template's package_rjc edge already lands on (E_1), which
-    // has never carried a limit because the part was Tj when it was drawn.
-    base.nodes.N_BASE = {
-      ...base.nodes.N_BASE,
-      component_ref: 'CMP_PA',
-      origin: { kind: 'template', template_id: 'T_PA', role: 'CASE' },
-    } as ThermalNetwork['nodes'][string];
-    return base;
-  }
-
-  function part(limitType: 'Tj' | 'Tc'): Component[] {
-    return [
-      {
-        ...components()[0],
-        thermal_spec: { limit_type: limitType, limit_C: { value: 180 } },
-      } as unknown as Component,
-    ];
-  }
-
-  it('moves the limit off the junction and onto the case', () => {
-    const projected = exportedNetwork({
-      network: staleLimitNetwork(),
-      components: part('Tc'),
-    });
-
-    expect(projected).not.toBeNull();
-    expect(projected!.nodes.N_PA_J.limit_C).toBeNull();
-    expect(projected!.nodes.N_BASE.limit_C).toBe(180);
-    expect(projected!.nodes.N_BASE.limit_type).toBe('Tc');
-  });
-
-  it('writes the projected limit into the network CSV, not the stored one', () => {
-    const tables = exportNetworkCsv({
-      network: exportedNetwork({ network: staleLimitNetwork(), components: part('Tc') })!,
-      scenario_name: 'S',
-      solution: solution(),
-      config: { ...CONFIG, csv_include_units: false },
-    });
-
-    const rows = tables.nodes.split('\r\n');
-    const junction = rows.find((row) => row.startsWith('N_PA_J,'));
-    const caseRow = rows.find((row) => row.startsWith('N_BASE,'));
-
-    // The junction keeps its temperature and loses a limit it never owned.
-    expect(junction).not.toMatch(/,Tc,/);
-    expect(caseRow).toMatch(/,Tc,180/);
-  });
-
-  it('leaves a junction-based part where it is', () => {
-    const projected = exportedNetwork({
-      network: staleLimitNetwork(),
-      components: part('Tj'),
-    });
-
-    expect(projected!.nodes.N_PA_J.limit_C).toBe(180);
-    expect(projected!.nodes.N_BASE.limit_C ?? null).toBeNull();
-  });
-});
-
-describe('Bottleneck CSV (12 §13)', () => {
-  it('emits §13 columns and repeats the analysis settings per row', () => {
-    const csv = exportBottleneckCsv({
-      analysis: analysis(),
-      config: { ...CONFIG, csv_include_units: false },
-    });
-    expect(csv.split('\r\n')[0]).toBe(
-      'Rank,Edge ID,Edge,Path,Type,Rth,Q,Delta T,Sensitivity Improvement,Margin Impact,Affected Components,Score,Classification,Confidence,Source,Reduction %,Target Metric',
-    );
-    const row = csv.split('\r\n')[1];
-    expect(row).toMatch(/^1,E_2,/);
-    expect(row).toMatch(/Critical/);
-    expect(row).toMatch(/20,Worst Component Temperature/);
-  });
-});
-
-describe('Scenario & Boundary JSON (12 §14)', () => {
-  it('carries the scenario inputs, the boundary models and their sources', () => {
-    const document = exportScenarioJson({
-      project_id: 'P',
-      project_name: 'P',
-      scenario: scenario(),
-      boundary: boundary(),
-      exported_at: 'now',
-      export_session_id: 'EXP_1',
-    });
-
-    expect(document.scenario.ambient_C).toBe(55);
-    expect(document.scenario.wind_direction_deg).toBe(180);
-    expect(document.scenario).not.toHaveProperty('radiation_reference_C');
-    expect(document.boundary?.profiles).toHaveLength(1);
-    expect(document.boundary?.sources[0]).toEqual({
-      profile_id: 'PRF_1',
-      name: 'Natural convection',
-      source: 'Assumed',
-      confidence: 'medium',
-    });
-  });
-
-  it('exports the scenario alone when Screen 06 has no boundary set', () => {
-    const document = exportScenarioJson({
-      project_id: 'P',
-      project_name: 'P',
-      scenario: scenario(),
-      boundary: null,
-      exported_at: 'now',
-      export_session_id: 'EXP_1',
-    });
-    expect(document.boundary).toBeNull();
-    expect(document.scenario.wind_direction_deg).toBeNull();
-  });
-});
-
-// --- readiness details ------------------------------------------------------
-
 describe('Per-artifact readiness (12 §3, §4)', () => {
   it('reports NOT_AVAILABLE when the source does not exist', () => {
     const empty = readiness({
@@ -1016,13 +693,9 @@ describe('Per-artifact readiness (12 §3, §4)', () => {
     const all = evaluateAllArtifacts(empty);
 
     expect(all.pdf_report.status).toBe('NOT_AVAILABLE');
-    expect(all.temperature_csv.status).toBe('NOT_AVAILABLE');
-    expect(all.network_json.status).toBe('NOT_AVAILABLE');
-    expect(all.bottleneck_csv.status).toBe('NOT_AVAILABLE');
-    expect(all.scenario_json.status).toBe('NOT_AVAILABLE');
+    expect(all.html_report.status).toBe('NOT_AVAILABLE');
+    expect(all.png_snapshots.status).toBe('NOT_AVAILABLE');
     expect(all.package_zip.status).toBe('NOT_AVAILABLE');
-    // The manifest describes the session, so it is always producible.
-    expect(all.manifest.status).toBe('READY');
   });
 
   it('always explains a status that is not READY', () => {
@@ -1034,17 +707,7 @@ describe('Per-artifact readiness (12 §3, §4)', () => {
     }
   });
 
-  it('blocks the bottleneck CSV when the analysis predates the current solve', () => {
-    expect(evaluateArtifact('bottleneck_csv', readiness({ analysis_stale: true })).status).toBe(
-      'BLOCKED',
-    );
-  });
 
-  it('warns rather than blocks when the boundary set is still a draft', () => {
-    expect(
-      evaluateArtifact('scenario_json', readiness({ boundary: boundary('draft') })).status,
-    ).toBe('WARNING');
-  });
 
   it('warns when the overlay is unavailable but the other views are not', () => {
     const entry = evaluateArtifact('png_snapshots', readiness({ analysis: null }));
@@ -1096,7 +759,7 @@ describe('Validation (12 §31)', () => {
     const input = readiness({ components_without_limits: 3, low_confidence_edges: 2 });
     const validation = validateExport({
       ...input,
-      selected: ['network_json'],
+      selected: ['png_snapshots'],
       base_filename: 'x',
       readiness: evaluateAllArtifacts(input),
       analytical_only: true,
@@ -1172,13 +835,13 @@ describe('JSON formatting (12 §25)', () => {
 describe('Global export status (12 §5)', () => {
   it('is READY when nothing is outstanding and COMPLETE after a clean run', () => {
     const clean = { blocking: [], blocking_zh: [], warnings: [], warnings_zh: [] };
-    expect(globalStatus({ validation: clean, selected: ['manifest'], exporting: false, results: [] })).toBe(
+    expect(globalStatus({ validation: clean, selected: ['pdf_report'], exporting: false, results: [] })).toBe(
       'READY',
     );
     expect(
       globalStatus({
         validation: clean,
-        selected: ['manifest'],
+        selected: ['pdf_report'],
         exporting: false,
         results: [{ status: 'EXPORTED' }],
       }),

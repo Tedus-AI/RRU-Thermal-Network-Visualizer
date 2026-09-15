@@ -12,6 +12,9 @@
 import type { LanguageMode, Orientation, PageSize } from '@/report/reportTypes';
 
 export const EXPORT_SCHEMA_VERSION = '1.0';
+
+/** How current the solve behind an export is; see `ExportSources`. */
+export type SolutionStatus = 'SOLVED' | 'STALE' | 'NONE';
 /** Stamped into the manifest so an exported package names the build it came from. */
 export const APP_VERSION = '0.1.0';
 
@@ -20,14 +23,8 @@ export const APP_VERSION = '0.1.0';
 export const ARTIFACT_TYPES = [
   'pdf_report',
   'html_report',
-  'temperature_csv',
-  'network_json',
-  'network_csv',
-  'bottleneck_csv',
-  'scenario_json',
   'png_snapshots',
   'package_zip',
-  'manifest',
 ] as const;
 export type ArtifactType = (typeof ARTIFACT_TYPES)[number];
 
@@ -56,9 +53,17 @@ export interface ArtifactDefinition {
 /**
  * 12 §8 — the V1 catalog.
  *
- * `package_zip` and `manifest` are in the same list because §21 makes both
- * selectable in the package builder, but they are not ordinary sources: the ZIP
- * wraps the others and the manifest describes them.
+ * The five data files this list used to carry -- the temperature CSV, the two
+ * thermal network exports, the bottleneck CSV and the scenario/boundary JSON --
+ * were removed along with the stand-alone traceability manifest. What an
+ * engineer takes away from this tool is the report and the pictures in it; the
+ * raw tables restated numbers that are already on the screens that computed
+ * them, in files nothing downstream reads.
+ *
+ * `package_zip` is in the same list because §21 makes it selectable in the
+ * package builder, but it is not an ordinary source: it wraps the others. The
+ * manifest is still WRITTEN into that ZIP -- a package without its provenance
+ * record is not traceable -- it simply is not something to export on its own.
  */
 export const ARTIFACT_DEFINITIONS: ArtifactDefinition[] = [
   {
@@ -92,81 +97,6 @@ export const ARTIFACT_DEFINITIONS: ArtifactDefinition[] = [
     package_path: 'report/thermal_report.html',
   },
   {
-    type: 'temperature_csv',
-    label: 'Temperature Results CSV',
-    zh: '溫度結果 CSV',
-    format: 'CSV',
-    description: 'Per-node temperature, limit, margin and result source',
-    description_zh: '各節點溫度、限制、餘裕與結果來源',
-    prerequisite: 'Current Screen 07 solution',
-    prerequisite_zh: '目前的 Screen 07 求解結果',
-    source_screen: '07 Thermal Network',
-    extension: 'csv',
-    mime_type: 'text/csv;charset=utf-8',
-    artifact_slug: 'Temperature_Results',
-    package_path: 'data/temperatures.csv',
-  },
-  {
-    type: 'network_json',
-    label: 'Thermal Network JSON',
-    zh: '熱網路 JSON',
-    format: 'JSON',
-    description: 'Canonical graph: nodes, edges, zones, Rth provenance, layout',
-    description_zh: '正規圖形資料：節點、連線、區域、Rth 來源與版面',
-    prerequisite: 'Valid thermal network',
-    prerequisite_zh: '有效的熱網路',
-    source_screen: '05 Thermal Path Builder / 07 Thermal Network',
-    extension: 'json',
-    mime_type: 'application/json',
-    artifact_slug: 'Thermal_Network',
-    package_path: 'data/thermal_network.json',
-  },
-  {
-    type: 'network_csv',
-    label: 'Thermal Network CSV',
-    zh: '熱網路 CSV',
-    format: 'CSV',
-    description: 'Two tables — nodes.csv and edges.csv',
-    description_zh: '兩張表：nodes.csv 與 edges.csv',
-    prerequisite: 'Valid thermal network',
-    prerequisite_zh: '有效的熱網路',
-    source_screen: '05 Thermal Path Builder / 07 Thermal Network',
-    extension: 'csv',
-    mime_type: 'text/csv;charset=utf-8',
-    artifact_slug: 'Thermal_Network',
-    package_path: 'data/network_nodes.csv',
-  },
-  {
-    type: 'bottleneck_csv',
-    label: 'Bottleneck Analysis CSV',
-    zh: '瓶頸分析 CSV',
-    format: 'CSV',
-    description: 'Ranked bottlenecks with sensitivity and margin impact',
-    description_zh: '瓶頸排名，含敏感度與餘裕改善',
-    prerequisite: 'Current Screen 08 analysis',
-    prerequisite_zh: '目前的 Screen 08 分析結果',
-    source_screen: '08 Bottleneck Analysis',
-    extension: 'csv',
-    mime_type: 'text/csv;charset=utf-8',
-    artifact_slug: 'Bottleneck_Analysis',
-    package_path: 'data/bottlenecks.csv',
-  },
-  {
-    type: 'scenario_json',
-    label: 'Scenario & Boundary JSON',
-    zh: '情境與邊界 JSON',
-    format: 'JSON',
-    description: 'Scenario inputs plus the boundary models and their sources',
-    description_zh: '情境輸入與邊界模型、來源',
-    prerequisite: 'Scenario + boundary configuration',
-    prerequisite_zh: '情境與邊界設定',
-    source_screen: '06 Boundary Conditions',
-    extension: 'json',
-    mime_type: 'application/json',
-    artifact_slug: 'Scenario_Boundary',
-    package_path: 'data/scenario_boundary.json',
-  },
-  {
     type: 'png_snapshots',
     label: 'Charts / Snapshots PNG',
     zh: '圖表快照 PNG',
@@ -195,21 +125,6 @@ export const ARTIFACT_DEFINITIONS: ArtifactDefinition[] = [
     mime_type: 'application/zip',
     artifact_slug: 'Engineering_Package',
     package_path: '',
-  },
-  {
-    type: 'manifest',
-    label: 'Traceability Manifest',
-    zh: '追溯資訊清單',
-    format: 'JSON',
-    description: 'Project, scenario, solver, snapshot, artifact and warning record',
-    description_zh: '記錄專案、情境、求解器、快照、產出與警告',
-    prerequisite: 'Export session metadata',
-    prerequisite_zh: '匯出工作階段的中繼資料',
-    source_screen: '12 Export Center',
-    extension: 'json',
-    mime_type: 'application/json',
-    artifact_slug: 'Manifest',
-    package_path: 'traceability/manifest.json',
   },
 ];
 
@@ -369,13 +284,7 @@ export function defaultConfiguration(base: string): ExportConfiguration {
 
 // --- presets (12 §23) -------------------------------------------------------
 
-export const PRESETS = [
-  'engineering_package',
-  'report_only',
-  'data_only',
-  'images_only',
-  'custom',
-] as const;
+export const PRESETS = ['engineering_package', 'report_only', 'images_only', 'custom'] as const;
 export type ExportPreset = (typeof PRESETS)[number];
 
 export const PRESET_LABELS: Record<ExportPreset, { label: string; zh: string; note: string }> = {
@@ -384,27 +293,16 @@ export const PRESET_LABELS: Record<ExportPreset, { label: string; zh: string; no
     zh: '工程封裝',
     note: 'All recommended READY/WARNING artifacts',
   },
-  report_only: { label: 'Report Only', zh: '僅報告', note: 'PDF + manifest' },
-  data_only: { label: 'Data Only', zh: '僅資料', note: 'CSV / JSON + manifest' },
-  images_only: { label: 'Images Only', zh: '僅圖片', note: 'PNG snapshots + manifest' },
+  report_only: { label: 'Report Only', zh: '僅報告', note: 'PDF and HTML report' },
+  images_only: { label: 'Images Only', zh: '僅圖片', note: 'PNG snapshots' },
   custom: { label: 'Custom', zh: '自訂', note: 'Your own selection' },
 };
 
 /** 12 §23 — what each preset asks for, before readiness is applied. */
 export const PRESET_ARTIFACTS: Record<Exclude<ExportPreset, 'custom'>, ArtifactType[]> = {
-  engineering_package: [
-    'pdf_report',
-    'temperature_csv',
-    'network_json',
-    'network_csv',
-    'bottleneck_csv',
-    'scenario_json',
-    'png_snapshots',
-    'manifest',
-  ],
-  report_only: ['pdf_report', 'manifest'],
-  data_only: ['temperature_csv', 'network_json', 'network_csv', 'bottleneck_csv', 'scenario_json', 'manifest'],
-  images_only: ['png_snapshots', 'manifest'],
+  engineering_package: ['pdf_report', 'html_report', 'png_snapshots'],
+  report_only: ['pdf_report', 'html_report'],
+  images_only: ['png_snapshots'],
 };
 
 // --- session and results (12 §48, §49) --------------------------------------
