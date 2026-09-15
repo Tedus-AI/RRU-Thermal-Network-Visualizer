@@ -17,6 +17,8 @@ import type {
   ResultsOverviewSnapshot,
 } from '@/thermal/overview/overviewTypes';
 
+import { buildActionSummary } from '@/thermal/overview/actionSummaryRules';
+
 import type { SectionId, SnapshotState, SnapshotSummary } from './reportTypes';
 
 export interface SnapshotEvaluation extends SnapshotSummary {
@@ -86,32 +88,48 @@ export function evaluateSnapshot(
 }
 
 /**
- * Put the Chinese action lines back on a snapshot frozen before it carried any.
+ * Give a snapshot frozen before the Chinese field existed both halves of its
+ * Engineering Actions, rebuilt from its own frozen numbers.
  *
  * The report reads the frozen snapshot and nothing else (§12, §37), and that
- * rule is kept here: the SENTENCES still come from the snapshot. Only their
- * translation is taken from the live overview, and only when the two English
- * arrays are character-for-character identical — which is proof that the live
- * Chinese lines are the translations of exactly these sentences and not of some
- * later result. Anything else is left alone and the report prints English.
+ * rule is what makes this safe: `buildActionSummary` is a pure function of the
+ * structured summaries the snapshot already carries — the critical components,
+ * the bottleneck availability, the solver quality, the completeness counts —
+ * so running it here reads no live result. It produces both languages from one
+ * pass, which is the only way the two halves are guaranteed to be the same
+ * sentence.
  *
- * Without this, a snapshot frozen before the field existed shows an English-only
- * Engineering Actions for ever, and the only way to get the Chinese is to know
- * that Prepare Report Snapshot has to be pressed again — which nothing says.
+ * This replaces borrowing the translation from the live overview. That only
+ * worked while the two English arrays matched character for character, and the
+ * rules have since changed: the energy-balance, limit-coverage,
+ * low-confidence-edge and analytical-only sentences were cut so the one finding
+ * that differs between projects is not pushed off the page. An old snapshot
+ * still quotes all four, no live line matches them, and the section stayed
+ * English for ever — printing, in the one language the reader did not ask for,
+ * conclusions this tool no longer draws.
+ *
+ * A snapshot that already carries Chinese is returned untouched, so this only
+ * ever reaches the snapshots that are broken.
+ *
+ * `solution_stale` is false by construction: Prepare Report Snapshot refuses a
+ * stale solve, so a snapshot that exists was frozen from a current one.
  */
-export function withTranslatedActions(
-  snapshot: ResultsOverviewSnapshot,
-  live: ResultsOverview | null,
-): ResultsOverviewSnapshot {
+export function withTranslatedActions(snapshot: ResultsOverviewSnapshot): ResultsOverviewSnapshot {
   if (snapshot.action_summary_zh && snapshot.action_summary_zh.length > 0) return snapshot;
-  if (!live) return snapshot;
 
-  const frozen = snapshot.action_summary;
-  const current = live.action_summary;
-  if (current.length !== frozen.length) return snapshot;
-  if (!frozen.every((line, index) => line === current[index])) return snapshot;
+  const rebuilt = buildActionSummary({
+    overall_status: snapshot.overall_status,
+    solution_stale: false,
+    critical_components: snapshot.critical_components,
+    bottlenecks: snapshot.bottlenecks,
+    bottleneck_availability: snapshot.bottleneck_availability,
+    solver: snapshot.solver_quality,
+    completeness: snapshot.completeness,
+    distribution_available: snapshot.distribution != null,
+  });
 
-  return { ...snapshot, action_summary_zh: live.action_summary_zh };
+  if (rebuilt.lines.length === 0) return snapshot;
+  return { ...snapshot, action_summary: rebuilt.lines, action_summary_zh: rebuilt.lines_zh };
 }
 
 /** 11 §3 — a stale or missing snapshot may still preview, but never export. */

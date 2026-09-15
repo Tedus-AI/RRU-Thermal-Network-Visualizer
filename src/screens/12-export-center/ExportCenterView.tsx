@@ -509,7 +509,7 @@ export function ExportCenterView() {
       // The same recovery Screen 11's preview does, so the exported document
       // and the preview of it do not disagree about which language the
       // Engineering Actions are in. See `withTranslatedActions`.
-      snapshot: withTranslatedActions(snapshot, liveOverview),
+      snapshot: withTranslatedActions(snapshot),
       project: {
         name: draft?.project_name ?? projectId ?? '',
         id: projectId ?? '',

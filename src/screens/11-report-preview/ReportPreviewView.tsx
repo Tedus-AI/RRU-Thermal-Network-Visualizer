@@ -319,7 +319,7 @@ export function ReportPreviewView() {
    * and only when the English text is identical.
    */
   const reportSnapshot = useMemo(
-    () => (snapshot ? withTranslatedActions(snapshot, liveOverview) : null),
+    () => (snapshot ? withTranslatedActions(snapshot) : null),
     [snapshot, liveOverview],
   );
 
