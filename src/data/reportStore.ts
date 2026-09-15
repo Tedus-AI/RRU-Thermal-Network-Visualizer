@@ -29,7 +29,7 @@ import type {
   ReportTemplate,
   ThermalReportConfig,
 } from '@/report/reportTypes';
-import { toTemplate } from '@/report/reportConfig';
+import { normaliseDisplay, toTemplate } from '@/report/reportConfig';
 
 interface ReportStoreState {
   /** One config per scenario. */
@@ -66,7 +66,11 @@ export const useReportStore = create<ReportStoreState>((set, get) => ({
 
   loadFor: (projectId, scenarioId) => {
     const configs: Record<string, ThermalReportConfig> = {};
-    for (const config of loadReportConfigs(projectId)) configs[config.scenario_id] = config;
+    // Stored configs predate what Keep Table Together now means; see
+    // `normaliseDisplay`.
+    for (const config of loadReportConfigs(projectId)) {
+      configs[config.scenario_id] = normaliseDisplay(config);
+    }
 
     const payloads: Record<string, ReportExportPayload> = {};
     for (const payload of loadExportPayloads(projectId)) payloads[payload.scenario_id] = payload;

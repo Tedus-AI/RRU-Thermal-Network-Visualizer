@@ -56,7 +56,12 @@ export interface SectionDefinition {
 export function defaultDisplay(pageBreakBefore = false): SectionDisplayOptions {
   return {
     page_break_before: pageBreakBefore,
-    keep_table_together: true,
+    // Off by default. It used to be on, which meant every section refused to
+    // share a page unless the whole of it fitted — and since the height
+    // estimates were two to four times too large, that was most of the time.
+    // The estimates are measured now, so the flag can mean what it says: this
+    // one is not to be split, move it whole if it does not fit.
+    keep_table_together: false,
     compact_spacing: false,
   };
 }

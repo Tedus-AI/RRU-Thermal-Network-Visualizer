@@ -24,7 +24,7 @@ import {
 } from '@/report/reportTypes';
 import { sectionDefinition } from '@/report/sectionRegistry';
 
-import { ReportSectionBody, type SectionRenderInput } from './ReportSections';
+import { REPORT_WRAP, ReportSectionBody, type SectionRenderInput } from './ReportSections';
 import { reportLabel } from './reportViewModel';
 import { T11 } from './tooltips';
 
@@ -245,7 +245,7 @@ export function ReportPageView({
         <div className="flex h-full flex-col px-[14mm] py-[12mm]">
           {/* --- running header (11 §9) --------------------------------- */}
           <div className="flex shrink-0 items-center justify-between border-b border-[#d7dde5] pb-1 text-[8.5px] text-[#68748a]">
-            <span className="truncate">
+            <span className={REPORT_WRAP}>
               {[
                 header.show_project_name ? projectName : null,
                 header.show_report_title ? config.title : null,
@@ -253,7 +253,7 @@ export function ReportPageView({
                 .filter(Boolean)
                 .join(' · ')}
             </span>
-            <span className="truncate">
+            <span className={REPORT_WRAP}>
               {header.show_scenario ? config.subtitle : ''}
               {header.show_prepared_date ? ` · ${config.cover.prepared_date}` : ''}
             </span>
@@ -296,10 +296,10 @@ export function ReportPageView({
 
           {/* --- running footer (11 §9) --------------------------------- */}
           <div className="flex shrink-0 items-center justify-between border-t border-[#d7dde5] pt-1 text-[8.5px] text-[#68748a]">
-            <span className="truncate">
+            <span className={REPORT_WRAP}>
               {header.show_project_name ? config.cover.project_name_override ?? '' : ''}
             </span>
-            <span className="truncate">
+            <span className={REPORT_WRAP}>
               {header.show_confidentiality ? header.footer_text : ''}
             </span>
             <span className="shrink-0">

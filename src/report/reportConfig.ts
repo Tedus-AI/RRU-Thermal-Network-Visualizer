@@ -16,11 +16,34 @@ import {
   type SectionId,
   type ThermalReportConfig,
 } from './reportTypes';
-import { RECOMMENDED_SECTION_IDS } from './sectionRegistry';
+import { RECOMMENDED_SECTION_IDS, sectionDefinition } from './sectionRegistry';
 import { defaultSections } from './defaultTemplate';
 
 function touched(config: ThermalReportConfig, sections: ReportSectionConfig[]): ThermalReportConfig {
   return { ...config, sections: renumber(sections), updated_at: new Date().toISOString() };
+}
+
+/**
+ * Bring a stored config forward to what Keep Table Together now means.
+ *
+ * The flag used to default ON for every section, and for a splittable one the
+ * paginator ignored it while the Inspector hid the control — so a stored `true`
+ * there records the old default and nothing a reader chose. Read literally
+ * under the new rule it would move whole tables to a fresh page, which is the
+ * blank-footed layout the measured heights were meant to end.
+ *
+ * A NON-splittable section is left alone: the flag always worked there, so a
+ * `true` on it may well be deliberate and it does the same thing either way.
+ */
+export function normaliseDisplay(config: ThermalReportConfig): ThermalReportConfig {
+  let changed = false;
+  const sections = config.sections.map((section) => {
+    if (!sectionDefinition(section.id).splittable) return section;
+    if (!section.display.keep_table_together) return section;
+    changed = true;
+    return { ...section, display: { ...section.display, keep_table_together: false } };
+  });
+  return changed ? { ...config, sections } : config;
 }
 
 /** Order numbers stay 1..n and contiguous, whatever the caller did to the array. */

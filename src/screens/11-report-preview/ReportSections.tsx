@@ -76,6 +76,26 @@ export function sliceRange<T>(items: readonly T[], from: number, to: number): T[
   return items.slice(from, Number.isFinite(to) ? to : undefined);
 }
 
+/**
+ * Report text wraps; it never truncates.
+ *
+ * Two reasons, and the second is the important one.
+ *
+ * html2canvas rasterises these pages for the PDF, and it clips text at an
+ * `overflow: hidden` box using its own font metrics rather than the browser's.
+ * Every line that carried `truncate` came out of the exporter sliced through
+ * the middle — "Prototype", "WARNING", "353.2 W", the running header, the
+ * footer — while the tables beside them, which do not truncate, were perfect.
+ * The browser's own boxes measured correctly at every step, so there was
+ * nothing to correct on this side; naming an explicit line height did not help.
+ *
+ * And a report is a deliverable. `truncate` answers "too long to fit" by
+ * hiding the end of a value behind an ellipsis, which on screen is a nudge to
+ * widen a column and in a printed PDF is a number the reader never learns was
+ * there. A page of fixed A4 width should give the text another line instead.
+ */
+export const REPORT_WRAP = 'min-w-0 break-words leading-[1.45]';
+
 const CELL = 'border border-[#d7dde5] px-2 py-1 align-middle';
 const HEAD = `${CELL} bg-[#eef2f7] text-[9.5px] font-bold uppercase tracking-wide text-[#425067]`;
 
@@ -92,10 +112,10 @@ function Field({
 }) {
   return (
     <div className="min-w-0 border border-[#d7dde5] px-2 py-1">
-      <p className="truncate text-[8.5px] font-semibold tracking-wide text-[#68748a] uppercase">
+      <p className={`${REPORT_WRAP} text-[8.5px] font-semibold tracking-wide text-[#68748a] uppercase`}>
         {reportLabel(mode, label, zh)}
       </p>
-      <p className="truncate text-[11px] font-bold text-[#16202f]">{value}</p>
+      <p className={`${REPORT_WRAP} text-[11px] font-bold text-[#16202f]`}>{value}</p>
     </div>
   );
 }
@@ -186,7 +206,7 @@ function CoverSection({ input }: { input: SectionRenderInput }) {
         ].map(([label, zh, value]) => (
           <div key={label} className="flex justify-between gap-3 border-b border-[#e4e9f0] pb-1">
             <span className="text-[#68748a]">{reportLabel(mode, label, zh)}</span>
-            <span className="truncate font-semibold text-[#16202f]">{value}</span>
+            <span className={`${REPORT_WRAP} font-semibold text-[#16202f]`}>{value}</span>
           </div>
         ))}
       </div>
