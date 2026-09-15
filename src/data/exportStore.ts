@@ -18,7 +18,13 @@
 
 import { create } from 'zustand';
 
-import { loadExportStamp, saveExportStamp, type ExportStamp } from './persistence';
+import {
+  loadExportPreferences,
+  loadExportStamp,
+  saveExportPreferences,
+  saveExportStamp,
+  type ExportStamp,
+} from './persistence';
 
 import {
   defaultConfiguration,
@@ -58,6 +64,8 @@ interface ExportStoreState {
 
   /** Per-project export stamp (12 §36), read from storage. */
   stamp: ExportStamp | null;
+  /** Whose preferences the settings below belong to, so a change can be saved. */
+  projectId: string | null;
   scenarioId: string | null;
 
   loadFor: (projectId: string, scenarioId: string | null, base: string) => void;
@@ -83,6 +91,27 @@ interface ExportStoreState {
   clearQueue: () => void;
 }
 
+/**
+ * Write the Export Center's settings back as they change.
+ *
+ * On change rather than on leave: there is no reliable "leaving the screen"
+ * moment in a single-page app, and the same rule is what makes Screen 11's
+ * layout survive a navigation.
+ */
+function rememberSettings(
+  projectId: string | null,
+  config: ExportConfiguration,
+  preset: ExportPreset,
+  selected: ArtifactType[],
+): void {
+  if (!projectId) return;
+  saveExportPreferences(projectId, {
+    config: config as unknown as Record<string, unknown>,
+    preset,
+    selected,
+  });
+}
+
 export const useExportStore = create<ExportStoreState>((set, get) => ({
   config: defaultConfiguration(''),
   preset: 'engineering_package',
@@ -99,6 +128,7 @@ export const useExportStore = create<ExportStoreState>((set, get) => ({
   progress: null,
 
   stamp: null,
+  projectId: null,
   scenarioId: null,
 
   loadFor: (projectId, scenarioId, base) => {
@@ -107,10 +137,32 @@ export const useExportStore = create<ExportStoreState>((set, get) => ({
     // the queue and the results; only the session history is allowed to persist
     // across a scenario switch, because it is a log of what this tab did.
     const changed = previous.scenarioId !== scenarioId;
+
+    // Settings are not results. The queue and the session belong to one run and
+    // are cleared with it; what the engineer chose -- the filename pattern, the
+    // encodings, the precision, which artifacts are ticked -- is a preference,
+    // and every other screen in this tool remembers its own. Reloaded rather
+    // than kept from `previous`, so it is right after a browser reload too.
+    const stored = loadExportPreferences(projectId);
+    const remembered = stored
+      ? { ...defaultConfiguration(base), ...(stored.config as Partial<ExportConfiguration>) }
+      : null;
+
     set({
+      projectId,
       scenarioId,
       stamp: loadExportStamp(projectId),
-      config: changed ? defaultConfiguration(base) : { ...previous.config, base_filename: previous.config.base_filename || base },
+      config: remembered
+        ? { ...remembered, base_filename: remembered.base_filename || base }
+        : changed
+          ? defaultConfiguration(base)
+          : { ...previous.config, base_filename: previous.config.base_filename || base },
+      ...(stored
+        ? {
+            preset: stored.preset as ExportPreset,
+            selected: stored.selected as ArtifactType[],
+          }
+        : {}),
       ...(changed
         ? {
             session: null,
@@ -139,23 +191,38 @@ export const useExportStore = create<ExportStoreState>((set, get) => ({
       cancelRequested: false,
       progress: null,
       stamp: null,
+      projectId: null,
       scenarioId: null,
     }),
 
-  setConfig: (patch) => set((state) => ({ config: { ...state.config, ...patch } })),
+  setConfig: (patch) =>
+    set((state) => {
+      const config = { ...state.config, ...patch };
+      rememberSettings(state.projectId, config, state.preset, state.selected);
+      return { config };
+    }),
 
-  setPreset: (preset, artifacts) => set({ preset, selected: artifacts }),
+  setPreset: (preset, artifacts) =>
+    set((state) => {
+      rememberSettings(state.projectId, state.config, preset, artifacts);
+      return { preset, selected: artifacts };
+    }),
 
-  setSelected: (selected) => set({ selected }),
+  setSelected: (selected) =>
+    set((state) => {
+      rememberSettings(state.projectId, state.config, state.preset, selected);
+      return { selected };
+    }),
 
   toggle: (type) =>
-    set((state) => ({
-      // Touching the selection by hand means the preset no longer describes it.
-      preset: 'custom',
-      selected: state.selected.includes(type)
+    set((state) => {
+      const selected = state.selected.includes(type)
         ? state.selected.filter((entry) => entry !== type)
-        : [...state.selected, type],
-    })),
+        : [...state.selected, type];
+      // Touching the selection by hand means the preset no longer describes it.
+      rememberSettings(state.projectId, state.config, 'custom', selected);
+      return { preset: 'custom' as ExportPreset, selected };
+    }),
 
   beginSession: (session, queue) =>
     set({
