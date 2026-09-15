@@ -17,8 +17,6 @@ export const T12 = {
     '沿用 Screen 11 的報告準備狀態；WARNING 可確認後匯出，BLOCKED 則不可產生 PDF。',
   traceabilityManifest:
     '追溯資訊清單：記錄本次匯出所使用的 Project、Scenario、Solver、Snapshot、Artifact、版本與警告，便於後續工程驗證與版本追蹤。',
-  overwriteHandling:
-    '當檔名重複時的處理方式；Browser Download 模式通常使用 Auto Rename 以避免覆寫。',
   decimalPrecision: 'CSV 匯出時的數值小數位數；不會改變工具內部保存的原始精度。',
   utf8Bom: '在 CSV 開頭加入 BOM，提升 Excel 開啟繁體中文欄位時的相容性。',
   localExport: '匯出檔案在本機瀏覽器產生，不會自動上傳到外部服務。',
@@ -40,14 +38,19 @@ export const T12 = {
     '各資料來源目前是否可用於匯出；BLOCKED 表示來源已過期或無效，需回到對應畫面重新產生。',
 } as const;
 
-/** 12 §56 — the exact label list that must carry a zh-TW engineering tooltip. */
+/**
+ * 12 §56 — the label list that must carry a zh-TW engineering tooltip.
+ *
+ * "Overwrite Handling" was on §56's list and is no longer here: the control it
+ * explained never did anything, so it was removed rather than left as a
+ * dropdown with a tooltip and no effect.
+ */
 export const REQUIRED_TOOLTIP_LABELS: Array<{ label: string; zh: string }> = [
   { label: 'Export Status', zh: T12.exportStatus },
   { label: 'Artifact', zh: T12.artifact },
   { label: 'Package Preset', zh: T12.packagePreset },
   { label: 'Report Readiness', zh: T12.reportReadiness },
   { label: 'Traceability Manifest', zh: T12.traceabilityManifest },
-  { label: 'Overwrite Handling', zh: T12.overwriteHandling },
   { label: 'Decimal Precision', zh: T12.decimalPrecision },
   { label: 'UTF-8 BOM', zh: T12.utf8Bom },
   { label: 'Local Export', zh: T12.localExport },

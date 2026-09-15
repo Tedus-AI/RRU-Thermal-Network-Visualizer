@@ -95,11 +95,9 @@ import {
   ExportProgress,
   ExportQueue,
   ExportResultPanel,
-  PackageWarningSummary,
 } from './ExportQueue';
 import {
   ExportHistoryPanel,
-  ExportSessionPanel,
   ExportValidationPanel,
   LocalExportNotice,
   SourceReadinessPanel,
@@ -232,7 +230,6 @@ export function ExportCenterView() {
   const history = useExportStore((s) => s.history);
   const exporting = useExportStore((s) => s.exporting);
   const progress = useExportStore((s) => s.progress);
-  const session = useExportStore((s) => s.session);
   const lastManifest = useExportStore((s) => s.lastManifest);
   const stamp = useExportStore((s) => s.stamp);
 
@@ -1001,13 +998,9 @@ export function ExportCenterView() {
             >
               <ExportQueue queue={queue} onDownloadAgain={downloadAgain} />
             </Panel>
-
-            <Panel index={5} title="Package Warning Summary" zh="封裝警告摘要">
-              <PackageWarningSummary warnings={validation.warnings} />
-            </Panel>
           </div>
 
-          {/* --- RIGHT: presets, readiness, validation, session, history --- */}
+          {/* --- RIGHT: presets, readiness, validation, history ----------- */}
           <div className="flex w-full shrink-0 flex-col gap-3 xl:w-[21rem]">
             <Panel title="Package Presets" zh="封裝組合" explanation={T12.packagePreset}>
               <PackagePresetPanel
@@ -1048,10 +1041,6 @@ export function ExportCenterView() {
               }
             >
               <ExportValidationPanel validation={validation} />
-            </Panel>
-
-            <Panel title="Export Session" zh="匯出工作階段" explanation={T12.exportSession}>
-              <ExportSessionPanel session={session} />
             </Panel>
 
             <Panel

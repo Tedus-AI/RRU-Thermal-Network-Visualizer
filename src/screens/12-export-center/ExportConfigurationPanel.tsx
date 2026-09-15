@@ -23,8 +23,6 @@ import {
   DESTINATIONS,
   DESTINATION_LABELS,
   JSON_FORMATS,
-  OVERWRITE_LABELS,
-  OVERWRITE_MODES,
   PNG_SCALES,
   type ArtifactType,
   type CsvEncoding,
@@ -32,7 +30,6 @@ import {
   type Destination,
   type ExportConfiguration,
   type JsonFormat,
-  type OverwriteMode,
   type PngScale,
 } from '@/export/exportTypes';
 
@@ -159,25 +156,6 @@ export function ExportConfigurationPanel({
           checked={config.timestamp}
           disabled={disabled}
           onChange={(value) => onChange({ timestamp: value })}
-        />
-      </Row>
-
-      <Row
-        label="Overwrite Handling"
-        zh="重複檔名"
-        htmlFor="ex-overwrite"
-        explanation={T12.overwriteHandling}
-      >
-        <Select
-          id="ex-overwrite"
-          className="h-8 !text-[11px]"
-          value={config.overwrite}
-          disabled={disabled}
-          items={OVERWRITE_MODES.map((mode) => ({
-            value: mode,
-            label: OVERWRITE_LABELS[mode].label,
-          }))}
-          onChange={(event) => onChange({ overwrite: event.target.value as OverwriteMode })}
         />
       </Row>
 

@@ -1,5 +1,10 @@
 /**
- * Export queue, progress and result panel — 12 §28, §29, §30, §34, §46.
+ * Export queue, progress and result panel — 12 §28, §29, §30, §34.
+ *
+ * §46's pre-export warning summary used to live here too, as a panel repeating
+ * the warnings the Validation panel was already listing. The confirmation
+ * dialog is what §46 actually requires and it still names every warning before
+ * a run starts; the panel was a third copy of the same three lines.
  *
  * The queue's columns are §28's: Artifact, Format, Status, Progress, Filename,
  * Size, Action. §29's progress line reads exactly as the specification writes it
@@ -167,36 +172,6 @@ export function ExportQueue({
           })}
         </tbody>
       </table>
-    </div>
-  );
-}
-
-/** 12 §46 — the warning summary shown BEFORE the export runs. */
-export function PackageWarningSummary({ warnings }: { warnings: string[] }) {
-  if (warnings.length === 0) {
-    return (
-      <p className="text-[11px] text-ink-500">
-        No warnings. The current selection can be exported as-is.
-        <span className="block text-ink-400">目前沒有警告，可直接匯出。</span>
-      </p>
-    );
-  }
-
-  return (
-    <div className="flex flex-col gap-1">
-      <p className="flex items-center gap-1.5 text-[11.5px] font-bold text-warn-600">
-        <AlertTriangle className="size-3.5" aria-hidden />
-        {warnings.length} warning{warnings.length === 1 ? '' : 's'}
-        <span className="font-normal text-ink-500">/ {warnings.length} 項警告</span>
-        <EngineeringInfo zh={T12.packageWarning} label="Package Warning" align="left" />
-      </p>
-      <ul className="flex flex-col gap-0.5">
-        {warnings.map((warning) => (
-          <li key={warning} className="text-[10.5px] leading-relaxed text-ink-500">
-            · {warning}
-          </li>
-        ))}
-      </ul>
     </div>
   );
 }

@@ -17,7 +17,6 @@ import { EngineeringInfo, biTitle } from '@/ui/FieldLabel';
 import {
   SOURCE_LABELS,
   type ExportHistoryEntry,
-  type ExportSession,
   type ExportValidation,
   type SourceReadiness,
   type SourceReadinessEntry,
@@ -130,53 +129,6 @@ export function ExportValidationPanel({ validation }: { validation: ExportValida
           </ul>
         </div>
       )}
-    </div>
-  );
-}
-
-/** 12 §47 — what the running (or last) export froze. */
-export function ExportSessionPanel({ session }: { session: ExportSession | null }) {
-  if (!session) {
-    return (
-      <p className="text-[11px] text-ink-400">
-        No export session yet. One is frozen when an export starts.
-        <span className="block">尚未建立匯出工作階段；匯出開始時才會凍結來源版本。</span>
-      </p>
-    );
-  }
-
-  const rows: Array<[string, string, string | undefined]> = [
-    ['Session', '工作階段', session.id],
-    ['Started', '開始時間', timeOf(session.started_at)],
-    ['Scenario', '情境', session.scenario_id],
-    ['Solver Result', '求解結果', session.solver_solution_id],
-    ['Analysis', '瓶頸分析', session.analysis_id],
-    ['Report Snapshot', '報告快照', session.report_snapshot_id],
-    ['Report Config', '報告設定', session.report_config_id],
-  ];
-
-  return (
-    <div className="flex flex-col gap-1.5">
-      <p className="flex items-center gap-1.5 text-[11px] font-semibold text-ink-700">
-        Export Session <span className="font-normal text-ink-400">/ 匯出工作階段</span>
-        <EngineeringInfo zh={T12.exportSession} label="Export Session" align="left" />
-        <Badge tone={session.status === 'COMPLETE' ? 'ok' : session.status === 'PARTIAL' ? 'warn' : 'neutral'}>
-          {session.status}
-        </Badge>
-      </p>
-      <dl className="grid grid-cols-[7rem_1fr] gap-x-2 gap-y-0.5 text-[10.5px]">
-        {rows.map(([label, zh, value]) => (
-          <div key={label} className="contents">
-            <dt className="truncate text-ink-500">
-              {label} <span className="text-ink-400">{zh}</span>
-            </dt>
-            <dd className="truncate font-mono text-ink-900" title={value ?? 'N/A'}>
-              {/* An absent source is N/A, never a made-up id. */}
-              {value ?? 'N/A'}
-            </dd>
-          </div>
-        ))}
-      </dl>
     </div>
   );
 }
