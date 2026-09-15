@@ -593,7 +593,13 @@ export function ExportCenterView() {
           network,
           solution,
           solution_status: !solution ? 'NONE' : stale ? 'STALE' : 'SOLVED',
-          analysis,
+          // A stale analysis is not an analysis. Readiness already reports the
+          // bottleneck overlay as unavailable and BLOCKS the Bottleneck CSV
+          // when the solve has moved underneath Screen 08 -- but the snapshot
+          // renderer was handed the stale results anyway and drew the overlay
+          // from them, so the one artifact that shipped stale rankings was the
+          // picture, where nothing says which solve it came from.
+          analysis: analysisStale ? null : analysis,
           distribution,
           boundary: boundarySet,
           components,

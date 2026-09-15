@@ -22,6 +22,8 @@ export interface RowCounts {
   network_figures?: number;
   /** Part chains in Bottleneck Thermal Network. */
   bottleneck_figures?: number;
+  /** Numbered entries in Engineering Actions. */
+  actions?: number;
 }
 
 /**
@@ -33,6 +35,7 @@ function itemCount(section: ReportSectionConfig, rows: RowCounts): number | null
   if (!definition.splittable || !definition.row_height) return null;
   if (section.id === 'network') return rows.network_figures ?? 0;
   if (section.id === 'bottleneck') return rows.bottleneck_figures ?? 0;
+  if (section.id === 'actions') return rows.actions ?? 0;
   // 0 means "All" (11 §15), and is the default.
   const limit = section.content.row_count ?? 0;
   return limit === 0 ? rows.critical : Math.min(limit, rows.critical);

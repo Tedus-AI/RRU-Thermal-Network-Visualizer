@@ -387,6 +387,7 @@ export function ReportPreviewView() {
       critical: snapshot?.critical_components.length ?? 0,
       network_figures: figures.filter((figure) => !figure.part).length,
       bottleneck_figures: figures.filter((figure) => Boolean(figure.part)).length,
+      actions: snapshot?.action_summary.length ?? 0,
     }),
     [snapshot, figures],
   );

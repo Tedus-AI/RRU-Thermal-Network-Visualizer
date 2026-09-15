@@ -571,10 +571,16 @@ function ActionsSection({ input }: { input: SectionRenderInput }) {
   const { config, snapshot } = input;
   const mode = config.language_mode;
 
+  const shown = sliceRange(snapshot.action_summary, input.from, input.to);
+  const last = input.part === input.parts - 1;
+
   return (
     <div className="flex flex-col gap-2">
       <ol className="flex flex-col gap-1">
-        {snapshot.action_summary.map((line, index) => {
+        {shown.map((line, offset) => {
+          // Numbered against the whole list, not this page's slice, so an
+          // action carried overleaf keeps the number the reader saw referenced.
+          const index = input.from + offset;
           // A snapshot frozen before the Chinese lines were carried has none;
           // the English sentence stands in rather than the entry going blank.
           const zh = snapshot.action_summary_zh?.[index];
@@ -584,6 +590,7 @@ function ActionsSection({ input }: { input: SectionRenderInput }) {
           return (
             <li
               key={`${index}-${line}`}
+              data-measure-item={input.measuring ? index : undefined}
               className="flex gap-2 text-[10px] leading-relaxed text-[#16202f]"
             >
               <span className="shrink-0 font-bold text-[#68748a] tabular">{index + 1}.</span>
@@ -601,7 +608,9 @@ function ActionsSection({ input }: { input: SectionRenderInput }) {
         })}
       </ol>
 
-      {(config.notes?.trim() || config.conclusion_notes?.trim()) && (
+      {/* The notes close the section, so they belong with its last actions --
+          repeating them on every part would read as several conclusions. */}
+      {last && (config.notes?.trim() || config.conclusion_notes?.trim()) && (
         <div className="border-l-4 border-[#b6c2d3] bg-[#f7f9fc] px-3 py-2">
           <p className="text-[8.5px] font-bold tracking-wide text-[#68748a] uppercase">
             {reportLabel(mode, 'Engineer Notes — report-only text', '工程師備註（報告專用文字）')}
