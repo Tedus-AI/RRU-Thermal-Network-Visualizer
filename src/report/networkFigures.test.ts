@@ -8,6 +8,7 @@ import { networkFigures, FIGURE_GROUPS } from './networkFigures';
 import type { Component } from '@/domain/component';
 import type { ThermalNetwork } from '@/thermal/types';
 import type { MarginRank } from '@/thermal/analysis/marginRanking';
+import type { ThermalSolution } from '@/thermal/solver/solverTypes';
 
 const component = (id: string, category: Component['category']) =>
   ({ id, name: id, category, enabled: true }) as Component;
@@ -163,6 +164,104 @@ describe('networkFigures', () => {
     });
     expect(figures[0].hidden_node_ids.size).toBe(0);
     expect(figures[0].note_zh).not.toContain('各取一條');
+  });
+
+  /**
+   * The STARKCORE cavity filter, reduced to its shape.
+   *
+   * The heatsink base runs hotter than the filter body, so the contact carries
+   * heat INTO the filter and the filter sheds it through its own convection to
+   * ambient. The fins are downstream of the base, not of the filter.
+   */
+  const filterNetwork = (): ThermalNetwork =>
+    ({
+      nodes: Object.fromEntries(
+        [
+          ['N_body', { component_ref: 'cavity' }],
+          ['N_contact', { component_ref: 'cavity' }],
+          ['N_filter_amb', {}],
+          ['N_hsk', {}],
+          ['N_fin', {}],
+          ['N_amb', {}],
+        ].map(([id, extra]) => [id, { id, name: id, ...(extra as object) }]),
+      ),
+      edges: {
+        // The filter's own path out.
+        E_out: { id: 'E_out', from: 'N_body', to: 'N_filter_amb', enabled: true },
+        // Heat arriving from the base: drawn from contact to body, and that is
+        // the direction the solver found.
+        E_in: { id: 'E_in', from: 'N_contact', to: 'N_body', enabled: true },
+        E_hsk: { id: 'E_hsk', from: 'N_hsk', to: 'N_contact', enabled: true },
+        // The rest of the machine's path, downstream of the base.
+        E_fin: { id: 'E_fin', from: 'N_hsk', to: 'N_fin', enabled: true },
+        E_amb: { id: 'E_amb', from: 'N_fin', to: 'N_amb', enabled: true },
+      },
+    }) as unknown as ThermalNetwork;
+
+  const forward = (ids: string[]): ThermalSolution =>
+    ({
+      edge_results: Object.fromEntries(
+        ids.map((id) => [id, { edge_id: id, actual_direction: 'forward' }]),
+      ),
+    }) as unknown as ThermalSolution;
+
+  it('stops a group figure at the node feeding heat back into it', () => {
+    const figures = networkFigures({
+      network: filterNetwork(),
+      components: [component('cavity', 'Filter')],
+      ranked: [],
+      leversByNode: new Map(),
+      solution: forward(['E_out', 'E_in', 'E_hsk', 'E_fin', 'E_amb']),
+    });
+    const figure = figures.find((entry) => entry.key === 'group-filter')!;
+
+    // The filter's own nodes and where its heat goes.
+    for (const id of ['N_body', 'N_contact', 'N_filter_amb']) {
+      expect(figure.hidden_node_ids.has(id)).toBe(false);
+    }
+    // The base is kept: "this heat arrives from the heatsink" is the finding.
+    expect(figure.hidden_node_ids.has('N_hsk')).toBe(false);
+    // What lies beyond it is another group's path, and is not drawn here.
+    expect(figure.hidden_node_ids.has('N_fin')).toBe(true);
+    expect(figure.hidden_node_ids.has('N_amb')).toBe(true);
+  });
+
+  it('keeps the whole tail when the heat really does run out through it', () => {
+    // The RF, digital and power boards: heat leaves the part, crosses into the
+    // base and out of the fins, so every one of those nodes is on the group's
+    // own path and the figure draws all of it. Here E_in runs contact → body
+    // in the model but the solver found it flowing the other way, which is
+    // what "the filter is being cooled by the base" would look like.
+    const figures = networkFigures({
+      network: filterNetwork(),
+      components: [component('cavity', 'Filter')],
+      ranked: [],
+      leversByNode: new Map(),
+      solution: {
+        edge_results: {
+          E_out: { edge_id: 'E_out', actual_direction: 'forward' },
+          E_in: { edge_id: 'E_in', actual_direction: 'reverse' },
+          E_hsk: { edge_id: 'E_hsk', actual_direction: 'reverse' },
+          E_fin: { edge_id: 'E_fin', actual_direction: 'forward' },
+          E_amb: { edge_id: 'E_amb', actual_direction: 'forward' },
+        },
+      } as unknown as ThermalSolution,
+    });
+    const figure = figures.find((entry) => entry.key === 'group-filter')!;
+    for (const id of ['N_contact', 'N_hsk', 'N_fin', 'N_amb']) {
+      expect(figure.hidden_node_ids.has(id)).toBe(false);
+    }
+  });
+
+  it('trims nothing when there is no solve to read directions from', () => {
+    const figures = networkFigures({
+      network: filterNetwork(),
+      components: [component('cavity', 'Filter')],
+      ranked: [],
+      leversByNode: new Map(),
+    });
+    const figure = figures.find((entry) => entry.key === 'group-filter')!;
+    expect(figure.hidden_node_ids.size).toBe(0);
   });
 
   it('numbers a part figure\'s cut segments so the list can match them', () => {
