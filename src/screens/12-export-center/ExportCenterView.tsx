@@ -806,25 +806,13 @@ export function ExportCenterView() {
       <ScreenWorkspace
         title="Export Center"
         titleZh="匯出中心"
-        description="Turns the results Screens 07–11 produced into files. Nothing is recalculated here."
-        descriptionZh="把 07–11 已產生的結果輸出成檔案；本頁不重新計算任何數值。"
+        descriptionZh="結果輸出成檔案；本頁不重新計算任何數值"
         badge={<Badge tone="warn">NOTHING TO EXPORT</Badge>}
       >
         <NoArtifacts onReport={() => go('report')} onNetwork={() => go('network')} />
       </ScreenWorkspace>
     );
   }
-
-  const readyCount = ARTIFACT_DEFINITIONS.filter(
-    (definition) => readiness[definition.type]?.status === 'READY',
-  ).length;
-  const warningCount = ARTIFACT_DEFINITIONS.filter(
-    (definition) => readiness[definition.type]?.status === 'WARNING',
-  ).length;
-  const blockedCount = ARTIFACT_DEFINITIONS.filter(
-    (definition) => readiness[definition.type]?.status === 'BLOCKED',
-  ).length;
-  const lastSize = queue.reduce((sum, entry) => sum + (entry.size_bytes ?? 0), 0);
 
   const showManifest = (value: unknown) => {
     setManifestText(JSON.stringify(value, null, 2));
@@ -835,27 +823,23 @@ export function ExportCenterView() {
     <ScreenWorkspace
       title="Export Center"
       titleZh="匯出中心"
-      description="Turns the results Screens 07–11 produced into PDF, CSV, JSON, PNG and a ZIP engineering package with a traceability manifest. Nothing is recalculated and no report layout is changed here."
-      descriptionZh="把 07–11 已產生的結果輸出成 PDF、CSV、JSON、PNG 與含追溯清單的 ZIP 工程封裝；本頁不重新計算，也不修改報告版面。"
+      descriptionZh="結果輸出成 PDF、CSV、JSON、PNG 與含追溯清單的 ZIP 工程封裝；本頁不重新計算，也不修改報告版面"
       badge={
         <span className="flex flex-wrap items-center gap-1.5">
-          <Badge tone={status === 'READY' || status === 'COMPLETE' ? 'ok' : status === 'FAILED' ? 'danger' : 'warn'}>
-            {status}
-          </Badge>
+          {/* The Export Status KPI card was removed for saying the same word
+              twice; its explanation belongs to the badge that remains. */}
+          <span title={T12.exportStatus}>
+            <Badge tone={status === 'READY' || status === 'COMPLETE' ? 'ok' : status === 'FAILED' ? 'danger' : 'warn'}>
+              {status}
+            </Badge>
+          </span>
           <Badge tone="accent">{scenario.name}</Badge>
           {payload && <Badge tone="neutral">Report {payload.readiness}</Badge>}
           {stale && <Badge tone="danger">Solution stale</Badge>}
         </span>
       }
       metrics={
-        <ExportKpiBar
-          status={status}
-          ready={readyCount}
-          warnings={warningCount}
-          blocked={blockedCount}
-          sizeEstimate={lastSize > 0 ? lastSize : null}
-          lastExport={stamp?.lastExportAt ?? null}
-        />
+        <ExportKpiBar readiness={readiness} lastExport={stamp?.lastExportAt ?? null} />
       }
       actionBar={
         <div className="flex w-full flex-wrap items-center gap-2">
