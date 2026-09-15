@@ -21,22 +21,16 @@ import type { ResultsOverviewSnapshot } from '@/thermal/overview/overviewTypes';
 import type { ThermalReportConfig } from '@/report/reportTypes';
 import type { TemperatureDistributionResult } from '@/thermal/analysis/distributionResult';
 
-import { encodeCsv, encodeJson } from './csv';
 import { sha256Hex } from './checksum';
 import { textBlob } from './download';
-import { exportBottleneckCsv } from './exportBottleneckCsv';
-import { projectComponentLimits } from '@/thermal/graph/componentProjection';
-
-import { exportNetworkCsv } from './exportNetworkCsv';
-import { exportNetworkJson, type SolutionStatus } from './exportNetworkJson';
 import { exportPngSnapshots } from './exportPngSnapshots';
-import { exportScenarioJson } from './exportScenarioJson';
 import { exportHtmlReport, exportPdfReport } from './exportPdfReport';
 import type { ReportRenderInput } from './reportRenderer';
 import { filenameFor, uniqueFilename } from './filenameBuilder';
 import {
   artifactDefinition,
   type ArtifactType,
+  type SolutionStatus,
   type ExportArtifactResult,
   type ExportConfiguration,
   type ExportSession,
@@ -88,14 +82,8 @@ export interface RunOutcome {
 const PROGRESS_LABELS: Partial<Record<ArtifactType, { en: string; zh: string }>> = {
   pdf_report: { en: 'Rendering PDF', zh: '產生 PDF' },
   html_report: { en: 'Rendering HTML report', zh: '產生 HTML 報告' },
-  temperature_csv: { en: 'Writing temperature CSV', zh: '寫入溫度 CSV' },
-  network_json: { en: 'Writing network JSON', zh: '寫入熱網路 JSON' },
-  network_csv: { en: 'Writing network CSV', zh: '寫入熱網路 CSV' },
-  bottleneck_csv: { en: 'Writing bottleneck CSV', zh: '寫入瓶頸 CSV' },
-  scenario_json: { en: 'Writing scenario JSON', zh: '寫入情境 JSON' },
   png_snapshots: { en: 'Rendering chart snapshots', zh: '產生圖表快照' },
   package_zip: { en: 'Generating ZIP', zh: '產生 ZIP' },
-  manifest: { en: 'Writing manifest', zh: '寫入追溯清單' },
 };
 
 export async function runExport(options: RunOptions): Promise<RunOutcome> {
@@ -105,9 +93,10 @@ export async function runExport(options: RunOptions): Promise<RunOutcome> {
   const taken = new Set<string>();
   let cancelled = false;
 
-  // The manifest is produced by the packager, never by the per-artifact loop:
-  // it has to describe results that do not exist yet at this point.
-  const queue = options.types.filter((type) => type !== 'manifest' && type !== 'package_zip');
+  // The ZIP is produced by the packager, never by the per-artifact loop: it
+  // wraps results that do not exist yet at this point. The manifest it carries
+  // is built there too.
+  const queue = options.types.filter((type) => type !== 'package_zip');
 
   for (const [index, type] of queue.entries()) {
     if (options.isCancelled?.()) {
@@ -187,23 +176,6 @@ export async function runExport(options: RunOptions): Promise<RunOutcome> {
   return { artifacts, results, cancelled };
 }
 
-/**
- * The network as an export must describe it: each component's limit sitting on
- * the node its limit TYPE names.
- *
- * A stored node keeps whatever limit was last written to it, so a part switched
- * from Tj to Tc leaves its old limit on the junction and the case never
- * receives one. Every result surface in the tool -- the temperature dataset,
- * the report, Screen 10 -- reads through this projection. The two network
- * exports did not, so they wrote 2GB_DDR's 95 degree Tc limit onto a junction
- * sitting at 95.4 degrees: the data file said FAIL where the report built from
- * the same solve said PASS with 7.3 degrees of margin.
- */
-export function exportedNetwork(
-  sources: Pick<ExportSources, 'network' | 'components'>,
-): ThermalNetwork | null {
-  return sources.network ? projectComponentLimits(sources.network, sources.components) : null;
-}
 
 async function generate(
   type: ArtifactType,
@@ -260,129 +232,10 @@ async function generate(
       };
     }
 
-    case 'temperature_csv': {
-      if (!sources.network || !sources.solution) throw new Error('No solved result to export.');
-      const { exportTemperatureCsv } = await import('./exportTemperatureCsv');
-      const csv = exportTemperatureCsv({
-        project_id: sources.project_id,
-        project_name: sources.project_name,
-        scenario_name: sources.scenario.name,
-        network: sources.network,
-        solution: sources.solution,
-        components: sources.components,
-        rows: sources.distribution?.rows,
-        config,
-      });
-      return {
-        type,
-        files: [
-          file(
-            nameFor(),
-            definition.package_path,
-            textBlob(encodeCsv(csv, config.csv_encoding), definition.mime_type),
-          ),
-        ],
-        warnings: [],
-      };
-    }
 
-    case 'network_json': {
-      if (!sources.network) throw new Error('No thermal network to export.');
-      const document = exportNetworkJson({
-        project_id: sources.project_id,
-        project_name: sources.project_name,
-        scenario_id: sources.scenario.id,
-        scenario_name: sources.scenario.name,
-        network: exportedNetwork(sources)!,
-        solution: sources.solution,
-        solution_status: sources.solution_status,
-        exported_at: options.session.started_at,
-        export_session_id: options.session.id,
-      });
-      const warnings =
-        sources.solution_status === 'SOLVED'
-          ? []
-          : [`Exported as configuration — solutionStatus = ${sources.solution_status}.`];
-      return {
-        type,
-        files: [
-          file(
-            nameFor(),
-            definition.package_path,
-            textBlob(encodeJson(document, config.json_format), definition.mime_type),
-          ),
-        ],
-        warnings,
-      };
-    }
 
-    case 'network_csv': {
-      if (!sources.network) throw new Error('No thermal network to export.');
-      const tables = exportNetworkCsv({
-        network: exportedNetwork(sources)!,
-        scenario_name: sources.scenario.name,
-        // 12 §12 — Q and ΔT stay blank rather than reporting a stale flow.
-        solution: sources.solution_status === 'SOLVED' ? sources.solution : null,
-        config,
-      });
-      return {
-        type,
-        files: [
-          file(
-            nameFor('Network_Nodes'),
-            'data/network_nodes.csv',
-            textBlob(encodeCsv(tables.nodes, config.csv_encoding), definition.mime_type),
-          ),
-          file(
-            nameFor('Network_Edges'),
-            'data/network_edges.csv',
-            textBlob(encodeCsv(tables.edges, config.csv_encoding), definition.mime_type),
-          ),
-        ],
-        warnings:
-          sources.solution_status === 'SOLVED'
-            ? []
-            : ['Q and Delta T are blank: no current solved result.'],
-      };
-    }
 
-    case 'bottleneck_csv': {
-      if (!sources.analysis) throw new Error('No bottleneck analysis to export.');
-      const csv = exportBottleneckCsv({ analysis: sources.analysis, config });
-      return {
-        type,
-        files: [
-          file(
-            nameFor(),
-            definition.package_path,
-            textBlob(encodeCsv(csv, config.csv_encoding), definition.mime_type),
-          ),
-        ],
-        warnings: [],
-      };
-    }
 
-    case 'scenario_json': {
-      const document = exportScenarioJson({
-        project_id: sources.project_id,
-        project_name: sources.project_name,
-        scenario: sources.scenario,
-        boundary: sources.boundary,
-        exported_at: options.session.started_at,
-        export_session_id: options.session.id,
-      });
-      return {
-        type,
-        files: [
-          file(
-            nameFor(),
-            definition.package_path,
-            textBlob(encodeJson(document, config.json_format), definition.mime_type),
-          ),
-        ],
-        warnings: sources.boundary ? [] : ['No boundary set: scenario inputs only.'],
-      };
-    }
 
     case 'png_snapshots': {
       if (!sources.network || !sources.solution) throw new Error('No solved result to render.');

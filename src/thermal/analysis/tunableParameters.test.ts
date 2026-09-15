@@ -84,6 +84,17 @@ describe('segmentLevers', () => {
     expect(result.rth_after_C_per_W).toBeCloseTo(result.rth_before_C_per_W! * 0.8, 12);
   });
 
+  it('carries the badge number the caller gives it', () => {
+    // The lever list on Screen 08 holds only the segments the reader cut, so
+    // its own index is not the number the graph draws on the chain. The rank
+    // travels with the segment instead, and the two agree by construction.
+    const network = networkOf(edge('E1', 'tim_thickness_k', TIM));
+    expect(segmentLevers(network, 'S1', 'E1', 'Lid → TIM', 20, undefined, 3).rank).toBe(3);
+    // A segment that has left the network still answers with its number,
+    // because the picture beside the list still has a badge on it.
+    expect(segmentLevers(network, 'S1', 'GONE', 'Removed', 20, undefined, 2).rank).toBe(2);
+  });
+
   it('every target, put back through the calculator, gives the asked-for Rth', () => {
     const network = networkOf(edge('E1', 'tim_thickness_k', TIM));
     const result = segmentLevers(network, 'S1', 'E1', 'Lid → TIM', 20);

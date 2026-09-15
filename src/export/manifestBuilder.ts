@@ -90,14 +90,7 @@ function sourceVersionOf(type: ExportArtifactResult['type'], session: ExportSess
     case 'pdf_report':
     case 'html_report':
       return session.report_snapshot_id;
-    case 'temperature_csv':
-      return session.distribution_id;
     case 'png_snapshots':
-      return session.solver_solution_id;
-    case 'bottleneck_csv':
-      return session.analysis_id;
-    case 'network_json':
-    case 'network_csv':
       return session.solver_solution_id;
     default:
       return undefined;

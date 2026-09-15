@@ -82,10 +82,8 @@ import {
 import { createExportSession } from '@/export/exportSession';
 import { runExport } from '@/export/exportRunner';
 import { buildPackage } from '@/export/packageBuilder';
-import { buildManifest } from '@/export/manifestBuilder';
 import { filenameFor, defaultBaseFilename, uniqueFilename } from '@/export/filenameBuilder';
-import { encodeJson } from '@/export/csv';
-import { deliver, pickDirectory, supportsFolderPicker, textBlob, triggerDownload } from '@/export/download';
+import { deliver, pickDirectory, supportsFolderPicker, triggerDownload } from '@/export/download';
 import { sha256Hex } from '@/export/checksum';
 import type { ReportRenderInput } from '@/export/reportRenderer';
 import { resultRevisionMatches } from '@/domain/revision';
@@ -413,6 +411,15 @@ export function ExportCenterView() {
   useEffect(() => {
     if (!activeScenarioId || selectableTypes.length === 0) return;
     if (seeded.current === activeScenarioId) return;
+    // A remembered selection is a decision; the preset is only a starting
+    // point. This effect re-runs on every remount, so without this guard
+    // coming back from another screen re-seeded the preset over whatever the
+    // engineer had ticked -- which is what made the settings look like they
+    // were never saved at all.
+    if (useExportStore.getState().preferencesRestored) {
+      seeded.current = activeScenarioId;
+      return;
+    }
     seeded.current = activeScenarioId;
     // 12 §23 — the Engineering Package preset selects every recommended
     // artifact that currently passes its own prerequisites.
@@ -433,10 +440,7 @@ export function ExportCenterView() {
 
     for (const type of selected) {
       const definition = artifactDefinition(type);
-      // The network CSV writes two tables, so the preview shows both.
-      const slugs: Array<string | undefined> =
-        type === 'network_csv' ? ['Network_Nodes', 'Network_Edges'] : [undefined];
-      for (const slug of slugs) {
+      for (const slug of [undefined] as Array<string | undefined>) {
         const filename = uniqueFilename(
           filenameFor(type, {
             config,
@@ -731,37 +735,6 @@ export function ExportCenterView() {
         }
       }
 
-      // 12 §17 — the manifest travels with a loose export too, when selected.
-      let manifest = null;
-      if (selected.includes('manifest')) {
-        manifest = buildManifest({
-          session: exportSession,
-          results: outcome.results,
-          warnings,
-          now: now.toISOString(),
-        });
-        const manifestName = filenameFor('manifest', {
-          config,
-          project_id: projectId,
-          scenario_name: scenario.name,
-          now,
-        });
-        const blob = textBlob(encodeJson(manifest, config.json_format), 'application/json');
-        const delivered = await deliver({
-          blob,
-          filename: manifestName,
-          mode: config.destination,
-          directory: directoryRef.current,
-        });
-        nextQueue.push({
-          type: 'manifest',
-          filename: manifestName,
-          status: 'EXPORTED',
-          size_bytes: blob.size,
-          object_url: delivered.object_url,
-          mime_type: 'application/json',
-        });
-      }
 
       const failed = outcome.results.filter((result) => result.status === 'FAILED').length;
       const succeeded = outcome.results.filter(
@@ -780,7 +753,7 @@ export function ExportCenterView() {
         project_id: projectId,
         results: outcome.results,
         queue: nextQueue,
-        manifest,
+        manifest: null,
         status: sessionStatus,
         history: {
           id: exportSession.id,
@@ -797,8 +770,8 @@ export function ExportCenterView() {
           filename: nextQueue.find((entry) => entry.status === 'EXPORTED')?.filename ?? '',
           size_bytes: totalSize,
           artifact_count: nextQueue.filter((entry) => entry.status === 'EXPORTED').length,
-          warnings: manifest?.warnings ?? warnings,
-          manifest: manifest ?? undefined,
+          // A loose export writes no manifest; only the ZIP carries one.
+          warnings,
           object_url: nextQueue.find((entry) => entry.status === 'EXPORTED')?.object_url,
         },
       });
@@ -849,12 +822,10 @@ export function ExportCenterView() {
   // --- gates ----------------------------------------------------------------
   if (projectStatus === 'loading' || (projectId && !draft)) return <LoadingState />;
 
-  // The manifest and the ZIP are not sources: the manifest describes a session
-  // and the ZIP wraps whatever else exists. Neither one makes the screen useful
-  // on its own, so neither counts towards "is there anything to export".
+  // The ZIP is not a source: it wraps whatever else exists, so it does not
+  // count towards "is there anything to export".
   const anythingExportable = ARTIFACT_DEFINITIONS.some(
     (definition) =>
-      definition.type !== 'manifest' &&
       definition.type !== 'package_zip' &&
       isExportable(readiness[definition.type]?.status ?? 'NOT_AVAILABLE'),
   );

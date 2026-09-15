@@ -104,6 +104,15 @@ export interface Lever {
 
 export interface SegmentLevers {
   edge_id: string;
+  /**
+   * Where this segment sits in the part's chain, 1 nearest ambient.
+   *
+   * Carried rather than derived from the list's own position: the lever list
+   * holds only the segments the reader has CUT, so its index is not the
+   * segment's number. Numbering by it put a 1 on the row the picture beside it
+   * had marked 2, which is the one thing the badges exist to prevent.
+   */
+  rank: number;
   label: string;
   edge_type: string;
   method: EdgeMethod;
@@ -615,6 +624,7 @@ export function segmentLevers(
   label: string,
   reductionPct: number,
   boundary?: BoundaryContext,
+  rank = 0,
 ): SegmentLevers {
   const edge: ThermalEdge | undefined = network.edges[edgeId];
   const before = edge ? edgeResistance(edge, scenarioId) : null;
@@ -624,6 +634,7 @@ export function segmentLevers(
   if (!edge) {
     return {
       edge_id: edgeId,
+      rank,
       label,
       edge_type: 'unknown',
       method: 'imported',
@@ -638,6 +649,7 @@ export function segmentLevers(
 
   const base: Omit<SegmentLevers, 'levers' | 'message'> = {
     edge_id: edge.id,
+    rank,
     label,
     edge_type: edge.type,
     method: edge.method,

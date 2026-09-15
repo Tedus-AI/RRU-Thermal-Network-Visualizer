@@ -174,8 +174,10 @@ describe('networkFigures', () => {
         [
           'N_pm_body',
           [
-            { edge_id: 'E1', label: 'TIM', reduction_pct: 20, levers: [] },
-            { edge_id: 'E2', label: 'Fin Surface', reduction_pct: 18, levers: [] },
+            // The badge number travels ON the segment now, so the figure and
+            // the list beside it cannot drift apart when one of them filters.
+            { edge_id: 'E1', rank: 1, label: 'TIM', reduction_pct: 20, levers: [] },
+            { edge_id: 'E2', rank: 2, label: 'Fin Surface', reduction_pct: 18, levers: [] },
           ] as never,
         ],
       ]),

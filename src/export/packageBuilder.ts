@@ -10,9 +10,11 @@
 import JSZip from 'jszip';
 
 import { buildManifest } from './manifestBuilder';
+
+/** Where the traceability manifest sits inside an Engineering Package. */
+const MANIFEST_PACKAGE_PATH = 'traceability/manifest.json';
 import { encodeJson } from './csv';
 import {
-  artifactDefinition,
   type ExportArtifactResult,
   type ExportManifest,
   type ExportSession,
@@ -71,10 +73,10 @@ export async function buildPackage(input: PackageInput): Promise<PackageOutput> 
     warnings: input.warnings,
     now: input.now,
   });
-  zip.file(
-    artifactDefinition('manifest').package_path,
-    encodeJson(manifest, input.json_format),
-  );
+  // Named here rather than looked up: the manifest is no longer an artifact
+  // anyone selects, but a package without its provenance record is not
+  // traceable, so every ZIP still carries one.
+  zip.file(MANIFEST_PACKAGE_PATH, encodeJson(manifest, input.json_format));
   entries += 1;
 
   const blob = await zip.generateAsync({

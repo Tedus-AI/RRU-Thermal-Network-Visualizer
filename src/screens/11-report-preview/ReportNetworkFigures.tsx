@@ -311,11 +311,11 @@ function LeverTable({
         {reportLabel(mode, 'Planned Improvement · from Screen 08', '預計改善段 · 來自 08')}
       </p>
       <ul className="flex flex-col gap-1">
-        {levers.map((segment, index) => (
+        {levers.map((segment) => (
           <li key={segment.edge_id}>
             <p className="flex items-baseline gap-1.5 text-[9.5px] font-semibold text-[#16202f]">
               {/* The same number the chain above carries on this segment. */}
-              <SegmentBadge n={index + 1} />
+              <SegmentBadge n={segment.rank} />
               {segment.label}
               <span className="font-normal text-[#68748a]">−{segment.reduction_pct}%</span>
             </p>

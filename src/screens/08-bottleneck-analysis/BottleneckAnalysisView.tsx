@@ -509,9 +509,13 @@ export function BottleneckAnalysisView() {
 
   const levers = useMemo(() => {
     if (!solveGraph || !scenarioId) return [];
+    // The rank comes from the segment's place in the WHOLE chain, before the
+    // filter: this list holds only what the reader cut, so its own index would
+    // put a 1 on the row the graph beside it has marked 2.
     return segments
-      .filter((segment) => (reductions[segment.edge_id] ?? 0) > 0)
-      .map((segment) =>
+      .map((segment, index) => ({ segment, rank: index + 1 }))
+      .filter(({ segment }) => (reductions[segment.edge_id] ?? 0) > 0)
+      .map(({ segment, rank }) =>
         segmentLevers(
           solveGraph,
           scenarioId,
@@ -519,6 +523,7 @@ export function BottleneckAnalysisView() {
           segment.label,
           reductions[segment.edge_id] ?? 0,
           boundaryContext,
+          rank,
         ),
       );
   }, [solveGraph, scenarioId, segments, reductions, boundaryContext]);

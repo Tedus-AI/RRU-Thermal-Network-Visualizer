@@ -66,6 +66,15 @@ interface ExportStoreState {
   stamp: ExportStamp | null;
   /** Whose preferences the settings below belong to, so a change can be saved. */
   projectId: string | null;
+  /**
+   * True once `loadFor` has put a remembered selection back.
+   *
+   * The screen seeds the Engineering Package preset when it first opens, and
+   * that effect re-runs on every remount — so coming back from another screen
+   * it overwrote the very selection that had just been restored. It asks this
+   * first now.
+   */
+  preferencesRestored: boolean;
   scenarioId: string | null;
 
   loadFor: (projectId: string, scenarioId: string | null, base: string) => void;
@@ -129,6 +138,7 @@ export const useExportStore = create<ExportStoreState>((set, get) => ({
 
   stamp: null,
   projectId: null,
+  preferencesRestored: false,
   scenarioId: null,
 
   loadFor: (projectId, scenarioId, base) => {
@@ -151,6 +161,7 @@ export const useExportStore = create<ExportStoreState>((set, get) => ({
     set({
       projectId,
       scenarioId,
+      preferencesRestored: Boolean(stored),
       stamp: loadExportStamp(projectId),
       config: remembered
         ? { ...remembered, base_filename: remembered.base_filename || base }
@@ -192,6 +203,7 @@ export const useExportStore = create<ExportStoreState>((set, get) => ({
       progress: null,
       stamp: null,
       projectId: null,
+      preferencesRestored: false,
       scenarioId: null,
     }),
 
