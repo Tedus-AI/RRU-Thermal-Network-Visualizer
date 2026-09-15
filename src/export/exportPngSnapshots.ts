@@ -4,7 +4,7 @@
  * §15 is a fence: "Export only already supported views" and "Do not invent new
  * analytical views in 12." So each image here is one of Screens 07–09's own
  * views, re-rendered off-screen from the SAME stored results the screen reads —
- * the solved network, the bottleneck overlay and the temperature histogram.
+ * the solved network and the bottleneck overlay.
  *
  * Screen 10's Results Overview is deliberately absent. It is a composite screen
  * rather than an analytical view, and turning it into an image would mean
@@ -20,8 +20,6 @@ import type { ThermalNetwork } from '@/thermal/types';
 import type { ThermalSolution } from '@/thermal/solver/solverTypes';
 import type { BottleneckAnalysis } from '@/thermal/analysis/analysisTypes';
 import { isBoundaryNode } from '@/thermal/analysis/temperatureDataset';
-import { buildTemperatureDataset } from '@/thermal/analysis/temperatureDataset';
-import { autoBinWidth, buildHistogram } from '@/thermal/analysis/temperatureStatistics';
 import type { Component } from '@/domain/component';
 
 import type { PngScale } from './exportTypes';
@@ -242,116 +240,6 @@ function overlayElements(input: SnapshotInput, analysis: BottleneckAnalysis): El
   });
 }
 
-/**
- * 09 — the temperature histogram.
- *
- * The bins come from Screen 09's own `buildHistogram`, and the chart is drawn as
- * BARS over those bins — exactly as the screen does it. That is not a stylistic
- * choice: `plotly.js-basic-dist-min` (the build this app ships) has no
- * `histogram` trace, so asking for one silently renders a line through the raw
- * temperatures. Sharing the binning also means the exported image and the screen
- * agree bin for bin, which is what §15 means by "already supported views".
- */
-async function renderHistogram(input: SnapshotInput): Promise<Blob | null> {
-  const rows = buildTemperatureDataset({
-    network: input.network,
-    solution: input.solution,
-    components: input.components,
-  });
-  if (rows.length === 0) return null;
-
-  const temperatures = rows.map((row) => row.temperature_C);
-  const bins = buildHistogram(
-    rows.map((row) => ({ node_id: row.node_id, temperature_C: row.temperature_C })),
-    autoBinWidth(temperatures),
-  );
-  if (bins.length === 0) return null;
-
-  const Plotly = (await import('plotly.js-basic-dist-min')).default as unknown as {
-    toImage: (figure: unknown, options: Record<string, unknown>) => Promise<string>;
-  };
-
-  const figure = {
-    data: [
-      {
-        type: 'bar',
-        x: bins.map((bin) => bin.label),
-        y: bins.map((bin) => bin.count),
-        marker: { color: '#2977f5', line: { color: '#1348a8', width: 1 } },
-        text: bins.map((bin) => (bin.count > 0 ? String(bin.count) : '')),
-        textposition: 'outside',
-        name: 'Nodes',
-      },
-    ],
-    layout: {
-      title: { text: `Temperature Distribution — ${input.scenario_name}`, font: { size: 15 } },
-      xaxis: { title: { text: 'Temperature (°C)' }, type: 'category', automargin: true },
-      yaxis: { title: { text: 'Node Count' }, automargin: true },
-      bargap: 0.05,
-      paper_bgcolor: '#ffffff',
-      plot_bgcolor: '#ffffff',
-      margin: { l: 60, r: 24, t: 56, b: 70 },
-    },
-  };
-
-  const dataUrl = await Plotly.toImage(figure, {
-    format: 'png',
-    width: 1200,
-    height: 700,
-    scale: input.scale === '2x' ? 2 : 1,
-  });
-  return dataUrlToBlob(dataUrl);
-}
-
-/** 09 — component temperature bars, "[if available]" in §15. */
-async function renderComponentBars(input: SnapshotInput): Promise<Blob | null> {
-  const rows = buildTemperatureDataset({
-    network: input.network,
-    solution: input.solution,
-    components: input.components,
-  }).filter((row) => row.component_name && row.is_heat_source);
-  if (rows.length === 0) return null;
-
-  const hottest = new Map<string, number>();
-  for (const row of rows) {
-    const key = row.component_name as string;
-    hottest.set(key, Math.max(hottest.get(key) ?? -Infinity, row.temperature_C));
-  }
-  const entries = Array.from(hottest.entries()).sort((a, b) => b[1] - a[1]);
-
-  const Plotly = (await import('plotly.js-basic-dist-min')).default as unknown as {
-    toImage: (figure: unknown, options: Record<string, unknown>) => Promise<string>;
-  };
-
-  const figure = {
-    data: [
-      {
-        type: 'bar',
-        x: entries.map(([name]) => name),
-        y: entries.map(([, value]) => value),
-        marker: { color: '#ea9a0b' },
-        name: 'Max °C',
-      },
-    ],
-    layout: {
-      title: { text: `Component Peak Temperature — ${input.scenario_name}`, font: { size: 15 } },
-      xaxis: { automargin: true, tickangle: -35 },
-      yaxis: { title: { text: 'Temperature (°C)' }, automargin: true },
-      paper_bgcolor: '#ffffff',
-      plot_bgcolor: '#ffffff',
-      margin: { l: 60, r: 24, t: 56, b: 90 },
-    },
-  };
-
-  const dataUrl = await Plotly.toImage(figure, {
-    format: 'png',
-    width: 1200,
-    height: 700,
-    scale: input.scale === '2x' ? 2 : 1,
-  });
-  return dataUrlToBlob(dataUrl);
-}
-
 export interface SnapshotResult {
   images: SnapshotImage[];
   /** 12 §31 — "optional image unavailable" is a warning, not a failure. */
@@ -395,12 +283,11 @@ export async function exportPngSnapshots(input: SnapshotInput): Promise<Snapshot
     warnings.push('Bottleneck overlay unavailable: Screen 08 has no current analysis.');
   }
 
-  await attempt('temperature_histogram.png', 'Temperature Histogram (09)', () =>
-    renderHistogram(input),
-  );
-  await attempt('component_bars.png', 'Component Temperature Bars (09)', () =>
-    renderComponentBars(input),
-  );
+  // The histogram and the component bars used to follow, labelled (09). Screen
+  // 09 was removed and nothing replaced it, so they were the only two pictures
+  // in this export with no counterpart anywhere in the tool — an engineer could
+  // not lay the file beside the screen it came from and check it, which is the
+  // one thing a snapshot export is for.
 
   return { images, warnings };
 }

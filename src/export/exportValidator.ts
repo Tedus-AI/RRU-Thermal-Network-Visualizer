@@ -371,8 +371,8 @@ export function evaluateSources(input: ReadinessInput): SourceReadinessEntry[] {
         : solutionState,
       solutionState === 'READY'
         ? input.analysis && !input.analysis_stale
-          ? 'Network, overlay and histogram views are renderable.'
-          : 'Network and histogram renderable; overlay needs Screen 08.'
+          ? 'Both views are renderable: the network and the bottleneck overlay.'
+          : 'The network renders; the bottleneck overlay needs a current Screen 08 analysis.'
         : 'Chart snapshots need a current solve.',
       solutionState === 'READY' ? '可重繪圖表快照。' : '圖表快照需要目前的求解結果。',
     ),

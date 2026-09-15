@@ -114,7 +114,10 @@ export function capLength(stem: string, extension: string): string {
 }
 
 /**
- * 12 §24 — Auto Rename. The browser does this for a real download, but a ZIP
+ * 12 §24 — Auto Rename, always. There was an Overwrite Handling setting offering
+ * "Confirm" as an alternative; nothing ever read it, so the dropdown changed
+ * neither this function nor the writers. It is gone rather than left there
+ * pretending. The browser does this for a real download, but a ZIP
  * entry and the session history both need it applied in-process too, otherwise
  * two artifacts generated in the same minute silently overwrite each other.
  */

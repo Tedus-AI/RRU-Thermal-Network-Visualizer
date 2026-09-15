@@ -171,11 +171,11 @@ export const ARTIFACT_DEFINITIONS: ArtifactDefinition[] = [
     label: 'Charts / Snapshots PNG',
     zh: '圖表快照 PNG',
     format: 'PNG',
-    description: 'Existing 07 / 08 / 09 views, re-rendered from stored results',
-    description_zh: '由既有 07 / 08 / 09 視圖依儲存結果重繪',
+    description: 'Existing 07 / 08 views, re-rendered from stored results',
+    description_zh: '由既有 07 / 08 視圖依儲存結果重繪',
     prerequisite: 'Current solution (analysis for the overlay)',
     prerequisite_zh: '目前求解結果（瓶頸疊圖另需 08 分析）',
-    source_screen: '07 / 08 / 09',
+    source_screen: '07 / 08',
     extension: 'png',
     mime_type: 'image/png',
     artifact_slug: 'Snapshots',
@@ -291,7 +291,7 @@ export const SOURCE_LABELS: Record<SourceKey, { label: string; zh: string; scree
   temperature_distribution: { label: 'Temperature Distribution', zh: '溫度分佈', screen: '07' },
   network_data: { label: 'Network Data', zh: '熱網路資料', screen: '05' },
   scenario_boundary: { label: 'Scenario / Boundary', zh: '情境 / 邊界', screen: '06' },
-  snapshots: { label: 'Snapshots', zh: '圖表快照', screen: '07/08/09' },
+  snapshots: { label: 'Snapshots', zh: '圖表快照', screen: '07/08' },
 };
 
 export type SourceReadiness = 'READY' | 'WARNING' | 'BLOCKED' | 'NOT_AVAILABLE';
@@ -304,14 +304,6 @@ export interface SourceReadinessEntry {
 }
 
 // --- configuration (12 §24, §25, §26, §27) ----------------------------------
-
-export const OVERWRITE_MODES = ['auto_rename', 'confirm'] as const;
-export type OverwriteMode = (typeof OVERWRITE_MODES)[number];
-
-export const OVERWRITE_LABELS: Record<OverwriteMode, { label: string; zh: string }> = {
-  auto_rename: { label: 'Auto Rename', zh: '自動改名' },
-  confirm: { label: 'Confirm', zh: '每次確認' },
-};
 
 export const CSV_ENCODINGS = ['utf8_bom', 'utf8'] as const;
 export type CsvEncoding = (typeof CSV_ENCODINGS)[number];
@@ -345,7 +337,6 @@ export interface ExportConfiguration {
   include_project_id: boolean;
   include_scenario_id: boolean;
   timestamp: boolean;
-  overwrite: OverwriteMode;
   zip_compression: boolean;
 
   csv_encoding: CsvEncoding;
@@ -365,9 +356,6 @@ export function defaultConfiguration(base: string): ExportConfiguration {
     include_project_id: true,
     include_scenario_id: true,
     timestamp: true,
-    // 12 §24 — Browser Download cannot ask the filesystem anything, so the only
-    // honest default there is Auto Rename.
-    overwrite: 'auto_rename',
     zip_compression: true,
     csv_encoding: 'utf8_bom',
     decimal_precision: DEFAULT_DECIMAL_PRECISION,
