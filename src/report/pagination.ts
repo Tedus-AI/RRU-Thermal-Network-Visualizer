@@ -22,6 +22,8 @@ export interface RowCounts {
   network_figures?: number;
   /** Part chains in Bottleneck Thermal Network. */
   bottleneck_figures?: number;
+  /** Numbered entries in Engineering Actions. */
+  actions?: number;
 }
 
 /**
@@ -33,6 +35,7 @@ function itemCount(section: ReportSectionConfig, rows: RowCounts): number | null
   if (!definition.splittable || !definition.row_height) return null;
   if (section.id === 'network') return rows.network_figures ?? 0;
   if (section.id === 'bottleneck') return rows.bottleneck_figures ?? 0;
+  if (section.id === 'actions') return rows.actions ?? 0;
   // 0 means "All" (11 §15), and is the default.
   const limit = section.content.row_count ?? 0;
   return limit === 0 ? rows.critical : Math.min(limit, rows.critical);
@@ -124,15 +127,13 @@ export function paginate(
       section.display.page_break_before ||
       // The cover never shares its page with the section that follows it.
       page.section_ids.includes('cover') ||
-      // A section that does not fit in what is left of the page.
-      //
-      // Only a section that CANNOT be split is moved whole. A splittable one
-      // starts here and carries on overleaf, which is the entire point of its
-      // being splittable — "Keep Table Together" used to move it too, and
-      // since it defaults to on, every section refused to share a page unless
-      // it fitted entirely. That is what left a third of each page blank on a
-      // report with no page breaks set at all.
-      (!definition.splittable && used + height > 1);
+      // A section that does not fit in what is left of the page moves whole —
+      // always when it cannot be split (it would otherwise be clipped), and on
+      // request when it can. "Keep Table Together" is that request, and it is
+      // off by default now: while it was on, and the height estimates were two
+      // to four times too large, it meant every section refused to share a page
+      // and a third of each one was left blank.
+      ((!definition.splittable || section.display.keep_table_together) && used + height > 1);
 
     if (current == null || breaksFrom(current)) {
       current = open(section);

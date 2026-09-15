@@ -44,6 +44,9 @@ export interface SnapshotInput {
 
 const PIXELS = { width: 1400, height: 900 };
 
+/** Breathing room around the graph in the exported image. */
+const GRAPH_PADDING_PX = 40;
+
 /** Same temperature ramp Screens 07 and 09 use, so the export matches the screen. */
 function temperatureFill(temperature: number, min: number, max: number): string {
   const span = Math.max(max - min, 1);
@@ -137,7 +140,7 @@ async function renderGraph(elements: ElementDefinition[], scale: PngScale): Prom
     });
 
     cy.resize();
-    cy.fit(undefined, 40);
+    cy.fit(undefined, GRAPH_PADDING_PX);
 
     const dataUrl = cy.png({
       full: true,
@@ -145,11 +148,44 @@ async function renderGraph(elements: ElementDefinition[], scale: PngScale): Prom
       bg: '#ffffff',
       output: 'base64uri',
     }) as string;
-    return dataUrlToBlob(dataUrl);
+    // `cy.fit`'s padding moves the viewport, and `full: true` ignores the
+    // viewport entirely -- it crops to `elements.boundingBox()`, which stops
+    // at the node outline rather than outside it. So the outermost nodes came
+    // out with their borders shaved against the image edge, and in a dagre LR
+    // layout the leftmost column is every heat source in the network. The
+    // margin has to be added after the fact, because Cytoscape's full-graph
+    // export takes no padding of its own.
+    return await padImage(dataUrl, GRAPH_PADDING_PX * (scale === '2x' ? 2 : 1));
   } finally {
     cy.destroy();
     container.remove();
   }
+}
+
+/** Draws the rendered graph onto a white canvas `margin` pixels larger all round. */
+async function padImage(dataUrl: string, margin: number): Promise<Blob> {
+  const image = new Image();
+  await new Promise<void>((resolve, reject) => {
+    image.onload = () => resolve();
+    image.onerror = () => reject(new Error('The rendered graph could not be re-read for padding.'));
+    image.src = dataUrl;
+  });
+
+  const canvas = document.createElement('canvas');
+  canvas.width = image.width + margin * 2;
+  canvas.height = image.height + margin * 2;
+  const context = canvas.getContext('2d');
+  if (!context) return dataUrlToBlob(dataUrl);
+  context.fillStyle = '#ffffff';
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.drawImage(image, margin, margin);
+
+  return await new Promise<Blob>((resolve) => {
+    canvas.toBlob(
+      (blob) => resolve(blob ?? dataUrlToBlob(dataUrl)),
+      'image/png',
+    );
+  });
 }
 
 function dataUrlToBlob(dataUrl: string): Blob {

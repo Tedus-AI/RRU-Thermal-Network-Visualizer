@@ -15,12 +15,15 @@ import {
   type ThermalReportConfig,
 } from './reportTypes';
 import { includedSections, orderedSections } from './reportConfig';
+import type { MeasuredHeights } from './measuredHeights';
 
 export interface PayloadInput {
   config: ThermalReportConfig;
   snapshot_id: string;
   readiness: ReportReadiness;
   estimated_page_count: number;
+  /** What the preview measured off its own pages; see `measured_heights`. */
+  measured_heights?: MeasuredHeights;
   now?: string;
 }
 
@@ -49,6 +52,7 @@ export function buildExportPayload(input: PayloadInput): ReportExportPayload {
     readiness,
     generated_at: input.now ?? new Date().toISOString(),
     estimated_page_count: input.estimated_page_count,
+    ...(input.measured_heights ? { measured_heights: input.measured_heights } : {}),
     contains_file_bytes: false,
   };
 }

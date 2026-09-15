@@ -53,11 +53,7 @@ import { useDistributionResult } from '@/data/useDistributionResult';
 import { currentSourceRevision } from '@/data/sourceRevision';
 
 import { buildResultsOverview } from '@/thermal/overview/overviewAggregator';
-import { projectComponentLimits } from '@/thermal/graph/componentProjection';
-import { marginRanking, partsNeedingAttention } from '@/thermal/analysis/marginRanking';
-import { segmentLevers, type SegmentLevers } from '@/thermal/analysis/tunableParameters';
-import { NEAR_LIMIT_MARGIN_C } from '@/thermal/analysis/temperatureDataset';
-import { networkFigures } from '@/report/networkFigures';
+import { reportFigureSource } from '@/report/reportFigureSource';
 
 import {
   DEFAULT_ZOOM,
@@ -353,68 +349,45 @@ export function ReportPreviewView() {
    * The pictures the Thermal Network Summary carries, and what Screen 08 says
    * could be done about each part that needs attention.
    *
-   * Built here rather than in the section because it is the same derivation
-   * Screen 10 runs for Improvement Actions — the same ranking helper, the same
-   * saved studies, the same recomputed levers — and a second copy of it would
-   * be a second answer to "which parts matter".
+   * Derived by the shared helper rather than here, because Screen 12's export
+   * renders these same sections and has to arrive at the same answer — when it
+   * had none of its own the PDF printed "Not Available" over two sections the
+   * preview had just drawn in full.
    */
-  const networkContext = useMemo(() => {
-    // The solve INPUT, not the stored graph — the same base Screen 10 reasons
-    // about. A fin link's parameters live on the network the solve ran on, so
-    // levers read off the stored graph come back empty and the report would
-    // say a part has nothing adjustable when Screen 08 has just said it has
-    // six things.
-    const base = solveInput?.network ?? network;
-    if (!base) return null;
-    return {
-      network: components.length > 0 ? projectComponentLimits(base, components) : base,
-      solution: stale ? null : solution,
-      scenarioId: activeScenarioId ?? '',
-    };
-  }, [solveInput, network, components, solution, stale, activeScenarioId]);
-
-  const figures = useMemo(() => {
-    if (!networkContext || !networkContext.solution) return [];
-    const ranked = partsNeedingAttention(
-      marginRanking(networkContext.network, networkContext.solution.node_temperatures_C, 0),
-    ).filter((part) => part.margin_C <= NEAR_LIMIT_MARGIN_C);
-
-    const byTarget = new Map(studies.map((study) => [study.target_node_id, study]));
-    const leversByNode = new Map<string, SegmentLevers[] | null>();
-    for (const part of ranked) {
-      const study = byTarget.get(part.node_id);
-      // null means "no study"; an empty array means "a study whose segments
-      // have nothing adjustable". The report says different things about them.
-      leversByNode.set(
-        part.node_id,
-        study && activeScenarioId
-          ? study.segments.map((segment) =>
-              segmentLevers(
-                networkContext.network,
-                activeScenarioId,
-                segment.edge_id,
-                segment.label,
-                segment.reduction_pct,
-                { ports: boundaryPorts, set: boundarySet },
-              ),
-            )
-          : null,
-      );
-    }
-
-    return networkFigures({
-      network: networkContext.network,
+  const source = useMemo(
+    () =>
+      reportFigureSource({
+        solve_network: solveInput?.network ?? null,
+        stored_network: network,
+        components,
+        solution,
+        stale,
+        scenario_id: activeScenarioId,
+        studies,
+        boundary_ports: boundaryPorts,
+        boundary_set: boundarySet,
+      }),
+    [
+      solveInput,
+      network,
       components,
-      ranked,
-      leversByNode,
-    });
-  }, [networkContext, components, studies, activeScenarioId, boundaryPorts, boundarySet]);
+      solution,
+      stale,
+      activeScenarioId,
+      studies,
+      boundaryPorts,
+      boundarySet,
+    ],
+  );
+  const networkContext = source.context;
+  const figures = source.figures;
 
   const rowCounts = useMemo(
     () => ({
       critical: snapshot?.critical_components.length ?? 0,
       network_figures: figures.filter((figure) => !figure.part).length,
       bottleneck_figures: figures.filter((figure) => Boolean(figure.part)).length,
+      actions: snapshot?.action_summary.length ?? 0,
     }),
     [snapshot, figures],
   );
@@ -608,6 +581,9 @@ export function ReportPreviewView() {
       snapshot_id: snapshot.id,
       readiness: validation.readiness,
       estimated_page_count: pages.length,
+      // The heights this preview measured off its own pages, so Screen 12's
+      // render breaks where the engineer just saw it break.
+      measured_heights: measured,
     });
     useReportStore.getState().storePayload(projectId, payload);
     useReportStore.getState().save(projectId);

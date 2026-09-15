@@ -470,18 +470,43 @@ describe('Pagination (11 §10, §40)', () => {
   });
 
   it('moves a NON-splittable section whole rather than clipping it', () => {
-    // 'actions' cannot be split, so it may not start in a gap it overflows.
+    // 'overall' is one block of status -- it has no items to carry overleaf,
+    // so it may not start in a gap it would overflow.
     const measured = {
-      project: { base: 0.4, items: [] },
-      overall: { base: 0.4, items: [] },
-      actions: { base: 0.5, items: [] },
+      project: { base: 0.7, items: [] },
+      overall: { base: 0.5, items: [] },
     };
-    const trimmed = (['critical', 'network', 'bottleneck'] as SectionId[]).reduce(drop, config());
+    const trimmed = (['critical', 'network', 'bottleneck', 'actions'] as SectionId[]).reduce(
+      drop,
+      config(),
+    );
     const pages = paginate(orderedSections(trimmed), ROWS, measured);
-    const page = pages.find((entry) => entry.section_ids.includes('actions'));
-    // 0.4 + 0.4 leaves 0.2, and 'actions' wants 0.5, so it gets its own page
-    // rather than starting in a gap it would overflow and be clipped in.
-    expect(page?.section_ids).toEqual(['actions']);
+    const page = pages.find((entry) => entry.section_ids.includes('overall'));
+    // 'project' takes 0.7 and leaves 0.3, and 'overall' wants 0.5, so it gets
+    // its own page rather than starting in a gap it would be clipped in.
+    expect(page?.section_ids).toEqual(['overall']);
+  });
+
+  it('carries a long actions list overleaf instead of clipping it', () => {
+    // A machine with a dozen parts at or near their limits writes a dozen
+    // actions. While this section could not be split, everything past the foot
+    // of the page was drawn into the page box and cut off with nothing to say
+    // so -- the reader saw the list simply stop.
+    const measured = {
+      actions: { base: 0.06, items: Array.from({ length: 20 }, () => 0.08) },
+    };
+    const trimmed = (['project', 'overall', 'critical', 'network', 'bottleneck'] as SectionId[])
+      .reduce(drop, config());
+    const pages = paginate(orderedSections(trimmed), { ...ROWS, actions: 20 }, measured);
+    const carrying = pages.filter((entry) => entry.section_ids.includes('actions'));
+
+    expect(carrying.length).toBeGreaterThan(1);
+    // Every action reaches a page, and none is drawn twice.
+    expect(carrying[0]?.slices?.actions?.from).toBe(0);
+    expect(carrying.at(-1)?.slices?.actions?.to).toBe(20);
+    for (let index = 1; index < carrying.length; index += 1) {
+      expect(carrying[index]?.slices?.actions?.from).toBe(carrying[index - 1]?.slices?.actions?.to);
+    }
   });
 
   it('carries a splittable section across pages by measured item height', () => {

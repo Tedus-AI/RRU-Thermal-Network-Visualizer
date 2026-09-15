@@ -16,6 +16,7 @@ import { ReportPageView } from '@/screens/11-report-preview/ReportPreviewCanvas'
 import type { SectionRenderInput } from '@/screens/11-report-preview/ReportSections';
 import { includedSections, orderedSections } from '@/report/reportConfig';
 import { paginate, type RowCounts } from '@/report/pagination';
+import type { MeasuredHeights } from '@/report/measuredHeights';
 import { pageBoxMm, type ReportPage, type ThermalReportConfig } from '@/report/reportTypes';
 import type { ResultsOverviewSnapshot } from '@/thermal/overview/overviewTypes';
 import type { NetworkFigure } from '@/report/networkFigures';
@@ -38,6 +39,8 @@ export interface ReportRenderInput {
   /** The live network the Thermal Network figures are drawn from, when there is one. */
   network_context?: SectionRenderInput['network_context'];
   network_figures?: SectionRenderInput['network_figures'];
+  /** Heights the preview measured, so the export repeats its page breaks. */
+  measured_heights?: MeasuredHeights;
 }
 
 export interface RenderedReport {
@@ -65,6 +68,7 @@ function rowCountsOf(
     critical: snapshot.critical_components.length,
     network_figures: figures.filter((figure) => !figure.part).length,
     bottleneck_figures: figures.filter((figure) => Boolean(figure.part)).length,
+    actions: snapshot.action_summary.length,
   };
 }
 
@@ -80,11 +84,13 @@ export function renderReport(input: ReportRenderInput): RenderedReport {
   const sections = orderedSections(config);
   const included = includedSections(config);
   const figures = input.network_figures ?? [];
-  // NOTE: no measured heights here, so this is still the registry's ESTIMATE
-  // and can differ from what Screen 11's preview showed. Screen 12 has not
-  // been reviewed yet; measuring needs the figures to have finished drawing,
-  // which this synchronous render cannot wait for.
-  const pageModels = paginate(sections, rowCountsOf(snapshot, figures));
+  // The heights Screen 11 measured off the pages it showed, carried on the
+  // export payload. Re-deriving them here would mean re-measuring a render
+  // that has not happened yet; taking the preview's own numbers means the
+  // exported document breaks its pages exactly where the engineer approved
+  // them. Absent (an older payload), `paginate` falls back to the registry
+  // estimate, which is what split a nine-row table 6 + 3 across two pages.
+  const pageModels = paginate(sections, rowCountsOf(snapshot, figures), input.measured_heights);
   const box = pageBoxMm(config.page_size, config.orientation);
 
   const container = document.createElement('div');

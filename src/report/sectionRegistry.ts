@@ -56,7 +56,12 @@ export interface SectionDefinition {
 export function defaultDisplay(pageBreakBefore = false): SectionDisplayOptions {
   return {
     page_break_before: pageBreakBefore,
-    keep_table_together: true,
+    // Off by default. It used to be on, which meant every section refused to
+    // share a page unless the whole of it fitted — and since the height
+    // estimates were two to four times too large, that was most of the time.
+    // The estimates are measured now, so the flag can mean what it says: this
+    // one is not to be split, move it whole if it does not fit.
+    keep_table_together: false,
     compact_spacing: false,
   };
 }
@@ -163,11 +168,18 @@ export const SECTION_DEFINITIONS: SectionDefinition[] = [
     id: 'actions',
     title: 'Engineering Actions / Conclusions',
     zh: '工程行動與結論',
+    // One action is one or two sentences, and a machine with a dozen parts at
+    // or near their limits writes a dozen of them. While this section could not
+    // be split, a list longer than the page was drawn once and CLIPPED by the
+    // page box -- the reader saw the page end mid-sentence and the actions that
+    // followed nowhere at all. A numbered list can always say "item 9 onward".
+    splittable: true,
     recommended: false,
     source_screen: '10',
     source_zh: '10 結果總覽',
     defaultContent: {},
-    base_height: 0.45,
+    base_height: 0.06,
+    row_height: 0.05,
   },
 ];
 

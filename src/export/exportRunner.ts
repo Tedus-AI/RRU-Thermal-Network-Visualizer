@@ -25,6 +25,8 @@ import { encodeCsv, encodeJson } from './csv';
 import { sha256Hex } from './checksum';
 import { textBlob } from './download';
 import { exportBottleneckCsv } from './exportBottleneckCsv';
+import { projectComponentLimits } from '@/thermal/graph/componentProjection';
+
 import { exportNetworkCsv } from './exportNetworkCsv';
 import { exportNetworkJson, type SolutionStatus } from './exportNetworkJson';
 import { exportPngSnapshots } from './exportPngSnapshots';
@@ -185,6 +187,24 @@ export async function runExport(options: RunOptions): Promise<RunOutcome> {
   return { artifacts, results, cancelled };
 }
 
+/**
+ * The network as an export must describe it: each component's limit sitting on
+ * the node its limit TYPE names.
+ *
+ * A stored node keeps whatever limit was last written to it, so a part switched
+ * from Tj to Tc leaves its old limit on the junction and the case never
+ * receives one. Every result surface in the tool -- the temperature dataset,
+ * the report, Screen 10 -- reads through this projection. The two network
+ * exports did not, so they wrote 2GB_DDR's 95 degree Tc limit onto a junction
+ * sitting at 95.4 degrees: the data file said FAIL where the report built from
+ * the same solve said PASS with 7.3 degrees of margin.
+ */
+export function exportedNetwork(
+  sources: Pick<ExportSources, 'network' | 'components'>,
+): ThermalNetwork | null {
+  return sources.network ? projectComponentLimits(sources.network, sources.components) : null;
+}
+
 async function generate(
   type: ArtifactType,
   options: RunOptions,
@@ -273,7 +293,7 @@ async function generate(
         project_name: sources.project_name,
         scenario_id: sources.scenario.id,
         scenario_name: sources.scenario.name,
-        network: sources.network,
+        network: exportedNetwork(sources)!,
         solution: sources.solution,
         solution_status: sources.solution_status,
         exported_at: options.session.started_at,
@@ -299,7 +319,7 @@ async function generate(
     case 'network_csv': {
       if (!sources.network) throw new Error('No thermal network to export.');
       const tables = exportNetworkCsv({
-        network: sources.network,
+        network: exportedNetwork(sources)!,
         scenario_name: sources.scenario.name,
         // 12 §12 — Q and ΔT stay blank rather than reporting a stale flow.
         solution: sources.solution_status === 'SOLVED' ? sources.solution : null,

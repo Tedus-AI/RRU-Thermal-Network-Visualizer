@@ -12,6 +12,7 @@
  */
 
 import type { OverallThermalStatus, ResultMode } from '@/thermal/overview/overviewTypes';
+import type { MeasuredHeights } from './measuredHeights';
 
 export const REPORT_SCHEMA_VERSION = '1.0';
 
@@ -309,6 +310,17 @@ export interface ReportExportPayload {
   generated_at: string;
   /** Page count the preview estimated, so Screen 12 can sanity-check its render. */
   estimated_page_count: number;
+  /**
+   * The heights the preview MEASURED off its own rendered pages.
+   *
+   * Carried so the export reproduces the page breaks the engineer approved
+   * rather than re-deriving them from the registry's estimate. Without it the
+   * PDF split the critical table 6 + 3 across two pages where the preview had
+   * fitted all nine on one, which is exactly the layout change §9 forbids this
+   * screen from making. Optional: a payload prepared before this field existed
+   * has none, and the export falls back to the estimate.
+   */
+  measured_heights?: MeasuredHeights;
   /**
    * 11 §32, §38, AC-11-34/35 — metadata only. No PDF, CSV, JSON, PNG or ZIP is
    * produced on this screen, and this literal keeps that promise in the type.

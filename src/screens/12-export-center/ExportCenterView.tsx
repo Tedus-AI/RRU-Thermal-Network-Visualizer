@@ -61,6 +61,7 @@ import { currentSourceRevision } from '@/data/sourceRevision';
 
 import { buildResultsOverview } from '@/thermal/overview/overviewAggregator';
 import { evaluateSnapshot, withTranslatedActions } from '@/report/snapshotAdapter';
+import { reportFigureSource } from '@/report/reportFigureSource';
 
 import {
   ARTIFACT_DEFINITIONS,
@@ -213,6 +214,10 @@ export function ExportCenterView() {
   const solutions = useSolutionStore((s) => s.solutions);
   const solutionKey = useSolutionStore((s) => s.activeKey);
   const solutionStale = useSolutionStore((s) => s.isStale());
+  // The two the report's figures are derived from; see `reportFigureSource`.
+  const solveInput = useSolutionStore((s) => s.input);
+  const studies = useAnalysisStore((s) => s.proposals);
+  const boundaryPorts = useBoundaryStore((s) => s.ports);
   const solverState = useSolverStore((s) => s.state);
   const analyses = useAnalysisStore((s) => s.analyses);
   // Derived from the solution on screen rather than read back from a stored
@@ -460,6 +465,43 @@ export function ExportCenterView() {
   }, []);
 
   // --- the export -----------------------------------------------------------
+  /**
+   * The same figures Screen 11 previews.
+   *
+   * Screen 12 used to pass none, so `renderReport` received an empty list and a
+   * null context: the exported PDF printed "Thermal Network Not Available" and
+   * "Bottleneck Thermal Network Not Available" over two sections the preview
+   * had drawn in full, and the paginator counted both as empty and broke the
+   * pages somewhere else again. §9 forbids this screen changing the report's
+   * layout, and dropping two of its seven sections is the largest change it
+   * could make.
+   */
+  const figureSource = useMemo(
+    () =>
+      reportFigureSource({
+        solve_network: solveInput?.network ?? null,
+        stored_network: network,
+        components,
+        solution,
+        stale,
+        scenario_id: activeScenarioId,
+        studies,
+        boundary_ports: boundaryPorts,
+        boundary_set: boundarySet,
+      }),
+    [
+      solveInput,
+      network,
+      components,
+      solution,
+      stale,
+      activeScenarioId,
+      studies,
+      boundaryPorts,
+      boundarySet,
+    ],
+  );
+
   const reportRender = useMemo<ReportRenderInput | null>(() => {
     if (!reportConfig || !snapshot || !scenario) return null;
     return {
@@ -483,8 +525,21 @@ export function ExportCenterView() {
       },
       unavailable: snapshotEvaluation.unavailable_sections,
       stale: snapshotEvaluation.state === 'STALE',
+      network_context: figureSource.context,
+      network_figures: figureSource.figures,
+      measured_heights: payload?.measured_heights,
     };
-  }, [reportConfig, snapshot, liveOverview, scenario, draft, projectId, snapshotEvaluation]);
+  }, [
+    reportConfig,
+    snapshot,
+    liveOverview,
+    scenario,
+    draft,
+    projectId,
+    snapshotEvaluation,
+    figureSource,
+    payload,
+  ]);
 
   const execute = useCallback(
     async (mode: 'selected' | 'package') => {
@@ -538,7 +593,13 @@ export function ExportCenterView() {
           network,
           solution,
           solution_status: !solution ? 'NONE' : stale ? 'STALE' : 'SOLVED',
-          analysis,
+          // A stale analysis is not an analysis. Readiness already reports the
+          // bottleneck overlay as unavailable and BLOCKS the Bottleneck CSV
+          // when the solve has moved underneath Screen 08 -- but the snapshot
+          // renderer was handed the stale results anyway and drew the overlay
+          // from them, so the one artifact that shipped stale rankings was the
+          // picture, where nothing says which solve it came from.
+          analysis: analysisStale ? null : analysis,
           distribution,
           boundary: boundarySet,
           components,

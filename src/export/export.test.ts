@@ -21,6 +21,7 @@ import type { ReportExportPayload } from '@/report/reportTypes';
 import { buildCsv, encodeCsv, encodeJson } from './csv';
 import { exportBottleneckCsv } from './exportBottleneckCsv';
 import { exportNetworkCsv } from './exportNetworkCsv';
+import { exportedNetwork } from './exportRunner';
 import { exportNetworkJson } from './exportNetworkJson';
 import { exportScenarioJson } from './exportScenarioJson';
 import { exportTemperatureCsv } from './exportTemperatureCsv';
@@ -871,6 +872,79 @@ describe('Network CSV (12 §12)', () => {
       'Edge ID,From,To,Type,Method,Active Rth,Rth Source,Q,Delta T,Confidence,Enabled',
     );
     expect(tables.edges).toMatch(/52\.130/);
+  });
+});
+
+describe('Network exports judge a limit where its type says (12 §11, §12)', () => {
+  /**
+   * The graph as Screen 05 leaves it: the limit still sits on the junction it
+   * was first written to, and `CMP_PA` has since been re-stated as a CASE
+   * limit. Every result surface projects the limit onto the case before
+   * reading it; the two network exports have to do the same, or the data file
+   * scores a part against a temperature its datasheet never bounded.
+   */
+  function staleLimitNetwork(): ThermalNetwork {
+    const base = network();
+    base.nodes.N_PA_J = {
+      ...base.nodes.N_PA_J,
+      origin: { kind: 'template', template_id: 'T_PA', role: 'JUNCTION' },
+    } as ThermalNetwork['nodes'][string];
+    // The case the template's package_rjc edge already lands on (E_1), which
+    // has never carried a limit because the part was Tj when it was drawn.
+    base.nodes.N_BASE = {
+      ...base.nodes.N_BASE,
+      component_ref: 'CMP_PA',
+      origin: { kind: 'template', template_id: 'T_PA', role: 'CASE' },
+    } as ThermalNetwork['nodes'][string];
+    return base;
+  }
+
+  function part(limitType: 'Tj' | 'Tc'): Component[] {
+    return [
+      {
+        ...components()[0],
+        thermal_spec: { limit_type: limitType, limit_C: { value: 180 } },
+      } as unknown as Component,
+    ];
+  }
+
+  it('moves the limit off the junction and onto the case', () => {
+    const projected = exportedNetwork({
+      network: staleLimitNetwork(),
+      components: part('Tc'),
+    });
+
+    expect(projected).not.toBeNull();
+    expect(projected!.nodes.N_PA_J.limit_C).toBeNull();
+    expect(projected!.nodes.N_BASE.limit_C).toBe(180);
+    expect(projected!.nodes.N_BASE.limit_type).toBe('Tc');
+  });
+
+  it('writes the projected limit into the network CSV, not the stored one', () => {
+    const tables = exportNetworkCsv({
+      network: exportedNetwork({ network: staleLimitNetwork(), components: part('Tc') })!,
+      scenario_name: 'S',
+      solution: solution(),
+      config: { ...CONFIG, csv_include_units: false },
+    });
+
+    const rows = tables.nodes.split('\r\n');
+    const junction = rows.find((row) => row.startsWith('N_PA_J,'));
+    const caseRow = rows.find((row) => row.startsWith('N_BASE,'));
+
+    // The junction keeps its temperature and loses a limit it never owned.
+    expect(junction).not.toMatch(/,Tc,/);
+    expect(caseRow).toMatch(/,Tc,180/);
+  });
+
+  it('leaves a junction-based part where it is', () => {
+    const projected = exportedNetwork({
+      network: staleLimitNetwork(),
+      components: part('Tj'),
+    });
+
+    expect(projected!.nodes.N_PA_J.limit_C).toBe(180);
+    expect(projected!.nodes.N_BASE.limit_C ?? null).toBeNull();
   });
 });
 
