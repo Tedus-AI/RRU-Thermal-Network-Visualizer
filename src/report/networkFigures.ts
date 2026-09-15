@@ -14,6 +14,7 @@
 import type { Component, ComponentCategory } from '@/domain/component';
 import type { ThermalNetwork, ThermalNode } from '@/thermal/types';
 import type { MarginRank } from '@/thermal/analysis/marginRanking';
+import type { ThermalSolution } from '@/thermal/solver/solverTypes';
 import type { SegmentLevers } from '@/thermal/analysis/tunableParameters';
 import { componentOf, instanceOf } from '@/export/networkGraphPages';
 
@@ -123,6 +124,74 @@ export function modelledComponentIds(network: ThermalNetwork): Set<string> {
   return ids;
 }
 
+
+/**
+ * Everything downstream of a group, plus the one hop that feeds it.
+ *
+ * A group figure is captioned as one board's heat path, and it used to draw
+ * every shared node the component filter did not remove — the heatsink base,
+ * the fin surface, ambient. For the RF, digital and power boards that is right:
+ * their heat runs through the base and out of the fins, so the tail IS their
+ * path.
+ *
+ * It is wrong for the cavity filter. The base runs hotter than the filter body,
+ * so heat crosses that contact INTO the filter and leaves again through the
+ * filter's own convection to ambient. Drawing `HSK Base → Fin Surface →
+ * Ambient` after it invited the reader to conclude the filter is cooled by the
+ * fins, when the arrow beside it says the opposite.
+ *
+ * So the figure follows the heat instead of the wiring: out from the group's
+ * own nodes along each edge in the direction the solver actually found, and
+ * everything reached that way is the group's path. A node on the OTHER side of
+ * an edge that flows inward is kept as well, because "this heat arrives from
+ * the heatsink base" is the finding, but the walk stops there — what happens
+ * beyond a node that is feeding this group is some other group's story.
+ *
+ * Without a solution there are no directions to follow, so nothing is trimmed
+ * and the figure stays as it was.
+ */
+function downstreamOfGroup(
+  network: ThermalNetwork,
+  solution: ThermalSolution | null | undefined,
+  own: ReadonlySet<string>,
+  alreadyHidden: ReadonlySet<string>,
+): Set<string> {
+  const keep = new Set(own);
+  if (!solution) {
+    for (const node of Object.values(network.nodes)) {
+      if (!node.disabled && !alreadyHidden.has(node.id)) keep.add(node.id);
+    }
+    return keep;
+  }
+
+  const edges = Object.values(network.edges).filter(
+    (edge) => edge.enabled && !alreadyHidden.has(edge.from) && !alreadyHidden.has(edge.to),
+  );
+
+  const frontier = [...own];
+  const walked = new Set(own);
+  while (frontier.length > 0) {
+    const current = frontier.pop() as string;
+    for (const edge of edges) {
+      if (edge.from !== current && edge.to !== current) continue;
+      const other = edge.from === current ? edge.to : edge.from;
+      const result = solution.edge_results[edge.id];
+      // No result, or none flowing: the node is adjacent structure worth
+      // showing, but there is no heat to follow past it.
+      const reversed = result?.actual_direction === 'reverse';
+      const upstreamEnd = result ? (reversed ? edge.to : edge.from) : null;
+      const flowsOutward = upstreamEnd === current && result?.actual_direction !== 'zero';
+
+      keep.add(other);
+      if (flowsOutward && !walked.has(other)) {
+        walked.add(other);
+        frontier.push(other);
+      }
+    }
+  }
+  return keep;
+}
+
 export function networkFigures(input: {
   network: ThermalNetwork;
   components: readonly Component[];
@@ -130,6 +199,8 @@ export function networkFigures(input: {
   ranked: readonly MarginRank[];
   /** The levers for each ranked part, in the same order; absent entries mean no study. */
   leversByNode: ReadonlyMap<string, SegmentLevers[] | null>;
+  /** The solve whose flow directions say where each group's heat actually goes. */
+  solution?: ThermalSolution | null;
 }): NetworkFigure[] {
   const modelled = modelledComponentIds(input.network);
   const drawn = input.components.filter(
@@ -145,6 +216,25 @@ export function networkFigures(input: {
     const keep = new Set(inGroup.map((component) => component.id));
     const { hidden, instances } = duplicateInstanceNodes(input.network, keep);
     const repeated = [...instances.values()].filter((count) => count > 1).length;
+
+    // The group's own nodes, then everything its heat reaches — see
+    // `downstreamOfGroup`. Whatever is left over is tail belonging to some
+    // other group's path and is hidden with the duplicate instances.
+    const own = new Set(
+      Object.values(input.network.nodes)
+        .filter((node) => !node.disabled && !hidden.has(node.id))
+        .filter((node) => {
+          const id = componentOf(node);
+          return Boolean(id && keep.has(id));
+        })
+        .map((node) => node.id),
+    );
+    const onPath = downstreamOfGroup(input.network, input.solution, own, hidden);
+    const trimmed = new Set(hidden);
+    for (const node of Object.values(input.network.nodes)) {
+      if (node.disabled || trimmed.has(node.id)) continue;
+      if (!onPath.has(node.id)) trimmed.add(node.id);
+    }
     figures.push({
       key: `group-${group.key}`,
       title: `${group.title} Chain`,
@@ -158,7 +248,7 @@ export function networkFigures(input: {
           ? `${inGroup.length} 個元件，重複者各取一條`
           : `${inGroup.length} 個元件`,
       hidden_component_ids: new Set([...modelled].filter((id) => !keep.has(id))),
-      hidden_node_ids: hidden,
+      hidden_node_ids: trimmed,
     });
   }
 

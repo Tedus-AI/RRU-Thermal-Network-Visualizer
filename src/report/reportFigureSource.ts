@@ -102,6 +102,9 @@ export function reportFigureSource(input: FigureSourceInput): FigureSource {
       components: [...input.components],
       ranked,
       leversByNode,
+      // The flow directions are what tell a group figure where its own heat
+      // goes, and which shared node is feeding it rather than cooling it.
+      solution: context.solution,
     }),
   };
 }
