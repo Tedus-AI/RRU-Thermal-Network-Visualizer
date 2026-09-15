@@ -15,6 +15,7 @@ import {
   type ReportSectionConfig,
   type ThermalReportConfig,
 } from './reportTypes';
+import { REPORT_LAYOUT_REVISION } from './reportConfig';
 import { SECTION_DEFINITIONS, defaultDisplay } from './sectionRegistry';
 
 export const DEFAULT_TEMPLATE_NAME = 'Thermal Engineering Summary';
@@ -72,6 +73,8 @@ export function createReportConfig(input: {
 
   return {
     schema_version: REPORT_SCHEMA_VERSION,
+    // Born current, so no migration ever has cause to rewrite it.
+    layout_revision: REPORT_LAYOUT_REVISION,
     id: `RPT_${input.scenario_id}`,
     project_id: input.project_id,
     scenario_id: input.scenario_id,
