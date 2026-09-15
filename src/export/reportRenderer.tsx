@@ -12,12 +12,17 @@
 import { createRoot, type Root } from 'react-dom/client';
 import { flushSync } from 'react-dom';
 
-import { ReportPageView } from '@/screens/11-report-preview/ReportPreviewCanvas';
+import { ReportPageView, ReportSection } from '@/screens/11-report-preview/ReportPreviewCanvas';
 import type { SectionRenderInput } from '@/screens/11-report-preview/ReportSections';
 import { includedSections, orderedSections } from '@/report/reportConfig';
 import { paginate, type RowCounts } from '@/report/pagination';
-import type { MeasuredHeights } from '@/report/measuredHeights';
-import { pageBoxMm, type ReportPage, type ThermalReportConfig } from '@/report/reportTypes';
+import { readMeasuredHeights, type MeasuredHeights } from '@/report/measuredHeights';
+import {
+  pageBoxMm,
+  type ReportPage,
+  type ReportSectionConfig,
+  type ThermalReportConfig,
+} from '@/report/reportTypes';
 import type { ResultsOverviewSnapshot } from '@/thermal/overview/overviewTypes';
 import type { NetworkFigure } from '@/report/networkFigures';
 
@@ -39,7 +44,10 @@ export interface ReportRenderInput {
   /** The live network the Thermal Network figures are drawn from, when there is one. */
   network_context?: SectionRenderInput['network_context'];
   network_figures?: SectionRenderInput['network_figures'];
-  /** Heights the preview measured, so the export repeats its page breaks. */
+  /**
+   * Heights the preview measured. Only a fallback now: the export measures its
+   * own pages, so a payload prepared before that existed still breaks correctly.
+   */
   measured_heights?: MeasuredHeights;
 }
 
@@ -73,6 +81,94 @@ function rowCountsOf(
 }
 
 /**
+ * Measure the sections the way Screen 11 measures them, on this very render.
+ *
+ * The preview's numbers used to arrive on the export payload, which meant a
+ * payload prepared before that field existed carried none -- and the export
+ * silently fell back to the registry's estimates and broke its pages somewhere
+ * the engineer had never seen. Since the export mounts Screen 11's own
+ * components anyway, it can do the measuring pass itself: one page to learn
+ * what a page's body is in pixels, then every included section rendered whole
+ * at that width. Nothing then depends on when the payload was written.
+ *
+ * Returns nothing when the browser laid nothing out (a zero-height body), so
+ * the caller falls back rather than paginating against zeroes.
+ */
+function measureSections(
+  container: HTMLElement,
+  input: ReportRenderInput,
+  sections: ReportSectionConfig[],
+  included: ReportSectionConfig[],
+  renderInput: (section: ReportSectionConfig) => SectionRenderInput,
+): MeasuredHeights {
+  const probeHost = document.createElement('div');
+  container.appendChild(probeHost);
+  const probeRoot = createRoot(probeHost);
+
+  try {
+    // One page, carrying nothing, purely to read the body box the real pages
+    // will have. Its size comes from the page size and margins, not from what
+    // is on it, so an empty page measures the same as a full one.
+    flushSync(() => {
+      probeRoot.render(
+        <ReportPageView
+          config={input.config}
+          page={{ page_number: 1, title: '', title_zh: '', section_ids: [] }}
+          sections={included}
+          renderInput={renderInput}
+          scale={1}
+          selectedId={included[0]?.id ?? 'cover'}
+          onSelectSection={() => {}}
+          stale={input.stale}
+          printMode
+        />,
+      );
+    });
+
+    const body = probeHost.querySelector<HTMLElement>('[data-report-body]');
+    if (!body || body.offsetHeight <= 0 || body.offsetWidth <= 0) return {};
+    const bodyHeight = body.offsetHeight;
+    const bodyWidth = body.offsetWidth;
+    const gap = Number.parseFloat(getComputedStyle(body).rowGap) || 0;
+
+    const measureHost = document.createElement('div');
+    measureHost.style.width = `${bodyWidth}px`;
+    measureHost.style.display = 'flex';
+    measureHost.style.flexDirection = 'column';
+    measureHost.style.rowGap = `${gap}px`;
+    container.appendChild(measureHost);
+    const measureRoot = createRoot(measureHost);
+
+    try {
+      flushSync(() => {
+        measureRoot.render(
+          <>
+            {included.map((section) => (
+              <div key={section.id} data-measure-section={section.id}>
+                <ReportSection
+                  section={section}
+                  input={{ ...renderInput(section), measuring: true }}
+                  index={sections.indexOf(section) + 1}
+                  mode={input.config.language_mode}
+                />
+              </div>
+            ))}
+          </>,
+        );
+      });
+
+      return readMeasuredHeights(measureHost, bodyHeight, gap);
+    } finally {
+      measureRoot.unmount();
+      measureHost.remove();
+    }
+  } finally {
+    probeRoot.unmount();
+    probeHost.remove();
+  }
+}
+
+/**
  * Mounts every page off-screen.
  *
  * The container is positioned far off the viewport rather than hidden: an
@@ -90,7 +186,6 @@ export function renderReport(input: ReportRenderInput): RenderedReport {
   // exported document breaks its pages exactly where the engineer approved
   // them. Absent (an older payload), `paginate` falls back to the registry
   // estimate, which is what split a nine-row table 6 + 3 across two pages.
-  const pageModels = paginate(sections, rowCountsOf(snapshot, figures), input.measured_heights);
   const box = pageBoxMm(config.page_size, config.orientation);
 
   const container = document.createElement('div');
@@ -100,6 +195,10 @@ export function renderReport(input: ReportRenderInput): RenderedReport {
   container.style.top = '0';
   container.style.zIndex = '-1';
   container.style.backgroundColor = '#ffffff';
+  // Pinned to the ratio the report inherits from `body` on screen, so the
+  // rasterizer's baseline correction (see `exportPdfReport`) can neutralise
+  // `body`'s own line-height without moving a single line of the report.
+  container.style.lineHeight = '1.5';
   document.body.appendChild(container);
 
   const roots: Root[] = [];
@@ -122,6 +221,17 @@ export function renderReport(input: ReportRenderInput): RenderedReport {
     part: 0,
     parts: 1,
   });
+
+  // The payload's numbers first, because they are literally what the engineer
+  // watched the preview break its pages on. Anything the payload does not
+  // carry is measured here instead, on these very pages: an older payload has
+  // no heights at all, and paginating from the registry's generous estimates
+  // is what broke the export somewhere the engineer had never seen.
+  const measured = {
+    ...measureSections(container, input, sections, included, renderInput),
+    ...input.measured_heights,
+  };
+  const pageModels = paginate(sections, rowCountsOf(snapshot, figures), measured);
 
   for (const model of pageModels) {
     const host = document.createElement('div');

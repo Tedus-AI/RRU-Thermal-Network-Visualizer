@@ -389,43 +389,45 @@ function drop(config: ThermalReportConfig, id: SectionId): ThermalReportConfig {
 
 describe('An action summary frozen before it carried Chinese', () => {
   const frozen = (lines: string[]): ResultsOverviewSnapshot =>
-    ({ ...snapshot(), action_summary: lines, action_summary_zh: undefined }) as ResultsOverviewSnapshot;
+    ({
+      ...snapshot(),
+      action_summary: lines,
+      action_summary_zh: undefined,
+    }) as ResultsOverviewSnapshot;
 
-  const overview = (lines: string[], zh: string[]) =>
-    ({ action_summary: lines, action_summary_zh: zh }) as ResultsOverview;
-
-  it('recovers the Chinese when the English is character-for-character the same', () => {
+  it('rebuilds both languages from the snapshot\'s own frozen numbers', () => {
+    // The sentences an older ruleset wrote. None of them survives the current
+    // rules, so no live line could ever have matched them.
     const result = withTranslatedActions(
-      frozen(['A.', 'B.']),
-      overview(['A.', 'B.'], ['甲。', '乙。']),
+      frozen([
+        'Solver energy balance is good at 0.05% (412.3 W generated, 412.1 W rejected).',
+        'Results are analytical-only: no FloTHERM or measurement dataset has calibrated this model yet.',
+      ]),
     );
-    expect(result.action_summary_zh).toEqual(['甲。', '乙。']);
-    // The sentences themselves still come from the snapshot.
-    expect(result.action_summary).toEqual(['A.', 'B.']);
+
+    expect(result.action_summary_zh).toBeDefined();
+    expect(result.action_summary_zh).toHaveLength(result.action_summary.length);
+    expect(result.action_summary_zh?.every((line) => line.trim().length > 0)).toBe(true);
+    // The fixture's parts all pass, so the current rules conclude exactly that.
+    expect(result.action_summary.join(' ')).toMatch(/clear of its limit/);
+    expect(result.action_summary_zh?.join(' ')).toMatch(/都在限制之內/);
+    // And the sentences the rules dropped are gone rather than left in English.
+    expect(result.action_summary.join(' ')).not.toMatch(/energy balance/i);
+    expect(result.action_summary.join(' ')).not.toMatch(/analytical-only/i);
   });
 
-  it('refuses when the live summary says something different', () => {
-    const result = withTranslatedActions(
-      frozen(['A.', 'B.']),
-      overview(['A.', 'B CHANGED.'], ['甲。', '乙改。']),
-    );
-    expect(result.action_summary_zh).toBeUndefined();
-  });
-
-  it('refuses when the live summary is a different length', () => {
-    const result = withTranslatedActions(frozen(['A.']), overview(['A.', 'B.'], ['甲。', '乙。']));
-    expect(result.action_summary_zh).toBeUndefined();
+  it('reads nothing but the snapshot', () => {
+    // Every input to the rebuild is a field of the snapshot, so two calls on
+    // the same frozen data give the same answer whatever the live result is.
+    const input = frozen(['Anything at all.']);
+    expect(withTranslatedActions(input)).toEqual(withTranslatedActions(input));
   });
 
   it('leaves a snapshot that already carries its own Chinese alone', () => {
     const carried = { ...frozen(['A.']), action_summary_zh: ['原本的。'] };
-    const result = withTranslatedActions(carried, overview(['A.'], ['別的。']));
+    const result = withTranslatedActions(carried);
     expect(result.action_summary_zh).toEqual(['原本的。']);
-  });
-
-  it('leaves the snapshot alone when there is no live overview', () => {
-    const result = withTranslatedActions(frozen(['A.']), null);
-    expect(result.action_summary_zh).toBeUndefined();
+    expect(result.action_summary).toEqual(['A.']);
   });
 });
 

@@ -236,7 +236,7 @@ async function generate(
   switch (type) {
     case 'pdf_report': {
       if (!sources.report_render) throw new Error('No report payload to render.');
-      const pdf = await exportPdfReport(sources.report_render, config.png_scale);
+      const pdf = await exportPdfReport(sources.report_render);
       return {
         type,
         files: [file(nameFor(), definition.package_path, pdf.blob)],
