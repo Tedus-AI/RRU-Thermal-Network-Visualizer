@@ -24,6 +24,15 @@ function touched(config: ThermalReportConfig, sections: ReportSectionConfig[]): 
 }
 
 /**
+ * The layout revision a config has been brought forward to.
+ *
+ * Separate from `schema_version`, which describes the SHAPE of the stored
+ * object and is shared with the export payload. This counts the one-time
+ * migrations applied to a config's contents, so each runs exactly once.
+ */
+export const REPORT_LAYOUT_REVISION = 2;
+
+/**
  * Bring a stored config forward to what Keep Table Together now means.
  *
  * The flag used to default ON for every section, and for a splittable one the
@@ -32,18 +41,26 @@ function touched(config: ThermalReportConfig, sections: ReportSectionConfig[]): 
  * under the new rule it would move whole tables to a fresh page, which is the
  * blank-footed layout the measured heights were meant to end.
  *
+ * Stamped, and therefore applied ONCE. Without the stamp this ran on every
+ * load, and since the Inspector now offers the control on every section it
+ * spent its time undoing the reader's own choice: tick Keep Table Together,
+ * leave for another screen, come back to find it cleared — and the export,
+ * which reads the same stored config, laid the report out the way nobody had
+ * asked for. A migration that cannot tell its own default from a decision has
+ * to stop after the one pass it was written for.
+ *
  * A NON-splittable section is left alone: the flag always worked there, so a
  * `true` on it may well be deliberate and it does the same thing either way.
  */
 export function normaliseDisplay(config: ThermalReportConfig): ThermalReportConfig {
-  let changed = false;
+  if ((config.layout_revision ?? 1) >= REPORT_LAYOUT_REVISION) return config;
+
   const sections = config.sections.map((section) => {
     if (!sectionDefinition(section.id).splittable) return section;
     if (!section.display.keep_table_together) return section;
-    changed = true;
     return { ...section, display: { ...section.display, keep_table_together: false } };
   });
-  return changed ? { ...config, sections } : config;
+  return { ...config, sections, layout_revision: REPORT_LAYOUT_REVISION };
 }
 
 /** Order numbers stay 1..n and contiguous, whatever the caller did to the array. */

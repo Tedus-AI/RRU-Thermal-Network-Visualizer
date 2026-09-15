@@ -16,6 +16,7 @@ import {
   applyTemplate,
   includedSections,
   moveSection,
+  normaliseDisplay,
   orderedSections,
   patchContent,
   patchDisplay,
@@ -25,6 +26,7 @@ import {
   toTemplate,
   toggleSection,
 } from './reportConfig';
+import { REPORT_LAYOUT_REVISION } from './reportConfig';
 import { createReportConfig } from './defaultTemplate';
 import {
   evaluateSnapshot,
@@ -386,6 +388,57 @@ describe('Section selection and order (11 §5, §6)', () => {
 function drop(config: ThermalReportConfig, id: SectionId): ThermalReportConfig {
   return toggleSection(config, id).config;
 }
+
+describe('The stored-config migration (11 §25)', () => {
+  /** A config as it was written before the migration existed. */
+  function legacy(keepTogether: boolean): ThermalReportConfig {
+    const base = config();
+    return {
+      ...base,
+      layout_revision: undefined,
+      sections: base.sections.map((section) =>
+        section.id === 'critical'
+          ? { ...section, display: { ...section.display, keep_table_together: keepTogether } }
+          : section,
+      ),
+    };
+  }
+
+  const keepsTableTogether = (result: ThermalReportConfig) =>
+    result.sections.find((section) => section.id === 'critical')?.display.keep_table_together;
+
+  it('clears the old default off a splittable section, once', () => {
+    const migrated = normaliseDisplay(legacy(true));
+    expect(keepsTableTogether(migrated)).toBe(false);
+    expect(migrated.layout_revision).toBe(REPORT_LAYOUT_REVISION);
+  });
+
+  it('never touches a config it has already brought forward', () => {
+    // The reader ticked Keep Table Together AFTER the migration ran. Loading
+    // the screen again must not read that decision as the old default and
+    // undo it -- which is what an unstamped migration did on every visit,
+    // taking the export's layout with it.
+    const chosen = { ...normaliseDisplay(legacy(true)) };
+    const deliberate: ThermalReportConfig = {
+      ...chosen,
+      sections: chosen.sections.map((section) =>
+        section.id === 'critical'
+          ? { ...section, display: { ...section.display, keep_table_together: true } }
+          : section,
+      ),
+    };
+
+    expect(keepsTableTogether(normaliseDisplay(deliberate))).toBe(true);
+    // And it survives however many times the screen is revisited.
+    expect(keepsTableTogether(normaliseDisplay(normaliseDisplay(deliberate)))).toBe(true);
+  });
+
+  it('leaves a freshly created config exactly as created', () => {
+    const fresh = config();
+    expect(fresh.layout_revision).toBe(REPORT_LAYOUT_REVISION);
+    expect(normaliseDisplay(fresh)).toBe(fresh);
+  });
+});
 
 describe('An action summary frozen before it carried Chinese', () => {
   const frozen = (lines: string[]): ResultsOverviewSnapshot =>

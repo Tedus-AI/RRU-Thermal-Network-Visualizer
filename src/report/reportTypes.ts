@@ -182,6 +182,13 @@ export interface HeaderFooterConfig {
 
 export interface ThermalReportConfig {
   schema_version: string;
+  /**
+   * Which one-time content migrations this config has had applied.
+   *
+   * Absent on a config stored before the field existed, which reads as 1. See
+   * `REPORT_LAYOUT_REVISION`.
+   */
+  layout_revision?: number;
   id: string;
   project_id: string;
   scenario_id: string;

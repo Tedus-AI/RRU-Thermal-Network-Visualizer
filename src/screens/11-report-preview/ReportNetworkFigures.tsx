@@ -253,6 +253,50 @@ export function ReportNetworkFigures({
   );
 }
 
+/**
+ * The segment's number, drawn as SVG rather than a digit in a round `<span>`.
+ *
+ * The PDF is rasterized by html2canvas, which places a run of text at its own
+ * measured baseline for the font rather than where the browser put it. In a
+ * body paragraph a small error is invisible; inside a 14px circle it is the
+ * whole design, and the digit came out resting on the bottom edge. Nudging it
+ * with padding would only be right for the font this machine happens to
+ * resolve `system-ui` to -- the same reason an engineer's PDF does not look
+ * like ours.
+ *
+ * html2canvas draws an `<svg>` by rasterizing it as an image, so its contents
+ * land exactly where the browser shows them, whatever the font. Measured in
+ * the raster: the digit sits 3.5px from the top of the disc and 4.5px from the
+ * bottom, against 7 and 1 for the `<span>` it replaces.
+ */
+function SegmentBadge({ n }: { n: number }) {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 14 14"
+      aria-hidden
+      className="block shrink-0 self-center"
+    >
+      <circle cx="7" cy="7" r="7" fill="#cb5410" />
+      <text
+        x="7"
+        y="7"
+        textAnchor="middle"
+        dominantBaseline="central"
+        // Named here rather than inherited: a rasterized SVG is drawn as its
+        // own image and does not see the page's stylesheet.
+        fontFamily="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif"
+        fontSize="8"
+        fontWeight="700"
+        fill="#ffffff"
+      >
+        {n}
+      </text>
+    </svg>
+  );
+}
+
 /** What Screen 08's study says would cool the part, by segment. */
 function LeverTable({
   mode,
@@ -271,9 +315,7 @@ function LeverTable({
           <li key={segment.edge_id}>
             <p className="flex items-baseline gap-1.5 text-[9.5px] font-semibold text-[#16202f]">
               {/* The same number the chain above carries on this segment. */}
-              <span className="flex size-3.5 shrink-0 items-center justify-center rounded-full bg-[#cb5410] text-[8px] font-bold text-white tabular">
-                {index + 1}
-              </span>
+              <SegmentBadge n={index + 1} />
               {segment.label}
               <span className="font-normal text-[#68748a]">−{segment.reduction_pct}%</span>
             </p>

@@ -62,6 +62,7 @@ const REPORT_CONFIGS_KEY = 'tnv.report_configs';
 const REPORT_TEMPLATES_KEY = 'tnv.report_templates';
 const REPORT_PAYLOADS_KEY = 'tnv.report_export_payloads';
 const EXPORT_STAMPS_KEY = 'tnv.export_stamps';
+const EXPORT_PREFS_KEY = 'tnv.export_prefs';
 
 /**
  * localStorage is only the synchronous working cache; the selected folder is
@@ -745,4 +746,37 @@ export function saveExportStamp(projectId: string, stamp: ExportStamp): void {
   const all = readCollection(EXPORT_STAMPS_KEY);
   all[projectId] = stamp as unknown as RawDoc;
   writeCollection(EXPORT_STAMPS_KEY, all);
+}
+
+/**
+ * What the engineer last set the Export Center to.
+ *
+ * Settings, not results: a filename pattern, a CSV encoding, a decimal
+ * precision, which artifacts were ticked. §36 forbids an export writing file
+ * bytes or thermal data to storage and this writes neither -- it is the same
+ * kind of preference every other screen already remembers. Without it the
+ * Export Center was the one screen that forgot what it had been told the
+ * moment you left it, and an engineer who had set up a filename and a
+ * precision found both back at their defaults on the next visit.
+ *
+ * Under its own key, for the reason the stamp is: writing it can never
+ * overwrite a sibling field this build does not know about.
+ */
+export interface ExportPreferences {
+  config: Record<string, unknown>;
+  preset: string;
+  selected: string[];
+}
+
+export function loadExportPreferences(projectId: string): ExportPreferences | null {
+  const all = readCollection(EXPORT_PREFS_KEY);
+  const entry = all[projectId] as unknown as ExportPreferences | undefined;
+  if (!entry || typeof entry !== 'object' || !entry.config) return null;
+  return entry;
+}
+
+export function saveExportPreferences(projectId: string, prefs: ExportPreferences): void {
+  const all = readCollection(EXPORT_PREFS_KEY);
+  all[projectId] = prefs as unknown as RawDoc;
+  writeCollection(EXPORT_PREFS_KEY, all);
 }
