@@ -1,137 +1,125 @@
 /**
  * Header KPI cards — 12 §7, §59.
  *
- * The six §7 names, in §7's order: Export Status, Ready Artifacts, Warnings,
- * Blocked, Package Size Estimate, Last Export.
+ * §7 named six: Export Status, Ready Artifacts, Warnings, Blocked, Package Size
+ * Estimate, Last Export. Four of them did not earn their place on the page.
  *
- * As on Screens 10 and 11, six cards on one row leave about 200px each, so the
- * card header keeps the English name visible and moves the Chinese to the note
- * under the value and to the hover title — the project's rule for compact space.
+ * Export Status printed the same word the badge beside the title already prints,
+ * at 21px. Warnings and Blocked were bare counts — "1" and "1" — with nothing
+ * saying WHICH artifact or why, so the one question a reader has when they see
+ * a blocked count ("what is held back, and what do I do about it?") needed the
+ * table below to answer. Package Size Estimate was not an estimate at all: it
+ * reported the total of the LAST run and read N/A until there had been one, and
+ * the queue already prints a size per file and a session total.
+ *
+ * What is left is the pair a reader acts on: how much of the catalog is
+ * exportable, with the held-back items named behind a disclosure, and when this
+ * project was last exported. The tile is `ResultKpiTile`, the one Screens 06,
+ * 07, 10 and 11 share, so the row matches the rest of the tool.
  */
 
-import { AlertTriangle, Ban, CheckCircle2, Clock, Package, ShieldCheck } from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
+import { useState } from 'react';
+import { CheckCircle2, ChevronDown, Clock } from 'lucide-react';
 
-import { EngineeringInfo, biTitle } from '@/ui/FieldLabel';
-import type { Tone } from '@/ui/primitives';
-import { GLOBAL_STATUS_ZH, type GlobalExportStatus } from '@/export/exportTypes';
+import { ResultKpiTile } from '@/ui/ResultKpiTile';
+import { biTitle } from '@/ui/FieldLabel';
+import type { ArtifactType } from '@/export/exportTypes';
+import { ARTIFACT_DEFINITIONS } from '@/export/exportTypes';
+import type { ArtifactReadiness } from '@/export/exportValidator';
 
-import { GLOBAL_TONE, bytes, timeOf } from './exportViewModel';
+import { timeOf } from './exportViewModel';
 import { T12 } from './tooltips';
 
-const TONE_TEXT: Record<Tone, string> = {
-  ok: 'text-ok-600',
-  warn: 'text-warn-600',
-  danger: 'text-danger-600',
-  accent: 'text-accent-700',
-  neutral: 'text-ink-700',
-};
-
-function KpiCard({
-  icon: Icon,
-  label,
-  zh,
-  explanation,
-  value,
-  valueTone = 'neutral',
-  note,
-  compact,
-}: {
-  icon: LucideIcon;
-  label: string;
-  zh: string;
-  explanation?: string;
-  value: string;
-  valueTone?: Tone;
-  note?: string;
-  compact?: boolean;
-}) {
-  return (
-    <section className="flex min-w-0 flex-col gap-1 rounded-lg border border-line bg-surface px-3.5 py-3">
-      <header className="flex items-center gap-1.5" title={biTitle(label, zh)}>
-        <Icon className="size-3.5 shrink-0 text-ink-400" aria-hidden />
-        <span className="min-w-0 flex-1 truncate text-[11.5px] font-bold text-ink-700">{label}</span>
-        {explanation && <EngineeringInfo zh={explanation} label={label} />}
-      </header>
-      <p
-        className={`truncate font-bold tabular ${compact ? 'text-[15px]' : 'text-[21px]'} ${TONE_TEXT[valueTone]}`}
-        title={value}
-      >
-        {value}
-      </p>
-      <p className="truncate text-[10px] text-ink-400" title={note}>
-        {note ?? ' '}
-      </p>
-    </section>
-  );
-}
-
 export function ExportKpiBar({
-  status,
-  ready,
-  warnings,
-  blocked,
-  sizeEstimate,
+  readiness,
   lastExport,
 }: {
-  status: GlobalExportStatus;
-  ready: number;
-  warnings: number;
-  blocked: number;
-  /** Bytes, or null while nothing has been generated to measure. */
-  sizeEstimate: number | null;
+  readiness: Partial<Record<ArtifactType, ArtifactReadiness>>;
   lastExport: string | null;
 }) {
+  const [openHeldBack, setOpenHeldBack] = useState(false);
+
+  const total = ARTIFACT_DEFINITIONS.length;
+  const ready = ARTIFACT_DEFINITIONS.filter(
+    (definition) => readiness[definition.type]?.status === 'READY',
+  );
+  // Everything that is not plainly exportable, whatever the reason: a warning
+  // that wants confirming, a stale source, a prerequisite that never ran. One
+  // list, because to the reader they are one question.
+  const heldBack = ARTIFACT_DEFINITIONS.filter(
+    (definition) => readiness[definition.type]?.status !== 'READY',
+  );
+
+  const warnings = heldBack.filter(
+    (definition) => readiness[definition.type]?.status === 'WARNING',
+  ).length;
+  const stopped = heldBack.length - warnings;
+
   return (
-    <div className="grid grid-cols-2 gap-2.5 md:grid-cols-3 xl:grid-cols-6">
-      <KpiCard
-        icon={ShieldCheck}
-        label="Export Status"
-        zh="匯出狀態"
-        explanation={T12.exportStatus}
-        value={status}
-        valueTone={GLOBAL_TONE[status]}
-        note={GLOBAL_STATUS_ZH[status]}
-        compact={status.length > 7}
-      />
-      <KpiCard
+    /* Capped rather than stretched across the page. Six cards used to fill the
+       band; two of them spread over 1900 px would each be a metre of white with
+       a number at the end, and the tiles on 10 and 11 sit at about 500 px. */
+    <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:max-w-[62rem]">
+      <ResultKpiTile
         icon={CheckCircle2}
         label="Ready Artifacts"
         zh="可匯出項目"
         explanation={T12.artifact}
-        value={`${ready}`}
-        valueTone={ready > 0 ? 'ok' : 'neutral'}
-        note="Pass their own prerequisites / 符合前置條件"
-      />
-      <KpiCard
-        icon={AlertTriangle}
-        label="Warnings"
-        zh="警告"
-        explanation={T12.packageWarning}
-        value={`${warnings}`}
-        valueTone={warnings > 0 ? 'warn' : 'neutral'}
-        note="Exportable after confirmation / 確認後可匯出"
-      />
-      <KpiCard
-        icon={Ban}
-        label="Blocked"
-        zh="受阻"
-        value={`${blocked}`}
-        valueTone={blocked > 0 ? 'danger' : 'neutral'}
-        note="Stale or invalid source / 來源過期或無效"
-      />
-      <KpiCard
-        icon={Package}
-        label="Package Size Estimate"
-        zh="封裝大小估計"
-        // The estimate is only real once something has been generated; before
-        // that it says N/A rather than guessing a number from row counts.
-        value={sizeEstimate == null ? 'N/A' : bytes(sizeEstimate)}
-        valueTone="neutral"
-        note={sizeEstimate == null ? 'Measured after export / 匯出後量測' : 'Last run / 上次匯出'}
-        compact
-      />
-      <KpiCard
+        value={`${ready.length} / ${total}`}
+        valueTone={ready.length === total ? 'ok' : ready.length === 0 ? 'danger' : 'warn'}
+        note={
+          heldBack.length === 0
+            ? '全部符合前置條件'
+            : `${warnings} 項警告 · ${stopped} 項無法匯出`
+        }
+        action={
+          heldBack.length > 0 && (
+            <button
+              type="button"
+              aria-expanded={openHeldBack}
+              title={biTitle('What is held back, and why', '哪些項目不能匯出、原因為何')}
+              onClick={() => setOpenHeldBack((open) => !open)}
+              className="flex size-4 shrink-0 items-center justify-center rounded text-ink-400 transition-colors hover:bg-surface-muted hover:text-ink-900"
+            >
+              <ChevronDown
+                className={`size-3.5 transition-transform ${openHeldBack ? 'rotate-180' : ''}`}
+                aria-hidden
+              />
+            </button>
+          )
+        }
+      >
+        {openHeldBack && heldBack.length > 0 && (
+          /* The reason, not just the count. A blocked artifact is only
+             actionable once the reader knows which one it is and what would
+             unblock it — both of which the readiness check already worked out. */
+          <ul className="mt-1.5 flex flex-col gap-1 border-t border-line pt-1.5">
+            {heldBack.map((definition) => {
+              const entry = readiness[definition.type];
+              const blocking = entry?.status !== 'WARNING';
+              return (
+                <li key={definition.type} className="text-[10.5px] leading-snug">
+                  <span className="flex items-baseline gap-1.5">
+                    <span
+                      className={`shrink-0 font-bold ${blocking ? 'text-danger-600' : 'text-warn-600'}`}
+                    >
+                      {entry?.status ?? 'NOT_AVAILABLE'}
+                    </span>
+                    <span className="min-w-0 truncate font-semibold text-ink-900">
+                      {definition.zh}
+                    </span>
+                  </span>
+                  {entry?.reason_zh && (
+                    <span className="block text-ink-400">{entry.reason_zh}</span>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </ResultKpiTile>
+
+      <ResultKpiTile
         icon={Clock}
         label="Last Export"
         zh="上次匯出"
@@ -139,7 +127,6 @@ export function ExportKpiBar({
         value={lastExport ? timeOf(lastExport) : 'Never'}
         valueTone="neutral"
         note={lastExport ? '本機瀏覽器產生' : '尚未匯出'}
-        compact
       />
     </div>
   );

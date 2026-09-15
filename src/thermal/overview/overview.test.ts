@@ -453,7 +453,32 @@ describe('Test E — bottleneck analysis not run (10 §34 E)', () => {
     const overview = overviewOf({ limit: 150, analysis: null });
     const text = overview.action_summary.join(' ');
     expect(text).not.toMatch(/projected/i);
-    expect(text).toMatch(/has not been run/i);
+    // AC-10-19's other half — saying that no analysis has run — moved to the
+    // recommendation, which is where it is actionable. The summary is about the
+    // components now, so it neither claims an improvement nor discusses 08.
+    expect(text).not.toMatch(/bottleneck/i);
+    expect(overview.recommended.action).toBe('Run Bottleneck Analysis');
+    expect(overview.recommended.reason).toMatch(/no bottleneck analysis exists/i);
+  });
+
+  it('concludes about the components, not about the run', () => {
+    const overview = overviewOf({ limit: 150, analysis: null });
+    const text = overview.action_summary.join(' ');
+    // The four boilerplate lines that used to close every report: the solver's
+    // energy balance, the limit coverage count, the low-confidence edge count,
+    // and the analytical-only note. Each still lives on the screen that owns it.
+    expect(text).not.toMatch(/energy balance/i);
+    expect(text).not.toMatch(/analytical-only/i);
+    expect(text).not.toMatch(/no thermal limit, so the pass\/fail/i);
+    expect(text).not.toMatch(/low-confidence/i);
+  });
+
+  it('names every component at or near its limit, worst first', () => {
+    // PA1 at 96.8 against a 95 limit is over; the limit is set so it fails.
+    const overview = overviewOf({ limit: 95 });
+    const text = overview.action_summary.join(' ');
+    expect(text).toMatch(/PA1 is OVER its/);
+    expect(text).toMatch(/96\.8 °C against 95\.0 °C/);
   });
 
   it('treats an analysis built on a different solve as stale, not current', () => {

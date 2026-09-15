@@ -40,6 +40,21 @@ export interface ActionSummary {
 
 const one = (value: number) => value.toFixed(1);
 
+/**
+ * The conclusion is about the PARTS, not about the run.
+ *
+ * It used to end with the solver's energy balance, how many components carry no
+ * limit, how many edges use a low-confidence Rth, and whether the model had been
+ * calibrated — four sentences that say the same thing on every project and push
+ * the one finding that differs off the bottom of the page. Every one of them is
+ * still on the screen that owns it: the solver's balance on 07, the coverage
+ * counts on 10.
+ *
+ * What is left is a line per component at or near its limit, worst first, each
+ * carrying the numbers that justify it. A stale solve still leads, because a
+ * conclusion drawn from superseded temperatures has to say so before it says
+ * anything else.
+ */
 export function buildActionSummary(input: ActionSummaryInput): ActionSummary {
   const lines: string[] = [];
   const zh: string[] = [];
@@ -57,96 +72,42 @@ export function buildActionSummary(input: ActionSummaryInput): ActionSummary {
     );
   }
 
-  // 2 — the lowest-margin monitored component (10 §14 example line 1).
+  // Already ranked by margin, worst first, so the lines come out in the order
+  // an engineer would work them.
   const monitored = input.critical_components.filter((row) => row.margin_C != null);
-  const worst = monitored[0];
-  if (worst && worst.margin_C != null) {
-    if (worst.margin_C < 0) {
+  const failing = monitored.filter((row) => row.status === 'FAIL');
+  const nearLimit = monitored.filter((row) => row.status === 'NEAR LIMIT');
+
+  for (const row of failing) {
+    const over = Math.abs(row.margin_C ?? 0);
+    add(
+      `${row.component_name} is OVER its ${row.limit_type ?? 'thermal'} limit by ${one(over)} °C — ${one(row.temperature_C)} °C against ${one(row.limit_C ?? 0)} °C.`,
+      `${row.component_name} 超出 ${row.limit_type ?? 'thermal'} 限制 ${one(over)} °C —— 溫度 ${one(row.temperature_C)} °C，限制 ${one(row.limit_C ?? 0)} °C。`,
+    );
+  }
+
+  for (const row of nearLimit) {
+    add(
+      `${row.component_name} is within ${NEAR_LIMIT_MARGIN_C} °C of its ${row.limit_type ?? 'thermal'} limit — ${one(row.temperature_C)} °C against ${one(row.limit_C ?? 0)} °C, ${one(row.margin_C ?? 0)} °C of margin.`,
+      `${row.component_name} 距離 ${row.limit_type ?? 'thermal'} 限制不到 ${NEAR_LIMIT_MARGIN_C} °C —— 溫度 ${one(row.temperature_C)} °C，限制 ${one(row.limit_C ?? 0)} °C，餘裕 ${one(row.margin_C ?? 0)} °C。`,
+    );
+  }
+
+  // A conclusion still has to conclude something when nothing is in trouble.
+  // The tightest margin is what makes "everything passes" checkable.
+  if (failing.length === 0 && nearLimit.length === 0) {
+    const tightest = monitored[0];
+    if (tightest) {
       add(
-        `${worst.component_name} is over its ${worst.limit_type ?? 'thermal'} limit at ${one(worst.temperature_C)} °C against ${one(worst.limit_C ?? 0)} °C (margin ${one(worst.margin_C)} °C).`,
-        `${worst.component_name} 已超出 ${worst.limit_type ?? 'thermal'} limit：溫度 ${one(worst.temperature_C)} °C，限制 ${one(worst.limit_C ?? 0)} °C（餘裕 ${one(worst.margin_C)} °C）。`,
+        `Every monitored component is clear of its limit. The tightest is ${tightest.component_name}, with ${one(tightest.margin_C ?? 0)} °C of margin at ${one(tightest.temperature_C)} °C.`,
+        `所有受監控元件都在限制之內。餘裕最小的是 ${tightest.component_name}，溫度 ${one(tightest.temperature_C)} °C，餘裕 ${one(tightest.margin_C ?? 0)} °C。`,
       );
     } else {
       add(
-        `${worst.component_name} is the lowest-margin monitored component (+${one(worst.margin_C)} °C at ${one(worst.temperature_C)} °C).`,
-        `${worst.component_name} 是餘裕最小的受監控元件（+${one(worst.margin_C)} °C，溫度 ${one(worst.temperature_C)} °C）。`,
+        'No monitored component carries a thermal limit, so no pass or fail conclusion can be drawn.',
+        '沒有任何受監控元件帶有 thermal limit，因此無法做出通過或不通過的結論。',
       );
     }
-  } else {
-    add(
-      'No monitored component carries a thermal limit, so no margin conclusion can be drawn.',
-      '沒有任何受監控元件帶有 thermal limit，因此無法得出餘裕結論。',
-    );
-  }
-
-  // 3 — the near-limit population, if any.
-  const nearLimit = input.critical_components.filter((row) => row.status === 'NEAR LIMIT');
-  if (nearLimit.length > 0) {
-    add(
-      `${nearLimit.length} component(s) sit within ${NEAR_LIMIT_MARGIN_C} °C of their limit: ${nearLimit.map((row) => row.component_name).join(', ')}.`,
-      `有 ${nearLimit.length} 個元件的餘裕在 ${NEAR_LIMIT_MARGIN_C} °C 以內：${nearLimit.map((row) => row.component_name).join('、')}。`,
-    );
-  }
-
-  // 4 — the bottleneck, strictly as Screen 08 measured it (10 §14, AC-10-19).
-  const top = input.bottlenecks[0];
-  if (input.bottleneck_availability === 'current' && top) {
-    add(
-      `${top.edge_label} is the highest-value improvement candidate (score ${top.score.toFixed(0)}, ${top.classification}).`,
-      `${top.edge_label} 是價值最高的改善候選（score ${top.score.toFixed(0)}，${top.classification}）。`,
-    );
-    if (top.sensitivity_improvement_C != null) {
-      add(
-        `A ${top.reduction_pct}% reduction of that segment's Rth is projected by Screen 08 to improve the target temperature by ${one(top.sensitivity_improvement_C)} °C and to affect ${top.affected_components} component(s).`,
-        `Screen 08 推估將該段 Rth 降低 ${top.reduction_pct}% 可讓目標溫度改善 ${one(top.sensitivity_improvement_C)} °C，並影響 ${top.affected_components} 個元件。`,
-      );
-    }
-    if (top.confidence === 'low') {
-      add(
-        `That candidate rests on a low-confidence Rth input, so verify the segment's resistance before committing to a design change.`,
-        '該候選依賴低可信度的 Rth 輸入，在投入設計變更前請先確認該段熱阻。',
-      );
-    }
-  } else {
-    // AC-10-19 — no ranking, no projected improvement, no invented candidate.
-    add(
-      input.bottleneck_availability === 'not_run'
-        ? 'Bottleneck analysis has not been run for this scenario, so no improvement candidate is ranked here.'
-        : 'Bottleneck analysis is not current, so no improvement candidate is ranked here.',
-      input.bottleneck_availability === 'not_run'
-        ? '此情境尚未執行 bottleneck 分析，因此本頁不列出改善候選。'
-        : 'Bottleneck 分析不是最新的，因此本頁不列出改善候選。',
-    );
-  }
-
-  // 5 — solver quality, in the same words Screen 07 uses.
-  const gradeWord =
-    input.solver.quality === 'green' ? 'good' : input.solver.quality === 'warning' ? 'elevated' : 'unacceptable';
-  const gradeZh =
-    input.solver.quality === 'green' ? '良好' : input.solver.quality === 'warning' ? '偏高' : '不可接受';
-  add(
-    `Solver energy balance is ${gradeWord} at ${input.solver.energy_error_pct.toFixed(2)}% (${one(input.solver.generated_W)} W generated, ${one(input.solver.rejected_W)} W rejected).`,
-    `Solver 能量守恆${gradeZh}，誤差 ${input.solver.energy_error_pct.toFixed(2)}%（產生 ${one(input.solver.generated_W)} W，排出 ${one(input.solver.rejected_W)} W）。`,
-  );
-
-  // 6 — data coverage, stated as coverage rather than as a verdict.
-  if (input.completeness.components_without_limits > 0) {
-    add(
-      `${input.completeness.components_without_limits} component(s) have no thermal limit, so the pass/fail judgement does not cover them.`,
-      `有 ${input.completeness.components_without_limits} 個元件沒有 thermal limit，通過與否的判定並未涵蓋這些元件。`,
-    );
-  }
-  if (input.completeness.low_confidence_critical_edges > 0) {
-    add(
-      `${input.completeness.low_confidence_critical_edges} critical edge(s) use low-confidence Rth inputs; results are usable but want engineering review.`,
-      `有 ${input.completeness.low_confidence_critical_edges} 段關鍵連線使用低可信度 Rth 輸入，結果可用但建議工程覆核。`,
-    );
-  }
-  if (input.completeness.data_confidence === 'Analytical-only') {
-    add(
-      'Results are analytical-only: no FloTHERM or measurement dataset has calibrated this model yet.',
-      '目前結果僅來自 analytical model，尚未有 FloTHERM 或量測資料進行校正。',
-    );
   }
 
   return { lines, lines_zh: zh };
