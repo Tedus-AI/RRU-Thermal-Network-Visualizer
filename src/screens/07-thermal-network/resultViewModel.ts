@@ -19,27 +19,21 @@ import type {
 
 // --- result modes (07 §20) --------------------------------------------------
 
-export const RESULT_MODES = [
-  { id: 'temperature', label: 'Temperature', zh: '溫度', needsSolution: true },
-  { id: 'heat_flow', label: 'Heat Flow', zh: '熱流', needsSolution: true },
-  { id: 'delta_t', label: 'ΔT', zh: '溫差', needsSolution: true },
-  { id: 'rth', label: 'Rth', zh: '熱阻', needsSolution: false },
-  { id: 'node_type', label: 'Node Type', zh: '節點類型', needsSolution: false },
-  { id: 'rth_source', label: 'Rth Source', zh: '熱阻來源', needsSolution: false },
-] as const;
-
 /**
- * Node temperature and edge ΔT in one picture — Screen 08's default.
+ * Node temperature and edge ΔT in one picture.
  *
- * On 07 the two are separate because that screen is read one question at a
- * time: what is hot, then where the drops are. On 08 they are the same
- * question. The reader is looking at one part's chain to decide which link to
- * argue about, and a link is worth arguing about because of the temperature it
- * costs the node above it; splitting that across two views makes them hold one
- * half in their head while looking at the other.
+ * These were two views for a long time, and 07 was read one question at a
+ * time: what is hot, then where the drops are. But a ΔT IS a pair of
+ * temperatures -- it is computed from them -- and the two questions are asked
+ * together. A reader looking at Temperature sees a hot node and immediately
+ * wants to know which link cost it that; a reader looking at ΔT sees an
+ * expensive link and immediately wants to know what it is feeding. Split
+ * across two buttons, each half is read while the other is held in the head.
  *
- * It is not in `RESULT_MODES` because 07's toolbar, its legend and its remembered
- * mode are that screen's, and this belongs to 08.
+ * Screen 08 was drawn this way from the start and the report's figures
+ * followed it. Screens 07, 10 and 12's snapshots did not, so the same network
+ * said different things depending on which screen you were standing on. One
+ * view now, everywhere.
  */
 export const COMBINED_MODE = {
   id: 'temperature_delta',
@@ -49,52 +43,85 @@ export const COMBINED_MODE = {
 } as const;
 
 /**
- * What Screen 08 offers. Node Type and Rth Source are input-only views: they
- * say how the model was built, which is 04/05/06's question, not the question
- * of which segment to improve.
+ * The views that colour by a SOLVED number: what is hot and where the drops
+ * are, how much heat is moving, and what is resisting it.
+ *
+ * This is the whole of what Screens 08, 10 and 12 offer. Node Type and Rth
+ * Source are input-only -- they say how the model was BUILT, which is 04/05/06's
+ * question -- so only 07, where the model is also inspected, carries them.
  */
-export const ANALYSIS_RESULT_MODES = [
+export const RESULT_VIEW_MODES = [
   COMBINED_MODE,
-  RESULT_MODES[1], // Heat Flow
-  RESULT_MODES[3], // Rth
+  { id: 'heat_flow', label: 'Heat Flow', zh: '熱流', needsSolution: true },
+  { id: 'rth', label: 'Rth', zh: '熱阻', needsSolution: false },
 ] as const;
+
+export const RESULT_MODES = [
+  ...RESULT_VIEW_MODES,
+  { id: 'node_type', label: 'Node Type', zh: '節點類型', needsSolution: false },
+  { id: 'rth_source', label: 'Rth Source', zh: '熱阻來源', needsSolution: false },
+] as const;
+
+export type ResultMode = (typeof RESULT_MODES)[number]['id'];
 
 /**
- * What Screen 10's network window offers — the four result views.
+ * What an older build wrote, and what it means now.
  *
- * Node Type and Rth Source are dropped for the reason Screen 08 drops them:
- * they say how the model was BUILT, which is 04/05/06's question. Screen 10 is
- * read after the solve, so the four modes that colour by a solved number are
- * the whole of it.
+ * `temperature` and `delta_t` were separate views; they are one. A reader who
+ * left 07 on either of them should come back to the view that carries what
+ * they were looking at, not be reset to the default.
  */
-export const OVERVIEW_RESULT_MODES = [
-  RESULT_MODES[0], // Temperature
-  RESULT_MODES[1], // Heat Flow
-  RESULT_MODES[2], // ΔT
-  RESULT_MODES[3], // Rth
-] as const;
+const MERGED_MODE_IDS = new Set(['temperature', 'delta_t']);
 
-export type ResultMode = (typeof RESULT_MODES)[number]['id'] | typeof COMBINED_MODE.id;
+/** Translate a stored mode into one this build has, or null if it is neither. */
+export function migrateResultMode(value: unknown): ResultMode | null {
+  if (isResultMode(value)) return value;
+  if (typeof value === 'string' && MERGED_MODE_IDS.has(value)) return COMBINED_MODE.id;
+  return null;
+}
 
-/** True where the node colouring is the temperature ramp. */
+/**
+ * The quantity a view puts on an edge — what a parallel pair combines.
+ *
+ * Read off the mode rather than compared against it at each call site, because
+ * the two are no longer the same vocabulary: `temperature_delta` draws the
+ * `delta_t` quantity. Comparing the mode directly is what left parallel braces
+ * unlabelled, and so undrawn, in the combined view.
+ */
+export type EdgeQuantity = 'heat_flow' | 'delta_t' | 'rth' | 'none';
+
+export function edgeQuantity(mode: ResultMode): EdgeQuantity {
+  if (mode === 'heat_flow') return 'heat_flow';
+  if (mode === COMBINED_MODE.id) return 'delta_t';
+  if (mode === 'rth') return 'rth';
+  return 'none';
+}
+
+/**
+ * True where the node colouring is the temperature ramp.
+ *
+ * One mode answers both of these now. They stay as two questions because the
+ * node loop and the edge loop each ask their own, and `mode === COMBINED_MODE.id`
+ * twice says less about why.
+ */
 export function paintsNodeTemperature(mode: ResultMode): boolean {
-  return mode === 'temperature' || mode === COMBINED_MODE.id;
+  return mode === COMBINED_MODE.id;
 }
 
 /** True where the edge colouring is the ΔT ramp. */
 export function paintsEdgeDelta(mode: ResultMode): boolean {
-  return mode === 'delta_t' || mode === COMBINED_MODE.id;
+  return mode === COMBINED_MODE.id;
 }
 
 /**
- * The mode as a filename fragment — `Temperature`, `HeatFlow`, `DeltaT`.
+ * The mode as a filename fragment — `TemperatureDeltaT`, `HeatFlow`, `Rth`.
  *
  * Built from the label rather than the id so the file says what the toolbar
  * says, and ASCII-folded because `ΔT` is not something every filesystem, mail
  * client and archive tool agrees on.
  */
 export function modeFilenamePart(mode: ResultMode): string {
-  const entry = [...RESULT_MODES, COMBINED_MODE].find((candidate) => candidate.id === mode);
+  const entry = RESULT_MODES.find((candidate) => candidate.id === mode);
   if (!entry) return mode;
   return entry.label.replace(/\u0394/g, 'Delta').replace(/[^A-Za-z0-9]+/g, '');
 }
@@ -108,7 +135,7 @@ export function modeFilenamePart(mode: ResultMode): string {
  * showing nothing selected.
  */
 export function isResultMode(value: unknown): value is ResultMode {
-  return [...RESULT_MODES, COMBINED_MODE].some((mode) => mode.id === value);
+  return RESULT_MODES.some((mode) => mode.id === value);
 }
 
 /** 07 §20 — before a solve only the three input-only modes are selectable. */

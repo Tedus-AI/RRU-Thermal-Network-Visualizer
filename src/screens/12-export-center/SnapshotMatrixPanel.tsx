@@ -7,14 +7,14 @@
  * things this tool already has; the only thing missing was a way to say which
  * combination is wanted.
  *
- * So: subjects down the side, the four result views across the top, one PNG per
+ * So: subjects down the side, the result views across the top, one PNG per
  * ticked cell. A column header ticks its whole column and a row label ticks its
- * whole row, because "the RF chain in all four views" and "everything in ΔT"
- * are the two ways an engineer actually asks for a set of pictures.
+ * whole row, because "the RF chain in every view" and "everything in Rth" are
+ * the two ways an engineer actually asks for a set of pictures.
  *
  * The count under the grid is the point of the whole panel. Ticking a column on
- * a nine-row matrix is thirty-six files, and the number says so before the
- * export runs rather than afterwards in a folder.
+ * a nine-row matrix is nine files, and the number says so before the export
+ * runs rather than afterwards in a folder.
  */
 
 import { Button } from '@/ui/primitives';
@@ -69,7 +69,7 @@ export function SnapshotMatrixPanel({
     );
   };
 
-  /** A row label sets its row to all four, or clears it — whichever it is not already. */
+  /** A row label sets its row to every view, or clears it — whichever it is not already. */
   const toggleRow = (subject: string) => {
     const full = (selection.modes[subject] ?? []).length === SNAPSHOT_MODES.length;
     onChange(withModes(subject, full ? [] : SNAPSHOT_MODES.map((mode) => mode.id)));
@@ -113,7 +113,7 @@ export function SnapshotMatrixPanel({
               {SNAPSHOT_MODES.map((mode) => {
                 const full = subjects.every((subject) => ticked(subject.key, mode.id));
                 return (
-                  <th key={mode.id} className="w-[5.5rem] py-1.5 text-center font-semibold">
+                  <th key={mode.id} className="w-[7rem] py-1.5 text-center font-semibold">
                     <button
                       type="button"
                       disabled={disabled}
@@ -122,7 +122,7 @@ export function SnapshotMatrixPanel({
                         `${full ? 'Clear' : 'Tick'} the whole ${mode.label} column`,
                         `${full ? '取消' : '勾選'}整欄 ${mode.zh}`,
                       )}
-                      className="mx-auto flex flex-col items-center rounded px-1.5 py-0.5 hover:bg-surface-200 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                      className="mx-auto flex flex-col items-center rounded px-1.5 py-0.5 text-center hover:bg-surface-200 disabled:cursor-not-allowed disabled:hover:bg-transparent"
                     >
                       <span className="text-ink-700">{mode.label}</span>
                       <span className="text-[10px] text-ink-400">{mode.zh}</span>

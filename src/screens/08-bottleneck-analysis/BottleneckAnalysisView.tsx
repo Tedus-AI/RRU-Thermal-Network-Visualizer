@@ -78,7 +78,7 @@ import { NodeResultInspector } from '@/screens/07-thermal-network/NodeResultInsp
 import { EdgeResultInspector } from '@/screens/07-thermal-network/EdgeResultInspector';
 import { ResultsOverlay } from '@/screens/07-thermal-network/ResultsOverlay';
 import {
-  ANALYSIS_RESULT_MODES,
+  RESULT_VIEW_MODES,
   COMBINED_MODE,
   edgeRows,
   nodeRows,
@@ -970,7 +970,7 @@ export function BottleneckAnalysisView() {
                 <Select
                   className="h-7 !text-[11px]"
                   value={mode}
-                  items={ANALYSIS_RESULT_MODES.map((entry) => ({
+                  items={RESULT_VIEW_MODES.map((entry) => ({
                     value: entry.id,
                     label: entry.label,
                   }))}

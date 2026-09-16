@@ -144,12 +144,12 @@ describe('the mode as a filename fragment', () => {
 
   /** The one that needed folding at all. */
   it('spells the delta out rather than shipping a Greek letter', () => {
-    expect(modeFilenamePart('delta_t')).toBe('DeltaT');
+    expect(modeFilenamePart('temperature_delta')).toBe('TemperatureDeltaT');
   });
 
   it('says what the toolbar says', () => {
-    expect(modeFilenamePart('temperature')).toBe('Temperature');
     expect(modeFilenamePart('heat_flow')).toBe('HeatFlow');
+    expect(modeFilenamePart('rth')).toBe('Rth');
     expect(modeFilenamePart('rth_source')).toBe('RthSource');
   });
 });

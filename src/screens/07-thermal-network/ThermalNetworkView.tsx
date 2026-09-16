@@ -87,7 +87,9 @@ import { ResultsOverlay } from './ResultsOverlay';
 import { ResultTree } from './ResultTree';
 import {
   allowedModes,
+  COMBINED_MODE,
   isResultMode,
+  migrateResultMode,
   edgeRows,
   nodeRows,
   resultTree,
@@ -191,6 +193,9 @@ export function ThermalNetworkView() {
     '07.mode',
     'node_type',
     isResultMode,
+    // A reader who left this screen on Temperature or on ΔT comes back to the
+    // view those two became, rather than being reset to the default.
+    migrateResultMode,
   );
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
@@ -272,10 +277,10 @@ export function ThermalNetworkView() {
   const hasResult = Boolean(solution) && !stale && solution?.status !== 'FAILED';
 
   // The result modes need a solution; falling back keeps the canvas honest
-  // rather than showing an all-grey "temperature" picture (07 §20).
+  // rather than showing an all-grey result picture (07 §20).
   useEffect(() => {
     if (!allowedModes(hasResult).includes(mode)) setMode('node_type');
-    else if (hasResult && mode === 'node_type' && solution) setMode('temperature');
+    else if (hasResult && mode === 'node_type' && solution) setMode(COMBINED_MODE.id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasResult]);
 

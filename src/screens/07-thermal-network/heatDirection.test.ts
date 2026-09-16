@@ -22,7 +22,7 @@ import { buildScale, deltaTLabel, type ResultMode } from './resultViewModel';
 
 const EDGE = 'EDGE_A_B';
 const DISPLAY = { showLabels: true, showPower: true, showLimits: false, showBoundary: true };
-const MODES: ResultMode[] = ['temperature', 'heat_flow', 'delta_t', 'rth', 'rth_source', 'node_type'];
+const MODES: ResultMode[] = ['temperature_delta', 'heat_flow', 'rth', 'rth_source', 'node_type'];
 
 /** Two nodes, one edge — the smallest graph that can point an arrow. */
 function network(): ThermalNetwork {
@@ -119,7 +119,7 @@ describe('the arrow follows the solved heat direction', () => {
 
 describe('ΔT is named, and carries no sign', () => {
   it('labels the difference with ΔT and no sign', () => {
-    expect(edgeData('delta_t', solution('forward', 7.6)).label).toBe('ΔT 7.6 °C');
+    expect(edgeData('temperature_delta', solution('forward', 7.6)).label).toBe('ΔT 7.6 °C');
   });
 
   /**
@@ -128,14 +128,14 @@ describe('ΔT is named, and carries no sign', () => {
    * end is the hotter one.
    */
   it('shows the same magnitude when the heat runs the other way', () => {
-    const data = edgeData('delta_t', solution('reverse', -7.6));
+    const data = edgeData('temperature_delta', solution('reverse', -7.6));
     expect(data.label).toBe('ΔT 7.6 °C');
     expect(data.srcArrow).toBe('triangle');
   });
 
   /** No `+`, no `−`, and no arrow either: direction is the arrow's job. */
   it('carries no direction marker of its own', () => {
-    const label = String(edgeData('delta_t', solution('reverse', -7.6)).label);
+    const label = String(edgeData('temperature_delta', solution('reverse', -7.6)).label);
     expect(label).not.toMatch(/[+↓↑]/);
     expect(label).not.toContain('-');
   });
@@ -147,7 +147,7 @@ describe('ΔT is named, and carries no sign', () => {
 
   /** The legend explains the arrow, and no longer promises a sign. */
   it('points at the arrow in the ΔT legend, not at a sign', () => {
-    const rows = legendFor('delta_t', solution('forward', 7.6));
+    const rows = legendFor('temperature_delta', solution('forward', 7.6));
     expect(rows.some((row) => /Arrow/i.test(row.label))).toBe(true);
     expect(rows.some((row) => row.zh.includes('正負號'))).toBe(false);
   });
@@ -252,13 +252,20 @@ describe("Screen 07's brace over a parallel pair", () => {
     expect(braceLabel('heat_flow')).toBe('Spreading + Heat Pipe ×2\n∑ 35.0 W');
   });
 
+  /**
+   * And it does so in the combined view, which is the only view that draws a
+   * ΔT now. Reading the quantity off the mode name rather than off the mode is
+   * what left this brace unlabelled — and so undrawn — after the merge.
+   */
   it('names the one ΔT the pair shares', () => {
-    expect(braceLabel('delta_t')).toBe('Spreading, Heat Pipe ×2\nshared ΔT 1.9 °C');
+    expect(braceLabel('temperature_delta')).toBe(
+      'Spreading, Heat Pipe ×2\nshared ΔT 1.9 °C',
+    );
   });
 
   /** Nothing combinable, nothing to say — and no stray °C/W in a °C graph. */
   it('draws no brace where there is no combinable quantity', () => {
-    for (const mode of ['temperature', 'node_type', 'rth_source'] as ResultMode[]) {
+    for (const mode of ['node_type', 'rth_source'] as ResultMode[]) {
       expect(braceLabel(mode), mode).toBeUndefined();
     }
   });
