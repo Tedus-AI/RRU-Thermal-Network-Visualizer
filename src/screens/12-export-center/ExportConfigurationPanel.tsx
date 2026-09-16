@@ -17,19 +17,12 @@ import { FolderOpen, Info } from 'lucide-react';
 import { Button, Select, TextInput } from '@/ui/primitives';
 import { EngineeringInfo } from '@/ui/FieldLabel';
 import {
-  CSV_ENCODINGS,
-  CSV_ENCODING_LABELS,
-  DECIMAL_PRECISIONS,
   DESTINATIONS,
   DESTINATION_LABELS,
-  JSON_FORMATS,
   PNG_SCALES,
   type ArtifactType,
-  type CsvEncoding,
-  type DecimalPrecision,
   type Destination,
   type ExportConfiguration,
-  type JsonFormat,
   type PngScale,
 } from '@/export/exportTypes';
 
@@ -159,69 +152,9 @@ export function ExportConfigurationPanel({
         />
       </Row>
 
-      <Row
-        label="CSV Encoding"
-        zh="CSV 編碼"
-        htmlFor="ex-encoding"
-        explanation={T12.utf8Bom}
-        explanationLabel="UTF-8 BOM"
-      >
-        <Select
-          id="ex-encoding"
-          className="h-8 !text-[11px]"
-          value={config.csv_encoding}
-          disabled={disabled}
-          items={CSV_ENCODINGS.map((encoding) => ({
-            value: encoding,
-            label: CSV_ENCODING_LABELS[encoding].label,
-          }))}
-          onChange={(event) => onChange({ csv_encoding: event.target.value as CsvEncoding })}
-        />
-      </Row>
 
-      <Row
-        label="Decimal Precision"
-        zh="小數位數"
-        htmlFor="ex-precision"
-        explanation={T12.decimalPrecision}
-      >
-        <Select
-          id="ex-precision"
-          className="h-8 !text-[11px]"
-          value={String(config.decimal_precision)}
-          disabled={disabled}
-          items={DECIMAL_PRECISIONS.map((precision) => ({
-            value: String(precision),
-            label: `${precision} decimals`,
-          }))}
-          onChange={(event) =>
-            onChange({ decimal_precision: Number(event.target.value) as DecimalPrecision })
-          }
-        />
-      </Row>
 
-      <Row label="CSV Units In Header" zh="欄名含單位">
-        <Toggle
-          label="CSV units in header"
-          checked={config.csv_include_units}
-          disabled={disabled}
-          onChange={(value) => onChange({ csv_include_units: value })}
-        />
-      </Row>
 
-      <Row label="JSON Format" zh="JSON 格式" htmlFor="ex-json" explanation={T12.jsonFormat}>
-        <Select
-          id="ex-json"
-          className="h-8 !text-[11px]"
-          value={config.json_format}
-          disabled={disabled}
-          items={JSON_FORMATS.map((format) => ({
-            value: format,
-            label: format === 'pretty' ? 'Pretty' : 'Compact',
-          }))}
-          onChange={(event) => onChange({ json_format: event.target.value as JsonFormat })}
-        />
-      </Row>
 
       <Row label="PNG Scale" zh="PNG 倍率" htmlFor="ex-png" explanation={T12.pngScale}>
         <Select

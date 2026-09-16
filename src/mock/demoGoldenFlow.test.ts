@@ -294,10 +294,10 @@ describe('FR1 RRU Golden Demo', () => {
     });
     expect(artifacts.pdf_report.status).toBe('BLOCKED');
     expect(artifacts.html_report.status).toBe('BLOCKED');
-    // The solve is still current, so the network still draws; the bottleneck
-    // overlay stands down because this case leaves Screen 08's analysis stale.
-    expect(artifacts.png_snapshots.status).toBe('WARNING');
-    expect(artifacts.png_snapshots.reason).toMatch(/overlay/i);
+    // The solve is still current, so the snapshots draw. Screen 08's analysis
+    // is stale here, which costs the bottleneck overlay -- one view of several,
+    // and not a fault in the artifact.
+    expect(artifacts.png_snapshots.status).toBe('READY');
   });
 });
 

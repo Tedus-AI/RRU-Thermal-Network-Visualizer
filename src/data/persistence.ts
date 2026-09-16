@@ -764,7 +764,6 @@ export function saveExportStamp(projectId: string, stamp: ExportStamp): void {
  */
 export interface ExportPreferences {
   config: Record<string, unknown>;
-  preset: string;
   selected: string[];
 }
 
