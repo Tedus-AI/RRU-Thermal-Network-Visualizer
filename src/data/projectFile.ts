@@ -36,6 +36,7 @@ import {
   loadComponentRevisions,
   loadComponents,
   loadExportPayloads,
+  loadExportPreferences,
   loadExportStamp,
   loadNetwork,
   loadNetworkReviewState,
@@ -53,6 +54,7 @@ import {
   saveComponentRevisions,
   saveComponents,
   saveExportPayload,
+  saveExportPreferences,
   saveExportStamp,
   saveNetwork,
   saveNetworkReviewState,
@@ -62,6 +64,7 @@ import {
   saveScenarios,
   saveSnapshot,
   saveSolution,
+  type ExportPreferences,
   type ExportStamp,
   type NetworkReviewState,
 } from './persistence';
@@ -96,6 +99,15 @@ export interface ProjectBundle {
   report_templates: ReportTemplate[];
   export_payloads: ReportExportPayload[];
   export_stamp: ExportStamp | null;
+  /**
+   * What the Export Center was last set to.
+   *
+   * It used to live only in a browser-local key, which made it the one part of
+   * the screen a .tnv.json did not carry -- the settings survived a reload on
+   * one machine and were gone on the next. They travel with the file now, the
+   * way the report layout does.
+   */
+  export_preferences: ExportPreferences | null;
 }
 
 export interface ProjectFile {
@@ -162,6 +174,7 @@ export function collectProject(projectId: string, appBuild: string): ProjectFile
       report_templates: loadReportTemplates(),
       export_payloads: loadExportPayloads(projectId),
       export_stamp: loadExportStamp(projectId),
+      export_preferences: loadExportPreferences(projectId),
     },
   };
 }
@@ -370,6 +383,7 @@ export function applyProjectFile(file: ProjectFile, mode: ImportMode): ImportOut
   note('report payloads', (data.export_payloads ?? []).length);
 
   if (data.export_stamp) saveExportStamp(targetId, data.export_stamp);
+  if (data.export_preferences) saveExportPreferences(targetId, data.export_preferences);
 
   return { project_id: targetId, mode, written };
 }

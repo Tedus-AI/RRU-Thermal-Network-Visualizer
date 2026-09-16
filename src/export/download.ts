@@ -18,7 +18,7 @@ interface FileSystemWritable {
 interface FileSystemFileHandleLike {
   createWritable: () => Promise<FileSystemWritable>;
 }
-interface FileSystemDirectoryHandleLike {
+export interface FileSystemDirectoryHandleLike {
   getFileHandle: (name: string, options?: { create?: boolean }) => Promise<FileSystemFileHandleLike>;
   name: string;
 }

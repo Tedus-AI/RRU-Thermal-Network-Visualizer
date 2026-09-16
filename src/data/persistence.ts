@@ -765,6 +765,14 @@ export function saveExportStamp(projectId: string, stamp: ExportStamp): void {
 export interface ExportPreferences {
   config: Record<string, unknown>;
   selected: string[];
+  /**
+   * The folder the engineer last pointed the export at, by name.
+   *
+   * A `FileSystemDirectoryHandle` is not serializable and a browser will not
+   * re-grant one without a fresh gesture, so what is kept is the name: enough
+   * for the screen to say which folder it was using and ask for it again.
+   */
+  output_folder_name?: string | null;
 }
 
 export function loadExportPreferences(projectId: string): ExportPreferences | null {

@@ -18,6 +18,8 @@
 
 import { create } from 'zustand';
 
+import type { FileSystemDirectoryHandleLike } from '@/export/download';
+
 import {
   loadExportPreferences,
   loadExportStamp,
@@ -49,6 +51,23 @@ export interface QueueEntry {
 interface ExportStoreState {
   config: ExportConfiguration;
   selected: ArtifactType[];
+  /**
+   * The folder the engineer chose, and its name.
+   *
+   * The handle lived in a `useRef` on the screen, and a ref is per mount: going
+   * to another screen and back dropped it, so `Output Folder` read
+   * "No folder chosen" again and the next export silently fell back to a
+   * browser download. It belongs to the session, not to one mounting of a
+   * component.
+   *
+   * The handle itself cannot be written to the project file -- a directory
+   * handle is not JSON, and a browser will not hand one back without a fresh
+   * user gesture. The NAME travels in the preferences, so a reloaded project
+   * can say which folder it was pointed at and ask for it again rather than
+   * pretending none was ever chosen.
+   */
+  directory: FileSystemDirectoryHandleLike | null;
+  directoryName: string | null;
 
   session: ExportSession | null;
   queue: QueueEntry[];
@@ -77,6 +96,7 @@ interface ExportStoreState {
 
   loadFor: (projectId: string, scenarioId: string | null, base: string) => void;
   clear: () => void;
+  setDirectory: (handle: FileSystemDirectoryHandleLike | null) => void;
 
   setConfig: (patch: Partial<ExportConfiguration>) => void;
   setSelected: (selected: ArtifactType[]) => void;
@@ -108,11 +128,16 @@ function rememberSettings(
   projectId: string | null,
   config: ExportConfiguration,
   selected: ArtifactType[],
+  outputFolderName?: string | null,
 ): void {
   if (!projectId) return;
   saveExportPreferences(projectId, {
     config: config as unknown as Record<string, unknown>,
     selected,
+    output_folder_name:
+      outputFolderName === undefined
+        ? (loadExportPreferences(projectId)?.output_folder_name ?? null)
+        : outputFolderName,
   });
 }
 
@@ -134,6 +159,8 @@ export const useExportStore = create<ExportStoreState>((set, get) => ({
   projectId: null,
   preferencesRestored: false,
   scenarioId: null,
+  directory: null,
+  directoryName: null,
 
   loadFor: (projectId, scenarioId, base) => {
     const previous = get();
@@ -162,7 +189,14 @@ export const useExportStore = create<ExportStoreState>((set, get) => ({
         : changed
           ? defaultConfiguration(base)
           : { ...previous.config, base_filename: previous.config.base_filename || base },
-      ...(stored ? { selected: stored.selected as ArtifactType[] } : {}),
+      ...(stored
+        ? {
+            selected: stored.selected as ArtifactType[],
+            // The name only; the handle has to be re-picked, because a browser
+            // grants folder access to a gesture, never to a stored value.
+            directoryName: stored.output_folder_name ?? null,
+          }
+        : {}),
       ...(changed
         ? {
             session: null,
@@ -176,6 +210,12 @@ export const useExportStore = create<ExportStoreState>((set, get) => ({
         : {}),
     });
   },
+
+  setDirectory: (handle) =>
+    set((state) => {
+      rememberSettings(state.projectId, state.config, state.selected, handle?.name ?? null);
+      return { directory: handle, directoryName: handle?.name ?? null };
+    }),
 
   clear: () =>
     set({
@@ -193,6 +233,8 @@ export const useExportStore = create<ExportStoreState>((set, get) => ({
       projectId: null,
       preferencesRestored: false,
       scenarioId: null,
+      directory: null,
+      directoryName: null,
     }),
 
   setConfig: (patch) =>

@@ -223,6 +223,10 @@ export function ExportCenterView() {
   const reportConfigs = useReportStore((s) => s.configs);
 
   const config = useExportStore((s) => s.config);
+  // From the store, not a ref: a ref is per mount, and this has to survive
+  // walking to another screen and back.
+  const directory = useExportStore((s) => s.directory);
+  const directoryName = useExportStore((s) => s.directoryName);
   const selected = useExportStore((s) => s.selected);
   const queue = useExportStore((s) => s.queue);
   const results = useExportStore((s) => s.results);
@@ -236,8 +240,6 @@ export function ExportCenterView() {
   const [manifestText, setManifestText] = useState('');
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [pendingMode, setPendingMode] = useState<'selected' | 'package'>('selected');
-  const directoryRef = useRef<Awaited<ReturnType<typeof pickDirectory>>>(null);
-  const [directoryName, setDirectoryName] = useState<string | null>(null);
 
   const solution = solutionKey ? (solutions[solutionKey] ?? null) : null;
   const scenario = scenarios.find((entry) => entry.id === activeScenarioId) ?? null;
@@ -630,7 +632,7 @@ export function ExportCenterView() {
           blob: built.blob,
           filename: zipName,
           mode: config.destination,
-          directory: directoryRef.current,
+          directory,
         });
         const checksum = config.checksum ? await sha256Hex(built.blob) : null;
 
@@ -712,7 +714,7 @@ export function ExportCenterView() {
             blob: file.blob,
             filename: file.filename,
             mode: config.destination,
-            directory: directoryRef.current,
+            directory,
           });
           nextQueue.push({
             type: artifact.type,
@@ -791,6 +793,7 @@ export function ExportCenterView() {
       components,
       reportConfig,
       reportRender,
+      directory,
       validation.warnings,
     ],
   );
@@ -978,8 +981,7 @@ export function ExportCenterView() {
                   folderName={directoryName}
                   onPickFolder={async () => {
                     const handle = await pickDirectory();
-                    directoryRef.current = handle;
-                    setDirectoryName(handle?.name ?? null);
+                    useExportStore.getState().setDirectory(handle);
                     if (!handle) toast.warning('No folder chosen — Browser Download will be used.');
                   }}
                   onChange={(patch) => useExportStore.getState().setConfig(patch)}
