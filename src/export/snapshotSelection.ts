@@ -8,7 +8,7 @@
  *
  * What is wanted instead is a grid. Down the side are the SUBJECTS the tool
  * already draws -- the whole machine, each board's chain, each part that needs
- * attention -- and across the top are the four result views Screen 07 offers.
+ * attention -- and across the top are the result views Screen 07 offers.
  * A tick picks one picture; the export renders exactly the ticked ones.
  *
  * Nothing here decides how a graph looks. A subject is a pair of hidden-sets,
@@ -17,10 +17,21 @@
  */
 
 import type { NetworkFigure } from '@/report/networkFigures';
-import { OVERVIEW_RESULT_MODES, type ResultMode } from '@/screens/07-thermal-network/resultViewModel';
+import {
+  COMBINED_MODE,
+  migrateResultMode,
+  RESULT_VIEW_MODES,
+  type ResultMode,
+} from '@/screens/07-thermal-network/resultViewModel';
 
-/** The four columns: temperature, heat flow, ΔT, Rth. */
-export const SNAPSHOT_MODES = OVERVIEW_RESULT_MODES;
+/**
+ * The columns: the three views that colour by a solved number.
+ *
+ * Four until Temperature and ΔT became one. The matrix offers exactly what
+ * Screens 07, 08 and 10 offer, because a snapshot that draws something no
+ * screen draws is not a snapshot.
+ */
+export const SNAPSHOT_MODES = RESULT_VIEW_MODES;
 
 export type SnapshotSubjectKind = 'whole' | 'group' | 'part';
 
@@ -155,10 +166,10 @@ export function snapshotCount(
  * forty PNGs nobody asked for is what the matrix exists to stop.
  */
 export function defaultSnapshotSelection(): SnapshotSelection {
-  return { modes: { whole: ['temperature'] }, instances: {} };
+  return { modes: { whole: [COMBINED_MODE.id] }, instances: {} };
 }
 
-/** `Whole Thermal Network · ΔT` — what the queue and the manifest call one image. */
+/** `Whole Thermal Network · Temperature + ΔT` — what the queue calls one image. */
 export function snapshotLabel(subject: SnapshotSubject, mode: ResultMode): string {
   const view = SNAPSHOT_MODES.find((entry) => entry.id === mode);
   return `${subject.label} · ${view?.label ?? mode}`;
@@ -187,7 +198,9 @@ function slugify(value: string): string {
  * Reads a stored selection back, keeping only what is still meaningful.
  *
  * Unknown view ids are dropped, which is what stops a hand-edited .tnv.json
- * from reaching the renderer with a mode nothing can draw.
+ * from reaching the renderer with a mode nothing can draw. Ids that a previous
+ * build offered and this one has merged are translated rather than dropped;
+ * see `migrateResultMode`.
  *
  * `subjects` is optional and means "also drop rows this network does not have".
  * A project file can be older than the network it is opened against -- a board
@@ -205,14 +218,19 @@ export function reconcileSnapshotSelection(
   if (raw.modes == null || typeof raw.modes !== 'object') return null;
 
   const known = subjects ? new Set(subjects.map((subject) => subject.key)) : null;
-  const validModes = new Set<string>(SNAPSHOT_MODES.map((mode) => mode.id));
+  const offered = new Set<string>(SNAPSHOT_MODES.map((mode) => mode.id));
 
   const modes: Record<string, ResultMode[]> = {};
   for (const [key, value] of Object.entries(raw.modes as Record<string, unknown>)) {
     if ((known && !known.has(key)) || !Array.isArray(value)) continue;
-    const kept = value.filter(
-      (entry): entry is ResultMode => typeof entry === 'string' && validModes.has(entry),
-    );
+    const kept: ResultMode[] = [];
+    for (const entry of value) {
+      // A file written before Temperature and ΔT merged has one or both of
+      // them ticked. Both mean the view they became, and a row that had both
+      // must not come back asking for the same picture twice.
+      const mode = migrateResultMode(entry);
+      if (mode && offered.has(mode) && !kept.includes(mode)) kept.push(mode);
+    }
     if (kept.length > 0) modes[key] = kept;
   }
 

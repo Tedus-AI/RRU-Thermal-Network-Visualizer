@@ -106,13 +106,13 @@ describe('snapshotPairs', () => {
 
   it('reads row by row, and within a row in column order', () => {
     const pairs = snapshotPairs(subjects, {
-      modes: { 'group-rf': ['delta_t', 'temperature'], whole: ['temperature'] },
+      modes: { 'group-rf': ['rth', 'temperature_delta'], whole: ['temperature_delta'] },
       instances: {},
     });
     expect(pairs.map((pair) => `${pair.subject.key}/${pair.mode}`)).toEqual([
-      'whole/temperature',
-      'group-rf/temperature',
-      'group-rf/delta_t',
+      'whole/temperature_delta',
+      'group-rf/temperature_delta',
+      'group-rf/rth',
     ]);
   });
 
@@ -127,7 +127,7 @@ describe('snapshotPairs', () => {
   it('counts what the matrix says it will produce', () => {
     expect(
       snapshotCount(subjects, {
-        modes: { whole: ['temperature', 'rth'], 'part-N_pm_case': ['delta_t'] },
+        modes: { whole: ['temperature_delta', 'rth'], 'part-N_pm_case': ['heat_flow'] },
         instances: {},
       }),
     ).toBe(3);
@@ -139,8 +139,8 @@ describe('snapshotFilename', () => {
   const subjects = snapshotSubjects(FIGURES);
 
   it('names the subject and the view', () => {
-    expect(snapshotFilename(subjects[0], 'temperature', 'representative')).toBe(
-      'whole_network__temperature.png',
+    expect(snapshotFilename(subjects[0], 'temperature_delta', 'representative')).toBe(
+      'whole_network__temperature_delta.png',
     );
     expect(snapshotFilename(subjects[3], 'rth', 'representative')).toBe(
       'part_n_pm_case__rth.png',
@@ -149,9 +149,11 @@ describe('snapshotFilename', () => {
 
   it('separates the all-chains render from the one-chain render', () => {
     // Otherwise the second silently replaces the first in the folder.
-    expect(snapshotFilename(subjects[1], 'delta_t', 'all')).toBe('rf__delta_t__all.png');
+    expect(snapshotFilename(subjects[1], 'temperature_delta', 'all')).toBe(
+      'rf__temperature_delta__all.png',
+    );
     // A row with nothing repeated has no second version to distinguish.
-    expect(snapshotFilename(subjects[2], 'delta_t', 'all')).toBe('pw__delta_t.png');
+    expect(snapshotFilename(subjects[2], 'heat_flow', 'all')).toBe('pw__heat_flow.png');
   });
 });
 
@@ -161,16 +163,16 @@ describe('reconcileSnapshotSelection', () => {
   it('keeps a stored selection that still matches', () => {
     expect(
       reconcileSnapshotSelection(
-        { modes: { whole: ['temperature'] }, instances: { 'group-rf': 'all' } },
+        { modes: { whole: ['temperature_delta'] }, instances: { 'group-rf': 'all' } },
         subjects,
       ),
-    ).toEqual({ modes: { whole: ['temperature'] }, instances: { 'group-rf': 'all' } });
+    ).toEqual({ modes: { whole: ['temperature_delta'] }, instances: { 'group-rf': 'all' } });
   });
 
   it('drops rows this network no longer has', () => {
     expect(
       reconcileSnapshotSelection(
-        { modes: { 'group-digital': ['temperature'], whole: ['rth'] }, instances: {} },
+        { modes: { 'group-digital': ['temperature_delta'], whole: ['rth'] }, instances: {} },
         subjects,
       ),
     ).toEqual({ modes: { whole: ['rth'] }, instances: {} });
@@ -178,16 +180,33 @@ describe('reconcileSnapshotSelection', () => {
 
   it('drops view ids nothing can draw', () => {
     expect(
-      reconcileSnapshotSelection({ modes: { whole: ['temperature', 'wat'] } }, subjects),
-    ).toEqual({ modes: { whole: ['temperature'] }, instances: {} });
+      reconcileSnapshotSelection({ modes: { whole: ['heat_flow', 'wat'] } }, subjects),
+    ).toEqual({ modes: { whole: ['heat_flow'] }, instances: {} });
   });
 
   it('keeps every row when no subjects are given', () => {
     // How the store restores: the figures have not been derived at load time,
     // so a tick dropped there would be dropped for good.
     expect(
-      reconcileSnapshotSelection({ modes: { 'group-digital': ['temperature'] } }),
-    ).toEqual({ modes: { 'group-digital': ['temperature'] }, instances: {} });
+      reconcileSnapshotSelection({ modes: { 'group-digital': ['rth'] } }),
+    ).toEqual({ modes: { 'group-digital': ['rth'] }, instances: {} });
+  });
+
+  it('sends a pre-merge tick to the view it became', () => {
+    expect(
+      reconcileSnapshotSelection({ modes: { whole: ['temperature'] } }, subjects),
+    ).toEqual({ modes: { whole: ['temperature_delta'] }, instances: {} });
+    expect(
+      reconcileSnapshotSelection({ modes: { whole: ['delta_t'] } }, subjects),
+    ).toEqual({ modes: { whole: ['temperature_delta'] }, instances: {} });
+  });
+
+  it('does not ask for the same picture twice when both halves were ticked', () => {
+    // A .tnv.json written before the merge can carry Temperature AND ΔT on one
+    // row. They are now one view, and one view is one PNG.
+    expect(
+      reconcileSnapshotSelection({ modes: { whole: ['temperature', 'delta_t'] } }, subjects),
+    ).toEqual({ modes: { whole: ['temperature_delta'] }, instances: {} });
   });
 
   it('refuses anything that is not a selection', () => {

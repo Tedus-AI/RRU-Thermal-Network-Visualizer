@@ -142,14 +142,14 @@ describe('Screen 07 component visibility', () => {
     const all = solvedBusElements(network, null, {
       layoutMode: 'LeftRight',
       showLabels: true,
-      mode: 'rth',
+      quantity: 'rth',
       scenarioId: 'SCN_001',
     });
     const hidden = hiddenNodeIds(network, new Set(['CMP_B']));
     const filtered = solvedBusElements(network, null, {
       layoutMode: 'LeftRight',
       showLabels: true,
-      mode: 'rth',
+      quantity: 'rth',
       scenarioId: 'SCN_001',
       hidden,
     });

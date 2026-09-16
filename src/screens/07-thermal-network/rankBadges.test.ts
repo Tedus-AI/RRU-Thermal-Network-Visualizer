@@ -53,7 +53,7 @@ function badges(
   return buildElements(
     network(),
     null,
-    'temperature',
+    'temperature_delta',
     DISPLAY,
     'SCN_001',
     'TopBottom',
@@ -118,7 +118,7 @@ describe('over-limit alarm badges', () => {
     buildElements(
       hot(),
       solved,
-      'temperature',
+      'temperature_delta',
       DISPLAY,
       'SCN_001',
       'TopBottom',

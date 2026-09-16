@@ -19,7 +19,7 @@ import type { ElementDefinition } from 'cytoscape';
 import type { ThermalNetwork } from '@/thermal/types';
 import type { ThermalSolution } from '@/thermal/solver/solverTypes';
 import { HSK_BUS_COLOR, labelBox } from '@/ui/graphStyles';
-import { deltaTLabel } from './resultViewModel';
+import { deltaTLabel, type EdgeQuantity } from './resultViewModel';
 import {
   busAxis,
   hskBusGroups,
@@ -109,10 +109,10 @@ export function parallelNote(
   network: ThermalNetwork,
   solution: ThermalSolution | null,
   edgeIds: readonly string[],
-  mode: string,
+  quantity: EdgeQuantity,
   scenarioId: string,
 ): string {
-  if (mode === 'heat_flow') {
+  if (quantity === 'heat_flow') {
     let total = 0;
     for (const id of edgeIds) {
       const result = solution?.edge_results?.[id];
@@ -122,14 +122,14 @@ export function parallelNote(
     return `∑ ${total.toFixed(1)} W`;
   }
 
-  if (mode === 'delta_t') {
+  if (quantity === 'delta_t') {
     // Same two nodes, so one ΔT — printing it once is the point.
     const first = edgeIds[0] ? solution?.edge_results?.[edgeIds[0]] : undefined;
     if (!first || !Number.isFinite(first.delta_T_C)) return '';
     return `shared ${deltaTLabel(first.delta_T_C)}`;
   }
 
-  if (mode !== 'rth') return '';
+  if (quantity !== 'rth') return '';
 
   const combined = solvedParallelRth(network, solution, edgeIds, scenarioId);
   return `∥ ${combined != null ? `${combined.toFixed(3)} °C/W` : '—'}`;
@@ -141,7 +141,8 @@ export function solvedBusElements(
   options: {
     layoutMode: string;
     showLabels: boolean;
-    mode: string;
+    /** What the active view puts on an edge; see `edgeQuantity`. */
+    quantity: EdgeQuantity;
     /** The active scenario, so a per-scenario resistance override is honoured. */
     scenarioId: string;
     /** Node ids the reader has filtered out; their branches leave the bar. */
@@ -229,7 +230,7 @@ export function solvedBusElements(
           border: HSK_BUS_COLOR,
           text: HSK_BUS_COLOR,
           label: options.showLabels
-            ? parallelNote(network, solution, set.edgeIds, options.mode, options.scenarioId)
+            ? parallelNote(network, solution, set.edgeIds, options.quantity, options.scenarioId)
             : '',
         },
         classes: 'view-only hsk-bus-parallel-note',

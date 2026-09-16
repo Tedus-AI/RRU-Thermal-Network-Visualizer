@@ -83,13 +83,23 @@ export function useRememberedValue<T>(
   key: string,
   fallback: T,
   valid: (value: unknown) => value is T,
+  /**
+   * A last chance to translate what an older build wrote into something this
+   * one has, tried only once `valid` has rejected the stored value.
+   *
+   * Without it, renaming an option or merging two of them silently resets the
+   * reader's choice to the default -- which looks, from the outside, exactly
+   * like the setting not being remembered at all.
+   */
+  migrate?: (value: unknown) => T | null,
 ): [T, (next: T | ((current: T) => T)) => void] {
   const [value, setValue] = useState<T>(() => {
     try {
       const raw = window.localStorage.getItem(storageKey(key));
       if (raw == null) return fallback;
       const parsed: unknown = JSON.parse(raw);
-      return valid(parsed) ? parsed : fallback;
+      if (valid(parsed)) return parsed;
+      return migrate?.(parsed) ?? fallback;
     } catch {
       return fallback;
     }

@@ -19,6 +19,7 @@ import type { ThermalNetwork } from '@/thermal/types';
 import type { ThermalSolution } from '@/thermal/solver/solverTypes';
 
 import { parallelNote, solvedParallelRth } from './solvedBusElements';
+import type { EdgeQuantity } from './resultViewModel';
 
 const SPREADING = 'EDGE_PORT_CMP_FPGA_TIM_HEAT_OUT_HSK_BASE';
 const PIPE = 'EDGE_PORT_MOUNT_CMP_FPGA_TIM_HEAT_PIPE';
@@ -111,8 +112,8 @@ describe('the parallel note on the solved graph', () => {
   });
 
   describe('and what it says in each mode', () => {
-    const note = (mode: string) =>
-      parallelNote(network(), solution(), [SPREADING, PIPE], mode, SCENARIO);
+    const note = (quantity: EdgeQuantity) =>
+      parallelNote(network(), solution(), [SPREADING, PIPE], quantity, SCENARIO);
 
     it('writes the combination only in Rth', () => {
       expect(note('rth')).toBe('∥ 0.054 °C/W');
@@ -128,12 +129,11 @@ describe('the parallel note on the solved graph', () => {
 
     /**
      * A stray °C/W among a graph of temperatures was the complaint: the note
-     * ignored the toolbar entirely.
+     * ignored the toolbar entirely. Node Type and Rth Source describe the model
+     * rather than measure it, so there is nothing on their edges to combine.
      */
     it('says nothing where there is no combinable quantity', () => {
-      for (const mode of ['temperature', 'node_type', 'rth_source']) {
-        expect(note(mode), mode).toBe('');
-      }
+      expect(note('none')).toBe('');
     });
   });
 });

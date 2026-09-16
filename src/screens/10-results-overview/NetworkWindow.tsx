@@ -38,7 +38,8 @@ import {
   type SolvedGraphHandle,
 } from '@/screens/07-thermal-network/SolvedGraphCanvas';
 import {
-  OVERVIEW_RESULT_MODES,
+  COMBINED_MODE,
+  RESULT_VIEW_MODES,
   type ResultMode,
 } from '@/screens/07-thermal-network/resultViewModel';
 
@@ -83,7 +84,7 @@ export function NetworkWindow({
 }) {
   const canvasRef = useRef<SolvedGraphHandle | null>(null);
 
-  const [mode, setMode] = useState<ResultMode>('temperature');
+  const [mode, setMode] = useState<ResultMode>(COMBINED_MODE.id);
   const [legendOpen, setLegendOpen] = useRememberedFlag('10.network.legend', false);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
@@ -150,7 +151,7 @@ export function NetworkWindow({
     <>
       <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-b border-line px-3 py-2">
         <ResultModePills
-          modes={OVERVIEW_RESULT_MODES}
+          modes={RESULT_VIEW_MODES}
           mode={mode}
           hasResult={Boolean(solved)}
           onMode={setMode}

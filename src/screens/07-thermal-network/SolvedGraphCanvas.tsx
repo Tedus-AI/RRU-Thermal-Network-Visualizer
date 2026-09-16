@@ -63,6 +63,7 @@ import type { ThermalSolution } from '@/thermal/solver/solverTypes';
 
 import {
   COMBINED_MODE,
+  edgeQuantity,
   RTH_SOURCE_BADGE,
   RTH_SOURCE_COLORS,
   buildScale,
@@ -443,6 +444,9 @@ export function buildElements(
   const elements: ElementDefinition[] = [];
   const solved =
     mode === 'heat_flow' || paintsNodeTemperature(mode) || paintsEdgeDelta(mode);
+  // What this view puts on an edge, which is what a parallel pair combines --
+  // not the mode, because `temperature_delta` draws the `delta_t` quantity.
+  const quantity = edgeQuantity(mode);
   // A view filter only: the solution was computed over the whole network and
   // every KPI still reports it. Shared structure has no component behind it, so
   // the base and the fins never vanish.
@@ -519,7 +523,7 @@ export function buildElements(
   const bus = solvedBusElements(network, solution, {
     layoutMode,
     showLabels: display.showLabels,
-    mode,
+    quantity,
     scenarioId,
     hidden,
   });
@@ -566,11 +570,6 @@ export function buildElements(
     const reverse = result?.actual_direction === 'reverse';
 
     switch (mode) {
-      case 'temperature':
-        // Edges stay neutral; the optional Q label is the only result shown.
-        if (display.showLabels && result) label = `${num(result.heat_flow_W, 1, 'W')}`;
-        break;
-
       case 'heat_flow':
         if (result) {
           color = '#ea580c';
@@ -580,7 +579,6 @@ export function buildElements(
         break;
 
       case COMBINED_MODE.id:
-      case 'delta_t':
         if (result) {
           color = scales.delta.colorOf(Math.abs(result.delta_T_C));
           width = 3;
@@ -715,13 +713,9 @@ export function buildElements(
   if (display.showLabels) {
     for (const pair of pairs) {
       if (!presentNodes.has(pair.from) || !presentNodes.has(pair.to)) continue;
-      const value = parallelNote(network, solution, pair.edgeIds, mode, scenarioId);
+      const value = parallelNote(network, solution, pair.edgeIds, quantity, scenarioId);
       if (!value) continue;
-      const names = parallelPairNames(
-        network,
-        pair.edgeIds,
-        mode === 'heat_flow' ? 'heat_flow' : paintsEdgeDelta(mode) ? 'delta_t' : 'rth',
-      );
+      const names = parallelPairNames(network, pair.edgeIds, quantity);
       elements.push(
         parallelBraceElement(pair, names ? `${names}\n${value}` : value, HSK_BUS_COLOR),
       );
@@ -1329,18 +1323,6 @@ export function legendFor(
   const results = Object.values(solution?.edge_results ?? {});
 
   switch (mode) {
-    case 'temperature': {
-      const scale = buildScale(Object.values(solution?.node_temperatures_C ?? {}));
-      if (scale.max === scale.min) {
-        return [{ color: scale.colorOf(scale.min), label: `${scale.min.toFixed(1)} °C`, zh: '節點溫度' }];
-      }
-      return scale.stops.map((stop) => ({
-        color: stop.color,
-        label: `${stop.from.toFixed(0)} – ${stop.to.toFixed(0)} °C`,
-        zh: '節點溫度',
-      }));
-    }
-
     case 'heat_flow': {
       const max = results.reduce((value, entry) => Math.max(value, Math.abs(entry.heat_flow_W)), 0);
       return [
@@ -1350,24 +1332,19 @@ export function legendFor(
       ];
     }
 
-    case COMBINED_MODE.id:
-    case 'delta_t': {
+    case COMBINED_MODE.id: {
       const scale = buildScale(results.map((entry) => Math.abs(entry.delta_T_C)), DELTA_RAMP);
+      // The view colours BOTH, so the legend has to name both or the reader
+      // reads the edge ramp as the node one.
+      const temps = buildScale(Object.values(solution?.node_temperatures_C ?? {}));
       const nodes =
-        mode === COMBINED_MODE.id
-          ? (() => {
-              // The combined view colours BOTH, so the legend has to name both
-              // or the reader reads the edge ramp as the node one.
-              const temps = buildScale(Object.values(solution?.node_temperatures_C ?? {}));
-              return temps.max === temps.min
-                ? [{ color: temps.colorOf(temps.min), label: `Node ${temps.min.toFixed(1)} °C`, zh: '節點溫度' }]
-                : temps.stops.map((stop) => ({
-                    color: stop.color,
-                    label: `Node ${stop.from.toFixed(0)} – ${stop.to.toFixed(0)} °C`,
-                    zh: '節點溫度',
-                  }));
-            })()
-          : [];
+        temps.max === temps.min
+          ? [{ color: temps.colorOf(temps.min), label: `Node ${temps.min.toFixed(1)} °C`, zh: '節點溫度' }]
+          : temps.stops.map((stop) => ({
+              color: stop.color,
+              label: `Node ${stop.from.toFixed(0)} – ${stop.to.toFixed(0)} °C`,
+              zh: '節點溫度',
+            }));
       return [
         ...nodes,
         ...scale.stops.map((stop) => ({

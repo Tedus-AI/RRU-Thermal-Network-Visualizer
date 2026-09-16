@@ -1,12 +1,16 @@
 /**
- * Temperature + ΔT in one view — Screen 08's default mode.
+ * Temperature + ΔT in one view — now the tool's only temperature view.
  *
  * The claim it makes is that BOTH colourings are on at once: nodes off the
  * temperature ramp, edges off the ΔT ramp. Either half missing and the reader
  * is looking at a picture that answers half the question while looking like it
- * answers all of it, so both are asserted here against the single-purpose modes
- * they are built from — the node styling must match Temperature exactly, and
- * the edge styling must match ΔT exactly.
+ * answers all of it, so both halves are asserted here against the ramps they
+ * are built from.
+ *
+ * It used to be asserted against the standalone Temperature and ΔT modes.
+ * Those are gone — a ΔT is computed FROM temperatures, and splitting them over
+ * two buttons made every reader hold one half in their head while looking at
+ * the other — so the ramps are the reference now.
  */
 
 import { describe, expect, it } from 'vitest';
@@ -16,11 +20,13 @@ import type { ThermalSolution } from '@/thermal/solver/solverTypes';
 
 import { buildElements, legendFor } from './SolvedGraphCanvas';
 import {
-  ANALYSIS_RESULT_MODES,
   COMBINED_MODE,
   RESULT_MODES,
+  RESULT_VIEW_MODES,
   buildScale,
+  edgeQuantity,
   isResultMode,
+  migrateResultMode,
   modeFilenamePart,
   paintsEdgeDelta,
   paintsNodeTemperature,
@@ -97,28 +103,23 @@ function elementsFor(mode: ResultMode) {
 }
 
 describe('the combined Temperature + ΔT mode', () => {
-  it('paints nodes exactly as Temperature does', () => {
+  it('paints the node off the temperature ramp and labels it in °C', () => {
     const combined = elementsFor(COMBINED_MODE.id);
-    const temperature = elementsFor('temperature');
-    expect(combined.node.fill).toBe(temperature.node.fill);
-    expect(combined.node.textColor).toBe(temperature.node.textColor);
-    expect(combined.node.label).toBe(temperature.node.label);
+    expect(combined.node.fill).toBe(SCALES.temperature.colorOf(60));
     expect(String(combined.node.label)).toContain('60.0 °C');
   });
 
-  it('paints edges exactly as ΔT does', () => {
+  it('paints the edge off the ΔT ramp and labels it with the drop', () => {
     const combined = elementsFor(COMBINED_MODE.id);
-    const delta = elementsFor('delta_t');
-    expect(combined.edge.color).toBe(delta.edge.color);
-    expect(combined.edge.label).toBe(delta.edge.label);
+    expect(combined.edge.color).toBe(SCALES.delta.colorOf(7.6));
     expect(combined.edge.label).toBe('ΔT 7.6 °C');
   });
 
-  /** The regression it guards: ΔT alone leaves the nodes uncoloured. */
-  it('differs from ΔT on the node and from Temperature on the edge', () => {
+  /** The regression it guards: the two halves must not collapse into one. */
+  it('does not paint the node with the edge ramp, or the edge with the node ramp', () => {
     const combined = elementsFor(COMBINED_MODE.id);
-    expect(combined.node.fill).not.toBe(elementsFor('delta_t').node.fill);
-    expect(combined.edge.color).not.toBe(elementsFor('temperature').edge.color);
+    expect(combined.node.fill).not.toBe(SCALES.delta.colorOf(7.6));
+    expect(combined.edge.color).not.toBe(SCALES.temperature.colorOf(60));
   });
 
   it('names both ramps in the legend, so neither is read as the other', () => {
@@ -135,24 +136,69 @@ describe('the combined Temperature + ΔT mode', () => {
   });
 });
 
-describe("Screen 08's mode list", () => {
-  it('offers the combined view, Heat Flow and Rth — and nothing input-only', () => {
-    expect(ANALYSIS_RESULT_MODES.map((entry) => entry.id)).toEqual([
+describe('the mode lists after the merge', () => {
+  it('offers the combined view, Heat Flow and Rth as the result views', () => {
+    expect(RESULT_VIEW_MODES.map((entry) => entry.id)).toEqual([
       COMBINED_MODE.id,
       'heat_flow',
       'rth',
     ]);
   });
 
-  /** 07's own toolbar is untouched: the combined mode belongs to 08. */
-  it('leaves Screen 07 the six modes it had', () => {
+  it("gives Screen 07 the result views plus the two that describe the model", () => {
     expect(RESULT_MODES.map((entry) => entry.id)).toEqual([
-      'temperature',
+      COMBINED_MODE.id,
       'heat_flow',
-      'delta_t',
       'rth',
       'node_type',
       'rth_source',
     ]);
+  });
+
+  it('no longer offers Temperature and ΔT on their own', () => {
+    expect(isResultMode('temperature')).toBe(false);
+    expect(isResultMode('delta_t')).toBe(false);
+  });
+});
+
+describe('reading back a mode an older build wrote', () => {
+  it('sends both halves of the old split to the view they became', () => {
+    // Otherwise a reader who left the screen on either one comes back to the
+    // default, which looks exactly like the setting not being remembered.
+    expect(migrateResultMode('temperature')).toBe(COMBINED_MODE.id);
+    expect(migrateResultMode('delta_t')).toBe(COMBINED_MODE.id);
+  });
+
+  it('passes a mode this build still has straight through', () => {
+    for (const mode of RESULT_MODES) {
+      expect(migrateResultMode(mode.id), mode.id).toBe(mode.id);
+    }
+  });
+
+  it('refuses anything that was never a mode', () => {
+    expect(migrateResultMode('hierarchical')).toBeNull();
+    expect(migrateResultMode(null)).toBeNull();
+    expect(migrateResultMode(7)).toBeNull();
+  });
+});
+
+describe('what a view puts on an edge', () => {
+  /**
+   * The mode and the quantity stopped being the same word when the two views
+   * merged. Comparing the mode directly is what left a parallel pair's brace
+   * unlabelled — and so undrawn — in the combined view.
+   */
+  it('reads ΔT off the combined view, not off a mode named delta_t', () => {
+    expect(edgeQuantity(COMBINED_MODE.id)).toBe('delta_t');
+  });
+
+  it('maps the other result views to their own quantity', () => {
+    expect(edgeQuantity('heat_flow')).toBe('heat_flow');
+    expect(edgeQuantity('rth')).toBe('rth');
+  });
+
+  it('gives the input-only views no combinable quantity at all', () => {
+    expect(edgeQuantity('node_type')).toBe('none');
+    expect(edgeQuantity('rth_source')).toBe('none');
   });
 });
