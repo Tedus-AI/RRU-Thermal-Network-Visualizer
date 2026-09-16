@@ -146,24 +146,14 @@ export function evaluateArtifact(type: ArtifactType, input: ReadinessInput): Art
 
 
     case 'png_snapshots': {
+      // Whether Screen 08 has a current analysis decides whether there is a
+      // bottleneck overlay to draw, not whether this artifact is healthy. It
+      // used to raise a WARNING saying so, which put a caution triangle on a
+      // row that exports perfectly well -- a view that does not exist is not a
+      // fault in the ones that do. The temperature-rows warning beside it
+      // described the CSV this build no longer produces.
       const solved = solvedResultStatus(input);
       if (solved !== 'READY') return wrap(solved, solvedResultReason(input));
-      if (!input.analysis || input.analysis_stale) {
-        // 12 §31 — "optional image unavailable" is a warning, never a blocker.
-        return wrap('WARNING', {
-          en: 'The bottleneck overlay is unavailable; the other views still export.',
-          zh: '瓶頸疊圖不可用，其餘視圖仍可匯出。',
-        });
-      }
-      if (
-        ('distribution' in input || 'distribution_stale' in input) &&
-        (!input.distribution || input.distribution_stale)
-      ) {
-        return wrap('WARNING', {
-          en: 'The temperature rows are unavailable; current 07/08 views still export.',
-          zh: '溫度資料列不可用；目前的 07/08 畫面仍可匯出。',
-        });
-      }
       return wrap('READY');
     }
 

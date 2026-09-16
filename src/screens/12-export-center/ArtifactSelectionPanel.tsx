@@ -13,17 +13,14 @@
 
 import { AlertTriangle, Ban, CheckCircle2, CircleSlash } from 'lucide-react';
 
-import { Badge, Button, Select } from '@/ui/primitives';
+import { Badge, Button } from '@/ui/primitives';
 import { ColumnLabel, EngineeringInfo, biTitle } from '@/ui/FieldLabel';
 import {
   ARTIFACT_DEFINITIONS,
   ARTIFACT_STATUS_ZH,
-  PRESET_LABELS,
-  PRESETS,
   isSelectable,
   type ArtifactStatus,
   type ArtifactType,
-  type ExportPreset,
 } from '@/export/exportTypes';
 import type { ArtifactReadiness } from '@/export/exportValidator';
 
@@ -40,48 +37,6 @@ const STATUS_ICON: Record<ArtifactStatus, typeof CheckCircle2> = {
   FAILED: Ban,
 };
 
-export function PackagePresetPanel({
-  preset,
-  onPreset,
-  onSavePreset,
-}: {
-  preset: ExportPreset;
-  onPreset: (preset: ExportPreset) => void;
-  onSavePreset: () => void;
-}) {
-  return (
-    <div className="flex flex-col gap-2">
-      <label
-        htmlFor="ex-preset"
-        className="flex items-center gap-1 text-[11px] font-semibold text-ink-700"
-      >
-        Package Preset
-        <span className="font-normal text-ink-400">/ 封裝組合</span>
-        <EngineeringInfo zh={T12.packagePreset} label="Package Preset" align="left" />
-      </label>
-      <Select
-        id="ex-preset"
-        className="h-8 !text-[11.5px]"
-        value={preset}
-        items={PRESETS.map((entry) => ({ value: entry, label: PRESET_LABELS[entry].label }))}
-        onChange={(event) => onPreset(event.target.value as ExportPreset)}
-      />
-      <p className="text-[10.5px] leading-relaxed text-ink-500">
-        {PRESET_LABELS[preset].note}
-        <span className="block text-ink-400">{PRESET_LABELS[preset].zh}</span>
-      </p>
-      {/* 12 §23 — a preset only ever picks artifacts that pass their own
-          prerequisites, so choosing one can never queue something BLOCKED. */}
-      <p className="text-[10px] text-ink-400">
-        A preset selects only artifacts that currently pass their prerequisites.
-        <span className="block">組合僅會選取目前符合前置條件的項目。</span>
-      </p>
-      <Button className="!h-7 !text-[11px]" onClick={onSavePreset}>
-        Save Export Preset / 儲存匯出組合
-      </Button>
-    </div>
-  );
-}
 
 export function ArtifactSelectionPanel({
   readiness,

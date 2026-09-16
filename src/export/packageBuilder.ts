@@ -18,7 +18,6 @@ import {
   type ExportArtifactResult,
   type ExportManifest,
   type ExportSession,
-  type JsonFormat,
 } from './exportTypes';
 
 /** One produced file: an artifact may yield several (network CSV, PNG set). */
@@ -43,7 +42,6 @@ export interface PackageInput {
   artifacts: GeneratedArtifact[];
   results: ExportArtifactResult[];
   warnings: string[];
-  json_format: JsonFormat;
   compress: boolean;
   now: string;
 }
@@ -76,7 +74,7 @@ export async function buildPackage(input: PackageInput): Promise<PackageOutput> 
   // Named here rather than looked up: the manifest is no longer an artifact
   // anyone selects, but a package without its provenance record is not
   // traceable, so every ZIP still carries one.
-  zip.file(MANIFEST_PACKAGE_PATH, encodeJson(manifest, input.json_format));
+  zip.file(MANIFEST_PACKAGE_PATH, encodeJson(manifest));
   entries += 1;
 
   const blob = await zip.generateAsync({

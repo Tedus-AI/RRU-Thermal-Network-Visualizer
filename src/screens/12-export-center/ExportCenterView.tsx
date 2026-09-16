@@ -65,7 +65,6 @@ import { reportFigureSource } from '@/report/reportFigureSource';
 
 import {
   ARTIFACT_DEFINITIONS,
-  PRESET_ARTIFACTS,
   artifactDefinition,
   isExportable,
   type ArtifactType,
@@ -73,7 +72,6 @@ import {
 } from '@/export/exportTypes';
 import {
   evaluateAllArtifacts,
-  evaluateSources,
   globalStatus,
   requiresConfirmation,
   validateExport,
@@ -88,7 +86,7 @@ import { sha256Hex } from '@/export/checksum';
 import type { ReportRenderInput } from '@/export/reportRenderer';
 import { resultRevisionMatches } from '@/domain/revision';
 
-import { ArtifactSelectionPanel, PackagePresetPanel } from './ArtifactSelectionPanel';
+import { ArtifactSelectionPanel } from './ArtifactSelectionPanel';
 import { ExportConfigurationPanel, FilenamePreview } from './ExportConfigurationPanel';
 import {
   ExportProgress,
@@ -99,7 +97,6 @@ import {
   ExportHistoryPanel,
   ExportValidationPanel,
   LocalExportNotice,
-  SourceReadinessPanel,
 } from './ExportValidationPanel';
 import { ExportKpiBar } from './ExportKpiBar';
 import { T12 } from './tooltips';
@@ -226,7 +223,6 @@ export function ExportCenterView() {
   const reportConfigs = useReportStore((s) => s.configs);
 
   const config = useExportStore((s) => s.config);
-  const preset = useExportStore((s) => s.preset);
   const selected = useExportStore((s) => s.selected);
   const queue = useExportStore((s) => s.queue);
   const results = useExportStore((s) => s.results);
@@ -379,7 +375,6 @@ export function ExportCenterView() {
   );
 
   const readiness = useMemo(() => evaluateAllArtifacts(readinessInput), [readinessInput]);
-  const sources = useMemo(() => evaluateSources(readinessInput), [readinessInput]);
 
   const validation = useMemo(
     () =>
@@ -413,22 +408,18 @@ export function ExportCenterView() {
     if (seeded.current === activeScenarioId) return;
     // A remembered selection is a decision; the preset is only a starting
     // point. This effect re-runs on every remount, so without this guard
-    // coming back from another screen re-seeded the preset over whatever the
-    // engineer had ticked -- which is what made the settings look like they
-    // were never saved at all.
+    // coming back from another screen re-seeded it over whatever the engineer
+    // had ticked -- which is what made the settings look like they were never
+    // saved at all.
     if (useExportStore.getState().preferencesRestored) {
       seeded.current = activeScenarioId;
       return;
     }
     seeded.current = activeScenarioId;
-    // 12 §23 — the Engineering Package preset selects every recommended
-    // artifact that currently passes its own prerequisites.
-    useExportStore
-      .getState()
-      .setPreset(
-        'engineering_package',
-        PRESET_ARTIFACTS.engineering_package.filter((type) => selectableTypes.includes(type)),
-      );
+    // A first visit starts with everything that currently passes its own
+    // prerequisites ticked, which is what the Engineering Package preset used
+    // to mean before the four rows made a dropdown over them redundant.
+    useExportStore.getState().setSelected(selectableTypes);
   }, [activeScenarioId, selectableTypes]);
 
   // --- filenames ------------------------------------------------------------
@@ -625,7 +616,6 @@ export function ExportCenterView() {
           artifacts: outcome.artifacts,
           results: outcome.results,
           warnings,
-          json_format: config.json_format,
           compress: config.zip_compression,
           now: now.toISOString(),
         });
@@ -852,7 +842,7 @@ export function ExportCenterView() {
     <ScreenWorkspace
       title="Export Center"
       titleZh="匯出中心"
-      descriptionZh="結果輸出成 PDF、CSV、JSON、PNG 與含追溯清單的 ZIP 工程封裝；本頁不重新計算，也不修改報告版面"
+      descriptionZh="結果輸出成 PDF／HTML 報告、PNG 圖表快照，與含追溯清單的 ZIP 工程封裝；本頁不重新計算，也不修改報告版面"
       badge={
         <span className="flex flex-wrap items-center gap-1.5">
           {/* The Export Status KPI card was removed for saying the same word
@@ -1032,32 +1022,8 @@ export function ExportCenterView() {
             </Panel>
           </div>
 
-          {/* --- RIGHT: presets, readiness, validation, history ----------- */}
+          {/* --- RIGHT: validation and history ---------------------------- */}
           <div className="flex w-full shrink-0 flex-col gap-3 xl:w-[21rem]">
-            <Panel title="Package Presets" zh="封裝組合" explanation={T12.packagePreset}>
-              <PackagePresetPanel
-                preset={preset}
-                onPreset={(next) => {
-                  if (next === 'custom') {
-                    useExportStore.getState().setPreset('custom', selected);
-                    return;
-                  }
-                  const wanted = PRESET_ARTIFACTS[next].filter((type) =>
-                    selectableTypes.includes(type),
-                  );
-                  useExportStore.getState().setPreset(next, wanted);
-                  toast.success(`${wanted.length} artifact(s) selected / 已選取 ${wanted.length} 項`);
-                }}
-                onSavePreset={() => {
-                  useExportStore.getState().setPreset('custom', selected);
-                  toast.success('Selection saved as the Custom preset / 已存為自訂組合');
-                }}
-              />
-            </Panel>
-
-            <Panel title="Source Readiness" zh="來源狀態" explanation={T12.sourceReadiness}>
-              <SourceReadinessPanel entries={sources} />
-            </Panel>
 
             <Panel
               title="Validation"

@@ -32,7 +32,6 @@ import {
   type ExportConfiguration,
   type ExportHistoryEntry,
   type ExportManifest,
-  type ExportPreset,
   type ExportSession,
   type ExportArtifactResult,
 } from '@/export/exportTypes';
@@ -49,7 +48,6 @@ export interface QueueEntry {
 
 interface ExportStoreState {
   config: ExportConfiguration;
-  preset: ExportPreset;
   selected: ArtifactType[];
 
   session: ExportSession | null;
@@ -81,7 +79,6 @@ interface ExportStoreState {
   clear: () => void;
 
   setConfig: (patch: Partial<ExportConfiguration>) => void;
-  setPreset: (preset: ExportPreset, artifacts: ArtifactType[]) => void;
   setSelected: (selected: ArtifactType[]) => void;
   toggle: (type: ArtifactType) => void;
 
@@ -110,20 +107,17 @@ interface ExportStoreState {
 function rememberSettings(
   projectId: string | null,
   config: ExportConfiguration,
-  preset: ExportPreset,
   selected: ArtifactType[],
 ): void {
   if (!projectId) return;
   saveExportPreferences(projectId, {
     config: config as unknown as Record<string, unknown>,
-    preset,
     selected,
   });
 }
 
 export const useExportStore = create<ExportStoreState>((set, get) => ({
   config: defaultConfiguration(''),
-  preset: 'engineering_package',
   selected: [],
 
   session: null,
@@ -168,12 +162,7 @@ export const useExportStore = create<ExportStoreState>((set, get) => ({
         : changed
           ? defaultConfiguration(base)
           : { ...previous.config, base_filename: previous.config.base_filename || base },
-      ...(stored
-        ? {
-            preset: stored.preset as ExportPreset,
-            selected: stored.selected as ArtifactType[],
-          }
-        : {}),
+      ...(stored ? { selected: stored.selected as ArtifactType[] } : {}),
       ...(changed
         ? {
             session: null,
@@ -191,7 +180,6 @@ export const useExportStore = create<ExportStoreState>((set, get) => ({
   clear: () =>
     set({
       config: defaultConfiguration(''),
-      preset: 'engineering_package',
       selected: [],
       session: null,
       queue: [],
@@ -210,19 +198,14 @@ export const useExportStore = create<ExportStoreState>((set, get) => ({
   setConfig: (patch) =>
     set((state) => {
       const config = { ...state.config, ...patch };
-      rememberSettings(state.projectId, config, state.preset, state.selected);
+      rememberSettings(state.projectId, config, state.selected);
       return { config };
     }),
 
-  setPreset: (preset, artifacts) =>
-    set((state) => {
-      rememberSettings(state.projectId, state.config, preset, artifacts);
-      return { preset, selected: artifacts };
-    }),
 
   setSelected: (selected) =>
     set((state) => {
-      rememberSettings(state.projectId, state.config, state.preset, selected);
+      rememberSettings(state.projectId, state.config, selected);
       return { selected };
     }),
 
@@ -231,9 +214,8 @@ export const useExportStore = create<ExportStoreState>((set, get) => ({
       const selected = state.selected.includes(type)
         ? state.selected.filter((entry) => entry !== type)
         : [...state.selected, type];
-      // Touching the selection by hand means the preset no longer describes it.
-      rememberSettings(state.projectId, state.config, 'custom', selected);
-      return { preset: 'custom' as ExportPreset, selected };
+      rememberSettings(state.projectId, state.config, selected);
+      return { selected };
     }),
 
   beginSession: (session, queue) =>

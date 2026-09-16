@@ -1,9 +1,9 @@
 /**
  * Export layer tests — 12 §58 A–F, plus the serialization contracts of
- * §17, §18, §21, §26 and §27.
+ * §17, §18, §21 and §26.
  *
  * Everything here is the pure part of Screen 12: readiness, validation,
- * filenames, CSV encoding and the manifest. The generators that need a DOM
+ * filenames and the manifest. The generators that need a DOM
  * (PDF, PNG, ZIP) are exercised in the browser verification instead.
  *
  * The §10–§14 serialization cases went with the artifacts they covered: the
@@ -20,7 +20,7 @@ import type { ThermalSolution } from '@/thermal/solver/solverTypes';
 import type { ThermalNetwork } from '@/thermal/types';
 import type { ReportExportPayload } from '@/report/reportTypes';
 
-import { buildCsv, encodeCsv, encodeJson } from './csv';
+import { encodeJson } from './csv';
 import { createExportSession } from './exportSession';
 import { buildManifest } from './manifestBuilder';
 import {
@@ -42,7 +42,6 @@ import {
 } from './exportValidator';
 import {
   defaultConfiguration,
-  PRESET_ARTIFACTS,
   type ArtifactType,
   type ExportArtifactResult,
 } from './exportTypes';
@@ -381,7 +380,9 @@ describe('Test A — Engineering Package (12 §58 A)', () => {
     expect(all.png_snapshots.status).toBe('READY');
     expect(all.package_zip.status).toBe('READY');
 
-    const selected = PRESET_ARTIFACTS.engineering_package;
+    // Everything a first visit ticks: each artifact that passes its own
+    // prerequisites. The WARNING report among them is what forces the prompt.
+    const selected: ArtifactType[] = ['pdf_report', 'html_report', 'png_snapshots'];
     expect(requiresConfirmation(selected, all)).toBe(true);
 
     const validation = validateExport({
@@ -661,24 +662,6 @@ describe('Test F — filename sanitization (12 §58 F, §18, §21)', () => {
 
 // --- serialization contracts ------------------------------------------------
 
-describe('CSV encoding (12 §27)', () => {
-  it('prefixes a BOM when asked, and not otherwise', () => {
-    expect(encodeCsv('a,b\r\n', 'utf8_bom').charCodeAt(0)).toBe(0xfeff);
-    expect(encodeCsv('a,b\r\n', 'utf8').charCodeAt(0)).toBe('a'.charCodeAt(0));
-  });
-
-  it('quotes a field containing the delimiter or a quote', () => {
-    const csv = buildCsv(
-      [{ name: 'A, B', note: 'say "hi"' }],
-      [
-        { header: 'Name', value: (row) => row.name },
-        { header: 'Note', value: (row) => row.note },
-      ],
-      { decimal_precision: 3, csv_include_units: false },
-    );
-    expect(csv.split('\r\n')[1]).toBe('"A, B","say ""hi"""');
-  });
-});
 
 describe('Per-artifact readiness (12 §3, §4)', () => {
   it('reports NOT_AVAILABLE when the source does not exist', () => {
@@ -709,10 +692,12 @@ describe('Per-artifact readiness (12 §3, §4)', () => {
 
 
 
-  it('warns when the overlay is unavailable but the other views are not', () => {
+  it('stays READY when there is no bottleneck overlay to draw', () => {
+    // A view that does not exist is not a fault in the ones that do. The row
+    // used to carry a caution triangle for it, which read as a problem with an
+    // artifact that exports perfectly well.
     const entry = evaluateArtifact('png_snapshots', readiness({ analysis: null }));
-    expect(entry.status).toBe('WARNING');
-    expect(entry.reason).toMatch(/overlay is unavailable/);
+    expect(entry.status).toBe('READY');
   });
 });
 

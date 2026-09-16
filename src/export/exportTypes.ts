@@ -218,23 +218,13 @@ export interface SourceReadinessEntry {
   detail_zh: string;
 }
 
-// --- configuration (12 §24, §25, §26, §27) ----------------------------------
-
-export const CSV_ENCODINGS = ['utf8_bom', 'utf8'] as const;
-export type CsvEncoding = (typeof CSV_ENCODINGS)[number];
-
-export const CSV_ENCODING_LABELS: Record<CsvEncoding, { label: string; zh: string }> = {
-  utf8_bom: { label: 'UTF-8 with BOM', zh: 'UTF-8（含 BOM）' },
-  utf8: { label: 'UTF-8', zh: 'UTF-8' },
-};
-
-/** 12 §26 — serialization only; the stored precision never changes. */
-export const DECIMAL_PRECISIONS = [2, 3, 4] as const;
-export type DecimalPrecision = (typeof DECIMAL_PRECISIONS)[number];
-export const DEFAULT_DECIMAL_PRECISION: DecimalPrecision = 3;
-
-export const JSON_FORMATS = ['pretty', 'compact'] as const;
-export type JsonFormat = (typeof JSON_FORMATS)[number];
+// --- configuration (12 §24, §25) --------------------------------------------
+//
+// §26 and §27 governed the CSV tables and the JSON documents: a decimal
+// precision, a unit row, a UTF-8 BOM, a pretty/compact switch. All four left
+// with the five data files they formatted. The manifest inside the package is
+// the only JSON still written and it is always written pretty, because it is
+// read by eye.
 
 export const PNG_SCALES = ['1x', '2x'] as const;
 export type PngScale = (typeof PNG_SCALES)[number];
@@ -254,10 +244,6 @@ export interface ExportConfiguration {
   timestamp: boolean;
   zip_compression: boolean;
 
-  csv_encoding: CsvEncoding;
-  decimal_precision: DecimalPrecision;
-  csv_include_units: boolean;
-  json_format: JsonFormat;
   png_scale: PngScale;
 
   destination: Destination;
@@ -272,39 +258,14 @@ export function defaultConfiguration(base: string): ExportConfiguration {
     include_scenario_id: true,
     timestamp: true,
     zip_compression: true,
-    csv_encoding: 'utf8_bom',
-    decimal_precision: DEFAULT_DECIMAL_PRECISION,
-    csv_include_units: true,
-    json_format: 'pretty',
     png_scale: '2x',
     destination: 'browser_download',
     checksum: true,
   };
 }
 
-// --- presets (12 §23) -------------------------------------------------------
 
-export const PRESETS = ['engineering_package', 'report_only', 'images_only', 'custom'] as const;
-export type ExportPreset = (typeof PRESETS)[number];
-
-export const PRESET_LABELS: Record<ExportPreset, { label: string; zh: string; note: string }> = {
-  engineering_package: {
-    label: 'Engineering Package',
-    zh: '工程封裝',
-    note: 'All recommended READY/WARNING artifacts',
-  },
-  report_only: { label: 'Report Only', zh: '僅報告', note: 'PDF and HTML report' },
-  images_only: { label: 'Images Only', zh: '僅圖片', note: 'PNG snapshots' },
-  custom: { label: 'Custom', zh: '自訂', note: 'Your own selection' },
-};
-
-/** 12 §23 — what each preset asks for, before readiness is applied. */
-export const PRESET_ARTIFACTS: Record<Exclude<ExportPreset, 'custom'>, ArtifactType[]> = {
-  engineering_package: ['pdf_report', 'html_report', 'png_snapshots'],
-  report_only: ['pdf_report', 'html_report'],
-  images_only: ['png_snapshots'],
-};
-
+// --- session and results
 // --- session and results (12 §48, §49) --------------------------------------
 
 export interface ExportArtifactRequest {
