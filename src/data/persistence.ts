@@ -773,6 +773,15 @@ export interface ExportPreferences {
    * for the screen to say which folder it was using and ask for it again.
    */
   output_folder_name?: string | null;
+  /**
+   * The snapshot matrix: which subject is ticked for which view.
+   *
+   * Stored loosely rather than as the typed selection, because the subjects a
+   * matrix has depend on the network it is opened against -- a board removed or
+   * a bottleneck cleared changes the rows. It is reconciled against the current
+   * subjects on the way in; see `reconcileSnapshotSelection`.
+   */
+  snapshot_selection?: Record<string, unknown> | null;
 }
 
 export function loadExportPreferences(projectId: string): ExportPreferences | null {

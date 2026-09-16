@@ -62,6 +62,11 @@ import { currentSourceRevision } from '@/data/sourceRevision';
 import { buildResultsOverview } from '@/thermal/overview/overviewAggregator';
 import { evaluateSnapshot, withTranslatedActions } from '@/report/snapshotAdapter';
 import { reportFigureSource } from '@/report/reportFigureSource';
+import {
+  reconcileSnapshotSelection,
+  snapshotCount,
+  snapshotSubjects,
+} from '@/export/snapshotSelection';
 
 import {
   ARTIFACT_DEFINITIONS,
@@ -87,6 +92,7 @@ import type { ReportRenderInput } from '@/export/reportRenderer';
 import { resultRevisionMatches } from '@/domain/revision';
 
 import { ArtifactSelectionPanel } from './ArtifactSelectionPanel';
+import { SnapshotMatrixPanel } from './SnapshotMatrixPanel';
 import { ExportConfigurationPanel, FilenamePreview } from './ExportConfigurationPanel';
 import {
   ExportProgress,
@@ -228,6 +234,7 @@ export function ExportCenterView() {
   const directory = useExportStore((s) => s.directory);
   const directoryName = useExportStore((s) => s.directoryName);
   const selected = useExportStore((s) => s.selected);
+  const storedSnapshotSelection = useExportStore((s) => s.snapshotSelection);
   const queue = useExportStore((s) => s.queue);
   const results = useExportStore((s) => s.results);
   const history = useExportStore((s) => s.history);
@@ -345,6 +352,63 @@ export function ExportCenterView() {
     );
   }, [analysis, solution, sourceRevision]);
 
+  /**
+   * The same figures Screen 11 previews.
+   *
+   * Screen 12 used to pass none, so `renderReport` received an empty list and a
+   * null context: the exported PDF printed "Thermal Network Not Available" and
+   * "Bottleneck Thermal Network Not Available" over two sections the preview
+   * had drawn in full, and the paginator counted both as empty and broke the
+   * pages somewhere else again. §9 forbids this screen changing the report's
+   * layout, and dropping two of its seven sections is the largest change it
+   * could make.
+   */
+  const figureSource = useMemo(
+    () =>
+      reportFigureSource({
+        solve_network: solveInput?.network ?? null,
+        stored_network: network,
+        components,
+        solution,
+        stale,
+        scenario_id: activeScenarioId,
+        studies,
+        boundary_ports: boundaryPorts,
+        boundary_set: boundarySet,
+      }),
+    [
+      solveInput,
+      network,
+      components,
+      solution,
+      stale,
+      activeScenarioId,
+      studies,
+      boundaryPorts,
+      boundarySet,
+    ],
+  );
+
+  /**
+   * The snapshot matrix's rows, and the ticks that survived being reloaded.
+   *
+   * The rows come from the report's figures rather than from a list of their
+   * own, so "which subjects are there" has one answer across Screens 11 and 12.
+   * A stored selection is reconciled against them here: a board removed or a
+   * bottleneck cleared since the file was written takes its ticks with it,
+   * rather than sitting in the file as a row nothing can draw.
+   */
+  const subjects = useMemo(() => snapshotSubjects(figureSource.figures), [figureSource.figures]);
+
+  const snapshotSelection = useMemo(
+    () =>
+      reconcileSnapshotSelection(storedSnapshotSelection, subjects) ?? {
+        modes: {},
+        instances: {},
+      },
+    [storedSnapshotSelection, subjects],
+  );
+
   const readinessInput = useMemo<ReadinessInput>(
     () => ({
       network,
@@ -360,6 +424,7 @@ export function ExportCenterView() {
       payload,
       components_without_limits: snapshot?.completeness.components_without_limits ?? 0,
       low_confidence_edges: snapshot?.completeness.low_confidence_critical_edges ?? 0,
+      snapshot_count: snapshotCount(subjects, snapshotSelection),
     }),
     [
       network,
@@ -373,6 +438,8 @@ export function ExportCenterView() {
       snapshot,
       snapshotEvaluation,
       payload,
+      subjects,
+      snapshotSelection,
     ],
   );
 
@@ -462,43 +529,6 @@ export function ExportCenterView() {
   }, []);
 
   // --- the export -----------------------------------------------------------
-  /**
-   * The same figures Screen 11 previews.
-   *
-   * Screen 12 used to pass none, so `renderReport` received an empty list and a
-   * null context: the exported PDF printed "Thermal Network Not Available" and
-   * "Bottleneck Thermal Network Not Available" over two sections the preview
-   * had drawn in full, and the paginator counted both as empty and broke the
-   * pages somewhere else again. §9 forbids this screen changing the report's
-   * layout, and dropping two of its seven sections is the largest change it
-   * could make.
-   */
-  const figureSource = useMemo(
-    () =>
-      reportFigureSource({
-        solve_network: solveInput?.network ?? null,
-        stored_network: network,
-        components,
-        solution,
-        stale,
-        scenario_id: activeScenarioId,
-        studies,
-        boundary_ports: boundaryPorts,
-        boundary_set: boundarySet,
-      }),
-    [
-      solveInput,
-      network,
-      components,
-      solution,
-      stale,
-      activeScenarioId,
-      studies,
-      boundaryPorts,
-      boundarySet,
-    ],
-  );
-
   const reportRender = useMemo<ReportRenderInput | null>(() => {
     if (!reportConfig || !snapshot || !scenario) return null;
     return {
@@ -590,19 +620,9 @@ export function ExportCenterView() {
           network,
           solution,
           solution_status: !solution ? 'NONE' : stale ? 'STALE' : 'SOLVED',
-          // A stale analysis is not an analysis. Readiness already reports the
-          // bottleneck overlay as unavailable and BLOCKS the Bottleneck CSV
-          // when the solve has moved underneath Screen 08 -- but the snapshot
-          // renderer was handed the stale results anyway and drew the overlay
-          // from them, so the one artifact that shipped stale rankings was the
-          // picture, where nothing says which solve it came from.
-          analysis: analysisStale ? null : analysis,
-          distribution,
-          boundary: boundarySet,
-          components,
-          snapshot,
-          report_config: reportConfig,
           report_render: reportRender,
+          snapshot_subjects: subjects,
+          snapshot_selection: snapshotSelection,
         },
         onProgress: (value) => useExportStore.getState().setProgress(value),
         isCancelled: () => useExportStore.getState().cancelRequested,
@@ -966,9 +986,28 @@ export function ExportCenterView() {
               />
             </Panel>
 
+            <Panel
+              index={2}
+              title="Snapshot Matrix"
+              zh="快照矩陣"
+              explanation={T12.snapshotMatrix}
+              actions={
+                <span className="text-[10.5px] text-ink-400">
+                  feeds Charts / Snapshots PNG
+                </span>
+              }
+            >
+              <SnapshotMatrixPanel
+                subjects={subjects}
+                selection={snapshotSelection}
+                disabled={exporting}
+                onChange={(next) => useExportStore.getState().setSnapshotSelection(next)}
+              />
+            </Panel>
+
             <div className="flex flex-col gap-3 2xl:flex-row">
               <Panel
-                index={2}
+                index={3}
                 title="Export Settings"
                 zh="匯出設定"
                 className="min-w-0 flex-1"
@@ -979,6 +1018,7 @@ export function ExportCenterView() {
                   disabled={exporting}
                   folderSupported={supportsFolderPicker()}
                   folderName={directoryName}
+                  folderGranted={Boolean(directory)}
                   onPickFolder={async () => {
                     const handle = await pickDirectory();
                     useExportStore.getState().setDirectory(handle);
@@ -989,7 +1029,7 @@ export function ExportCenterView() {
               </Panel>
 
               <Panel
-                index={3}
+                index={4}
                 title="File Naming"
                 zh="檔名設定"
                 className="min-w-0 flex-1"
@@ -1005,7 +1045,7 @@ export function ExportCenterView() {
             </div>
 
             <Panel
-              index={4}
+              index={5}
               title="Export Queue"
               zh="匯出佇列"
               explanation={T12.exportQueue}

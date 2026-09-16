@@ -19,6 +19,11 @@
 import { create } from 'zustand';
 
 import type { FileSystemDirectoryHandleLike } from '@/export/download';
+import {
+  defaultSnapshotSelection,
+  reconcileSnapshotSelection,
+  type SnapshotSelection,
+} from '@/export/snapshotSelection';
 
 import {
   loadExportPreferences,
@@ -69,6 +74,16 @@ interface ExportStoreState {
   directory: FileSystemDirectoryHandleLike | null;
   directoryName: string | null;
 
+  /**
+   * The snapshot matrix's ticks: which subject is wanted in which view.
+   *
+   * A setting, not a result, so it lives beside the artifact selection and is
+   * written to the project file with it. Keyed by subject rather than held as a
+   * list of pictures, because the rows are derived from the network and a row
+   * that disappears should take its ticks with it without disturbing the rest.
+   */
+  snapshotSelection: SnapshotSelection;
+
   session: ExportSession | null;
   queue: QueueEntry[];
   results: ExportArtifactResult[];
@@ -97,6 +112,7 @@ interface ExportStoreState {
   loadFor: (projectId: string, scenarioId: string | null, base: string) => void;
   clear: () => void;
   setDirectory: (handle: FileSystemDirectoryHandleLike | null) => void;
+  setSnapshotSelection: (selection: SnapshotSelection) => void;
 
   setConfig: (patch: Partial<ExportConfiguration>) => void;
   setSelected: (selected: ArtifactType[]) => void;
@@ -128,16 +144,24 @@ function rememberSettings(
   projectId: string | null,
   config: ExportConfiguration,
   selected: ArtifactType[],
-  outputFolderName?: string | null,
+  patch: { output_folder_name?: string | null; snapshot_selection?: SnapshotSelection } = {},
 ): void {
   if (!projectId) return;
+  // Whatever is not being changed is carried forward from what is stored, so
+  // ticking an artifact cannot forget the folder and picking a folder cannot
+  // forget the matrix.
+  const stored = loadExportPreferences(projectId);
   saveExportPreferences(projectId, {
     config: config as unknown as Record<string, unknown>,
     selected,
     output_folder_name:
-      outputFolderName === undefined
-        ? (loadExportPreferences(projectId)?.output_folder_name ?? null)
-        : outputFolderName,
+      patch.output_folder_name === undefined
+        ? (stored?.output_folder_name ?? null)
+        : patch.output_folder_name,
+    snapshot_selection:
+      patch.snapshot_selection === undefined
+        ? (stored?.snapshot_selection ?? null)
+        : (patch.snapshot_selection as unknown as Record<string, unknown>),
   });
 }
 
@@ -161,6 +185,7 @@ export const useExportStore = create<ExportStoreState>((set, get) => ({
   scenarioId: null,
   directory: null,
   directoryName: null,
+  snapshotSelection: defaultSnapshotSelection(),
 
   loadFor: (projectId, scenarioId, base) => {
     const previous = get();
@@ -195,6 +220,12 @@ export const useExportStore = create<ExportStoreState>((set, get) => ({
             // The name only; the handle has to be re-picked, because a browser
             // grants folder access to a gesture, never to a stored value.
             directoryName: stored.output_folder_name ?? null,
+            // Shape-checked but not matched against the rows: the figures the
+            // rows come from have not been derived at this point, so a tick
+            // dropped here would be dropped for good. The screen reconciles it
+            // against its own subjects once it has them.
+            snapshotSelection:
+              reconcileSnapshotSelection(stored.snapshot_selection) ?? defaultSnapshotSelection(),
           }
         : {}),
       ...(changed
@@ -213,8 +244,18 @@ export const useExportStore = create<ExportStoreState>((set, get) => ({
 
   setDirectory: (handle) =>
     set((state) => {
-      rememberSettings(state.projectId, state.config, state.selected, handle?.name ?? null);
+      rememberSettings(state.projectId, state.config, state.selected, {
+        output_folder_name: handle?.name ?? null,
+      });
       return { directory: handle, directoryName: handle?.name ?? null };
+    }),
+
+  setSnapshotSelection: (snapshotSelection) =>
+    set((state) => {
+      rememberSettings(state.projectId, state.config, state.selected, {
+        snapshot_selection: snapshotSelection,
+      });
+      return { snapshotSelection };
     }),
 
   clear: () =>
@@ -235,6 +276,7 @@ export const useExportStore = create<ExportStoreState>((set, get) => ({
       scenarioId: null,
       directory: null,
       directoryName: null,
+      snapshotSelection: defaultSnapshotSelection(),
     }),
 
   setConfig: (patch) =>
