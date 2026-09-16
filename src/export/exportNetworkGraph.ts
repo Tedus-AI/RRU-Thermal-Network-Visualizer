@@ -30,7 +30,7 @@ import {
 } from '@/screens/07-thermal-network/SolvedGraphCanvas';
 
 export interface GraphImage {
-  /** JPEG data URI. */
+  /** Data URI, in whichever format was asked for. */
   dataUrl: string;
   width: number;
   height: number;
@@ -60,6 +60,18 @@ export function measureImage(dataUrl: string): Promise<GraphImage> {
   });
 }
 
+export interface GraphImageOptions {
+  /**
+   * JPEG by default, because a 3000 px graph is about ten times smaller that
+   * way and the report embeds one per figure. The snapshot export asks for PNG:
+   * it is the format the artifact is named for, it is lossless, and an engineer
+   * who drops one into a deck will crop and zoom it.
+   */
+  format?: 'jpg' | 'png';
+  /** 2 for a retina-sized file; the export offers 1x and 2x. */
+  scale?: number;
+}
+
 /**
  * Renders elements on a Cytoscape instance of their own.
  *
@@ -76,6 +88,7 @@ export function measureImage(dataUrl: string): Promise<GraphImage> {
 export async function renderGraphImage(
   elements: ElementDefinition[],
   layoutMode: string,
+  options: GraphImageOptions = {},
 ): Promise<GraphImage> {
   const host = document.createElement('div');
   host.setAttribute('data-graph-export', '');
@@ -116,16 +129,18 @@ export async function renderGraphImage(
       positionTunedBadges(cy);
     }
 
+    const shot = {
+      output: 'base64uri',
+      full: true,
+      scale: options.scale ?? 1,
+      bg: '#ffffff',
+      maxWidth: MAX_EXPORT_EDGE_PX,
+      maxHeight: MAX_EXPORT_EDGE_PX,
+    } as const;
     return await measureImage(
-      cy.jpg({
-        output: 'base64uri',
-        full: true,
-        scale: 1,
-        quality: JPEG_QUALITY,
-        bg: '#ffffff',
-        maxWidth: MAX_EXPORT_EDGE_PX,
-        maxHeight: MAX_EXPORT_EDGE_PX,
-      }),
+      options.format === 'png'
+        ? (cy.png(shot) as string)
+        : cy.jpg({ ...shot, quality: JPEG_QUALITY }),
     );
   } finally {
     cy.destroy();

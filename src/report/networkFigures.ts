@@ -35,6 +35,18 @@ export interface NetworkFigure {
    */
   hidden_node_ids: ReadonlySet<string>;
   /**
+   * The part of `hidden_node_ids` that is there only because the figure keeps
+   * one instance of a repeated part.
+   *
+   * The two reasons a node is hidden are different in kind. A node dropped
+   * because the heat never reaches it is not in this figure's story at all; a
+   * node dropped because it is the second of four identical chains IS, and a
+   * reader who wants all four should be able to ask for them. The snapshot
+   * matrix's `all instances` policy is exactly `hidden_node_ids` minus this
+   * set, which is why the subset is recorded rather than re-derived.
+   */
+  instance_node_ids: ReadonlySet<string>;
+  /**
    * The segments a saved study cuts, numbered as the list beneath the figure
    * numbers them, so the reader can match "② Fin Surface → Ambient" in the
    * list to the ② on the chain.
@@ -249,6 +261,7 @@ export function networkFigures(input: {
           : `${inGroup.length} 個元件`,
       hidden_component_ids: new Set([...modelled].filter((id) => !keep.has(id))),
       hidden_node_ids: trimmed,
+      instance_node_ids: hidden,
     });
   }
 
@@ -266,6 +279,7 @@ export function networkFigures(input: {
       note_zh: '至環境的散熱路徑',
       hidden_component_ids: new Set([...modelled].filter((id) => !keep.has(id))),
       hidden_node_ids: hidden,
+      instance_node_ids: hidden,
       tuned_edges: new Map(
         (input.leversByNode.get(part.node_id) ?? []).map((segment) => [
           segment.edge_id,

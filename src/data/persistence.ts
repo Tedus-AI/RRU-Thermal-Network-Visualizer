@@ -765,6 +765,23 @@ export function saveExportStamp(projectId: string, stamp: ExportStamp): void {
 export interface ExportPreferences {
   config: Record<string, unknown>;
   selected: string[];
+  /**
+   * The folder the engineer last pointed the export at, by name.
+   *
+   * A `FileSystemDirectoryHandle` is not serializable and a browser will not
+   * re-grant one without a fresh gesture, so what is kept is the name: enough
+   * for the screen to say which folder it was using and ask for it again.
+   */
+  output_folder_name?: string | null;
+  /**
+   * The snapshot matrix: which subject is ticked for which view.
+   *
+   * Stored loosely rather than as the typed selection, because the subjects a
+   * matrix has depend on the network it is opened against -- a board removed or
+   * a bottleneck cleared changes the rows. It is reconciled against the current
+   * subjects on the way in; see `reconcileSnapshotSelection`.
+   */
+  snapshot_selection?: Record<string, unknown> | null;
 }
 
 export function loadExportPreferences(projectId: string): ExportPreferences | null {

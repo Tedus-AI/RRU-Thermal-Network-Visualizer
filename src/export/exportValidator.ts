@@ -52,6 +52,8 @@ export interface ReadinessInput {
   components_without_limits: number;
   /** Low-confidence edges on the critical path, from the Screen 10 snapshot. */
   low_confidence_edges: number;
+  /** How many pictures the snapshot matrix is currently ticked for. */
+  snapshot_count?: number;
 }
 
 export interface ArtifactReadiness {
@@ -146,14 +148,22 @@ export function evaluateArtifact(type: ArtifactType, input: ReadinessInput): Art
 
 
     case 'png_snapshots': {
-      // Whether Screen 08 has a current analysis decides whether there is a
-      // bottleneck overlay to draw, not whether this artifact is healthy. It
-      // used to raise a WARNING saying so, which put a caution triangle on a
-      // row that exports perfectly well -- a view that does not exist is not a
-      // fault in the ones that do. The temperature-rows warning beside it
-      // described the CSV this build no longer produces.
+      // A solved result and a tick, and nothing else. This row used to raise a
+      // WARNING when Screen 08 had no current analysis, which put a caution
+      // triangle on an artifact that exports perfectly well; the fixed
+      // bottleneck overlay that warning was about is gone, and what the export
+      // draws now is whatever the matrix asks for.
       const solved = solvedResultStatus(input);
       if (solved !== 'READY') return wrap(solved, solvedResultReason(input));
+      // An empty matrix is not a broken export, it is an unanswered question.
+      // Saying so on the row is better than letting the run reach the renderer
+      // and come back with a FAILED artifact and no files.
+      if (input.snapshot_count === 0) {
+        return wrap('NOT_AVAILABLE', {
+          en: 'No snapshot is ticked. Choose at least one in the snapshot matrix.',
+          zh: '尚未勾選任何快照，請於快照矩陣至少選擇一張。',
+        });
+      }
       return wrap('READY');
     }
 

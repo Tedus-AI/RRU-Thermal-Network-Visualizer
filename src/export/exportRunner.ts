@@ -11,21 +11,16 @@
  * "stops remaining work safely" means here: no half-written file is delivered.
  */
 
-import type { Component } from '@/domain/component';
 import type { Scenario } from '@/domain/project';
 import type { ThermalNetwork } from '@/thermal/types';
 import type { ThermalSolution } from '@/thermal/solver/solverTypes';
-import type { BottleneckAnalysis } from '@/thermal/analysis/analysisTypes';
-import type { ScenarioBoundaryConditionSet } from '@/thermal/boundary/types';
-import type { ResultsOverviewSnapshot } from '@/thermal/overview/overviewTypes';
-import type { ThermalReportConfig } from '@/report/reportTypes';
-import type { TemperatureDistributionResult } from '@/thermal/analysis/distributionResult';
 
 import { sha256Hex } from './checksum';
 import { textBlob } from './download';
 import { exportPngSnapshots } from './exportPngSnapshots';
 import { exportHtmlReport, exportPdfReport } from './exportPdfReport';
 import type { ReportRenderInput } from './reportRenderer';
+import type { SnapshotSelection, SnapshotSubject } from './snapshotSelection';
 import { filenameFor, uniqueFilename } from './filenameBuilder';
 import {
   artifactDefinition,
@@ -37,6 +32,15 @@ import {
 } from './exportTypes';
 import type { GeneratedArtifact, GeneratedFile } from './packageBuilder';
 
+/**
+ * What a run is allowed to read.
+ *
+ * Shorter than it was. It carried the analysis, the distribution, the boundary
+ * set, the component list and the Screen 10 snapshot for the CSV and JSON
+ * artifacts this build no longer produces, and for a snapshot renderer that
+ * drew its own bottleneck overlay. Both are gone; a field nothing reads is a
+ * claim about where an artifact's numbers come from that is not true.
+ */
 export interface ExportSources {
   project_id: string;
   project_name: string;
@@ -44,13 +48,11 @@ export interface ExportSources {
   network: ThermalNetwork | null;
   solution: ThermalSolution | null;
   solution_status: SolutionStatus;
-  analysis: BottleneckAnalysis | null;
-  distribution?: TemperatureDistributionResult | null;
-  boundary: ScenarioBoundaryConditionSet | null;
-  components: Component[];
-  snapshot: ResultsOverviewSnapshot | null;
-  report_config: ThermalReportConfig | null;
+  /** Everything the report says, already laid out by Screen 11. */
   report_render: ReportRenderInput | null;
+  /** The rows of the snapshot matrix, and which of their cells are ticked. */
+  snapshot_subjects: readonly SnapshotSubject[];
+  snapshot_selection: SnapshotSelection;
 }
 
 export interface RunProgress {
@@ -242,9 +244,9 @@ async function generate(
       const snapshots = await exportPngSnapshots({
         network: sources.network,
         solution: sources.solution,
-        analysis: sources.analysis,
-        components: sources.components,
-        scenario_name: sources.scenario.name,
+        scenario_id: sources.scenario.id,
+        subjects: sources.snapshot_subjects,
+        selection: sources.snapshot_selection,
         scale: config.png_scale,
       });
       const files = snapshots.images.map((image) =>
@@ -255,7 +257,7 @@ async function generate(
           'image/png',
         ),
       );
-      if (files.length === 0) throw new Error('No chart snapshot could be rendered.');
+      if (files.length === 0) throw new Error('No snapshot could be rendered.');
       return { type, files, warnings: snapshots.warnings };
     }
 

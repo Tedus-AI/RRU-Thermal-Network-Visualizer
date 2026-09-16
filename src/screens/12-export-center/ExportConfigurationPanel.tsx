@@ -15,7 +15,7 @@
 import { FolderOpen, Info } from 'lucide-react';
 
 import { Button, Select, TextInput } from '@/ui/primitives';
-import { EngineeringInfo } from '@/ui/FieldLabel';
+import { EngineeringInfo, biTitle } from '@/ui/FieldLabel';
 import {
   DESTINATIONS,
   DESTINATION_LABELS,
@@ -104,6 +104,7 @@ export function ExportConfigurationPanel({
   onChange,
   folderSupported,
   folderName,
+  folderGranted,
   onPickFolder,
   disabled,
 }: {
@@ -111,6 +112,17 @@ export function ExportConfigurationPanel({
   onChange: (patch: Partial<ExportConfiguration>) => void;
   folderSupported: boolean;
   folderName: string | null;
+  /**
+   * Whether this tab is actually holding the folder, as opposed to only
+   * remembering what it was called.
+   *
+   * The name is stored with the project; the handle cannot be, because a
+   * browser grants folder access to a gesture and never to a stored value. So
+   * after a reload the screen knows WHICH folder was in use and still cannot
+   * write to it, and saying only the name would promise a destination the next
+   * export would quietly fall back from.
+   */
+  folderGranted: boolean;
   onPickFolder: () => void;
   disabled: boolean;
 }) {
@@ -208,8 +220,25 @@ export function ExportConfigurationPanel({
             Output Folder <span className="text-[10px] text-ink-400">輸出資料夾</span>
           </span>
           <span className="flex min-w-0 flex-1 items-center justify-end gap-2">
-            <span className="min-w-0 flex-1 truncate rounded border border-line bg-surface-muted px-2 py-1 text-[11px] text-ink-700">
+            <span
+              className={`min-w-0 flex-1 truncate rounded border px-2 py-1 text-[11px] ${
+                folderName && !folderGranted
+                  ? 'border-warn-300 bg-warn-50 text-warn-700'
+                  : 'border-line bg-surface-muted text-ink-700'
+              }`}
+              title={
+                folderName && !folderGranted
+                  ? biTitle(
+                      `${folderName} — remembered, but this tab cannot write to it until it is chosen again.`,
+                      `${folderName} — 已記住，但本分頁需重新選擇才能寫入。`,
+                    )
+                  : undefined
+              }
+            >
               {folderName ?? 'No folder chosen / 尚未選擇'}
+              {folderName && !folderGranted && (
+                <span className="ml-1 font-semibold">· re-select / 需重新選擇</span>
+              )}
             </span>
             <Button
               className="!h-7 !px-2 !text-[11px]"

@@ -33,6 +33,8 @@ export const T12 = {
   jsonFormat: 'JSON 縮排格式；Pretty 便於人工檢視，Compact 檔案較小，內容完全相同。',
   pngScale: 'PNG 匯出解析度倍率；2x 適合貼入報告或簡報，1x 檔案較小。',
   zipCompression: '是否壓縮 ZIP 內容；關閉時封裝較快但檔案較大，內容完全相同。',
+  snapshotMatrix:
+    '選擇要輸出哪些熱網路圖：左側為快照對象（全域、各鏈路、各瓶頸元件），上方為 07 的四種結果視圖，每勾選一格輸出一張 PNG。點欄標題可整欄勾選，點列名稱可整列勾選。含重複元件（×N）的列可選擇只畫代表一路或全部畫出。',
   exportQueue: '本次匯出的工作清單與各項狀態；單一 artifact 失敗不會中斷其他項目。',
   sourceReadiness:
     '各資料來源目前是否可用於匯出；BLOCKED 表示來源已過期或無效，需回到對應畫面重新產生。',
