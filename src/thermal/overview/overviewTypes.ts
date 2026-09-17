@@ -1,7 +1,7 @@
 /**
  * Results Overview contracts — 10 §4, §11, §12, §15, §16, §17, §18, §20.
  *
- * Screen 10 is a SUMMARY, not an engine (10 §36). Nothing here solves, scores a
+ * Results Overview is a SUMMARY, not an engine (10 §36). Nothing here solves, scores a
  * bottleneck, or bins a temperature: every value is read from what Screens 07,
  * 08 and 09 already computed, and anything those screens did not compute stays
  * explicitly absent rather than being invented (10 §3, §21, AC-10-19, AC-10-30).
@@ -354,12 +354,12 @@ export interface ResultsOverviewSnapshot {
   report_readiness: ReportReadiness;
 
   /**
-   * The signature of the overview this snapshot froze. Screen 11 compares it to
+   * The signature of the overview this snapshot froze. Screen 10 compares it to
    * the live overview: equal means current, different means STALE (10 §19).
    * A snapshot never silently re-reads the live data — that is the whole point
    * of freezing one.
    */
   source_signature: string;
-  /** 10 §18 — a snapshot is metadata for Screen 11. It is not a document. */
+  /** 10 §18 — a snapshot is metadata for Report Preview. It is not a document. */
   produces_document: false;
 }

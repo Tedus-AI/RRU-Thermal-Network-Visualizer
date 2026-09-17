@@ -1,5 +1,5 @@
 /**
- * Presentation helpers for Screen 12.
+ * Presentation helpers for Screen 11.
  *
  * Formatting only. Nothing here decides readiness or produces a file — that all
  * lives in `src/export`, per 12 §39's rule that serialization and logic do not
@@ -7,11 +7,7 @@
  */
 
 import type { Tone } from '@/ui/primitives';
-import type {
-  ArtifactStatus,
-  GlobalExportStatus,
-  SourceReadiness,
-} from '@/export/exportTypes';
+import type { ArtifactStatus, GlobalExportStatus } from '@/export/exportTypes';
 
 export const ARTIFACT_TONE: Record<ArtifactStatus, Tone> = {
   READY: 'ok',
@@ -30,13 +26,6 @@ export const GLOBAL_TONE: Record<GlobalExportStatus, Tone> = {
   EXPORTING: 'accent',
   COMPLETE: 'ok',
   FAILED: 'danger',
-};
-
-export const SOURCE_TONE: Record<SourceReadiness, Tone> = {
-  READY: 'ok',
-  WARNING: 'warn',
-  BLOCKED: 'danger',
-  NOT_AVAILABLE: 'neutral',
 };
 
 /** Bytes as an engineer reads them, with the unit attached. */

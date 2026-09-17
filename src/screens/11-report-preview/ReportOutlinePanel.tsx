@@ -4,7 +4,7 @@
  * Outline lists every section with its number, title, REQ badge, include
  * checkbox and a drag affordance, exactly as the PNG shows. Reordering here
  * changes the report LAYOUT only: 11 §6 is explicit that it must never mutate
- * the Screen 10 snapshot, and this panel never sees snapshot data at all.
+ * the Screen 09 snapshot, and this panel never sees snapshot data at all.
  */
 
 import { useState } from 'react';

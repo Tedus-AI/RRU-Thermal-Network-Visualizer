@@ -1,10 +1,10 @@
 /**
  * Report composition contracts — 11 §4, §8, §9, §29, §32.
  *
- * Screen 11 arranges the Screen 10 snapshot into a previewable report. It never
+ * Screen 10 arranges the Screen 09 snapshot into a previewable report. It never
  * recalculates a thermal value (§37) and never writes a file (§38): the config
  * below describes LAYOUT and INCLUSION only, and the export payload carries
- * metadata for Screen 12 rather than bytes.
+ * metadata for Screen 11 rather than bytes.
  *
  * Naming note, as in 06–10: the specification sketches these in camelCase and
  * the codebase settled on snake_case in Screen 02. Field semantics are followed
@@ -35,16 +35,16 @@ export const SNAPSHOT_MESSAGES: Record<SnapshotState, { en: string; zh: string }
     zh: '快照與目前情境、求解結果與支援分析一致。',
   },
   WARNING: {
-    en: 'Snapshot is current, but Screen 10 reported Report Readiness WARNING.',
-    zh: '快照為最新，但 Screen 10 的 Report Readiness 為 WARNING。',
+    en: 'Snapshot is current, but Screen 09 reported Report Readiness WARNING.',
+    zh: '快照為最新，但 Screen 09 的 Report Readiness 為 WARNING。',
   },
   STALE: {
     en: 'Report snapshot is stale. Refresh the overview snapshot before final export.',
-    zh: '報告快照已過期，請先於 Screen 10 重新準備快照再進行匯出。',
+    zh: '報告快照已過期，請先於 Screen 09 重新準備快照再進行匯出。',
   },
   MISSING: {
-    en: 'No report snapshot is available. Return to Screen 10 and prepare a report snapshot.',
-    zh: '目前沒有報告快照，請回到 Screen 10 準備一份。',
+    en: 'No report snapshot is available. Return to Screen 09 and prepare a report snapshot.',
+    zh: '目前沒有報告快照，請回到 Screen 09 準備一份。',
   },
 };
 
@@ -192,7 +192,7 @@ export interface ThermalReportConfig {
   id: string;
   project_id: string;
   scenario_id: string;
-  /** The Screen 10 snapshot this configuration was composed against. */
+  /** The Screen 09 snapshot this configuration was composed against. */
   snapshot_id: string;
 
   template_name: string;
@@ -315,7 +315,7 @@ export interface ReportExportPayload {
 
   readiness: Extract<ReportReadiness, 'EXPORT_READY' | 'WARNING' | 'BLOCKED'>;
   generated_at: string;
-  /** Page count the preview estimated, so Screen 12 can sanity-check its render. */
+  /** Page count the preview estimated, so Screen 11 can sanity-check its render. */
   estimated_page_count: number;
   /**
    * The heights the preview MEASURED off its own rendered pages.

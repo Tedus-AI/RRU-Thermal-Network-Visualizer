@@ -32,7 +32,7 @@ export interface NetworkFigureContext {
   scenarioId: string;
 }
 
-/** Labels, power and limits on; the boundary drawn, as Screen 10's window has it. */
+/** Labels, power and limits on; the boundary drawn, as Screen 09's window has it. */
 const DISPLAY = { showLabels: true, showPower: true, showLimits: true, showBoundary: true };
 
 /**

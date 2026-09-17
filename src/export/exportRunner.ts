@@ -36,7 +36,7 @@ import type { GeneratedArtifact, GeneratedFile } from './packageBuilder';
  * What a run is allowed to read.
  *
  * Shorter than it was. It carried the analysis, the distribution, the boundary
- * set, the component list and the Screen 10 snapshot for the CSV and JSON
+ * set, the component list and the Screen 09 snapshot for the CSV and JSON
  * artifacts this build no longer produces, and for a snapshot renderer that
  * drew its own bottleneck overlay. Both are gone; a field nothing reads is a
  * claim about where an artifact's numbers come from that is not true.
@@ -48,7 +48,7 @@ export interface ExportSources {
   network: ThermalNetwork | null;
   solution: ThermalSolution | null;
   solution_status: SolutionStatus;
-  /** Everything the report says, already laid out by Screen 11. */
+  /** Everything the report says, already laid out by Screen 10. */
   report_render: ReportRenderInput | null;
   /** The rows of the snapshot matrix, and which of their cells are ticked. */
   snapshot_subjects: readonly SnapshotSubject[];

@@ -220,8 +220,8 @@ export function nextStepFor(health: ProjectHealth): NextStep {
   return {
     label: 'Review Results',
     description: 'Inspect the worst component, the dominant path and the ranked bottlenecks.',
-    screenCode: '10',
-    screenPath: screen('10').path,
+    screenCode: '09',
+    screenPath: screen('09').path,
     cta: 'Continue to Results Overview',
     blockedHere: false,
   };

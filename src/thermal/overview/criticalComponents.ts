@@ -17,7 +17,7 @@ export const CRITICAL_COMPONENT_TOP_N = 5;
 
 /**
  * 10 §8 classification. 10 §4 / AC-10-04 require the near-limit threshold to be
- * the SAME rule Screen 09 uses, so the constant is imported rather than restated
+ * the SAME rule the temperature dataset uses, so the constant is imported rather than restated
  * — one screen quietly disagreeing with another about what "near limit" means is
  * exactly the failure this rule exists to prevent.
  */

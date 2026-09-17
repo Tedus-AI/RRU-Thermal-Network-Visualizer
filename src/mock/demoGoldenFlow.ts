@@ -562,7 +562,7 @@ export async function buildDemoGoldenFlow(): Promise<DemoGoldenFlow> {
   });
 
   if (Object.values(artifacts).some((artifact) => artifact.status === 'BLOCKED')) {
-    throw new Error('Golden Demo contains a blocked Screen 12 artifact.');
+    throw new Error('Golden Demo contains a blocked Screen 11 artifact.');
   }
 
   return {

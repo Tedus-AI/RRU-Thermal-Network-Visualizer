@@ -294,7 +294,7 @@ export interface NodeResultRow {
  *
  * `warn` is new: a part 0.8 °C under its limit passed, in the same green as one
  * 40 °C under it, and the table said nothing a reader could act on. The line is
- * `NEAR_LIMIT_MARGIN_C`, the single constant Screen 10's badge, its status
+ * `NEAR_LIMIT_MARGIN_C`, the single constant Screen 09's badge, its status
  * reason and its action summary already read, so a part cannot be NEAR LIMIT on
  * one screen and green on another.
  */

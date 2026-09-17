@@ -1,15 +1,15 @@
 /**
  * Report snapshot — 10 §18, §19.
  *
- * `Prepare Report Snapshot` freezes the CURRENT summary so Screen 11 has a
+ * `Prepare Report Snapshot` freezes the CURRENT summary so Screen 10 has a
  * stable thing to lay out. 10 §18 is explicit about what it is not: it does not
  * generate a PDF, choose a page layout, or pick an export format. Those belong
  * to Screens 11 and 12.
  *
  * The freeze matters because of §19: any change to the solution, the scenario,
- * the Screen 08 analysis, the Screen 09 dataset or a component limit must make
+ * the Screen 08 analysis, the temperature dataset or a component limit must make
  * the prior snapshot STALE. Comparing the frozen signature to the live one is
- * how Screen 11 finds out — a snapshot that silently re-read live data would
+ * how Screen 10 finds out — a snapshot that silently re-read live data would
  * make that question unanswerable.
  */
 

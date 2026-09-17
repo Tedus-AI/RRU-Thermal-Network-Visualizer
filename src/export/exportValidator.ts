@@ -28,9 +28,6 @@ import {
   type ArtifactType,
   type ExportValidation,
   type GlobalExportStatus,
-  type SourceKey,
-  type SourceReadiness,
-  type SourceReadinessEntry,
 } from './exportTypes';
 
 export interface ReadinessInput {
@@ -45,12 +42,12 @@ export interface ReadinessInput {
   distribution_stale?: boolean;
   boundary: ScenarioBoundaryConditionSet | null;
   snapshot: ResultsOverviewSnapshot | null;
-  /** True when the Screen 10 snapshot no longer matches the live overview. */
+  /** True when the Screen 09 snapshot no longer matches the live overview. */
   snapshot_stale: boolean;
   payload: ReportExportPayload | null;
   /** Number of components with no thermal limit, for the §31 warning list. */
   components_without_limits: number;
-  /** Low-confidence edges on the critical path, from the Screen 10 snapshot. */
+  /** Low-confidence edges on the critical path, from the Screen 09 snapshot. */
   low_confidence_edges: number;
   /** How many pictures the snapshot matrix is currently ticked for. */
   snapshot_count?: number;
@@ -69,7 +66,7 @@ export interface ArtifactReadiness {
 function reportReadiness(input: ReadinessInput): ArtifactReadiness['status'] {
   if (!input.payload) return 'NOT_AVAILABLE';
   // 12 §43 — a BLOCKED report cannot produce a PDF. §9's whole source is the
-  // Screen 11 payload, and Screen 11 refuses to build one it cannot stand behind.
+  // Screen 10 payload, and Screen 10 refuses to build one it cannot stand behind.
   if (input.payload.readiness === 'BLOCKED') return 'BLOCKED';
   if (input.snapshot_stale) return 'BLOCKED';
   if (input.payload.readiness === 'WARNING') return 'WARNING';
@@ -79,14 +76,14 @@ function reportReadiness(input: ReadinessInput): ArtifactReadiness['status'] {
 function reportReason(input: ReadinessInput): { en: string; zh: string } {
   if (!input.payload) {
     return {
-      en: 'No export payload. Prepare one in Screen 11 Report Preview.',
-      zh: '尚無匯出資料包，請於 11 Report Preview 準備。',
+      en: 'No export payload. Prepare one in Screen 10 Report Preview.',
+      zh: '尚無匯出資料包，請於 10 Report Preview 準備。',
     };
   }
   if (input.payload.readiness === 'BLOCKED') {
     return {
-      en: 'Screen 11 Report Readiness is BLOCKED.',
-      zh: 'Screen 11 的 Report Readiness 為 BLOCKED。',
+      en: 'Screen 10 Report Readiness is BLOCKED.',
+      zh: 'Screen 10 的 Report Readiness 為 BLOCKED。',
     };
   }
   if (input.snapshot_stale) {
@@ -97,8 +94,8 @@ function reportReason(input: ReadinessInput): { en: string; zh: string } {
   }
   if (input.payload.readiness === 'WARNING') {
     return {
-      en: 'Screen 11 reported WARNING. Export requires confirmation.',
-      zh: 'Screen 11 為 WARNING，匯出前需確認。',
+      en: 'Screen 10 reported WARNING. Export requires confirmation.',
+      zh: 'Screen 10 為 WARNING，匯出前需確認。',
     };
   }
   return { en: '', zh: '' };
@@ -193,123 +190,13 @@ export function evaluateAllArtifacts(input: ReadinessInput): Record<ArtifactType
   return result;
 }
 
-// --- source readiness panel (12 §32) ----------------------------------------
-
-export function evaluateSources(input: ReadinessInput): SourceReadinessEntry[] {
-  const entry = (
-    key: SourceKey,
-    state: SourceReadiness,
-    detail: string,
-    detail_zh: string,
-  ): SourceReadinessEntry => ({ key, state, detail, detail_zh });
-
-  const solutionState: SourceReadiness = !input.solution
-    ? 'NOT_AVAILABLE'
-    : input.solution.status === 'FAILED'
-      ? 'BLOCKED'
-      : input.solution_stale
-        ? 'BLOCKED'
-        : input.solution.status === 'WARNING'
-          ? 'WARNING'
-          : 'READY';
-
-  return [
-    entry(
-      'report',
-      !input.payload
-        ? 'NOT_AVAILABLE'
-        : input.payload.readiness === 'BLOCKED' || input.snapshot_stale
-          ? 'BLOCKED'
-          : input.payload.readiness === 'WARNING'
-            ? 'WARNING'
-            : 'READY',
-      input.payload
-        ? `Screen 11 payload · readiness ${input.payload.readiness}`
-        : 'No Screen 11 export payload.',
-      input.payload ? `Screen 11 匯出資料包，狀態 ${input.payload.readiness}` : '尚無 Screen 11 匯出資料包。',
-    ),
-    entry(
-      'thermal_solution',
-      solutionState,
-      input.solution
-        ? `Solver ${input.solution.status}${input.solution_stale ? ' · stale' : ''} · ${input.solution.solved_at}`
-        : 'No solution for this scenario.',
-      input.solution
-        ? `求解 ${input.solution.status}${input.solution_stale ? '（已過期）' : ''}`
-        : '此情境尚無求解結果。',
-    ),
-    entry(
-      'bottleneck_analysis',
-      !input.analysis
-        ? 'NOT_AVAILABLE'
-        : input.analysis.state === 'FAILED'
-          ? 'BLOCKED'
-          : input.analysis_stale || input.solution_stale
-            ? 'BLOCKED'
-            : input.analysis.state === 'WARNING'
-              ? 'WARNING'
-              : 'READY',
-      input.analysis
-        ? `${input.analysis.results.length} ranked edge(s) · ${input.analysis.analyzed_at}`
-        : 'Screen 08 has not been run.',
-      input.analysis ? `已排名 ${input.analysis.results.length} 段連線` : '尚未執行 08 瓶頸分析。',
-    ),
-    entry(
-      'temperature_distribution',
-      'distribution' in input || 'distribution_stale' in input
-        ? !input.distribution
-          ? 'NOT_AVAILABLE'
-          : input.distribution_stale || input.solution_stale
-            ? 'BLOCKED'
-            : 'READY'
-        : solutionState,
-      input.solution
-        ? `Derived from the current solve · ${Object.keys(input.solution.node_temperatures_C).length} node(s)`
-        : 'No solved temperatures.',
-      input.solution ? '由目前求解結果推導' : '尚無求解溫度。',
-    ),
-    entry(
-      'network_data',
-      !input.network || Object.keys(input.network.nodes).length === 0 ? 'NOT_AVAILABLE' : 'READY',
-      input.network
-        ? `${Object.keys(input.network.nodes).length} node(s) · ${Object.keys(input.network.edges).length} edge(s)`
-        : 'No thermal network.',
-      input.network
-        ? `${Object.keys(input.network.nodes).length} 個節點、${Object.keys(input.network.edges).length} 段連線`
-        : '尚無熱網路。',
-    ),
-    entry(
-      'scenario_boundary',
-      !input.boundary ? 'NOT_AVAILABLE' : input.boundary.status === 'draft' ? 'WARNING' : 'READY',
-      input.boundary
-        ? `Boundary set ${input.boundary.status} · ${input.boundary.profiles.length} profile(s)`
-        : 'No boundary set.',
-      input.boundary ? `邊界設定：${input.boundary.status}` : '尚無邊界設定。',
-    ),
-    entry(
-      'snapshots',
-      solutionState === 'READY'
-        ? input.analysis && !input.analysis_stale
-          ? 'READY'
-          : 'WARNING'
-        : solutionState,
-      solutionState === 'READY'
-        ? input.analysis && !input.analysis_stale
-          ? 'Both views are renderable: the network and the bottleneck overlay.'
-          : 'The network renders; the bottleneck overlay needs a current Screen 08 analysis.'
-        : 'Chart snapshots need a current solve.',
-      solutionState === 'READY' ? '可重繪圖表快照。' : '圖表快照需要目前的求解結果。',
-    ),
-  ];
-}
-
 // --- validation (12 §31) ----------------------------------------------------
 
 export interface ValidationInput extends ReadinessInput {
   selected: ArtifactType[];
   base_filename: string;
   readiness: Record<ArtifactType, ArtifactReadiness>;
-  /** From the Screen 10 snapshot when one exists. */
+  /** From the Screen 09 snapshot when one exists. */
   analytical_only: boolean;
 }
 

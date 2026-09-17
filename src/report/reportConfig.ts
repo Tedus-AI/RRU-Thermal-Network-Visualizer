@@ -2,7 +2,7 @@
  * Report configuration mutations — 11 §6, §25, §27, §33.
  *
  * Every function here returns a NEW config. 11 §6 is explicit that reordering a
- * section must never mutate the Screen 10 snapshot, and the simplest way to keep
+ * section must never mutate the Screen 09 snapshot, and the simplest way to keep
  * that promise is for this module never to hold a reference to snapshot data at
  * all: it only ever sees layout.
  */

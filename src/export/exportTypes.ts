@@ -71,11 +71,11 @@ export const ARTIFACT_DEFINITIONS: ArtifactDefinition[] = [
     label: 'PDF Report',
     zh: 'PDF 報告',
     format: 'PDF',
-    description: 'Screen 11 report, rendered at its own page size and language',
-    description_zh: '依 Screen 11 版面與語言輸出的完整報告',
+    description: 'Screen 10 report, rendered at its own page size and language',
+    description_zh: '依 Screen 10 版面與語言輸出的完整報告',
     prerequisite: 'Report Snapshot · Readiness ≠ BLOCKED',
     prerequisite_zh: '報告快照，且 Report Readiness 非 BLOCKED',
-    source_screen: '11 Report Preview',
+    source_screen: '10 Report Preview',
     extension: 'pdf',
     mime_type: 'application/pdf',
     artifact_slug: 'Thermal_Report',
@@ -90,7 +90,7 @@ export const ARTIFACT_DEFINITIONS: ArtifactDefinition[] = [
     description_zh: '與 PDF 相同內容的單檔 HTML 報告',
     prerequisite: 'Report Snapshot · Readiness ≠ BLOCKED',
     prerequisite_zh: '報告快照，且 Report Readiness 非 BLOCKED',
-    source_screen: '11 Report Preview',
+    source_screen: '10 Report Preview',
     extension: 'html',
     mime_type: 'text/html;charset=utf-8',
     artifact_slug: 'Thermal_Report',
@@ -120,7 +120,7 @@ export const ARTIFACT_DEFINITIONS: ArtifactDefinition[] = [
     description_zh: '所選產出加上追溯資訊清單',
     prerequisite: 'At least one exportable artifact',
     prerequisite_zh: '至少一項可匯出的產出',
-    source_screen: '12 Export Center',
+    source_screen: '11 Export Center',
     extension: 'zip',
     mime_type: 'application/zip',
     artifact_slug: 'Engineering_Package',
@@ -187,36 +187,6 @@ export function isSelectable(status: ArtifactStatus): boolean {
 }
 
 // --- source readiness panel (12 §32) ----------------------------------------
-
-export const SOURCE_KEYS = [
-  'report',
-  'thermal_solution',
-  'bottleneck_analysis',
-  'temperature_distribution',
-  'network_data',
-  'scenario_boundary',
-  'snapshots',
-] as const;
-export type SourceKey = (typeof SOURCE_KEYS)[number];
-
-export const SOURCE_LABELS: Record<SourceKey, { label: string; zh: string; screen: string }> = {
-  report: { label: 'Report', zh: '報告', screen: '11' },
-  thermal_solution: { label: 'Thermal Solution', zh: '熱網路求解', screen: '07' },
-  bottleneck_analysis: { label: 'Bottleneck Analysis', zh: '瓶頸分析', screen: '08' },
-  temperature_distribution: { label: 'Temperature Distribution', zh: '溫度分佈', screen: '07' },
-  network_data: { label: 'Network Data', zh: '熱網路資料', screen: '05' },
-  scenario_boundary: { label: 'Scenario / Boundary', zh: '情境 / 邊界', screen: '06' },
-  snapshots: { label: 'Snapshots', zh: '圖表快照', screen: '07/08' },
-};
-
-export type SourceReadiness = 'READY' | 'WARNING' | 'BLOCKED' | 'NOT_AVAILABLE';
-
-export interface SourceReadinessEntry {
-  key: SourceKey;
-  state: SourceReadiness;
-  detail: string;
-  detail_zh: string;
-}
 
 // --- configuration (12 §24, §25) --------------------------------------------
 //
@@ -383,7 +353,7 @@ export interface ExportValidation {
   warnings_zh: string[];
 }
 
-// --- what the PDF/HTML generator needs from Screen 11 -----------------------
+// --- what the PDF/HTML generator needs from Screen 10 -----------------------
 
 export interface ReportRenderContract {
   page_size: PageSize;

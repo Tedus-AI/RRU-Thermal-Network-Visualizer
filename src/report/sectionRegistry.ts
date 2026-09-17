@@ -7,7 +7,7 @@
  * leaving the reader to guess (11 §26).
  *
  * Nothing here computes a thermal value. A section declares WHAT it shows and
- * roughly how much room it takes; the numbers arrive from the Screen 10
+ * roughly how much room it takes; the numbers arrive from the Screen 09
  * snapshot (11 §12, §37).
  */
 

@@ -52,7 +52,7 @@ const BOUNDARY_KEY = 'tnv.boundary_sets';
 const SOLUTIONS_KEY = 'tnv.thermal_solutions';
 const ANALYSES_KEY = 'tnv.bottleneck_analyses';
 /**
- * Written by builds that had Screen 09; nothing writes it now. Kept so that
+ * Written by builds that had a Temperature Distribution screen; nothing writes it now. Kept so that
  * deleting a project still clears what those builds left behind.
  */
 const DISTRIBUTIONS_KEY = 'tnv.temperature_distributions';
@@ -636,7 +636,7 @@ export function deleteProposal(projectId: string, proposalId: string): void {
 
 // --- Results Overview snapshots ---------------------------------------------
 // 10 §18, §19 — one frozen summary per scenario, kept apart from the solution it
-// froze. A snapshot is metadata for Screen 11; nothing here writes an overview
+// froze. A snapshot is metadata for Screen 10; nothing here writes an overview
 // KPI back into component master data (10 §30).
 
 export function loadSnapshots(projectId: string): ResultsOverviewSnapshot[] {

@@ -27,19 +27,19 @@ export const T10 = {
     'Generated Heat 與 Rejected Heat 的能量守恆誤差比例；沿用 Screen 07 的品質判斷。',
   criticalComponents:
     '依 Thermal Margin 由低到高排列的 monitored components，用來快速找最接近限制的元件。',
-  nearLimit: 'V1 使用與 Screen 09 相同規則：Margin <= 10°C 時標示接近 thermal limit。',
+  nearLimit: 'V1 使用與溫度資料集相同規則：Margin <= 10°C 時標示接近 thermal limit。',
   dataCompleteness:
     '顯示 limits、Rth sources、confidence 與 external validation 的完整程度，幫助判斷結果可信度。',
   resultMode:
     '目前 Results Overview 所代表的資料模式，例如 Analytical；尚未存在的 FloTHERM/Hybrid 模式不可假裝為 current。',
   reportReadiness:
-    '報告準備狀態：檢查目前求解結果是否有效，以及 08/09 等支援分析是否完整，決定是否能進入 11 Report Preview。',
+    '報告準備狀態：檢查目前求解結果是否有效，以及 08 等支援分析是否完整，決定是否能進入 10 Report Preview。',
   lowConfidence:
     '表示關鍵結果依賴低可信度或缺少 reference 的輸入，結果可用但需要工程覆核。',
   analyticalOnly:
     '目前結果完全來自 analytical thermal network model，尚未由 FloTHERM 或 measurement 校正。',
   prepareReportSnapshot:
-    '把目前 07/08/09 的 current summary 凍結成 11 Report Preview 可使用的 snapshot；不產生 PDF。',
+    '把目前 07/08 的 current summary 凍結成 10 Report Preview 可使用的 snapshot；不產生 PDF。',
 
   // --- supporting explanations for the other compact fields on this screen ---
   maxTemperature: '本情境所有已求解節點中的最高溫度，以及該溫度所在的元件。',
@@ -61,7 +61,7 @@ export const T10 = {
   criticalPath:
     '預設標示 Screen 08 的最高分瓶頸所在路徑；若 08 不可用，改以最熱元件到邊界的散熱路徑。',
   engineeringActionSummary:
-    '依 07/08/09 既有結果以固定規則產生的工程結論；不使用語言模型，也不會憑空生出 08 沒算過的改善量。',
+    '依 07/08 既有結果以固定規則產生的工程結論；不使用語言模型，也不會憑空生出 08 沒算過的改善量。',
   recommendedNextAction:
     '依嚴重度排序後的單一主要建議：先修正讓數字失去意義的問題（過期或失敗的求解），再處理數字本身指出的問題。',
   overallReadiness:

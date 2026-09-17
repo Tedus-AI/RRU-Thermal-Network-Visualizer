@@ -1,5 +1,5 @@
 /**
- * Screen 10 — Results Overview.
+ * Screen 09 — Results Overview.
  * Specification: 10_Results_Overview.md (source of truth, as the delivery audit
  * states), laid out after 10.png.
  *
@@ -166,7 +166,7 @@ function NotReady({
             : '目前的求解結果無效，請回到 07 Thermal Network 重新求解目前情境。'}
         </p>
         <p className="text-[11px] text-ink-500">
-          Screen 10 summarises results; it never solves for them. Nothing is estimated in their
+          Screen 09 summarises results; it never solves for them. Nothing is estimated in their
           absence.
           <span className="block">
             10 只彙整既有結果，本身不進行求解；沒有結果時也不會以估算值代替。
@@ -189,7 +189,7 @@ function NotReady({
  * link-sized control in its place would read as the panel having simply gone.
  *
  * Painted rather than outlined, and one colour each, because these two are the
- * only controls on Screen 10 that OPEN something — everything else on the
+ * only controls on Screen 09 that OPEN something — everything else on the
  * screen reports. Two surfaces of white among panels of white is exactly the
  * arrangement that hides a door. The colours are candy tokens rather than the
  * severity ramps: see `--color-candy-*`.
@@ -247,7 +247,7 @@ export function ResultsOverviewView() {
   const analyses = useAnalysisStore((s) => s.analyses);
   const snapshots = useOverviewStore((s) => s.snapshots);
   // Derived from the solution on screen rather than read back from a stored
-  // snapshot Screen 09 used to refresh; see `useDistributionResult`.
+  // snapshot Temperature Distribution used to refresh; see `useDistributionResult`.
   const { distribution, state: distributionState } = useDistributionResult();
   const boundarySet = useBoundaryStore((s) => s.current());
   const boundaryPorts = useBoundaryStore((s) => s.ports);
@@ -571,7 +571,7 @@ export function ResultsOverviewView() {
       return;
     }
     useOverviewStore.getState().prepare(projectId, overview, draft?.project_context.owner || undefined);
-    toast.success('Report snapshot prepared for Screen 11 / 已為 11 準備報告快照');
+    toast.success('Report snapshot prepared for Screen 10 / 已為 10 準備報告快照');
   };
 
   const continueToReport = () => {
@@ -583,7 +583,7 @@ export function ResultsOverviewView() {
     }
     if (overview.report_readiness === 'WARNING') {
       const proceed = window.confirm(
-        `Report Readiness is WARNING:\n\n${overview.report_readiness_reasons.map((reason) => `· ${reason}`).join('\n')}\n\nContinue to Screen 11 Report Preview anyway?`,
+        `Report Readiness is WARNING:\n\n${overview.report_readiness_reasons.map((reason) => `· ${reason}`).join('\n')}\n\nContinue to Screen 10 Report Preview anyway?`,
       );
       if (!proceed) return;
     }
@@ -666,7 +666,7 @@ export function ResultsOverviewView() {
             disabled={overview.report_readiness === 'BLOCKED'}
             onClick={continueToReport}
           >
-            Continue to 11 Report Preview
+            Continue to 10 Report Preview
           </Button>
         </div>
       }

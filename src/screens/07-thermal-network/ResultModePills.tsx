@@ -2,7 +2,7 @@
  * The metric switch — the one control that decides what the graph is a picture
  * of.
  *
- * Extracted from `ResultModeToolbar` because Screen 10's network window carries
+ * Extracted from `ResultModeToolbar` because Screen 09's network window carries
  * this and nothing else from that toolbar: the rest of it (exports, layout,
  * component visibility, the Results button) is Screen 07's workshop, and a
  * window opened to look at a conclusion does not need the workshop. The pills

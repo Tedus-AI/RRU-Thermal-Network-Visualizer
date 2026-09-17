@@ -1,5 +1,5 @@
 /**
- * Screen 11 tests — the developer test cases in 11 §50 (A–E), plus the section
+ * Report Preview tests — the developer test cases in 11 §50 (A–E), plus the section
  * rules of §6, the pagination of §40, the readiness rules of §29/§30 and the
  * export-payload contract of §32/§38.
  */
@@ -189,7 +189,7 @@ describe('Test A — current snapshot with WARNING (11 §50 A)', () => {
     expect(blocksExport(evaluation.state)).toBe(false);
     expect(validation.readiness).toBe('WARNING');
     expect(validation.blocking).toEqual([]);
-    expect(validation.warnings.join(' ')).toMatch(/Report Readiness from Screen 10 is WARNING/);
+    expect(validation.warnings.join(' ')).toMatch(/Report Readiness from Screen 09 is WARNING/);
   });
 });
 
@@ -230,7 +230,7 @@ describe('Test C — FAIL does not block reporting (11 §50 C, §30)', () => {
     expect(evaluation.state).toBe('CURRENT');
     expect(validation.blocking).toEqual([]);
     // 11 §30 — blocking is about stale/missing/inconsistent data, not about
-    // unfavourable thermal performance. Screen 10 said READY, so the report is
+    // unfavourable thermal performance. Screen 09 said READY, so the report is
     // export-ready and simply carries the failure callout.
     expect(validation.readiness).toBe('EXPORT_READY');
     expect(validation.warnings.join(' ')).toMatch(
@@ -715,9 +715,9 @@ describe('Validation and readiness (11 §29, §35, §36)', () => {
     expect(text).toMatch(/Analytical-only/);
   });
 
-  it('leaves readiness to Screen 10 rather than re-deriving it from advisories', () => {
-    // Screen 10 already weighed missing limits and low confidence when it set
-    // its own Report Readiness. When 10 says READY, Screen 11 does not overrule
+  it('leaves readiness to Screen 09 rather than re-deriving it from advisories', () => {
+    // Screen 09 already weighed missing limits and low confidence when it set
+    // its own Report Readiness. When 10 says READY, Screen 10 does not overrule
     // it — otherwise every V1 report would sit at WARNING purely because
     // Screen 03 is deferred (§20: analytical-only is not a failure).
     const stillReady = validate({ readiness: 'READY', overall: 'PASS', withoutLimits: 3 });
@@ -797,7 +797,7 @@ describe('includedSections', () => {
 
 // --- what the tool still produces (the section audit) ------------------------
 //
-// Screens 09 and several Screen 10 panels went during the review rounds. A
+// Screens 09 and several Screen 09 panels went during the review rounds. A
 // report section whose data nothing produces any more is a heading that only
 // ever apologises for itself, so these guard the two that were removed and the
 // one rule that changed.
@@ -819,7 +819,7 @@ describe('Report sections match what the tool produces', () => {
   });
 
   it('has no Temperature Distribution section', () => {
-    // Screen 09 is gone, and the section's own options were a histogram
+    // Temperature Distribution is gone, and the section's own options were a histogram
     // reserved for one of its charts and a hot-node table that rendered
     // nothing.
     expect(SECTION_DEFINITIONS.map((entry) => entry.id)).not.toContain('distribution');

@@ -889,10 +889,10 @@ export function BottleneckAnalysisView() {
             variant="primary"
             className="ml-auto"
             icon={<ArrowRight size={15} />}
-            title={biTitle('Continue to 09', '前往 09')}
-            onClick={() => navigate(projectPath(projectId, 'temperature'))}
+            title={biTitle('Continue to 09 Results Overview', '前往 09 結果總覽')}
+            onClick={() => navigate(projectPath(projectId, 'results'))}
           >
-            Continue to Temperature Distribution
+            Continue to Results Overview
           </Button>
         </div>
       }

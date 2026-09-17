@@ -59,7 +59,7 @@ export interface OverviewInput {
   components: Component[];
   /** Screen 08's stored analysis for this scenario, if any. */
   analysis: BottleneckAnalysis | null;
-  /** Formal Screen 09 result. Product callers always provide it. */
+  /** Formal temperature-distribution result. Product callers always provide it. */
   current_source_revision?: SourceRevision;
   /** 07 §38 — the stored solution predates a change to the inputs. */
   solution_stale: boolean;
@@ -129,7 +129,7 @@ function summariseDistribution(rows: TemperatureRow[]): TemperatureSummary {
     nodes_above_warning: rows.filter((row) => row.temperature_C > WARNING_TEMPERATURE_C).length,
     warning_threshold_C: WARNING_TEMPERATURE_C,
     row_count: rows.length,
-    // 10 §10 reads Screen 09's dataset. Screen 09's DEFAULT VIEW is narrower
+    // 10 §10 reads the temperature dataset. Temperature Distribution's DEFAULT VIEW was narrower
     // (components with limits); the overview is a whole-system statement, so it
     // uses every solved node and says so rather than letting the row count be
     // read against the wrong basis.
@@ -203,7 +203,7 @@ export function buildResultsOverview(input: OverviewInput): OverviewResult {
   /*
      One row per node, built here from the solution.
 
-     It used to arrive as an artefact Screen 09 had refreshed, with a flag
+     It used to arrive as an artefact Temperature Distribution had refreshed, with a flag
      saying whether that artefact still matched the solve — so this screen could
      be handed rows that disagreed with the solution beside them, and a snapshot
      could read STALE because a rebuilt dataset had been minted with a different

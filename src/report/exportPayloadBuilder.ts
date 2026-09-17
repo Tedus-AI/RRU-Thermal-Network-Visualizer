@@ -1,7 +1,7 @@
 /**
  * Export payload — 11 §32, §38.
  *
- * `Prepare for Export` produces METADATA for Screen 12 and nothing else. 11 §38
+ * `Prepare for Export` produces METADATA for the Export Center and nothing else. 11 §38
  * and AC-11-35 forbid generating a PDF, CSV, JSON file, PNG or ZIP here, and the
  * payload type carries `contains_file_bytes: false` as a literal so the promise
  * is checked by the compiler rather than only by a comment.

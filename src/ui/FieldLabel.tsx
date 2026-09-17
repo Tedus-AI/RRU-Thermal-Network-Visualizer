@@ -142,7 +142,7 @@ export function biTitle(en: string, zh: string): string {
 /**
  * Engineering explanation for a compact English-only label — 09 §3.2, §3.3.
  *
- * From Screen 09 the rule tightens: a native `title` attribute is explicitly NOT
+ * From 09 §3.3 onward the rule tightens: a native `title` attribute is explicitly NOT
  * sufficient for an engineering field (09 §3.3, AC-09-34), and the Traditional
  * Chinese text must explain what the number MEANS rather than translate its
  * name. This renders a visible, keyboard-focusable affordance so the explanation
