@@ -40,7 +40,7 @@ export function ScreenWorkspace({
   /**
    * A panel beside the title, filling the band the description would occupy.
    *
-   * For a screen whose headline IS a verdict: Screen 10's thermal status has
+   * For a screen whose headline IS a verdict: Screen 09's thermal status has
    * to be the first thing read, and putting it in the body pushed it under a
    * row of cards that only make sense once you know it.
    */

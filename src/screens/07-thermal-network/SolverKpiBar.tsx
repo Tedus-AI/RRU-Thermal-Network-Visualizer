@@ -119,7 +119,7 @@ export function SolverKpiBar({
         }
       />
       {/*
-         The one number Screen 09 was worth building for, and the reason it is a
+         The one number Temperature Distribution was worth building for, and the reason it is a
          card rather than a screen: every other reading here is at THIS air
          temperature, and the specification the machine is built to is written
          as a range. It is the worst margin added to the ambient — see

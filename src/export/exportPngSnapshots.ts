@@ -14,7 +14,7 @@
  * hidden-sets the report's figures are filtered by. What comes out is the
  * picture the engineer has already been looking at, in a file.
  *
- * WHICH pictures is the engineer's choice, from the matrix on Screen 12: a
+ * WHICH pictures is the engineer's choice, from the matrix on Screen 11: a
  * subject down the side, a result view across the top, one PNG per tick.
  */
 
@@ -50,7 +50,7 @@ export interface SnapshotInput {
 }
 
 /**
- * Labels, power, limits and the boundary, as Screen 10's network window has it.
+ * Labels, power, limits and the boundary, as Screen 09's network window has it.
  *
  * Not the engineer's own Screen 07 toggles: those are a working state that
  * changes while a question is being asked, and a file exported on Tuesday

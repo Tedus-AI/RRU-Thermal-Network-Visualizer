@@ -13,7 +13,7 @@
  * same report. One number cannot be right for both, and the safe number is
  * wrong for both.
  *
- * So the heights are measured instead. Screen 11 renders every included
+ * So the heights are measured instead. Screen 10 renders every included
  * section once, offscreen, at the real page width, and reads back what the
  * browser laid out; the paginator uses those numbers and falls back to the
  * registry only for what has not been measured yet (the first paint, and any

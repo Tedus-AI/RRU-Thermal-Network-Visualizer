@@ -1,7 +1,7 @@
 /**
  * The rendered report sections — 11 §7, §13–§22.
  *
- * Every number on this page is read from the Screen 10 snapshot. Nothing here
+ * Every number on this page is read from the Screen 09 snapshot. Nothing here
  * solves, ranks, bins or re-derives a statistic (§12, §37): where the snapshot
  * has no data for a section, the section says `Not Available` instead of
  * fabricating rows (§17, AC-11-20).

@@ -1,7 +1,7 @@
 /**
  * PDF and HTML report writers — 12 §9, §16, §38, AC-12-08.
  *
- * Both take the pages Screen 11's own renderer produced (see `reportRenderer`)
+ * Both take the pages Screen 10's own renderer produced (see `reportRenderer`)
  * and only decide how to serialize them. Nothing about the report's layout is
  * decided here, which is what §9's "12 must not change report layout" means in
  * practice.
@@ -28,7 +28,7 @@ export interface PdfResult {
  * engineer wants -- and it was being handed to this rasterizer as well, so
  * turning it down to 1x halved the report's resolution and changed how
  * html2canvas measured and cut every line of text. The report is the one
- * artifact that must come out identical to what Screen 11 displayed, and no
+ * artifact that must come out identical to what Screen 10 displayed, and no
  * export option is allowed a say in it.
  */
 const REPORT_RASTER_SCALE = 2;

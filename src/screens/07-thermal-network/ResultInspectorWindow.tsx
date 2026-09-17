@@ -1,7 +1,7 @@
 /**
  * The node / edge inspector, as a window.
  *
- * Lifted out of `ThermalNetworkView` so Screen 10's network window can offer
+ * Lifted out of `ThermalNetworkView` so Screen 09's network window can offer
  * the same thing. A graph you cannot interrogate is a picture: clicking a node
  * on Screen 07 opens its temperature, its margin, its links and where its
  * numbers came from, and a copy of that graph on another screen that answers a

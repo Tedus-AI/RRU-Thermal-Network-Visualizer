@@ -1,5 +1,5 @@
 /**
- * The metric switch Screen 10's network window offers.
+ * The metric switch Screen 09's network window offers.
  *
  * The window used to be locked to Temperature. It now carries the result views
  * — the combined Temperature + ΔT, Heat Flow and Rth — and must not quietly

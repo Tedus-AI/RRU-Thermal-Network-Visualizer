@@ -1,5 +1,5 @@
 /**
- * 全域熱網路 — Screen 07's solved network, over Screen 10.
+ * 全域熱網路 — Screen 07's solved network, over Screen 09.
  *
  * It began as a bare canvas locked to Temperature, which was too little: the
  * graph on 07 is not just a picture, it is four ways of colouring the same
@@ -10,7 +10,7 @@
  * So it carries all of that — the metric switch, the legend, the inspector,
  * layout, zoom, component visibility, both exports and fullscreen — using the
  * SAME components Screen 07 draws, never copies of them. What it does not
- * carry is 07's Results button: that opens the result table, and Screen 10
+ * carry is 07's Results button: that opens the result table, and Screen 09
  * already has its own door to it, in candy yellow, beside the one that opened
  * this window.
  */

@@ -5,7 +5,7 @@
  * page count is an ESTIMATE derived from how much room each included section
  * needs. It is deterministic — the same config always produces the same
  * pagination — and it is labelled as an estimate everywhere it is shown, because
- * the authoritative page count comes from whatever Screen 12 renders with.
+ * the authoritative page count comes from whatever Screen 11 renders with.
  *
  * The unit is one page of body area. A section declares a base height plus a
  * per-row height in the registry; nothing here reads a thermal value.

@@ -1,5 +1,5 @@
 /**
- * Screen 12 — Export Center.
+ * Screen 11 — Export Center.
  * Specification: 12_Export_Center.md (source of truth, per the delivery audit),
  * laid out after 12.png where the two agree.
  *
@@ -14,13 +14,13 @@
  * uploaded (§35).
  *
  * On the mockup: 12.png is the product's generic master mockup rather than a
- * Screen 12 delivery — it shows report LAYOUT controls (paper size, orientation,
+ * Screen 11 delivery — it shows report LAYOUT controls (paper size, orientation,
  * cover page, header/footer) which §25 and AC-12-38 explicitly forbid here. So
  * its SHAPE is followed — numbered sections, the artifact table with
  * Format/Description/Prerequisite/Status/Select, Select All / Clear All, the
  * export actions block and the history table — and it is filled with what the
  * specification actually requires. The forbidden layout controls stay in Screen
- * 11 where they belong, and the PDF row states that it uses the Screen 11 layout.
+ * 11 where they belong, and the PDF row states that it uses the Screen 10 layout.
  *
  * What this screen has SHED, round by round, is every surface that said again
  * what another one already said: the package presets, the source-readiness
@@ -178,7 +178,7 @@ function NoArtifacts({
         </p>
         <p className="text-[12px] text-ink-700">目前沒有可匯出的工程產物。</p>
         <p className="text-[11px] text-ink-500">
-          Screen 12 exports what Screens 05–11 already produced. It never generates a thermal
+          Screen 11 exports what Screens 05–11 already produced. It never generates a thermal
           result of its own, so there is nothing to write until at least a network exists.
           <span className="block">
             12 只輸出 05–11 已產生的結果，本頁不會自行計算，因此在尚無網路資料前沒有可寫出的檔案。
@@ -186,7 +186,7 @@ function NoArtifacts({
         </p>
         <div className="flex flex-wrap gap-2">
           <Button variant="primary" onClick={onReport}>
-            Go to Report Preview / 前往 11 報告預覽
+            Go to Report Preview / 前往 10 報告預覽
           </Button>
           <Button onClick={onNetwork}>Go to Thermal Network / 前往 07 熱網路圖</Button>
         </div>
@@ -221,7 +221,7 @@ export function ExportCenterView() {
   const solverState = useSolverStore((s) => s.state);
   const analyses = useAnalysisStore((s) => s.analyses);
   // Derived from the solution on screen rather than read back from a stored
-  // snapshot Screen 09 used to refresh; see `useDistributionResult`.
+  // snapshot Temperature Distribution used to refresh; see `useDistributionResult`.
   const { distribution, state: distributionState } = useDistributionResult();
   const snapshots = useOverviewStore((s) => s.snapshots);
   const payloads = useReportStore((s) => s.payloads);
@@ -352,9 +352,9 @@ export function ExportCenterView() {
   }, [analysis, solution, sourceRevision]);
 
   /**
-   * The same figures Screen 11 previews.
+   * The same figures Screen 10 previews.
    *
-   * Screen 12 used to pass none, so `renderReport` received an empty list and a
+   * Screen 11 used to pass none, so `renderReport` received an empty list and a
    * null context: the exported PDF printed "Thermal Network Not Available" and
    * "Bottleneck Thermal Network Not Available" over two sections the preview
    * had drawn in full, and the paginator counted both as empty and broke the
@@ -505,7 +505,7 @@ export function ExportCenterView() {
     if (!reportConfig || !snapshot || !scenario) return null;
     return {
       config: reportConfig,
-      // The same recovery Screen 11's preview does, so the exported document
+      // The same recovery Screen 10's preview does, so the exported document
       // and the preview of it do not disagree about which language the
       // Engineering Actions are in. See `withTranslatedActions`.
       snapshot: withTranslatedActions(snapshot),
@@ -912,7 +912,7 @@ export function ExportCenterView() {
 
           <Button
             icon={<Flag className="size-4" />}
-            // 12 §50, AC-12-45 — Finish returns to Screen 10.
+            // 12 §50, AC-12-45 — Finish returns to Results Overview.
             onClick={() => navigate(projectPath(projectId ?? '', 'results'))}
           >
             Finish
@@ -939,111 +939,111 @@ export function ExportCenterView() {
           onDownloadAgain={downloadAgain}
         />
 
-        <div className="flex min-h-0 flex-col gap-3 xl:flex-row">
-          {/* --- LEFT + CENTRE: catalog, configuration, queue --------------- */}
-          <div className="flex min-w-0 flex-1 flex-col gap-3">
-            <Panel
-              index={1}
-              title="Export Options"
-              zh="匯出項目"
-              explanation={T12.artifact}
-              actions={
-                <span className="text-[10.5px] text-ink-400">
-                  {ARTIFACT_DEFINITIONS.length} artifacts in the V1 catalog
-                </span>
-              }
-            >
-              <ArtifactSelectionPanel
-                readiness={readiness}
-                selected={selected}
-                disabled={exporting}
-                onToggle={(type) => useExportStore.getState().toggle(type)}
-                onSelectAll={() => useExportStore.getState().setSelected(selectableTypes)}
-                onClearAll={() => useExportStore.getState().setSelected([])}
-              />
-            </Panel>
+        {/* One column, top to bottom, in the order the work is done: what to
+            export, which pictures, how to name and where to put them, the run
+            itself, and what this session has already produced. The history
+            used to sit in a narrow right-hand column, which put the record of
+            past exports level with the controls for the next one. */}
+        <div className="flex min-h-0 flex-col gap-3">
+          <Panel
+            index={1}
+            title="Export Options"
+            zh="匯出項目"
+            explanation={T12.artifact}
+            actions={
+              <span className="text-[10.5px] text-ink-400">
+                {ARTIFACT_DEFINITIONS.length} artifacts in the V1 catalog
+              </span>
+            }
+          >
+            <ArtifactSelectionPanel
+              readiness={readiness}
+              selected={selected}
+              disabled={exporting}
+              onToggle={(type) => useExportStore.getState().toggle(type)}
+              onSelectAll={() => useExportStore.getState().setSelected(selectableTypes)}
+              onClearAll={() => useExportStore.getState().setSelected([])}
+            />
+          </Panel>
 
-            <Panel
-              index={2}
-              title="Snapshot Matrix"
-              zh="快照矩陣"
-              explanation={T12.snapshotMatrix}
-              actions={
-                <span className="text-[10.5px] text-ink-400">
-                  feeds Charts / Snapshots PNG
-                </span>
-              }
-            >
-              <SnapshotMatrixPanel
-                subjects={subjects}
-                selection={snapshotSelection}
-                disabled={exporting}
-                onChange={(next) => useExportStore.getState().setSnapshotSelection(next)}
-              />
-            </Panel>
+          <Panel
+            index={2}
+            title="Snapshot Matrix"
+            zh="快照矩陣"
+            explanation={T12.snapshotMatrix}
+            actions={
+              <span className="text-[10.5px] text-ink-400">
+                feeds Charts / Snapshots PNG
+              </span>
+            }
+          >
+            <SnapshotMatrixPanel
+              subjects={subjects}
+              selection={snapshotSelection}
+              disabled={exporting}
+              onChange={(next) => useExportStore.getState().setSnapshotSelection(next)}
+            />
+          </Panel>
 
-            <Panel
-              index={3}
-              title="Export Settings"
-              zh="匯出設定"
-              explanation={T12.decimalPrecision}
-            >
-              <ExportConfigurationPanel
-                config={config}
-                disabled={exporting}
-                folderSupported={supportsFolderPicker()}
-                folderName={directoryName}
-                folderGranted={Boolean(directory)}
-                onPickFolder={async () => {
-                  const handle = await pickDirectory();
-                  useExportStore.getState().setDirectory(handle);
-                  if (!handle) toast.warning('No folder chosen — Browser Download will be used.');
+          <Panel
+            index={3}
+            title="Export Settings"
+            zh="匯出設定"
+            explanation={T12.decimalPrecision}
+          >
+            <ExportConfigurationPanel
+              config={config}
+              disabled={exporting}
+              folderSupported={supportsFolderPicker()}
+              folderName={directoryName}
+              folderGranted={Boolean(directory)}
+              onPickFolder={async () => {
+                const handle = await pickDirectory();
+                useExportStore.getState().setDirectory(handle);
+                if (!handle) toast.warning('No folder chosen — Browser Download will be used.');
+              }}
+              onChange={(patch) => useExportStore.getState().setConfig(patch)}
+            />
+          </Panel>
+
+          <Panel
+            index={4}
+            title="Export Queue"
+            zh="匯出佇列"
+            explanation={T12.exportQueue}
+            actions={
+              <span className="flex items-center gap-1.5 text-[10.5px] text-ink-400">
+                {queue.length} entr{queue.length === 1 ? 'y' : 'ies'}
+                {/* 12 §30 — what a mixed outcome is called, always explained. */}
+                <span className="flex items-center gap-0.5">
+                  Partial Export
+                  <EngineeringInfo zh={T12.partialExport} label="Partial Export" align="left" />
+                </span>
+              </span>
+            }
+          >
+            <ExportQueue queue={queue} onDownloadAgain={downloadAgain} />
+          </Panel>
+
+          <Panel
+            index={5}
+            title="Export History"
+            zh="匯出紀錄"
+            actions={<span className="text-[10px] text-ink-400">session only</span>}
+          >
+            <div className="flex flex-col gap-2">
+              <LocalExportNotice />
+              <ExportHistoryPanel
+                history={history}
+                onDownloadAgain={downloadAgain}
+                onCopyFilename={(entry) => {
+                  void navigator.clipboard?.writeText(entry.filename);
+                  toast.success('Filename copied / 已複製檔名');
                 }}
-                onChange={(patch) => useExportStore.getState().setConfig(patch)}
+                onViewManifest={(entry) => showManifest(entry.manifest)}
               />
-            </Panel>
-
-            <Panel
-              index={4}
-              title="Export Queue"
-              zh="匯出佇列"
-              explanation={T12.exportQueue}
-              actions={
-                <span className="flex items-center gap-1.5 text-[10.5px] text-ink-400">
-                  {queue.length} entr{queue.length === 1 ? 'y' : 'ies'}
-                  {/* 12 §30 — what a mixed outcome is called, always explained. */}
-                  <span className="flex items-center gap-0.5">
-                    Partial Export
-                    <EngineeringInfo zh={T12.partialExport} label="Partial Export" align="left" />
-                  </span>
-                </span>
-              }
-            >
-              <ExportQueue queue={queue} onDownloadAgain={downloadAgain} />
-            </Panel>
-          </div>
-
-          {/* --- RIGHT: the session's own record --------------------------- */}
-          <div className="flex w-full shrink-0 flex-col gap-3 xl:w-[21rem]">
-            <Panel
-              title="Export History"
-              zh="匯出紀錄"
-              actions={<span className="text-[10px] text-ink-400">session only</span>}
-            >
-              <div className="flex flex-col gap-2">
-                <LocalExportNotice />
-                <ExportHistoryPanel
-                  history={history}
-                  onDownloadAgain={downloadAgain}
-                  onCopyFilename={(entry) => {
-                    void navigator.clipboard?.writeText(entry.filename);
-                    toast.success('Filename copied / 已複製檔名');
-                  }}
-                  onViewManifest={(entry) => showManifest(entry.manifest)}
-                />
-              </div>
-            </Panel>
-          </div>
+            </div>
+          </Panel>
         </div>
       </div>
 

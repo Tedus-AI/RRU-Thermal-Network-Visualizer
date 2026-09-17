@@ -1,11 +1,11 @@
 /**
  * Where the report's network pictures come from.
  *
- * Screen 11 derived these inline and Screen 12 did not derive them at all — it
+ * Screen 10 derived these inline and Screen 11 did not derive them at all — it
  * simply never passed them to the renderer, so the exported PDF printed
  * "Thermal Network Not Available" and "Bottleneck Thermal Network Not
  * Available" over two sections the preview had just drawn in full. §9 says
- * Screen 12 must not change the report's layout; silently dropping two of its
+ * Screen 11 must not change the report's layout; silently dropping two of its
  * seven sections is the largest change it could make.
  *
  * So the derivation lives here and both screens call it. It is the same

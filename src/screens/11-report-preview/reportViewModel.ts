@@ -1,8 +1,8 @@
 /**
- * Presentation helpers for Screen 11.
+ * Presentation helpers for Screen 10.
  *
  * Formatting and tone only. Every engineering number arrives already computed
- * from the Screen 10 snapshot — nothing here recalculates one (11 §12, §37).
+ * from the Results Overview snapshot — nothing here recalculates one (11 §12, §37).
  */
 
 import type { Tone } from '@/ui/primitives';

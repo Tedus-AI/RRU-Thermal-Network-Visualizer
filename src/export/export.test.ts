@@ -2,7 +2,7 @@
  * Export layer tests — 12 §58 A–F, plus the serialization contracts of
  * §17, §18, §21 and §26.
  *
- * Everything here is the pure part of Screen 12: readiness, validation,
+ * Everything here is the pure part of Screen 11: readiness, validation,
  * filenames and the manifest. The generators that need a DOM
  * (PDF, PNG, ZIP) are exercised in the browser verification instead.
  *
@@ -34,7 +34,6 @@ import {
 import {
   evaluateAllArtifacts,
   evaluateArtifact,
-  evaluateSources,
   globalStatus,
   requiresConfirmation,
   validateExport,
@@ -393,7 +392,7 @@ describe('Test A — Engineering Package (12 §58 A)', () => {
       analytical_only: true,
     });
     expect(validation.blocking).toEqual([]);
-    expect(validation.warnings.join(' ')).toMatch(/Screen 11 reported WARNING/);
+    expect(validation.warnings.join(' ')).toMatch(/Screen 10 reported WARNING/);
   });
 
   it('records the warning in the manifest', () => {
@@ -415,7 +414,7 @@ describe('Test A — Engineering Package (12 §58 A)', () => {
         filename: 'report.pdf',
         status: 'WARNING',
         mime_type: 'application/pdf',
-        warnings: ['Screen 11 reported WARNING.'],
+        warnings: ['Screen 10 reported WARNING.'],
       },
     ];
 
@@ -429,7 +428,7 @@ describe('Test A — Engineering Package (12 §58 A)', () => {
     expect(manifest.artifacts).toHaveLength(1);
     expect(manifest.artifacts[0].status).toBe('warning');
     expect(manifest.warnings.join(' ')).toMatch(/Analytical-only/);
-    expect(manifest.warnings.join(' ')).toMatch(/Screen 11 reported WARNING/);
+    expect(manifest.warnings.join(' ')).toMatch(/Screen 10 reported WARNING/);
     expect(manifest.reportSnapshotId).toBe('SNAP_1');
     expect(manifest.solverVersion).toBe('v1.0');
   });
@@ -698,30 +697,6 @@ describe('Per-artifact readiness (12 §3, §4)', () => {
     // artifact that exports perfectly well.
     const entry = evaluateArtifact('png_snapshots', readiness({ analysis: null }));
     expect(entry.status).toBe('READY');
-  });
-});
-
-describe('Source readiness panel (12 §32)', () => {
-  it('reports all seven sources', () => {
-    const entries = evaluateSources(readiness());
-    expect(entries.map((entry) => entry.key)).toEqual([
-      'report',
-      'thermal_solution',
-      'bottleneck_analysis',
-      'temperature_distribution',
-      'network_data',
-      'scenario_boundary',
-      'snapshots',
-    ]);
-    expect(entries.every((entry) => entry.detail.length > 0)).toBe(true);
-  });
-
-  it('follows the solve when it goes stale', () => {
-    const entries = evaluateSources(readiness({ solution_stale: true }));
-    const byKey = Object.fromEntries(entries.map((entry) => [entry.key, entry.state]));
-    expect(byKey.thermal_solution).toBe('BLOCKED');
-    expect(byKey.temperature_distribution).toBe('BLOCKED');
-    expect(byKey.network_data).toBe('READY');
   });
 });
 

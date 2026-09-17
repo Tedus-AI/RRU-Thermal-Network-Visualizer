@@ -1,7 +1,7 @@
 /**
  * The boundary conditions the solve actually ran on, as a short list.
  *
- * Screen 10 used to offer a button reading "View Boundary Conditions", which
+ * Screen 09 used to offer a button reading "View Boundary Conditions", which
  * asked the reader to leave the conclusion, load Screen 06, find the port, read
  * the number and come back. The numbers are four or five short rows; the ones
  * that decide the answer are how the heat leaves the machine and what it leaves

@@ -1,7 +1,7 @@
 /**
  * How much hotter the air can get before this machine stops passing.
  *
- * This is the one number Screen 09 was worth building for, and it is not a
+ * This is the one number Temperature Distribution was worth building for, and it is not a
  * chart — it is a sentence. Every screen up to here answers "at this operating
  * point"; the specification the machine is built to is written as a RANGE
  * ("operating ambient up to 55 °C"), and nothing else in the tool says where in

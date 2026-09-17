@@ -1,7 +1,7 @@
 /**
  * The two graph exports, as a hook.
  *
- * Lifted out of `ThermalNetworkView` when Screen 10's network window grew the
+ * Lifted out of `ThermalNetworkView` when Screen 09's network window grew the
  * same toolbar. Exporting the picture you are looking at is the point of
  * looking at it on either screen, and the PDF in particular — the whole network
  * then one page per component — is ninety lines of layout work that must not

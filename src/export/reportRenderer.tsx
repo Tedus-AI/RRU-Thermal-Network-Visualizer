@@ -1,9 +1,9 @@
 /**
  * Off-screen report rendering — 12 §9, §38, AC-12-08.
  *
- * §38 is explicit: "PDF must match Screen 11 semantic config. Do not rebuild a
+ * §38 is explicit: "PDF must match Screen 10 semantic config. Do not rebuild a
  * different report in 12." So this module does not lay out a report. It mounts
- * Screen 11's own `ReportPageView` in print mode into a detached container and
+ * Screen 10's own `ReportPageView` in print mode into a detached container and
  * hands the resulting DOM to the PDF and HTML writers. Page size, orientation,
  * language, section order, included sections and header/footer all come from the
  * config, unchanged, because it is literally the same component.
@@ -62,7 +62,7 @@ export interface RenderedReport {
 }
 
 /**
- * Row counts drive the page estimate, exactly as Screen 11 computes them.
+ * Row counts drive the page estimate, exactly as Screen 10 computes them.
  *
  * The figure counts were missing, so the two splittable figure sections were
  * paginated as though they held nothing and the export put every chain on one
@@ -81,12 +81,12 @@ function rowCountsOf(
 }
 
 /**
- * Measure the sections the way Screen 11 measures them, on this very render.
+ * Measure the sections the way Screen 10 measures them, on this very render.
  *
  * The preview's numbers used to arrive on the export payload, which meant a
  * payload prepared before that field existed carried none -- and the export
  * silently fell back to the registry's estimates and broke its pages somewhere
- * the engineer had never seen. Since the export mounts Screen 11's own
+ * the engineer had never seen. Since the export mounts Screen 10's own
  * components anyway, it can do the measuring pass itself: one page to learn
  * what a page's body is in pixels, then every included section rendered whole
  * at that width. Nothing then depends on when the payload was written.
@@ -180,7 +180,7 @@ export function renderReport(input: ReportRenderInput): RenderedReport {
   const sections = orderedSections(config);
   const included = includedSections(config);
   const figures = input.network_figures ?? [];
-  // The heights Screen 11 measured off the pages it showed, carried on the
+  // The heights Screen 10 measured off the pages it showed, carried on the
   // export payload. Re-deriving them here would mean re-measuring a render
   // that has not happened yet; taking the preview's own numbers means the
   // exported document breaks its pages exactly where the engineer approved
@@ -211,7 +211,7 @@ export function renderReport(input: ReportRenderInput): RenderedReport {
     project: input.project,
     scenario: input.scenario,
     unavailable: input.unavailable.includes(section.id),
-    // Screen 12's export renders the same page components, so it must supply
+    // Screen 11's export renders the same page components, so it must supply
     // the same inputs. It is given the network context when it has one; the
     // figures then draw exactly as they do in the preview.
     network_context: input.network_context ?? null,

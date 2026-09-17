@@ -156,7 +156,7 @@ export interface ReportReadinessOutcome {
  * 10 §17.
  *
  * BLOCKED is driven only by the 07 result: stale, failed, or absent. Everything
- * else — partial 08/09, missing limits, confidence issues — degrades to WARNING,
+ * else — a partial 08, missing limits, confidence issues — degrades to WARNING,
  * because a report CAN quote those results as long as it states their limits.
  */
 export function evaluateReportReadiness(checks: ReadinessCheck[]): ReportReadinessOutcome {

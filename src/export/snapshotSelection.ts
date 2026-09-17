@@ -1,7 +1,7 @@
 /**
  * What the snapshot matrix is a matrix OF.
  *
- * Screen 12 used to export two fixed pictures: the solved network, and a
+ * Screen 11 used to export two fixed pictures: the solved network, and a
  * bottleneck overlay. Both were drawn by code of their own, with their own
  * stylesheet and their own colour ramp, so the file an engineer opened was a
  * near-miss of the screen it claimed to be a snapshot of.
@@ -78,7 +78,7 @@ export function hasRepeats(subject: SnapshotSubject): boolean {
  * then the parts that need attention.
  *
  * Derived from the report's own figures, so a board that this design does not
- * have is not an empty row, and the parts listed are the parts Screen 11 prints
+ * have is not an empty row, and the parts listed are the parts Screen 10 prints
  * figures for -- one answer to "which subjects are there", not two.
  */
 export function snapshotSubjects(figures: readonly NetworkFigure[]): SnapshotSubject[] {

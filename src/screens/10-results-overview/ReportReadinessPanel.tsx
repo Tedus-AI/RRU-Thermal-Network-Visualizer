@@ -7,7 +7,7 @@
  * analysis, which is the same set of facts the verdict beside the page title
  * already reports, one screen-length further down.
  *
- * 10 §18 — `Prepare Report Snapshot` freezes metadata for Screen 11. It does not
+ * 10 §18 — `Prepare Report Snapshot` freezes metadata for Report Preview. It does not
  * generate a PDF, choose a layout, or pick an export format, and the panel says
  * so rather than leaving the reader to find out by pressing it.
  */
@@ -77,7 +77,7 @@ export function ReportReadinessPanel({
         </Button>
 
         <span className="flex items-center gap-1 text-[10px] text-ink-400">
-          Freezes the current summary for Screen 11. No PDF is generated here.
+          Freezes the current summary for Screen 10. No PDF is generated here.
           <EngineeringInfo zh={T10.prepareReportSnapshot} label="Prepare Report Snapshot" />
         </span>
 

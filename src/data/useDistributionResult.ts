@@ -1,13 +1,13 @@
 /**
  * The temperature dataset, derived from the solution on screen.
  *
- * It used to be a stored artefact: Screen 09 pressed Refresh, the rows were
+ * It used to be a stored artefact: Temperature Distribution pressed Refresh, the rows were
  * written to storage, and Screens 10, 11 and 12 read them back and had to
  * reason about whether what they had read still matched the solve — hence a
  * five-state `DistributionState` with DIRTY and READY in it, and an export
- * that could be blocked on "refresh Screen 09 first".
+ * that could be blocked on "refresh Temperature Distribution first".
  *
- * With Screen 09 gone there is nobody to press Refresh, and there never needed
+ * With that screen gone there is nobody to press Refresh, and there never needed
  * to be: the rows are a projection of the solution — one per node, with its
  * limit and margin attached — and building them is a loop over the nodes.
  * Deriving them from the solution the screen is already showing removes the

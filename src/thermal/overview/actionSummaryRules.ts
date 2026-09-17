@@ -1,7 +1,7 @@
 /**
  * Engineering Action Summary and Recommended Next Action — 10 §14, §15.
  *
- * Deterministic, rule-based sentences built from values Screens 07/08/09 already
+ * Deterministic, rule-based sentences built from values Screens 07/08 already
  * produced. 10 §14 and AC-10-18 are explicit that no language model is involved
  * in V1, and AC-10-19 is explicit that an improvement Screen 08 did not
  * calculate is never asserted here: if 08 has not run, the summary says so

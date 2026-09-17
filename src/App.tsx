@@ -58,7 +58,7 @@ export default function App() {
         <Route path="/project/:projectId/results" element={<ResultsOverviewView />} />
         <Route path="/project/:projectId/report" element={<ReportPreviewView />} />
         <Route path="/project/:projectId/export" element={<ExportCenterView />} />
-        {/* Screen 09 (Temperature Distribution) was removed: it binned NODES,
+        {/* The Temperature Distribution screen was removed: it binned NODES,
             which counts how finely the network was drawn rather than how hot
             the machine runs. A bookmark to it lands on Screen 07, which now
             carries the one reading it was worth — the highest usable ambient. */}

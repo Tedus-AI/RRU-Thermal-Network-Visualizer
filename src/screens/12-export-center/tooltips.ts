@@ -14,7 +14,7 @@ export const T12 = {
     '可匯出的工程產物，例如 PDF Report、Temperature CSV、Thermal Network JSON 或 PNG snapshot。',
   packagePreset: '預先定義的 artifact 選擇組合；只影響匯出內容，不會修改 thermal analysis data。',
   reportReadiness:
-    '沿用 Screen 11 的報告準備狀態；WARNING 可確認後匯出，BLOCKED 則不可產生 PDF。',
+    '沿用 Screen 10 的報告準備狀態；WARNING 可確認後匯出，BLOCKED 則不可產生 PDF。',
   traceabilityManifest:
     '追溯資訊清單：記錄本次匯出所使用的 Project、Scenario、Solver、Snapshot、Artifact、版本與警告，便於後續工程驗證與版本追蹤。',
   decimalPrecision: 'CSV 匯出時的數值小數位數；不會改變工具內部保存的原始精度。',
@@ -37,8 +37,6 @@ export const T12 = {
   snapshotMatrix:
     '選擇要輸出哪些熱網路圖：左側為快照對象（全域、各鏈路、各瓶頸元件），上方為 07 的結果視圖（溫度＋溫差、熱流、熱阻），每勾選一格輸出一張 PNG。點欄標題可整欄勾選，點列名稱可整列勾選。含重複元件（×N）的列可選擇只畫代表一路或全部畫出。',
   exportQueue: '本次匯出的工作清單與各項狀態；單一 artifact 失敗不會中斷其他項目。',
-  sourceReadiness:
-    '各資料來源目前是否可用於匯出；BLOCKED 表示來源已過期或無效，需回到對應畫面重新產生。',
 } as const;
 
 /**

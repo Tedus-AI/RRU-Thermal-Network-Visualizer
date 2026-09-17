@@ -1,11 +1,11 @@
 /**
- * Screen 11 — Report Preview.
+ * Screen 10 — Report Preview.
  * Specification: 11_Report_Preview.md (source of truth, per the delivery audit),
  * laid out after 11.png, whose placement this screen follows closely.
  *
- * The question this screen answers (11 §52): what does the current Screen 10
+ * The question this screen answers (11 §52): what does the current Results Overview
  * snapshot look like as a thermal engineering report, and is that report ready
- * to hand to Screen 12.
+ * to hand to Screen 11.
  *
  * What it never does (11 §37, §38, §39): solve, re-solve, run a sensitivity,
  * re-bin a temperature, change Overall Status, generate a PDF/CSV/JSON/PNG/ZIP,
@@ -159,20 +159,20 @@ function NoSnapshot({ onGoToOverview }: { onGoToOverview: () => void }) {
       <div className="flex flex-col items-start gap-3 rounded-lg border border-warn-500/40 bg-warn-100 px-5 py-4">
         <p className="flex items-center gap-2 text-[14px] font-bold text-warn-600">
           <TriangleAlert className="size-5" aria-hidden />
-          No report snapshot is available. Return to Screen 10 and prepare a report snapshot.
+          No report snapshot is available. Return to Screen 09 and prepare a report snapshot.
         </p>
         <p className="text-[12px] text-ink-700">
-          目前沒有報告快照，請回到 10 Results Overview 準備一份。
+          目前沒有報告快照，請回到 09 Results Overview 準備一份。
         </p>
         <p className="text-[11px] text-ink-500">
-          Screen 11 composes a report from the Screen 10 snapshot. It never recalculates a thermal
+          Screen 10 composes a report from the Screen 09 snapshot. It never recalculates a thermal
           result and never invents one in a snapshot's absence.
           <span className="block">
-            11 只依 Screen 10 的快照排版報告，本身不重新計算，也不會在沒有快照時憑空產生數值。
+            11 只依 Screen 09 的快照排版報告，本身不重新計算，也不會在沒有快照時憑空產生數值。
           </span>
         </p>
         <Button variant="primary" icon={<ArrowRight className="size-4" />} onClick={onGoToOverview}>
-          Go to Results Overview / 前往 10 結果總覽
+          Go to Results Overview / 前往 09 結果總覽
         </Button>
       </div>
     </div>
@@ -240,7 +240,7 @@ export function ReportPreviewView() {
     : null;
   const snapshot = activeScenarioId ? (snapshots[activeScenarioId] ?? null) : null;
   // Derived from the solution on screen rather than read back from a stored
-  // snapshot Screen 09 used to refresh; see `useDistributionResult`.
+  // snapshot Temperature Distribution used to refresh; see `useDistributionResult`.
   const { distribution, state: distributionState } = useDistributionResult();
 
   // --- load -----------------------------------------------------------------
@@ -349,7 +349,7 @@ export function ReportPreviewView() {
    * The pictures the Thermal Network Summary carries, and what Screen 08 says
    * could be done about each part that needs attention.
    *
-   * Derived by the shared helper rather than here, because Screen 12's export
+   * Derived by the shared helper rather than here, because Screen 11's export
    * renders these same sections and has to arrive at the same answer — when it
    * had none of its own the PDF printed "Not Available" over two sections the
    * preview had just drawn in full.
@@ -475,7 +475,7 @@ export function ReportPreviewView() {
     if (!config) return 1;
     const box = pageBoxMm(config.page_size, config.orientation);
     // 1 mm ≈ 3.7795 px at 96 dpi; the page is laid out in millimetres so the
-    // preview is proportionally what Screen 12 will render.
+    // preview is proportionally what Screen 11 will render.
     const pxPerMm = 3.7795275591;
     const pageWidth = box.width * pxPerMm;
     const pageHeight = box.height * pxPerMm;
@@ -510,8 +510,8 @@ export function ReportPreviewView() {
       <ScreenWorkspace
         title="Report Preview"
         titleZh="報告預覽"
-        description="Composes the current Screen 10 snapshot into a previewable thermal engineering report."
-        descriptionZh="把目前 Screen 10 的快照組成可預覽的熱工程報告；本頁不重新分析，也不匯出檔案。"
+        description="Composes the current Screen 09 snapshot into a previewable thermal engineering report."
+        descriptionZh="把目前 Screen 09 的快照組成可預覽的熱工程報告；本頁不重新分析，也不匯出檔案。"
         badge={<Badge tone="warn">NO SNAPSHOT</Badge>}
       >
         <NoSnapshot onGoToOverview={() => go('results')} />
@@ -526,7 +526,7 @@ export function ReportPreviewView() {
 
   /**
    * Every other screen in this tool writes as you work — the header says "Saved
-   * to JSON" and means it. Screen 11 alone kept the layout in memory until
+   * to JSON" and means it. Screen 10 alone kept the layout in memory until
    * someone found the Save Report Layout button, so a session's worth of
    * section choices and page settings vanished on reload. It saves on change
    * now; the button stays for an explicit save and to show the timestamp.
@@ -572,7 +572,7 @@ export function ReportPreviewView() {
     if (exportBlocked) {
       // 11 §3, AC-11-31 — a stale or missing snapshot blocks export preparation.
       toast.error(
-        'Export preparation is blocked. Refresh the Screen 10 snapshot and resolve the blocking items first.',
+        'Export preparation is blocked. Refresh the Screen 09 snapshot and resolve the blocking items first.',
       );
       return;
     }
@@ -581,14 +581,14 @@ export function ReportPreviewView() {
       snapshot_id: snapshot.id,
       readiness: validation.readiness,
       estimated_page_count: pages.length,
-      // The heights this preview measured off its own pages, so Screen 12's
+      // The heights this preview measured off its own pages, so Screen 11's
       // render breaks where the engineer just saw it break.
       measured_heights: measured,
     });
     useReportStore.getState().storePayload(projectId, payload);
     useReportStore.getState().save(projectId);
     toast.success(
-      `Export payload prepared for Screen 12 — metadata only, no files generated / 已為 12 準備匯出資料包（僅 metadata）`,
+      `Export payload prepared for Screen 11 — metadata only, no files generated / 已為 12 準備匯出資料包（僅 metadata）`,
     );
   };
 
@@ -599,7 +599,7 @@ export function ReportPreviewView() {
     }
     if (validation.readiness === 'WARNING') {
       const proceed = window.confirm(
-        `Report Readiness is WARNING:\n\n${validation.warnings.map((reason) => `· ${reason}`).join('\n')}\n\nContinue to Screen 12 Export Center anyway?`,
+        `Report Readiness is WARNING:\n\n${validation.warnings.map((reason) => `· ${reason}`).join('\n')}\n\nContinue to Screen 11 Export Center anyway?`,
       );
       if (!proceed) return;
     }

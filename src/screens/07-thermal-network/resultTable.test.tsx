@@ -307,7 +307,7 @@ describe('what the chips may not be', () => {
  * The status column.
  *
  * `+0.8` in the same green as `+40.5` is a number the reader has to do the
- * arithmetic on, and the arithmetic is the one Screen 10 already does to decide
+ * arithmetic on, and the arithmetic is the one Screen 09 already does to decide
  * NEAR LIMIT. Both screens read `NEAR_LIMIT_MARGIN_C`, so what is pinned here
  * is that the words and the line agree with it.
  */

@@ -5,7 +5,7 @@
  * the graph starts in, so left open it covers the first two nodes. A scale you
  * have read once does not need to keep covering the picture it describes.
  *
- * Shared with Screen 10's network window: the legend must say what THAT graph
+ * Shared with Screen 09's network window: the legend must say what THAT graph
  * is coloured by, and a second hand-written copy would go stale the first time
  * a ramp changes.
  */

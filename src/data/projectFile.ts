@@ -92,7 +92,7 @@ export interface ProjectBundle {
    * Saved report templates.
    *
    * They live in a browser-global list, which is what a template library is —
-   * but that made them the one thing on Screen 11 the .tnv.json did not carry,
+   * but that made them the one thing on Screen 10 the .tnv.json did not carry,
    * so a template survived a reload and not a machine. They travel with the
    * file now and merge back into the library on import.
    */
@@ -164,7 +164,7 @@ export function collectProject(projectId: string, appBuild: string): ProjectFile
       solutions: loadSolutions(projectId),
       network_review: loadNetworkReviewState(projectId),
       analyses: loadAnalyses(projectId),
-      // Derived from the solution since Screen 09 was removed. The key
+      // Derived from the solution since Temperature Distribution was removed. The key
       // stays, empty, so a file this build writes still loads in one that
       // expects it.
       distributions: [],

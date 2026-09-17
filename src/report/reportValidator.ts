@@ -52,10 +52,10 @@ export function validateReport(input: ValidationInput): ReportValidation {
    * 11 §29 vs §35 — two different lists, deliberately.
    *
    * §35 enumerates what the validation panel WARNS about. §29 defines when
-   * READINESS is WARNING, and names exactly two causes: Screen 10's own Report
+   * READINESS is WARNING, and names exactly two causes: Screen 09's own Report
    * Readiness is WARNING, or an optional supporting section is missing. The
    * rest — missing limits, low-confidence edges, analytical-only coverage — are
-   * shown but do not demote readiness here, because Screen 10 already weighed
+   * shown but do not demote readiness here, because Screen 09 already weighed
    * them when it set its own readiness, and re-deriving that judgement would
    * both double-count it and pin every V1 report at WARNING for as long as
    * Screen 03 stays deferred (§20: analytical-only is not a failure).
@@ -79,26 +79,26 @@ export function validateReport(input: ValidationInput): ReportValidation {
     state: snapshotState,
     detail:
       evaluation.state === 'MISSING'
-        ? 'No Screen 10 snapshot exists for this scenario.'
+        ? 'No Screen 09 snapshot exists for this scenario.'
         : evaluation.state === 'STALE'
           ? 'The snapshot no longer matches the current results.'
           : evaluation.state === 'WARNING'
-            ? 'Snapshot is current; Screen 10 reported Report Readiness WARNING.'
+            ? 'Snapshot is current; Screen 09 reported Report Readiness WARNING.'
             : `Snapshot ${evaluation.snapshot_id} is current.`,
     detail_zh:
       evaluation.state === 'MISSING'
-        ? '此情境尚無 Screen 10 快照。'
+        ? '此情境尚無 Screen 09 快照。'
         : evaluation.state === 'STALE'
           ? '快照已與目前結果不一致。'
           : evaluation.state === 'WARNING'
-            ? '快照為最新；Screen 10 的 Report Readiness 為 WARNING。'
+            ? '快照為最新；Screen 09 的 Report Readiness 為 WARNING。'
             : '快照為最新。',
   });
 
   if (evaluation.state === 'MISSING') {
     block(
-      'Snapshot missing — prepare one in Screen 10.',
-      '缺少快照，請先於 Screen 10 準備。',
+      'Snapshot missing — prepare one in Screen 09.',
+      '缺少快照，請先於 Screen 09 準備。',
     );
   } else if (evaluation.state === 'STALE') {
     block(
@@ -107,8 +107,8 @@ export function validateReport(input: ValidationInput): ReportValidation {
     );
   } else if (evaluation.state === 'WARNING') {
     warn(
-      'Source Report Readiness from Screen 10 is WARNING.',
-      'Screen 10 的 Report Readiness 為 WARNING。',
+      'Source Report Readiness from Screen 09 is WARNING.',
+      'Screen 09 的 Report Readiness 為 WARNING。',
       true,
     );
   }

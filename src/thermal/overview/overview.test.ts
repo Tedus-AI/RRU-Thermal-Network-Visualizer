@@ -1,5 +1,5 @@
 /**
- * Screen 10 tests — the developer test cases in 10 §34 (A–F), plus the status
+ * Results Overview tests — the developer test cases in 10 §34 (A–F), plus the status
  * priority of §4, the component classification of §8, the readiness rules of
  * §16/§17, the completeness counts of §12 and the snapshot contract of §18/§19.
  */
@@ -862,7 +862,7 @@ describe('Data completeness (10 §12)', () => {
 // --- distribution summary (10 §10) -----------------------------------------
 
 describe('Distribution summary (10 §10)', () => {
-  it('reads min / average / P95 / max and the row count from the Screen 09 dataset', () => {
+  it('reads min / average / P95 / max and the row count from the temperature dataset', () => {
     const overview = overviewOf({ limit: 150 });
     const distribution = overview.distribution;
     expect(distribution).not.toBeNull();

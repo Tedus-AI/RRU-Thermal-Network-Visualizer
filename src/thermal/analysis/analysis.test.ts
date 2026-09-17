@@ -724,7 +724,7 @@ describe('Improvements are measured against the network being modified', () => {
  *
  * A fixed top three is wrong in both directions: it hides a fourth part over
  * its limit, and on a healthy design it promotes two parts with 30 °C of room
- * into a list that reads like a problem. The line is the one Screen 10 judges
+ * into a list that reads like a problem. The line is the one Screen 09 judges
  * by, so the two screens cannot disagree about what is worth listing.
  */
 describe('partsNeedingAttention', () => {

@@ -1,5 +1,5 @@
 /**
- * What survived Screen 09.
+ * What survived Temperature Distribution.
  *
  * The screen is gone — its histogram binned NODES, which is a count of how
  * finely the network was drawn rather than a physical population — and with it
@@ -7,7 +7,7 @@
  * described its five tabs.
  *
  * These three did not, because the code under them did not: the binning and the
- * statistics still feed Screen 10's aggregator and the PNG export, and the row
+ * statistics still feed Screen 09's aggregator and the PNG export, and the row
  * builder feeds the overview layer, the report and the temperature CSV. They
  * keep their original cases, which were good ones.
  */

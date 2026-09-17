@@ -1,9 +1,15 @@
 /**
  * Screen registry — 00 §0 and §49.
  *
- * The sidebar is the same on every screen (00 §49). Screens 02–12 are declared
- * here from the start so navigation, routing and the "recommended next step"
- * logic are real from Phase 0 onward; their views land as they are specified.
+ * The sidebar is the same on every screen (00 §49). Every screen is declared
+ * here so navigation, routing and the "recommended next step" logic are real
+ * from Phase 0 onward.
+ *
+ * `code` is the screen's POSITION in the sidebar, and the numbers closed up
+ * when Temperature Distribution was removed: Results Overview, Report Preview
+ * and Export Center moved from 10/11/12 to 09/10/11, so the list reads 01–11
+ * with no gap. The specification documents keep their original numbers, which
+ * is why a `12 §32` citation in this codebase still says 12.
  */
 
 import {
@@ -124,7 +130,7 @@ export const SCREENS: ScreenDef[] = [
     implemented: true,
   },
   {
-    code: '10',
+    code: '09',
     path: 'results',
     label: '結果總覽',
     labelEn: 'Results Overview',
@@ -133,7 +139,7 @@ export const SCREENS: ScreenDef[] = [
     implemented: true,
   },
   {
-    code: '11',
+    code: '10',
     path: 'report',
     label: '報告預覽',
     labelEn: 'Report Preview',
@@ -142,7 +148,7 @@ export const SCREENS: ScreenDef[] = [
     implemented: true,
   },
   {
-    code: '12',
+    code: '11',
     path: 'export',
     label: '匯出中心',
     labelEn: 'Export Center',

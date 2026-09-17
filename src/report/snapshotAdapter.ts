@@ -1,7 +1,7 @@
 /**
  * Snapshot adapter — 11 §3, §12, §28, §37.
  *
- * The one place Screen 11 touches Screen 10's snapshot. It answers two
+ * The one place Screen 10 touches Screen 09's snapshot. It answers two
  * questions and nothing else:
  *
  *   1. is the snapshot CURRENT / WARNING / STALE / MISSING (§3);
@@ -28,7 +28,7 @@ export interface SnapshotEvaluation extends SnapshotSummary {
 }
 
 /**
- * 11 §3 — STALE is decided by the same signature Screen 10 freezes, so the two
+ * 11 §3 — STALE is decided by the same signature Results Overview freezes, so the two
  * screens cannot disagree about whether the world moved. A snapshot that is
  * current but whose source Report Readiness was WARNING reports WARNING, which
  * is a statement about the analyses behind it, not about the freeze.

@@ -137,7 +137,7 @@ interface ExportStoreState {
  * Write the Export Center's settings back as they change.
  *
  * On change rather than on leave: there is no reliable "leaving the screen"
- * moment in a single-page app, and the same rule is what makes Screen 11's
+ * moment in a single-page app, and the same rule is what makes Screen 10's
  * layout survive a navigation.
  */
 function rememberSettings(

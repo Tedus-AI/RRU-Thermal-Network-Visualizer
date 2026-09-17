@@ -1,7 +1,7 @@
 /**
  * The sentence that replaced a screen.
  *
- * Screen 09 was five tabs of histograms and statistics over a population of
+ * Temperature Distribution was five tabs of histograms and statistics over a population of
  * NODES — a count that says how finely the network was drawn, not how hot the
  * machine is. What it never said was the one thing the specification is written
  * in: how much hotter the air can get. That is this, and it is small enough to

@@ -5,7 +5,7 @@
  * the component records — the only place the three meet. Nothing here solves
  * and nothing writes back.
  *
- * It was written for Screen 09, which binned these rows into a histogram and
+ * It was written for Temperature Distribution, which binned these rows into a histogram and
  * took statistics over them. That screen is gone: a node is a modelling choice
  * rather than a member of a physical population — one part in the STARKCORE
  * model contributes twenty nodes and another three — so an average or a P95
@@ -47,7 +47,7 @@ export const NEAR_LIMIT_MARGIN_C = 5;
 /**
  * Default "runs hot" threshold for the Nodes Above Warning count (09 §5).
  *
- * Screen 09 lets the engineer move it; Screen 10 has no controls at all
+ * Temperature Distribution let the engineer move it; Results Overview has no controls at all
  * (10 §24) and reads this default. Both take it from here so the two screens
  * cannot quietly disagree about which nodes are above warning.
  */

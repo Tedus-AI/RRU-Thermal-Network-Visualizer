@@ -882,7 +882,7 @@ export function ThermalNetworkView() {
         />
       )}
 
-      {/* The same window Screen 10's network opens — see
+      {/* The same window Screen 09's network opens — see
           `ResultInspectorWindow`. */}
       <ResultInspectorWindow
         storageKey="tnv.07.inspector"

@@ -1,5 +1,5 @@
 /**
- * Presentation helpers for Screen 10.
+ * Presentation helpers for Screen 09.
  *
  * Formatting, tone and section numbering only. Nothing here computes a thermal
  * result — every number arrives from `thermal/overview`, which itself only reads
