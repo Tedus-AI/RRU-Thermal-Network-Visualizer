@@ -15,15 +15,20 @@
  *
  * On the mockup: 12.png is the product's generic master mockup rather than a
  * Screen 12 delivery — it shows report LAYOUT controls (paper size, orientation,
- * cover page, header/footer) which §25 and AC-12-38 explicitly forbid here, and
- * it omits eight blocks the Markdown requires (package presets, per-artifact
- * readiness reasons, export queue, progress and cancel, validation, source
- * readiness, package warning summary, session record). So its SHAPE is followed
- * — numbered sections, the artifact table with Format/Description/Prerequisite/
- * Status/Select, Select All / Clear All, the filename preview list, the export
- * actions block and the history table — and it is filled with what the
+ * cover page, header/footer) which §25 and AC-12-38 explicitly forbid here. So
+ * its SHAPE is followed — numbered sections, the artifact table with
+ * Format/Description/Prerequisite/Status/Select, Select All / Clear All, the
+ * export actions block and the history table — and it is filled with what the
  * specification actually requires. The forbidden layout controls stay in Screen
  * 11 where they belong, and the PDF row states that it uses the Screen 11 layout.
+ *
+ * What this screen has SHED, round by round, is every surface that said again
+ * what another one already said: the package presets, the source-readiness
+ * table, the standing validation panel and the filename preview list. A
+ * filename is decided by the naming settings a few centimetres above it and
+ * printed in the queue the moment it exists; a blocking reason belongs on the
+ * row it blocks and in the toast that refuses the run. Three places for one
+ * fact is how the three drift apart.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -70,9 +75,7 @@ import {
 
 import {
   ARTIFACT_DEFINITIONS,
-  artifactDefinition,
   isExportable,
-  type ArtifactType,
   type ExportHistoryEntry,
 } from '@/export/exportTypes';
 import {
@@ -85,7 +88,7 @@ import {
 import { createExportSession } from '@/export/exportSession';
 import { runExport } from '@/export/exportRunner';
 import { buildPackage } from '@/export/packageBuilder';
-import { filenameFor, defaultBaseFilename, uniqueFilename } from '@/export/filenameBuilder';
+import { filenameFor, defaultBaseFilename } from '@/export/filenameBuilder';
 import { deliver, pickDirectory, supportsFolderPicker, triggerDownload } from '@/export/download';
 import { sha256Hex } from '@/export/checksum';
 import type { ReportRenderInput } from '@/export/reportRenderer';
@@ -93,17 +96,13 @@ import { resultRevisionMatches } from '@/domain/revision';
 
 import { ArtifactSelectionPanel } from './ArtifactSelectionPanel';
 import { SnapshotMatrixPanel } from './SnapshotMatrixPanel';
-import { ExportConfigurationPanel, FilenamePreview } from './ExportConfigurationPanel';
+import { ExportConfigurationPanel } from './ExportConfigurationPanel';
 import {
   ExportProgress,
   ExportQueue,
   ExportResultPanel,
 } from './ExportQueue';
-import {
-  ExportHistoryPanel,
-  ExportValidationPanel,
-  LocalExportNotice,
-} from './ExportValidationPanel';
+import { ExportHistoryPanel, LocalExportNotice } from './ExportHistoryPanel';
 import { ExportKpiBar } from './ExportKpiBar';
 import { T12 } from './tooltips';
 
@@ -491,33 +490,6 @@ export function ExportCenterView() {
     useExportStore.getState().setSelected(selectableTypes);
   }, [activeScenarioId, selectableTypes]);
 
-  // --- filenames ------------------------------------------------------------
-  const filenames = useMemo(() => {
-    if (!projectId || !scenario) return [];
-    const now = new Date();
-    const taken = new Set<string>();
-    const entries: Array<{ type: ArtifactType; label: string; filename: string }> = [];
-
-    for (const type of selected) {
-      const definition = artifactDefinition(type);
-      for (const slug of [undefined] as Array<string | undefined>) {
-        const filename = uniqueFilename(
-          filenameFor(type, {
-            config,
-            project_id: projectId,
-            scenario_name: scenario.name,
-            now,
-            slug_override: slug,
-          }),
-          taken,
-        );
-        taken.add(filename);
-        entries.push({ type, label: definition.label, filename });
-      }
-    }
-    return entries;
-  }, [selected, config, projectId, scenario]);
-
   const go = (path: string) => navigate(projectPath(projectId ?? '', path));
 
   const downloadAgain = useCallback((entry: QueueEntry | ExportHistoryEntry) => {
@@ -898,7 +870,12 @@ export function ExportCenterView() {
                       ? `Validated with ${validation.warnings.length} warning(s) / 驗證通過，有 ${validation.warnings.length} 項警告`
                       : 'Validated — the selection is ready to export / 驗證通過，可以匯出',
                   )
-                : toast.error(`${validation.blocking.length} blocking issue(s). See the Validation panel.`)
+                : // The reasons themselves, not a pointer to a panel: the
+                  // artifact table already carries each row's own status, and
+                  // what blocks the run is the one thing worth reading here.
+                  toast.error(
+                    `Cannot export: ${validation.blocking.join(' · ')} / 無法匯出：${validation.blocking_zh.join(' · ')}`,
+                  )
             }
           >
             Validate Selected
@@ -1005,47 +982,29 @@ export function ExportCenterView() {
               />
             </Panel>
 
-            <div className="flex flex-col gap-3 2xl:flex-row">
-              <Panel
-                index={3}
-                title="Export Settings"
-                zh="匯出設定"
-                className="min-w-0 flex-1"
-                explanation={T12.decimalPrecision}
-              >
-                <ExportConfigurationPanel
-                  config={config}
-                  disabled={exporting}
-                  folderSupported={supportsFolderPicker()}
-                  folderName={directoryName}
-                  folderGranted={Boolean(directory)}
-                  onPickFolder={async () => {
-                    const handle = await pickDirectory();
-                    useExportStore.getState().setDirectory(handle);
-                    if (!handle) toast.warning('No folder chosen — Browser Download will be used.');
-                  }}
-                  onChange={(patch) => useExportStore.getState().setConfig(patch)}
-                />
-              </Panel>
-
-              <Panel
-                index={4}
-                title="File Naming"
-                zh="檔名設定"
-                className="min-w-0 flex-1"
-                explanation={T12.filenamePreview}
-                actions={
-                  <span className="font-mono text-[10px] text-ink-400">
-                    {'<Project>_<Scenario>_<Artifact>_<YYYYMMDD_HHmm>'}
-                  </span>
-                }
-              >
-                <FilenamePreview entries={filenames} />
-              </Panel>
-            </div>
+            <Panel
+              index={3}
+              title="Export Settings"
+              zh="匯出設定"
+              explanation={T12.decimalPrecision}
+            >
+              <ExportConfigurationPanel
+                config={config}
+                disabled={exporting}
+                folderSupported={supportsFolderPicker()}
+                folderName={directoryName}
+                folderGranted={Boolean(directory)}
+                onPickFolder={async () => {
+                  const handle = await pickDirectory();
+                  useExportStore.getState().setDirectory(handle);
+                  if (!handle) toast.warning('No folder chosen — Browser Download will be used.');
+                }}
+                onChange={(patch) => useExportStore.getState().setConfig(patch)}
+              />
+            </Panel>
 
             <Panel
-              index={5}
+              index={4}
               title="Export Queue"
               zh="匯出佇列"
               explanation={T12.exportQueue}
@@ -1064,25 +1023,8 @@ export function ExportCenterView() {
             </Panel>
           </div>
 
-          {/* --- RIGHT: validation and history ---------------------------- */}
+          {/* --- RIGHT: the session's own record --------------------------- */}
           <div className="flex w-full shrink-0 flex-col gap-3 xl:w-[21rem]">
-
-            <Panel
-              title="Validation"
-              zh="驗證狀態"
-              actions={
-                validation.blocking.length > 0 ? (
-                  <Badge tone="danger">{validation.blocking.length} blocking</Badge>
-                ) : validation.warnings.length > 0 ? (
-                  <Badge tone="warn">{validation.warnings.length} warning</Badge>
-                ) : (
-                  <Badge tone="ok">CLEAR</Badge>
-                )
-              }
-            >
-              <ExportValidationPanel validation={validation} />
-            </Panel>
-
             <Panel
               title="Export History"
               zh="匯出紀錄"

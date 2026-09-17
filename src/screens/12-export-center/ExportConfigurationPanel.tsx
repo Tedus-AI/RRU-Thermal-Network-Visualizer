@@ -20,7 +20,6 @@ import {
   DESTINATIONS,
   DESTINATION_LABELS,
   PNG_SCALES,
-  type ArtifactType,
   type Destination,
   type ExportConfiguration,
   type PngScale,
@@ -271,34 +270,5 @@ export function ExportConfigurationPanel({
         <span className="block">覆寫檔名只影響輸出檔案，不會修改專案或情境主檔。</span>
       </p>
     </div>
-  );
-}
-
-/** 12 §19 — the filename preview list, as `12.png` shows it. */
-export function FilenamePreview({
-  entries,
-}: {
-  entries: Array<{ type: ArtifactType; label: string; filename: string }>;
-}) {
-  if (entries.length === 0) {
-    return (
-      <p className="text-[11px] text-ink-400">
-        Select an artifact to see its filename.
-        <span className="block">選取匯出項目後會顯示檔名。</span>
-      </p>
-    );
-  }
-
-  return (
-    <ul className="flex flex-col gap-1" data-testid="filename-preview">
-      {entries.map((entry) => (
-        <li key={`${entry.type}-${entry.filename}`} className="min-w-0">
-          <span className="block truncate font-mono text-[10.5px] text-ink-900" title={entry.filename}>
-            {entry.filename}
-          </span>
-          <span className="block truncate text-[10px] text-ink-400">{entry.label}</span>
-        </li>
-      ))}
-    </ul>
   );
 }

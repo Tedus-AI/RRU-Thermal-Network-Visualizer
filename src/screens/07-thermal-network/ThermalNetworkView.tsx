@@ -223,7 +223,11 @@ export function ThermalNetworkView() {
   const [hiddenComponentIds, setHiddenComponentIds] = useState<ReadonlySet<string>>(
     () => new Set<string>(),
   );
-  const explorer = useGraphExplorer(network, components, hiddenComponentIds);
+  // Read here rather than below the explorer, which needs it: a focus follows
+  // the solved heat directions, so it stops at the node feeding the part
+  // instead of running on through the heatsink it never uses.
+  const solution = solutionKey ? (solutions[solutionKey] ?? null) : null;
+  const explorer = useGraphExplorer(network, components, hiddenComponentIds, solution);
   const toggleComponentVisible = useCallback((componentId: string) => {
     setHiddenComponentIds((current) => {
       const next = new Set(current);
@@ -239,7 +243,6 @@ export function ThermalNetworkView() {
   const canvasRef = useRef<SolvedGraphHandle | null>(null);
 
   const boundarySet = boundaryKey ? (boundarySets[boundaryKey] ?? null) : null;
-  const solution = solutionKey ? (solutions[solutionKey] ?? null) : null;
   const scenario = scenarios.find((entry) => entry.id === activeScenarioId) ?? null;
 
   // --- load ---------------------------------------------------------------

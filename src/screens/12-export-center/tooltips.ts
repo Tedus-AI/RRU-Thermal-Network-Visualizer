@@ -29,7 +29,8 @@ export const T12 = {
   // --- supporting explanations for the other compact fields on this screen ---
   destination:
     '匯出目的地；V1 預設為瀏覽器下載，僅在瀏覽器支援 File System Access API 時才提供選擇資料夾。',
-  filenamePreview: '依目前命名設定推算的檔名；覆寫檔名只影響輸出檔案，不會修改專案或情境主檔。',
+  filenamePreview:
+    '輸出檔名的主體；其餘部分依下方的命名設定組合。覆寫檔名只影響輸出檔案，不會修改專案或情境主檔。',
   jsonFormat: 'JSON 縮排格式；Pretty 便於人工檢視，Compact 檔案較小，內容完全相同。',
   pngScale: 'PNG 匯出解析度倍率；2x 適合貼入報告或簡報，1x 檔案較小。',
   zipCompression: '是否壓縮 ZIP 內容；關閉時封裝較快但檔案較大，內容完全相同。',
