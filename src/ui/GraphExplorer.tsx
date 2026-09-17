@@ -1,6 +1,7 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { flushSync } from 'react-dom';
 import type { ThermalNetwork } from '@/thermal/types';
+import type { ThermalSolution } from '@/thermal/solver/solverTypes';
 import { focusHiddenNodes, focusLabels, graphPaths } from './graphExplorerModel';
 import { GraphPathPreview, type GraphPreviewOptions } from './GraphPathPreview';
 
@@ -11,6 +12,13 @@ export function useGraphExplorer(
   network: ThermalNetwork | null | undefined,
   components: readonly { id: string; name: string }[] = [],
   hiddenIds: ReadonlySet<string> = EMPTY,
+  /**
+   * The solve, where the screen has one. It is what lets a focus stop at the
+   * node feeding the part rather than running on through the heatsink; see
+   * `focusHiddenNodes`. Screens that have no solve pass none and the focus
+   * stays purely topological.
+   */
+  solution: ThermalSolution | null = null,
 ) {
   const [view, setView] = useState<View>('full');
   const [focusKey, setFocusKey] = useState('');
@@ -21,8 +29,8 @@ export function useGraphExplorer(
       ? paths.find((path) => path.key === focusKey && !hiddenIds.has(path.componentId))
       : undefined;
   const hiddenNodes = useMemo(
-    () => (network && focused ? focusHiddenNodes(network, focused) : EMPTY),
-    [network, focused],
+    () => (network && focused ? focusHiddenNodes(network, focused, solution) : EMPTY),
+    [network, focused, solution],
   );
   const labels = useMemo(() => {
     const name = components.find((c) => c.id === focused?.componentId)?.name;

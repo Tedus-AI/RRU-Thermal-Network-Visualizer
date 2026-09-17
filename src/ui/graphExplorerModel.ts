@@ -1,4 +1,6 @@
 import type { ThermalNetwork, ThermalNode } from '@/thermal/types';
+import type { ThermalSolution } from '@/thermal/solver/solverTypes';
+import { heatPathReach } from '@/thermal/analysis/heatPathReach';
 
 export const graphOwner = (node: ThermalNode) => node.origin?.component_id ?? node.component_ref;
 export const graphInstance = (node: ThermalNode) =>
@@ -54,8 +56,24 @@ export function graphPaths(network: ThermalNetwork | null | undefined): GraphPat
   });
 }
 
-/** Traverse shared structure, but never leak through a common sink into another device. */
-export function focusHiddenNodes(network: ThermalNetwork, path: GraphPath): ReadonlySet<string> {
+/**
+ * Traverse shared structure, but never leak through a common sink into another
+ * device -- and, given a solve, never past a node that is FEEDING this one.
+ *
+ * The topological walk below is what keeps one device's focus from wandering
+ * into the next one's chain. It is not enough on its own: the cavity filter's
+ * contact is fed BY the heatsink base, so the base, the fin surface and ambient
+ * are all shared structure reachable from it, and the focus drew a tail that
+ * says the filter is cooled by the fins while every arrow on it points the
+ * other way. `heatPathReach` follows the solved directions instead and stops
+ * one hop past anything flowing inward, which is the same rule the report's
+ * group figures use. Without a solution nothing is trimmed.
+ */
+export function focusHiddenNodes(
+  network: ThermalNetwork,
+  path: GraphPath,
+  solution?: ThermalSolution | null,
+): ReadonlySet<string> {
   const nodes = new Map(Object.values(network.nodes).map((node) => [node.id, node]));
   const adjacent = new Map<string, string[]>();
   for (const edge of Object.values(network.edges)) {
@@ -80,9 +98,23 @@ export function focusHiddenNodes(network: ThermalNetwork, path: GraphPath): Read
       queue.push(id);
     }
   }
-  return new Set(
+  const hidden = new Set(
     Object.values(network.nodes)
       .filter((node) => !visible.has(node.id))
       .map((node) => node.id),
   );
+
+  // The heat walk runs on the subgraph the focus is already showing, so it
+  // cannot route out through a device this view has put away and back in.
+  if (!solution) return hidden;
+  const onPath = heatPathReach({
+    network,
+    solution,
+    own: new Set(path.nodeIds),
+    excluded: hidden,
+  });
+  for (const id of visible) {
+    if (!onPath.has(id)) hidden.add(id);
+  }
+  return hidden;
 }
