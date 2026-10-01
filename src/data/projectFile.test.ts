@@ -4,6 +4,7 @@ import { seedDemoProject } from '@/mock/seed';
 import { DEMO_PROJECT_ID } from '@/mock/demoProject';
 import {
   loadComponents,
+  loadExportPreferences,
   loadProject,
   loadScenarios,
   loadSolutions,
@@ -181,6 +182,31 @@ describe('applyProjectFile', () => {
 
     expect(outcome.written.some((entry) => entry.startsWith('components'))).toBe(true);
     expect(outcome.written.some((entry) => entry.startsWith('scenarios'))).toBe(true);
+  });
+});
+
+describe('export preferences carried by a file', () => {
+  it('stores a well-formed block, and leaves out one that is not', async () => {
+    await seedDemoProject();
+    const file = collectProject(DEMO_PROJECT_ID, 'test-build')!;
+
+    file.data.export_preferences = {
+      config: { base_filename: 'From_File' },
+      selected: ['pdf_report', 7 as unknown as string],
+      output_folder_name: 'Reports',
+    };
+    applyProjectFile(file, 'overwrite');
+    expect(loadExportPreferences(DEMO_PROJECT_ID)).toEqual({
+      config: { base_filename: 'From_File' },
+      selected: ['pdf_report'],
+      output_folder_name: 'Reports',
+      snapshot_selection: null,
+    });
+
+    localStorage.clear();
+    file.data.export_preferences = { config: [] } as unknown as typeof file.data.export_preferences;
+    applyProjectFile(file, 'overwrite');
+    expect(loadExportPreferences(DEMO_PROJECT_ID)).toBeNull();
   });
 });
 

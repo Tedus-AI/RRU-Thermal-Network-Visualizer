@@ -68,9 +68,11 @@ import { buildResultsOverview } from '@/thermal/overview/overviewAggregator';
 import { evaluateSnapshot, withTranslatedActions } from '@/report/snapshotAdapter';
 import { reportFigureSource } from '@/report/reportFigureSource';
 import {
+  mergeVisibleSelection,
   reconcileSnapshotSelection,
   snapshotCount,
   snapshotSubjects,
+  type SnapshotSelection,
 } from '@/export/snapshotSelection';
 
 import {
@@ -408,6 +410,24 @@ export function ExportCenterView() {
     [storedSnapshotSelection, subjects],
   );
 
+  // The rows above are the full list only when they came from a usable solve.
+  // Without one there are no figures and the matrix would show the
+  // whole-machine row alone. Today the screen does not render the matrix in
+  // that state -- nothing is exportable without a current solve -- but the rows
+  // and that gate are worked out separately, so the save does not lean on the
+  // gate: an edit never stores the boards and parts it cannot see as unticked.
+  const subjectsComplete =
+    figureSource.context?.solution != null && figureSource.context.solution.status !== 'FAILED';
+  const editSnapshotSelection = useCallback(
+    (edited: SnapshotSelection) => {
+      const store = useExportStore.getState();
+      store.setSnapshotSelection(
+        mergeVisibleSelection(store.snapshotSelection, edited, subjects, subjectsComplete),
+      );
+    },
+    [subjects, subjectsComplete],
+  );
+
   const readinessInput = useMemo<ReadinessInput>(
     () => ({
       network,
@@ -470,25 +490,28 @@ export function ExportCenterView() {
     [readiness],
   );
 
+  // Keyed by project as well as scenario: two projects that both open on
+  // SCN_001 are still two first visits.
   const seeded = useRef<string | null>(null);
   useEffect(() => {
-    if (!activeScenarioId || selectableTypes.length === 0) return;
-    if (seeded.current === activeScenarioId) return;
+    if (!projectId || !activeScenarioId || selectableTypes.length === 0) return;
+    const seedKey = `${projectId}:${activeScenarioId}`;
+    if (seeded.current === seedKey) return;
     // A remembered selection is a decision; the preset is only a starting
     // point. This effect re-runs on every remount, so without this guard
     // coming back from another screen re-seeded it over whatever the engineer
     // had ticked -- which is what made the settings look like they were never
     // saved at all.
     if (useExportStore.getState().preferencesRestored) {
-      seeded.current = activeScenarioId;
+      seeded.current = seedKey;
       return;
     }
-    seeded.current = activeScenarioId;
+    seeded.current = seedKey;
     // A first visit starts with everything that currently passes its own
     // prerequisites ticked, which is what the Engineering Package preset used
     // to mean before the four rows made a dropdown over them redundant.
     useExportStore.getState().setSelected(selectableTypes);
-  }, [activeScenarioId, selectableTypes]);
+  }, [projectId, activeScenarioId, selectableTypes]);
 
   const go = (path: string) => navigate(projectPath(projectId ?? '', path));
 
@@ -541,7 +564,7 @@ export function ExportCenterView() {
   ]);
 
   const execute = useCallback(
-    async (mode: 'selected' | 'package') => {
+    async (mode: 'selected' | 'package', track: { sessionId: string | null }) => {
       if (!projectId || !scenario) return;
       const store = useExportStore.getState();
       const now = new Date();
@@ -571,6 +594,7 @@ export function ExportCenterView() {
         now: now.toISOString(),
       });
 
+      track.sessionId = exportSession.id;
       store.beginSession(
         exportSession,
         requests.map((request) => ({
@@ -658,6 +682,7 @@ export function ExportCenterView() {
                 : 'COMPLETE';
 
         store.finishSession({
+          session_id: exportSession.id,
           project_id: projectId,
           results: outcome.results,
           queue: nextQueue,
@@ -734,6 +759,7 @@ export function ExportCenterView() {
 
       const totalSize = nextQueue.reduce((sum, entry) => sum + (entry.size_bytes ?? 0), 0);
       store.finishSession({
+        session_id: exportSession.id,
         project_id: projectId,
         results: outcome.results,
         queue: nextQueue,
@@ -787,12 +813,42 @@ export function ExportCenterView() {
       reportRender,
       directory,
       validation.warnings,
+      // Read into the run's sources. Missing here, a tick changed in the matrix
+      // reached the export only because something else happened to change too.
+      subjects,
+      snapshotSelection,
     ],
+  );
+
+  /**
+   * Runs an export and makes sure it ends.
+   *
+   * The exporter turns a failed artifact into a FAILED row of its own, but
+   * what it does not reach -- the filename builder, the package, a delivery --
+   * could throw out of `execute`. The promise was discarded with `void`, so
+   * the run never finished: no message, and the screen stayed on "exporting"
+   * with every button disabled until the page was reloaded.
+   */
+  const run = useCallback(
+    (mode: 'selected' | 'package') => {
+      const track: { sessionId: string | null } = { sessionId: null };
+      execute(mode, track).catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error('export failed', error);
+        if (track.sessionId) useExportStore.getState().abortSession(track.sessionId, message);
+        toast.error(`Export failed: ${message} / 匯出失敗`);
+      });
+    },
+    [execute],
   );
 
   const start = (mode: 'selected' | 'package') => {
     if (validation.blocking.length > 0) {
-      toast.error('Export is blocked. Resolve the items in the Validation panel first.');
+      // Named, as Validate Selected names them: the Validation panel this used
+      // to point at was removed, and a pointer to nothing explains nothing.
+      toast.error(
+        `Cannot export: ${validation.blocking.join(' · ')} / 無法匯出：${validation.blocking_zh.join(' · ')}`,
+      );
       return;
     }
     // 12 §42, §46 — a WARNING in the selection needs an explicit confirmation.
@@ -801,7 +857,7 @@ export function ExportCenterView() {
       setConfirmOpen(true);
       return;
     }
-    void execute(mode);
+    run(mode);
   };
 
   // --- gates ----------------------------------------------------------------
@@ -981,7 +1037,7 @@ export function ExportCenterView() {
               subjects={subjects}
               selection={snapshotSelection}
               disabled={exporting}
-              onChange={(next) => useExportStore.getState().setSnapshotSelection(next)}
+              onChange={editSnapshotSelection}
             />
           </Panel>
 
@@ -1060,7 +1116,7 @@ export function ExportCenterView() {
               icon={<CheckCheck className="size-4" />}
               onClick={() => {
                 setConfirmOpen(false);
-                void execute(pendingMode);
+                run(pendingMode);
               }}
             >
               Export Anyway / 仍要匯出

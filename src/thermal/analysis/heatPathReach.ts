@@ -21,7 +21,9 @@
  * beyond a node that is FEEDING this subject is some other subject's story.
  *
  * Without a solution there are no directions to follow, so nothing is trimmed
- * and the caller's own filtering stands.
+ * and the caller's own filtering stands. A FAILED solve counts as none: it has
+ * no edge results, and reading that as "no edge carries heat" cut every chain
+ * at its first shared node.
  */
 
 import type { ThermalNetwork } from '@/thermal/types';
@@ -43,7 +45,11 @@ export function heatPathReach(input: {
   const isExcluded = (id: string) => Boolean(excluded?.has(id));
 
   const keep = new Set(own);
-  if (!solution) {
+  const usable =
+    solution != null &&
+    solution.status !== 'FAILED' &&
+    Object.keys(solution.edge_results ?? {}).length > 0;
+  if (!usable) {
     for (const node of Object.values(network.nodes)) {
       if (!node.disabled && !isExcluded(node.id)) keep.add(node.id);
     }
@@ -62,11 +68,17 @@ export function heatPathReach(input: {
       if (edge.from !== current && edge.to !== current) continue;
       const other = edge.from === current ? edge.to : edge.from;
       const result = solution.edge_results[edge.id];
-      // No result, or none flowing: the node is adjacent structure worth
-      // showing, but there is no heat to follow past it.
+      // No heat flowing: the node is adjacent structure worth showing, but
+      // there is nothing to follow past it. No RESULT is different. A current
+      // solve has one for every enabled edge, so a missing one is an edge added
+      // since the solve ran, and a direction nobody knows yet is no reason to
+      // cut the chain short there -- the walk goes on through it, as it would
+      // with no solve at all, until a re-solve says which way it runs.
       const reversed = result?.actual_direction === 'reverse';
-      const upstreamEnd = result ? (reversed ? edge.to : edge.from) : null;
-      const flowsOutward = upstreamEnd === current && result?.actual_direction !== 'zero';
+      const upstreamEnd = reversed ? edge.to : edge.from;
+      const flowsOutward = result
+        ? upstreamEnd === current && result.actual_direction !== 'zero'
+        : true;
 
       keep.add(other);
       if (flowsOutward && !walked.has(other)) {

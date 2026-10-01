@@ -784,11 +784,42 @@ export interface ExportPreferences {
   snapshot_selection?: Record<string, unknown> | null;
 }
 
+/**
+ * The preferences' shape, checked field by field.
+ *
+ * They arrive from two places a person can edit -- browser storage and an
+ * imported .tnv.json -- and were trusted as long as `config` was truthy. A
+ * `selected` that was not an array then reached the screen's `.includes`, and
+ * an id this build does not offer reached the exporter, which throws on it.
+ * What each field MEANS (which artifact ids exist, which scales) is the export
+ * store's business; this only guarantees each field is the kind of thing its
+ * type says, so nothing downstream has to guess.
+ */
+export function normalizeExportPreferences(raw: unknown): ExportPreferences | null {
+  if (raw == null || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const entry = raw as Record<string, unknown>;
+  const config = entry.config;
+  if (config == null || typeof config !== 'object' || Array.isArray(config)) return null;
+  const snapshot = entry.snapshot_selection;
+  return {
+    config: config as Record<string, unknown>,
+    selected: Array.isArray(entry.selected)
+      ? entry.selected.filter((value): value is string => typeof value === 'string')
+      : [],
+    output_folder_name:
+      typeof entry.output_folder_name === 'string' && entry.output_folder_name
+        ? entry.output_folder_name
+        : null,
+    snapshot_selection:
+      snapshot != null && typeof snapshot === 'object' && !Array.isArray(snapshot)
+        ? (snapshot as Record<string, unknown>)
+        : null,
+  };
+}
+
 export function loadExportPreferences(projectId: string): ExportPreferences | null {
   const all = readCollection(EXPORT_PREFS_KEY);
-  const entry = all[projectId] as unknown as ExportPreferences | undefined;
-  if (!entry || typeof entry !== 'object' || !entry.config) return null;
-  return entry;
+  return normalizeExportPreferences(all[projectId]);
 }
 
 export function saveExportPreferences(projectId: string, prefs: ExportPreferences): void {
