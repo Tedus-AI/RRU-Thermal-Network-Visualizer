@@ -190,6 +190,14 @@ export function paginate(
         // Nothing fits in what is left of a page already carrying something
         // else. Start a fresh one and try again rather than emitting an empty
         // range — `fresh` is true next time round, so this cannot spin.
+        //
+        // When not even the first item fitted, the page this section joined
+        // carries none of it, so it comes off that page's list. Left there with
+        // no slice, the page drew the WHOLE section -- clipped at its foot --
+        // and the next page drew it again from the first row.
+        if (from === 0) {
+          current.section_ids = current.section_ids.filter((id) => id !== section.id);
+        }
         current = open(section, from > 0);
         continue;
       }

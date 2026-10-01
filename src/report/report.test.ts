@@ -524,6 +524,27 @@ describe('Pagination (11 §10, §40)', () => {
     expect(first?.slices?.critical?.to).toBe(12);
   });
 
+  it('never leaves a section on a page that carries none of it', () => {
+    // 'overall' leaves 0.08 of a page; 'critical' joins it, but its heading
+    // (0.07) plus its first row (0.04) does not fit, so the rows start overleaf.
+    // The page it joined used to keep it in its list with no slice, and a page
+    // that lists a section with no slice draws ALL of it: the whole table,
+    // clipped at the foot, and then the same table again from row 1 overleaf.
+    const measured = {
+      project: { base: 0.42, items: [] },
+      overall: { base: 0.5, items: [] },
+      critical: { base: 0.07, items: Array.from({ length: 12 }, () => 0.04) },
+    };
+    const pages = paginate(orderedSections(config()), { ...ROWS, critical: 12 }, measured);
+    const carrying = pages.filter((page) => page.section_ids.includes('critical'));
+    for (const page of carrying) {
+      expect(page.slices?.critical, `page ${page.page_number}`).toBeDefined();
+    }
+    expect(carrying[0]?.slices?.critical?.from).toBe(0);
+    // Not marked "continued": nothing of it came before.
+    expect(carrying[0]?.title).not.toMatch(/cont\./);
+  });
+
   it('moves a NON-splittable section whole rather than clipping it', () => {
     // 'overall' is one block of status -- it has no items to carry overleaf,
     // so it may not start in a gap it would overflow.
@@ -882,6 +903,13 @@ describe('Language modes', () => {
     );
     expect(reportLabel('bilingual', 'Overall Thermal Status', '整體熱狀態')).toBe(
       'Overall Thermal Status / 整體熱狀態',
+    );
+  });
+
+  it('prints a name once in bilingual mode', () => {
+    // A part's title is its name in both languages; "X / X" said nothing more.
+    expect(reportLabel('bilingual', 'XCZU67DR Junction', 'XCZU67DR Junction')).toBe(
+      'XCZU67DR Junction',
     );
   });
 });

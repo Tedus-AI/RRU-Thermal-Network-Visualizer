@@ -86,3 +86,28 @@ export function readMeasuredHeights(
 
   return measured;
 }
+
+/**
+ * Drop the sections whose pictures had not finished loading when measured.
+ *
+ * A figure lands asynchronously, so for a moment after the preview opens the
+ * Thermal Network sections measure as placeholders, or as images the browser
+ * has not decoded yet. The preview re-measures as each lands, but Prepare for
+ * Export freezes whatever it has at the moment of the click -- clicked early, a
+ * section was recorded most of a tenth of a page short, and the export, which
+ * prefers those numbers, broke its pages as if the figures were that small.
+ * A section left out here is measured by the export itself, after it has drawn
+ * every figure.
+ */
+export function settledHeights(root: HTMLElement, heights: MeasuredHeights): MeasuredHeights {
+  const settled: MeasuredHeights = { ...heights };
+  for (const host of root.querySelectorAll<HTMLElement>('[data-measure-section]')) {
+    const id = host.getAttribute('data-measure-section') as SectionId | null;
+    if (!id) continue;
+    const pending =
+      host.querySelector('[data-figure-pending]') != null ||
+      [...host.querySelectorAll('img')].some((image) => !image.complete || image.naturalHeight === 0);
+    if (pending) delete settled[id];
+  }
+  return settled;
+}

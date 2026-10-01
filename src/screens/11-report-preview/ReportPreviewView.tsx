@@ -82,7 +82,7 @@ import {
   withTranslatedActions,
 } from '@/report/snapshotAdapter';
 import { paginate, pageOfSection } from '@/report/pagination';
-import { readMeasuredHeights, type MeasuredHeights } from '@/report/measuredHeights';
+import { readMeasuredHeights, settledHeights, type MeasuredHeights } from '@/report/measuredHeights';
 import { sectionDefinition } from '@/report/sectionRegistry';
 import { previewReadiness, validateReport } from '@/report/reportValidator';
 import { buildExportPayload } from '@/report/exportPayloadBuilder';
@@ -582,13 +582,16 @@ export function ReportPreviewView() {
       readiness: validation.readiness,
       estimated_page_count: pages.length,
       // The heights this preview measured off its own pages, so Screen 11's
-      // render breaks where the engineer just saw it break.
-      measured_heights: measured,
+      // render breaks where the engineer just saw it break -- less any section
+      // whose figures were still loading; see `settledHeights`.
+      measured_heights: measureRef.current
+        ? settledHeights(measureRef.current, measured)
+        : measured,
     });
     useReportStore.getState().storePayload(projectId, payload);
     useReportStore.getState().save(projectId);
     toast.success(
-      `Export payload prepared for Screen 11 — metadata only, no files generated / 已為 12 準備匯出資料包（僅 metadata）`,
+      `Export payload prepared for Screen 11 — metadata only, no files generated / 已為 11 準備匯出資料包（僅 metadata）`,
     );
   };
 

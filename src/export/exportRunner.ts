@@ -214,13 +214,13 @@ async function generate(
       return {
         type,
         files: [file(nameFor(), definition.package_path, pdf.blob)],
-        warnings: [],
+        warnings: undrawnWarnings(pdf.undrawn_figures),
       };
     }
 
     case 'html_report': {
       if (!sources.report_render) throw new Error('No report payload to render.');
-      const html = exportHtmlReport(sources.report_render);
+      const html = await exportHtmlReport(sources.report_render);
       return {
         type,
         files: [
@@ -230,7 +230,7 @@ async function generate(
             textBlob(html.html, definition.mime_type),
           ),
         ],
-        warnings: [],
+        warnings: undrawnWarnings(html.undrawn_figures),
       };
     }
 
@@ -264,6 +264,14 @@ async function generate(
     default:
       throw new Error(`Artifact ${type} is not produced by the run loop.`);
   }
+}
+
+/**
+ * A figure the report could not draw is printed as a placeholder; the export
+ * says which, so the file is not taken for complete.
+ */
+function undrawnWarnings(titles: readonly string[]): string[] {
+  return titles.map((title) => `Network figure "${title}" could not be drawn and is missing from the report.`);
 }
 
 /** `thermal_network.png` → `Thermal_Network`, for the stand-alone filename. */

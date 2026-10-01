@@ -118,6 +118,92 @@ function ensureFigure(key: string, draw: () => Promise<string>): Promise<void> {
   return task;
 }
 
+/**
+ * Start drawing one figure, unless it is drawn or already being drawn.
+ *
+ * Returns the draw to wait on, or null when there is nothing to draw: the
+ * picture is cached, or the figure hides every node.
+ */
+function startFigure(
+  figure: NetworkFigure,
+  context: NetworkFigureContext,
+  scales: ReturnType<typeof resultScales>,
+): Promise<void> | null {
+  const signature = context.solution?.metadata.input_signature ?? 'unsolved';
+  const cacheKey = figureCacheKey(signature, figure);
+  if (IMAGE_CACHE.has(cacheKey)) return null;
+  const inFlight = IN_FLIGHT.get(cacheKey);
+  if (inFlight) return inFlight;
+
+  const elements = buildElements(
+    context.network,
+    context.solution,
+    FIGURE_MODE,
+    DISPLAY,
+    context.scenarioId,
+    'Auto',
+    scales,
+    figure.hidden_component_ids,
+    figure.hidden_node_ids,
+    undefined,
+    // The segments a saved study cuts, numbered on the picture, so the
+    // list underneath can say WHICH link each row is about.
+    figure.tuned_edges,
+  );
+  if (elements.length === 0) return null;
+
+  return ensureFigure(cacheKey, async () => {
+    const image = await renderGraphImage(elements, 'Auto');
+    return image.dataUrl;
+  });
+}
+
+/**
+ * Draw every figure a report carries, and wait until they are drawn.
+ *
+ * The page component draws its figures in an effect and shows "Drawing…"
+ * until each lands, which is right for a screen and wrong for an export: the
+ * PDF and HTML writers mount the pages and photograph them at once. Exported
+ * from a tab that had not drawn the figures yet -- after a reload, or straight
+ * after Prepare for Export while the queue was still busy -- a bottleneck
+ * figure was printed as the words "Drawing… / 繪製中…". The writers call this
+ * first, so every picture is in the cache before a page is mounted.
+ *
+ * Each picture is also loaded once into this document, which puts it on the
+ * document's list of available images: the pages mounted next then lay each
+ * figure out at its real size on their first pass, which is the pass the
+ * paginator measures.
+ *
+ * Resolves to the titles of the figures that could not be drawn, so the
+ * export can say so rather than ship a placeholder silently.
+ */
+export async function drawReportFigures(
+  figures: readonly NetworkFigure[],
+  context: NetworkFigureContext | null | undefined,
+): Promise<string[]> {
+  if (!context || figures.length === 0) return [];
+  const scales = resultScales(context.solution);
+  await Promise.all(
+    figures.map((figure) => startFigure(figure, context, scales)).filter((draw) => draw !== null),
+  );
+
+  const signature = context.solution?.metadata.input_signature ?? 'unsolved';
+  const missing: string[] = [];
+  const loads: Promise<unknown>[] = [];
+  for (const figure of figures) {
+    const url = IMAGE_CACHE.get(figureCacheKey(signature, figure));
+    if (!url) {
+      missing.push(figure.title);
+      continue;
+    }
+    const image = new Image();
+    image.src = url;
+    loads.push(image.decode().catch(() => undefined));
+  }
+  await Promise.all(loads);
+  return missing;
+}
+
 export function ReportNetworkFigures({
   figures,
   context,
@@ -149,33 +235,7 @@ export function ReportNetworkFigures({
 
   useEffect(() => {
     const scales = resultScales(context.solution);
-
-    for (const figure of figures) {
-      const cacheKey = figureCacheKey(signature, figure);
-      if (IMAGE_CACHE.has(cacheKey) || IN_FLIGHT.has(cacheKey)) continue;
-
-      const elements = buildElements(
-        context.network,
-        context.solution,
-        FIGURE_MODE,
-        DISPLAY,
-        context.scenarioId,
-        'Auto',
-        scales,
-        figure.hidden_component_ids,
-        figure.hidden_node_ids,
-        undefined,
-        // The segments a saved study cuts, numbered on the picture, so the
-        // list underneath can say WHICH link each row is about.
-        figure.tuned_edges,
-      );
-      if (elements.length === 0) continue;
-
-      void ensureFigure(cacheKey, async () => {
-        const image = await renderGraphImage(elements, 'Auto');
-        return image.dataUrl;
-      });
-    }
+    for (const figure of figures) void startFigure(figure, context, scales);
   }, [figures, context.network, context.solution, context.scenarioId, signature]);
 
   if (figures.length === 0) {
@@ -220,7 +280,7 @@ export function ReportNetworkFigures({
                 className="max-h-[52mm] w-auto max-w-full object-contain"
               />
             ) : (
-              <span className="py-6 text-[9px] text-[#68748a]">
+              <span data-figure-pending className="py-6 text-[9px] text-[#68748a]">
                 {reportLabel(mode, 'Drawing…', '繪製中…')}
               </span>
             )}

@@ -82,5 +82,8 @@ export const OVERALL_TONE: Record<OverallThermalStatus, Tone> = {
  */
 export function reportLabel(mode: LanguageMode, english: string, chinese: string): string {
   if (mode === 'chinese') return chinese;
-  return mode === 'bilingual' ? `${english} / ${chinese}` : english;
+  // A name has no translation: a part is called "XCZU67DR Junction" in both
+  // languages, and bilingual mode printed it twice over a slash.
+  if (mode === 'bilingual') return english === chinese ? english : `${english} / ${chinese}`;
+  return english;
 }
