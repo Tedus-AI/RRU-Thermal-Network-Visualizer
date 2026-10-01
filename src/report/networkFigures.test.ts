@@ -264,6 +264,63 @@ describe('networkFigures', () => {
     expect(figure.hidden_node_ids.size).toBe(0);
   });
 
+  it('stops a part figure where its group figure stops', () => {
+    // The Filter Chain figure stopped at the base while the cavity filter's
+    // own bottleneck figure, a page later, ran on to ambient through fins the
+    // filter never sends heat to.
+    const figures = networkFigures({
+      network: filterNetwork(),
+      components: [component('cavity', 'Filter')],
+      ranked: [part('N_body', 'cavity', 2)],
+      leversByNode: new Map(),
+      solution: forward(['E_out', 'E_in', 'E_hsk', 'E_fin', 'E_amb']),
+    });
+    const group = figures.find((entry) => entry.key === 'group-filter')!;
+    const own = figures.find((entry) => entry.key === 'part-N_body')!;
+    expect([...own.hidden_node_ids].sort()).toEqual([...group.hidden_node_ids].sort());
+    expect(own.hidden_node_ids.has('N_hsk')).toBe(false);
+    expect(own.hidden_node_ids.has('N_fin')).toBe(true);
+  });
+
+  it('keeps the tail on a part figure whose study numbered a segment in it', () => {
+    // Better fins cool the base that heats the filter, so a study may well
+    // number the fin segment; hiding it would orphan its number in the list.
+    const figures = networkFigures({
+      network: filterNetwork(),
+      components: [component('cavity', 'Filter')],
+      ranked: [part('N_body', 'cavity', 2)],
+      leversByNode: new Map([
+        [
+          'N_body',
+          [{ edge_id: 'E_fin', rank: 1, label: 'Fin', reduction_pct: 10, levers: [] }] as never,
+        ],
+      ]),
+      solution: forward(['E_out', 'E_in', 'E_hsk', 'E_fin', 'E_amb']),
+    });
+    const own = figures.find((entry) => entry.key === 'part-N_body')!;
+    for (const id of ['N_hsk', 'N_fin', 'N_amb']) {
+      expect(own.hidden_node_ids.has(id), id).toBe(false);
+    }
+    expect(own.tuned_edges?.get('E_fin')).toEqual({ rank: 1, active: true });
+  });
+
+  it('trims a part figure whose study stays inside the trim', () => {
+    const figures = networkFigures({
+      network: filterNetwork(),
+      components: [component('cavity', 'Filter')],
+      ranked: [part('N_body', 'cavity', 2)],
+      leversByNode: new Map([
+        [
+          'N_body',
+          [{ edge_id: 'E_hsk', rank: 1, label: 'TIM', reduction_pct: 10, levers: [] }] as never,
+        ],
+      ]),
+      solution: forward(['E_out', 'E_in', 'E_hsk', 'E_fin', 'E_amb']),
+    });
+    const own = figures.find((entry) => entry.key === 'part-N_body')!;
+    expect(own.hidden_node_ids.has('N_fin')).toBe(true);
+  });
+
   it('numbers a part figure\'s cut segments so the list can match them', () => {
     const figures = networkFigures({
       network: network(['pm']),

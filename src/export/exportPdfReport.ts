@@ -13,11 +13,15 @@
  * engineer saw in the preview.
  */
 
+import { drawReportFigures } from '@/screens/11-report-preview/ReportNetworkFigures';
+
 import { renderReport, type ReportRenderInput } from './reportRenderer';
 
 export interface PdfResult {
   blob: Blob;
   page_count: number;
+  /** Figures that could not be drawn and appear as a placeholder; see `drawReportFigures`. */
+  undrawn_figures: string[];
 }
 
 /**
@@ -39,7 +43,16 @@ export async function exportPdfReport(input: ReportRenderInput): Promise<PdfResu
     import('jspdf'),
   ]);
 
+  // Every figure drawn before a page is mounted; see `drawReportFigures`.
+  const undrawn = await drawReportFigures(input.network_figures ?? [], input.network_context);
+
   const rendered = renderReport(input);
+  // See `neutraliseBodyLineHeight`: html2canvas measures the font's baseline in
+  // a probe it appends to `document.body`, so the app's own line-height
+  // decides where every glyph in the PDF lands. Restored in `finally`: a page
+  // that failed to rasterize used to leave the whole app on the neutral
+  // line-height, every screen's text spacing changed until a reload.
+  const restoreLineHeight = neutraliseBodyLineHeight();
   try {
     if (rendered.pages.length === 0) {
       throw new Error('The report has no included sections, so there is nothing to render.');
@@ -51,11 +64,6 @@ export async function exportPdfReport(input: ReportRenderInput): Promise<PdfResu
       orientation: input.config.orientation === 'landscape' ? 'landscape' : 'portrait',
       compress: true,
     });
-
-    // See `withNeutralLineHeight`: html2canvas measures the font's baseline in
-    // a probe it appends to `document.body`, so the app's own line-height
-    // decides where every glyph in the PDF lands.
-    const restoreLineHeight = neutraliseBodyLineHeight();
 
     for (const [index, element] of rendered.pages.entries()) {
       const canvas = await html2canvas(element, {
@@ -71,9 +79,9 @@ export async function exportPdfReport(input: ReportRenderInput): Promise<PdfResu
       pdf.addImage(image, 'JPEG', 0, 0, rendered.width_mm, rendered.height_mm, undefined, 'FAST');
     }
 
-    restoreLineHeight();
-    return { blob: pdf.output('blob'), page_count: rendered.pages.length };
+    return { blob: pdf.output('blob'), page_count: rendered.pages.length, undrawn_figures: undrawn };
   } finally {
+    restoreLineHeight();
     rendered.dispose();
   }
 }
@@ -113,7 +121,12 @@ function neutraliseBodyLineHeight(): () => void {
  * the report opens correctly with no network access, which is the same promise
  * §35 makes about the export as a whole.
  */
-export function exportHtmlReport(input: ReportRenderInput): { html: string; page_count: number } {
+export async function exportHtmlReport(
+  input: ReportRenderInput,
+): Promise<{ html: string; page_count: number; undrawn_figures: string[] }> {
+  // The pages are serialised the moment they mount, so a figure not yet drawn
+  // would be written into the file as its placeholder for good.
+  const undrawn = await drawReportFigures(input.network_figures ?? [], input.network_context);
   const rendered = renderReport(input);
   try {
     const body = rendered.pages.map((page) => page.outerHTML).join('\n');
@@ -141,7 +154,7 @@ ${body}
 </body>
 </html>`;
 
-    return { html, page_count: rendered.pages.length };
+    return { html, page_count: rendered.pages.length, undrawn_figures: undrawn };
   } finally {
     rendered.dispose();
   }

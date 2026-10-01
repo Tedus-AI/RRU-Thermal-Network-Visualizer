@@ -6,6 +6,7 @@ import {
   defaultSnapshotSelection,
   hasRepeats,
   hiddenNodesFor,
+  mergeVisibleSelection,
   reconcileSnapshotSelection,
   snapshotCount,
   snapshotFilename,
@@ -142,8 +143,18 @@ describe('snapshotFilename', () => {
     expect(snapshotFilename(subjects[0], 'temperature_delta', 'representative')).toBe(
       'whole_network__temperature_delta.png',
     );
+    // A part by its name, which is what the report prints beside the picture.
     expect(snapshotFilename(subjects[3], 'rth', 'representative')).toBe(
-      'part_n_pm_case__rth.png',
+      'part_power_module__rth.png',
+    );
+  });
+
+  it('falls back to the node id for a part named without Latin letters', () => {
+    const [, named] = snapshotSubjects([
+      figure({ key: 'part-N_filter_body', title: '腔體濾波器', title_zh: '腔體濾波器' }),
+    ]);
+    expect(snapshotFilename(named, 'heat_flow', 'representative')).toBe(
+      'part_n_filter_body__heat_flow.png',
     );
   });
 
@@ -219,5 +230,61 @@ describe('defaultSnapshotSelection', () => {
   it('starts with one picture, not none and not forty', () => {
     const subjects = snapshotSubjects(FIGURES);
     expect(snapshotCount(subjects, defaultSnapshotSelection())).toBe(1);
+  });
+});
+
+describe('mergeVisibleSelection', () => {
+  const all = snapshotSubjects(FIGURES);
+  // What the matrix has while the solve is stale: no figures, one row.
+  const wholeOnly = snapshotSubjects([]);
+  const stored = {
+    modes: {
+      whole: ['temperature_delta' as const],
+      'group-rf': ['heat_flow' as const, 'rth' as const],
+      'group-pw': ['rth' as const],
+    },
+    instances: { 'group-rf': 'all' as const },
+  };
+
+  it('keeps the rows it cannot see when the rows are not the full list', () => {
+    // One tick on the whole-machine row with a stale solve used to save the
+    // selection with every board and part missing from it.
+    const edited = { modes: { whole: ['temperature_delta' as const, 'heat_flow' as const] }, instances: {} };
+    expect(mergeVisibleSelection(stored, edited, wholeOnly, false)).toEqual({
+      modes: {
+        whole: ['temperature_delta', 'heat_flow'],
+        'group-rf': ['heat_flow', 'rth'],
+        'group-pw': ['rth'],
+      },
+      instances: { 'group-rf': 'all' },
+    });
+  });
+
+  it('lets an edit clear a row it can see', () => {
+    const edited = { modes: {}, instances: {} };
+    const merged = mergeVisibleSelection(stored, edited, wholeOnly, false);
+    expect(merged.modes.whole).toBeUndefined();
+    expect(merged.modes['group-rf']).toEqual(['heat_flow', 'rth']);
+  });
+
+  it('lets an edit put a visible row back to one chain', () => {
+    const edited = { modes: stored.modes, instances: {} };
+    expect(mergeVisibleSelection(stored, edited, all, true).instances).toEqual({});
+  });
+
+  it('drops a vanished row once the rows are known to be complete', () => {
+    // A usable solve that no longer lists a part means the part has gone.
+    const withGhost = { ...stored, modes: { ...stored.modes, 'part-N_gone': ['rth' as const] } };
+    const edited = { modes: { whole: ['rth' as const] }, instances: {} };
+    const merged = mergeVisibleSelection(withGhost, edited, all, true);
+    expect(merged.modes).toEqual({ whole: ['rth'] });
+    expect(mergeVisibleSelection(withGhost, edited, wholeOnly, false).modes['part-N_gone']).toEqual([
+      'rth',
+    ]);
+  });
+
+  it('starts from nothing when nothing was stored', () => {
+    const edited = { modes: { whole: ['rth' as const] }, instances: {} };
+    expect(mergeVisibleSelection(null, edited, wholeOnly, false)).toEqual(edited);
   });
 });

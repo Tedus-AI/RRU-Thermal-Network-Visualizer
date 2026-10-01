@@ -35,6 +35,8 @@ import {
 
 import {
   defaultConfiguration,
+  restoreConfiguration,
+  restoreSelectedArtifacts,
   type ArtifactType,
   type ExportConfiguration,
   type ExportHistoryEntry,
@@ -122,6 +124,8 @@ interface ExportStoreState {
   setProgress: (progress: ExportStoreState['progress']) => void;
   requestCancel: () => void;
   finishSession: (input: {
+    /** The run this result belongs to; a result for any other run is dropped. */
+    session_id: string;
     project_id: string;
     results: ExportArtifactResult[];
     queue: QueueEntry[];
@@ -129,6 +133,14 @@ interface ExportStoreState {
     manifest?: ExportManifest | null;
     status: ExportSession['status'];
   }) => void;
+  /**
+   * Ends a run that threw instead of finishing.
+   *
+   * The exporter reports a failed artifact as a result, so this is for what it
+   * does not catch -- the filename builder, the package, a delivery. Without it
+   * the screen stayed on "exporting" with every button disabled until reload.
+   */
+  abortSession: (session_id: string, error: string) => void;
 
   clearQueue: () => void;
 }
@@ -192,7 +204,16 @@ export const useExportStore = create<ExportStoreState>((set, get) => ({
     // 12 §52 — "no previous-project state retained". Switching scenario resets
     // the queue and the results; only the session history is allowed to persist
     // across a scenario switch, because it is a log of what this tab did.
-    const changed = previous.scenarioId !== scenarioId;
+    //
+    // Switching PROJECT resets more, and used to reset less: it was detected
+    // only through the scenario id, and two projects that both start on
+    // SCN_001 looked like no change at all. The second project then exported
+    // into the first one's folder -- the handle in use was the old project's
+    // while the panel showed the new project's folder name -- listed the first
+    // one's files in its queue, and, with no remembered settings of its own,
+    // named its files with the first project's base name.
+    const projectChanged = previous.projectId !== projectId;
+    const changed = projectChanged || previous.scenarioId !== scenarioId;
 
     // Settings are not results. The queue and the session belong to one run and
     // are cleared with it; what the engineer chose -- the filename pattern, the
@@ -200,23 +221,32 @@ export const useExportStore = create<ExportStoreState>((set, get) => ({
     // and every other screen in this tool remembers its own. Reloaded rather
     // than kept from `previous`, so it is right after a browser reload too.
     const stored = loadExportPreferences(projectId);
-    const remembered = stored
-      ? { ...defaultConfiguration(base), ...(stored.config as Partial<ExportConfiguration>) }
-      : null;
+
+    if (projectChanged) {
+      // The blobs behind "Download Again" belong to the project that made them;
+      // its history is cleared below, so nothing can reach them any more.
+      for (const entry of [...previous.queue, ...previous.history]) {
+        if (entry.object_url) URL.revokeObjectURL(entry.object_url);
+      }
+    }
 
     set({
       projectId,
       scenarioId,
       preferencesRestored: Boolean(stored),
       stamp: loadExportStamp(projectId),
-      config: remembered
-        ? { ...remembered, base_filename: remembered.base_filename || base }
+      config: stored
+        ? restoreConfiguration(stored.config, base)
         : changed
           ? defaultConfiguration(base)
-          : { ...previous.config, base_filename: previous.config.base_filename || base },
+          : {
+              ...previous.config,
+              base_filename: previous.config.base_filename || base,
+            },
       ...(stored
         ? {
-            selected: stored.selected as ArtifactType[],
+            // Only ids this build can still produce; see `restoreSelectedArtifacts`.
+            selected: restoreSelectedArtifacts(stored.selected),
             // The name only; the handle has to be re-picked, because a browser
             // grants folder access to a gesture, never to a stored value.
             directoryName: stored.output_folder_name ?? null,
@@ -227,7 +257,20 @@ export const useExportStore = create<ExportStoreState>((set, get) => ({
             snapshotSelection:
               reconcileSnapshotSelection(stored.snapshot_selection) ?? defaultSnapshotSelection(),
           }
-        : {}),
+        : projectChanged
+          ? {
+              // Nothing remembered for this project: it starts where a first
+              // visit starts, not where the last project left off. An empty
+              // selection is what lets the screen seed its own default.
+              selected: [],
+              directoryName: null,
+              snapshotSelection: defaultSnapshotSelection(),
+            }
+          : {}),
+      // A granted folder belongs to the project it was granted for. Within one
+      // project it is kept across scenarios and visits; that is the point of
+      // holding it here rather than on the screen.
+      ...(projectChanged ? { directory: null, history: [] } : {}),
       ...(changed
         ? {
             session: null,
@@ -286,7 +329,6 @@ export const useExportStore = create<ExportStoreState>((set, get) => ({
       return { config };
     }),
 
-
   setSelected: (selected) =>
     set((state) => {
       rememberSettings(state.projectId, state.config, selected);
@@ -319,6 +361,10 @@ export const useExportStore = create<ExportStoreState>((set, get) => ({
 
   finishSession: (input) => {
     const state = get();
+    // A run outlives the screen that started it. If the engineer switched
+    // project or scenario while it ran, `loadFor` has already cleared the run
+    // it belonged to, and its results are not this queue's to show.
+    if (state.session?.id !== input.session_id) return;
     // 12 §36 — metadata only, under its own namespaced key. No file bytes, and
     // no other stored collection is touched by an export.
     if (state.session) {
@@ -342,6 +388,22 @@ export const useExportStore = create<ExportStoreState>((set, get) => ({
       history: input.history ? [input.history, ...state.history].slice(0, 20) : state.history,
     });
   },
+
+  abortSession: (session_id, error) =>
+    set((state) => {
+      if (state.session?.id !== session_id) return {};
+      return {
+        exporting: false,
+        cancelRequested: false,
+        progress: null,
+        session: { ...state.session, status: 'FAILED' },
+        queue: state.queue.map((entry) =>
+          entry.status === 'READY' || entry.status === 'EXPORTING'
+            ? { ...entry, status: 'FAILED' as const, error }
+            : entry,
+        ),
+      };
+    }),
 
   clearQueue: () =>
     set((state) => {

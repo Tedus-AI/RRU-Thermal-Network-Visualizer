@@ -180,12 +180,8 @@ export function renderReport(input: ReportRenderInput): RenderedReport {
   const sections = orderedSections(config);
   const included = includedSections(config);
   const figures = input.network_figures ?? [];
-  // The heights Screen 10 measured off the pages it showed, carried on the
-  // export payload. Re-deriving them here would mean re-measuring a render
-  // that has not happened yet; taking the preview's own numbers means the
-  // exported document breaks its pages exactly where the engineer approved
-  // them. Absent (an older payload), `paginate` falls back to the registry
-  // estimate, which is what split a nine-row table 6 + 3 across two pages.
+  // Page breaks come from measured heights; see the pagination step below for
+  // which measurement wins.
   const box = pageBoxMm(config.page_size, config.orientation);
 
   const container = document.createElement('div');
@@ -203,6 +199,10 @@ export function renderReport(input: ReportRenderInput): RenderedReport {
 
   const roots: Root[] = [];
   const pages: HTMLElement[] = [];
+  const dispose = () => {
+    for (const root of roots) root.unmount();
+    container.remove();
+  };
 
   const renderInput = (section: (typeof sections)[number]): SectionRenderInput => ({
     config,
@@ -222,44 +222,53 @@ export function renderReport(input: ReportRenderInput): RenderedReport {
     parts: 1,
   });
 
-  // The payload's numbers first, because they are literally what the engineer
-  // watched the preview break its pages on. Anything the payload does not
-  // carry is measured here instead, on these very pages: an older payload has
-  // no heights at all, and paginating from the registry's generous estimates
-  // is what broke the export somewhere the engineer had never seen.
-  const measured = {
-    ...measureSections(container, input, sections, included, renderInput),
-    ...input.measured_heights,
-  };
-  const pageModels = paginate(sections, rowCountsOf(snapshot, figures), measured);
+  // A throw part-way through -- a section that fails to render, a measure that
+  // trips -- used to leave the offscreen container and every page mounted so
+  // far in the document for the life of the tab, one more set per attempt.
+  let pageModels: ReportPage[];
+  try {
+    // The payload's numbers first, because they are literally what the engineer
+    // watched the preview break its pages on. Anything the payload does not
+    // carry is measured here instead, on these very pages: an older payload has
+    // no heights at all, and paginating from the registry's generous estimates
+    // is what broke the export somewhere the engineer had never seen.
+    const measured = {
+      ...measureSections(container, input, sections, included, renderInput),
+      ...input.measured_heights,
+    };
+    pageModels = paginate(sections, rowCountsOf(snapshot, figures), measured);
 
-  for (const model of pageModels) {
-    const host = document.createElement('div');
-    host.style.backgroundColor = '#ffffff';
-    container.appendChild(host);
+    for (const model of pageModels) {
+      const host = document.createElement('div');
+      host.style.backgroundColor = '#ffffff';
+      container.appendChild(host);
 
-    const root = createRoot(host);
-    // flushSync so the DOM exists before the caller rasterizes it. Without it
-    // React 18 would schedule the commit and html2canvas would photograph an
-    // empty container.
-    flushSync(() => {
-      root.render(
-        <ReportPageView
-          config={config}
-          page={model}
-          sections={included}
-          renderInput={renderInput}
-          scale={1}
-          selectedId={included[0]?.id ?? 'cover'}
-          onSelectSection={() => {}}
-          stale={input.stale}
-          printMode
-        />,
-      );
-    });
+      const root = createRoot(host);
+      // flushSync so the DOM exists before the caller rasterizes it. Without it
+      // React 18 would schedule the commit and html2canvas would photograph an
+      // empty container.
+      flushSync(() => {
+        root.render(
+          <ReportPageView
+            config={config}
+            page={model}
+            sections={included}
+            renderInput={renderInput}
+            scale={1}
+            selectedId={included[0]?.id ?? 'cover'}
+            onSelectSection={() => {}}
+            stale={input.stale}
+            printMode
+          />,
+        );
+      });
 
-    roots.push(root);
-    pages.push(host.firstElementChild as HTMLElement);
+      roots.push(root);
+      pages.push(host.firstElementChild as HTMLElement);
+    }
+  } catch (error) {
+    dispose();
+    throw error;
   }
 
   return {
@@ -267,9 +276,6 @@ export function renderReport(input: ReportRenderInput): RenderedReport {
     page_models: pageModels,
     width_mm: box.width,
     height_mm: box.height,
-    dispose: () => {
-      for (const root of roots) root.unmount();
-      container.remove();
-    },
+    dispose,
   };
 }

@@ -104,7 +104,13 @@ export function snapshotSubjects(figures: readonly NetworkFigure[]): SnapshotSub
       kind: group ? 'group' : 'part',
       label: group ? figure.title : `Bottleneck · ${figure.title}`,
       label_zh: group ? figure.title_zh : `瓶頸 · ${figure.title_zh}`,
-      slug: slugify(figure.key.replace(/^group-/, '').replace(/^part-/, 'part_')),
+      // A part is named for what it is, not for its node id: `part_n_pm_case`
+      // in a folder of PNGs says nothing an engineer can read, and the title is
+      // the name the report prints beside the same picture. A title with no
+      // Latin letters in it slugs to nothing, and then the node id is used.
+      slug: group
+        ? slugify(figure.key.replace(/^group-/, ''))
+        : `part_${slugify(figure.title, slugify(figure.key.replace(/^part-/, '')))}`,
       hidden_component_ids: figure.hidden_component_ids,
       hidden_node_ids: figure.hidden_node_ids,
       instance_node_ids: figure.instance_node_ids,
@@ -175,7 +181,7 @@ export function snapshotLabel(subject: SnapshotSubject, mode: ResultMode): strin
   return `${subject.label} · ${view?.label ?? mode}`;
 }
 
-/** `whole_network__temperature.png`, inside `images/`. */
+/** `whole_network__temperature_delta.png`, inside `images/`. */
 export function snapshotFilename(
   subject: SnapshotSubject,
   mode: ResultMode,
@@ -185,12 +191,12 @@ export function snapshotFilename(
   return `${subject.slug}__${mode}${suffix}.png`;
 }
 
-function slugify(value: string): string {
+function slugify(value: string, fallback = 'figure'): string {
   return (
     value
       .replace(/[^A-Za-z0-9]+/g, '_')
       .replace(/^_+|_+$/g, '')
-      .toLowerCase() || 'figure'
+      .toLowerCase() || fallback
   );
 }
 
@@ -240,6 +246,53 @@ export function reconcileSnapshotSelection(
       if (known && !known.has(key)) continue;
       if (value === 'all' || value === 'representative') instances[key] = value;
     }
+  }
+
+  return { modes, instances };
+}
+
+/**
+ * Folds an edit made on the rows the screen can see back into the selection
+ * that was stored.
+ *
+ * The matrix only ever holds the rows it is showing, and it hands back a whole
+ * selection. Saving that as-is is right while the rows are the full list and
+ * wrong the moment they are not: without a usable solve there are no figures,
+ * the rows shrink to the whole-machine one, and a tick saved from there would
+ * store every board and every part as unticked. Coming back after a re-solve
+ * would find them gone.
+ *
+ * So a row on screen always takes what the edit says -- including "nothing",
+ * which is how a row is cleared. A row off screen depends on why it is off
+ * screen. `complete` says the rows are everything this network has, because
+ * they were derived from a usable solve; then a missing row has really gone (a
+ * board removed, a bottleneck cleared) and its ticks go with it. Otherwise the
+ * rows are only what could be derived without one, and a missing row is
+ * merely not knowable yet, so what was stored for it is kept.
+ */
+export function mergeVisibleSelection(
+  stored: SnapshotSelection | null,
+  edited: SnapshotSelection,
+  visible: readonly SnapshotSubject[],
+  complete: boolean,
+): SnapshotSelection {
+  const shown = new Set(visible.map((subject) => subject.key));
+  const modes: Record<string, ResultMode[]> = {};
+  const instances: Record<string, InstancePolicy> = {};
+
+  if (!complete) {
+    for (const [key, value] of Object.entries(stored?.modes ?? {})) {
+      if (!shown.has(key)) modes[key] = value;
+    }
+    for (const [key, value] of Object.entries(stored?.instances ?? {})) {
+      if (!shown.has(key)) instances[key] = value;
+    }
+  }
+  for (const [key, value] of Object.entries(edited.modes)) {
+    if (shown.has(key) && value.length > 0) modes[key] = value;
+  }
+  for (const [key, value] of Object.entries(edited.instances)) {
+    if (shown.has(key)) instances[key] = value;
   }
 
   return { modes, instances };

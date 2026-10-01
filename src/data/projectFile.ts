@@ -37,6 +37,7 @@ import {
   loadComponents,
   loadExportPayloads,
   loadExportPreferences,
+  normalizeExportPreferences,
   loadExportStamp,
   loadNetwork,
   loadNetworkReviewState,
@@ -383,7 +384,11 @@ export function applyProjectFile(file: ProjectFile, mode: ImportMode): ImportOut
   note('report payloads', (data.export_payloads ?? []).length);
 
   if (data.export_stamp) saveExportStamp(targetId, data.export_stamp);
-  if (data.export_preferences) saveExportPreferences(targetId, data.export_preferences);
+  // Shape-checked on the way in, like everything else the file carries: a
+  // preference block that is not one is left out rather than stored for the
+  // Export Center to trip over later.
+  const exportPreferences = normalizeExportPreferences(data.export_preferences);
+  if (exportPreferences) saveExportPreferences(targetId, exportPreferences);
 
   return { project_id: targetId, mode, written };
 }

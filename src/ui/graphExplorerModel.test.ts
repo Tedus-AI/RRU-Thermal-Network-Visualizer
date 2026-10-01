@@ -212,4 +212,44 @@ describe('a focused path follows the solved heat, not the wiring', () => {
       expect(hidden.has(id), id).toBe(false);
     }
   });
+
+  it('reads a FAILED solve as no directions, not as no heat', () => {
+    // A failed solve is a real object whose edge results are empty. Taken at
+    // face value it says no edge carries heat, and the focus stopped at the
+    // first node past the part's own; it says nothing about directions at all.
+    const failed = { status: 'FAILED', edge_results: {} } as unknown as ThermalSolution;
+    const hidden = focusHiddenNodes(filterNetwork(), path(), failed);
+    for (const id of ['N_filter_amb', 'N_hsk', 'N_fin', 'N_amb']) {
+      expect(hidden.has(id), id).toBe(false);
+    }
+    expect(hidden).toEqual(focusHiddenNodes(filterNetwork(), path()));
+  });
+
+  it('walks on through an edge the solve has no direction for', () => {
+    // A stale solve: the base-to-fin edge was added after it ran. The fins are
+    // still downstream of the filter's base in every direction the solve DID
+    // find, so the chain is not cut short at the edge nobody has solved yet.
+    const stale = {
+      edge_results: {
+        E_out: { edge_id: 'E_out', actual_direction: 'forward' },
+        E_in: { edge_id: 'E_in', actual_direction: 'reverse' },
+        E_hsk: { edge_id: 'E_hsk', actual_direction: 'reverse' },
+        E_amb: { edge_id: 'E_amb', actual_direction: 'forward' },
+      },
+    } as unknown as ThermalSolution;
+    const hidden = focusHiddenNodes(filterNetwork(), path(), stale);
+    for (const id of ['N_hsk', 'N_fin', 'N_amb']) {
+      expect(hidden.has(id), id).toBe(false);
+    }
+  });
+
+  it('ignores the directions of a solve marked FAILED even if it carries some', () => {
+    const failed = {
+      ...forward(['E_out', 'E_in', 'E_hsk', 'E_fin', 'E_amb']),
+      status: 'FAILED',
+    } as unknown as ThermalSolution;
+    expect(focusHiddenNodes(filterNetwork(), path(), failed)).toEqual(
+      focusHiddenNodes(filterNetwork(), path()),
+    );
+  });
 });

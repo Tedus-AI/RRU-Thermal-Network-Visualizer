@@ -186,8 +186,6 @@ export function isSelectable(status: ArtifactStatus): boolean {
   return isExportable(status);
 }
 
-// --- source readiness panel (12 §32) ----------------------------------------
-
 // --- configuration (12 §24, §25) --------------------------------------------
 //
 // §26 and §27 governed the CSV tables and the JSON documents: a decimal
@@ -234,8 +232,61 @@ export function defaultConfiguration(base: string): ExportConfiguration {
   };
 }
 
+/** True for an artifact this build can produce. */
+export function isArtifactType(value: unknown): value is ArtifactType {
+  return typeof value === 'string' && (ARTIFACT_TYPES as readonly string[]).includes(value);
+}
 
-// --- session and results
+/**
+ * A remembered artifact selection, keeping only what this build can produce.
+ *
+ * The catalog has shrunk more than once -- five data files left in one round --
+ * and a project file written before that still lists them. `artifactDefinition`
+ * throws on an id it does not know, and it is called while an export is being
+ * set up, so one stale id stopped every export with no message on screen. A
+ * repeated id is dropped too: it would ask for the same file twice.
+ */
+export function restoreSelectedArtifacts(stored: readonly unknown[]): ArtifactType[] {
+  const kept: ArtifactType[] = [];
+  for (const value of stored) {
+    if (isArtifactType(value) && !kept.includes(value)) kept.push(value);
+  }
+  return kept;
+}
+
+/**
+ * A remembered configuration, read back one field at a time.
+ *
+ * Each field is taken only when it is a value the setting can hold; anything
+ * else -- a hand edit, a field an older build wrote and this one dropped --
+ * falls back to the default, so a bad value cannot reach the filename builder
+ * or the renderer.
+ */
+export function restoreConfiguration(stored: unknown, base: string): ExportConfiguration {
+  const config = defaultConfiguration(base);
+  if (stored == null || typeof stored !== 'object' || Array.isArray(stored)) return config;
+  const raw = stored as Record<string, unknown>;
+
+  if (typeof raw.base_filename === 'string' && raw.base_filename.trim()) {
+    config.base_filename = raw.base_filename;
+  }
+  for (const key of [
+    'include_project_id',
+    'include_scenario_id',
+    'timestamp',
+    'zip_compression',
+    'checksum',
+  ] as const) {
+    const value = raw[key];
+    if (typeof value === 'boolean') config[key] = value;
+  }
+  const scale = PNG_SCALES.find((entry) => entry === raw.png_scale);
+  if (scale) config.png_scale = scale;
+  const destination = DESTINATIONS.find((entry) => entry === raw.destination);
+  if (destination) config.destination = destination;
+  return config;
+}
+
 // --- session and results (12 §48, §49) --------------------------------------
 
 export interface ExportArtifactRequest {

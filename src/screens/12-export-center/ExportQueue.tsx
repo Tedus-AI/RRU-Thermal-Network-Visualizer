@@ -2,9 +2,8 @@
  * Export queue, progress and result panel — 12 §28, §29, §30, §34.
  *
  * §46's pre-export warning summary used to live here too, as a panel repeating
- * the warnings the Validation panel was already listing. The confirmation
- * dialog is what §46 actually requires and it still names every warning before
- * a run starts; the panel was a third copy of the same three lines.
+ * warnings already listed elsewhere. The confirmation dialog is what §46
+ * actually requires and it still names every warning before a run starts.
  *
  * The queue's columns are §28's: Artifact, Format, Status, Progress, Filename,
  * Size, Action. §29's progress line reads exactly as the specification writes it

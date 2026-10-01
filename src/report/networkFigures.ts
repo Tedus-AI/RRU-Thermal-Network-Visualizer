@@ -137,6 +137,38 @@ export function modelledComponentIds(network: ThermalNetwork): Set<string> {
   return ids;
 }
 
+/**
+ * What a figure for `keep` hides: the other instances, and the tail that
+ * belongs to some other path.
+ *
+ * The figure's own nodes, then everything its heat reaches -- see
+ * `heatPathReach`. Whatever is left over is tail belonging to some other
+ * component's path and is hidden along with the duplicate instances.
+ */
+function trimToHeatPath(
+  network: ThermalNetwork,
+  solution: ThermalSolution | null | undefined,
+  keep: ReadonlySet<string>,
+  instances: ReadonlySet<string>,
+): Set<string> {
+  const own = new Set(
+    Object.values(network.nodes)
+      .filter((node) => !node.disabled && !instances.has(node.id))
+      .filter((node) => {
+        const id = componentOf(node);
+        return Boolean(id && keep.has(id));
+      })
+      .map((node) => node.id),
+  );
+  const onPath = heatPathReach({ network, solution, own, excluded: instances });
+  const trimmed = new Set(instances);
+  for (const node of Object.values(network.nodes)) {
+    if (node.disabled || trimmed.has(node.id)) continue;
+    if (!onPath.has(node.id)) trimmed.add(node.id);
+  }
+  return trimmed;
+}
+
 export function networkFigures(input: {
   network: ThermalNetwork;
   components: readonly Component[];
@@ -162,29 +194,7 @@ export function networkFigures(input: {
     const { hidden, instances } = duplicateInstanceNodes(input.network, keep);
     const repeated = [...instances.values()].filter((count) => count > 1).length;
 
-    // The group's own nodes, then everything its heat reaches — see
-    // `heatPathReach`. Whatever is left over is tail belonging to some other
-    // group's path and is hidden with the duplicate instances.
-    const own = new Set(
-      Object.values(input.network.nodes)
-        .filter((node) => !node.disabled && !hidden.has(node.id))
-        .filter((node) => {
-          const id = componentOf(node);
-          return Boolean(id && keep.has(id));
-        })
-        .map((node) => node.id),
-    );
-    const onPath = heatPathReach({
-      network: input.network,
-      solution: input.solution,
-      own,
-      excluded: hidden,
-    });
-    const trimmed = new Set(hidden);
-    for (const node of Object.values(input.network.nodes)) {
-      if (node.disabled || trimmed.has(node.id)) continue;
-      if (!onPath.has(node.id)) trimmed.add(node.id);
-    }
+    const trimmed = trimToHeatPath(input.network, input.solution, keep, hidden);
     figures.push({
       key: `group-${group.key}`,
       title: `${group.title} Chain`,
@@ -209,6 +219,23 @@ export function networkFigures(input: {
     // figure falls back to everything rather than to nothing.
     const keep = part.component_id ? new Set([part.component_id]) : modelled;
     const { hidden } = duplicateInstanceNodes(input.network, keep);
+    const levers = input.leversByNode.get(part.node_id) ?? null;
+    // Trimmed the way its group figure is: the cavity filter's own figure ran
+    // on through the fins to ambient while the Filter Chain figure above it
+    // stopped at the heatsink base, two answers to one question in one report.
+    // A part without a component of its own is the whole machine and is not
+    // trimmed. Nor is a part whose study numbered a segment beyond the trim:
+    // improving the fins IS a lever on a part the base feeds heat into, and a
+    // figure that hid the segment would leave its number in the list pointing
+    // at nothing.
+    const flowTrimmed = part.component_id
+      ? trimToHeatPath(input.network, input.solution, keep, hidden)
+      : hidden;
+    const cutByFlow = (id: string) => flowTrimmed.has(id) && !hidden.has(id);
+    const studyFits = (levers ?? []).every((segment) => {
+      const edge = input.network.edges[segment.edge_id];
+      return !edge || (!cutByFlow(edge.from) && !cutByFlow(edge.to));
+    });
     figures.push({
       key: `part-${part.node_id}`,
       title: part.name,
@@ -216,17 +243,17 @@ export function networkFigures(input: {
       note: 'Heat path to ambient',
       note_zh: '至環境的散熱路徑',
       hidden_component_ids: new Set([...modelled].filter((id) => !keep.has(id))),
-      hidden_node_ids: hidden,
+      hidden_node_ids: studyFits ? flowTrimmed : hidden,
       instance_node_ids: hidden,
       tuned_edges: new Map(
-        (input.leversByNode.get(part.node_id) ?? []).map((segment) => [
+        (levers ?? []).map((segment) => [
           segment.edge_id,
           { rank: segment.rank, active: true },
         ]),
       ),
       part,
       status: part.margin_C < 0 ? 'over' : 'warn',
-      levers: input.leversByNode.get(part.node_id) ?? null,
+      levers,
     });
   }
 
