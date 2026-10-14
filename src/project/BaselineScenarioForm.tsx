@@ -5,6 +5,7 @@
  * boundary-condition set and mirrors these shared environmental defaults.
  */
 
+import { windRecordedOnly } from '@/thermal/boundary/wind';
 import { Field, NumberInput, SectionCard, TextInput } from '@/ui/primitives';
 import { SCENARIO_LIMITS, type Scenario } from '@/domain/project';
 import { useScenarioStore } from '@/data/scenarioStore';
@@ -117,7 +118,16 @@ export function BaselineScenarioForm({
           />
         </Field>
 
-        <Field label="Wind Speed" zh="風速" htmlFor="wind_mps" suffix="m/s" error={visibleError('wind_mps')}>
+        <Field
+          label="Wind Speed"
+          zh="風速"
+          htmlFor="wind_mps"
+          suffix="m/s"
+          error={visibleError('wind_mps')}
+          tip="目前所有對流模型皆為自然對流（鰭片關聯式為靜止空氣擬合），風速會被記錄並顯示，但不會套用到求解。"
+          hint={windRecordedOnly(scenario.wind_mps) ? 'Recorded, not applied: every solve is still-air.' : undefined}
+          hintZh={windRecordedOnly(scenario.wind_mps) ? '僅記錄，不套用：求解皆為無風條件。' : undefined}
+        >
           <NumberInput
             id="wind_mps"
             value={Number.isNaN(scenario.wind_mps) ? '' : scenario.wind_mps}

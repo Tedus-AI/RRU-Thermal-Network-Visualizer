@@ -6,6 +6,7 @@
  * Screen 06, which is what the button does.
  */
 
+import { windLabel } from '@/thermal/boundary/wind';
 import { ArrowLeft } from 'lucide-react';
 
 import { Badge, Button } from '@/ui/primitives';
@@ -66,7 +67,10 @@ export function ScenarioSummary({
         <Row
           label="Wind"
           zh="風速"
-          value={num(set?.site.wind_speed_m_s ?? scenario?.wind_mps, 1, 'm/s')}
+          value={windLabel(
+            num(set?.site.wind_speed_m_s ?? scenario?.wind_mps, 1, 'm/s'),
+            set?.site.wind_speed_m_s ?? scenario?.wind_mps,
+          )}
         />
         <Row
           label="Solar"

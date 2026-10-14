@@ -1158,7 +1158,7 @@ describe('boundary validation (06 §12)', () => {
 
     expect(result.errors).toHaveLength(0);
     expect(result.warnings.map((warning) => warning.id)).toEqual(
-      expect.arrayContaining(['PROFILE_H_LOW_P_CONV', 'WIND_WITH_MANUAL_H']),
+      expect.arrayContaining(['PROFILE_H_LOW_P_CONV', 'WIND_NOT_APPLIED']),
     );
     expect(result.status).toBe('warnings');
   });

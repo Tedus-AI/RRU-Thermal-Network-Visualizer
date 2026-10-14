@@ -11,6 +11,7 @@
  * without touching the surrounding UI.
  */
 
+import { windLabel } from '@/thermal/boundary/wind';
 import type { ResultsOverviewSnapshot } from '@/thermal/overview/overviewTypes';
 import type { NetworkFigure } from '@/report/networkFigures';
 import type {
@@ -232,7 +233,12 @@ function ProjectSection({ input }: { input: SectionRenderInput }) {
     [show.show_stage !== false, 'Stage', '階段', project.stage || '—'],
     [show.show_scenario !== false, 'Scenario', '情境', scenario.name],
     [show.show_ambient !== false, 'Ambient', '環境溫度', num(scenario.ambient_C, 1, '°C')],
-    [show.show_wind !== false, 'Wind', '風速', num(scenario.wind_mps, 1, 'm/s')],
+    [
+      show.show_wind !== false,
+      'Wind',
+      '風速',
+      windLabel(num(scenario.wind_mps, 1, 'm/s'), scenario.wind_mps, mode),
+    ],
     [show.show_solar !== false, 'Solar', '太陽輻射', num(scenario.solar_W_m2, 0, 'W/m²')],
     [
       show.show_power_scale !== false,

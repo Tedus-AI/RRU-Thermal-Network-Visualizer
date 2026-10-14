@@ -16,6 +16,7 @@
  * value renders as text and nothing here is an input, which says it better.
  */
 
+import { windLabel } from '@/thermal/boundary/wind';
 import { Badge } from '@/ui/primitives';
 import { EngineeringInfo, biTitle } from '@/ui/FieldLabel';
 import type { Scenario } from '@/domain/project';
@@ -73,7 +74,11 @@ export function ScenarioSummaryPanel({
         {boundary?.internal_air_C != null && (
           <Row label="Internal Air" zh="機內空氣" value={num(boundary.internal_air_C, 1, '°C')} />
         )}
-        <Row label="Wind" zh="風速" value={num(scenario.wind_mps, 1, 'm/s')} />
+        <Row
+          label="Wind"
+          zh="風速"
+          value={windLabel(num(scenario.wind_mps, 1, 'm/s'), scenario.wind_mps)}
+        />
         <Row
           label="Solar"
           zh="太陽輻射"
