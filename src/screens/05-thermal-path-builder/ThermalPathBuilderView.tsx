@@ -435,6 +435,9 @@ export function ThermalPathBuilderView() {
   useEffect(() => {
     if (!projectId || !network || network.project_id !== projectId) return;
     useBoundaryStore.getState().loadFor(projectId, activeScenarioId);
+    // Keyed on the revision, not the object: every edit makes a new network,
+    // but only a new revision can move the derived boundary ports.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId, activeScenarioId, network?.revision]);
 
   // Older saved networks may already contain linked HSK-base edges. Refresh
@@ -459,6 +462,9 @@ export function ThermalPathBuilderView() {
       },
       { skipHistory: true },
     );
+    // Keyed on the Screen 01 base inputs this reads, not the whole draft, so
+    // typing a project name does not re-run the refresh.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     projectId,
     draft?.project_id,
@@ -479,6 +485,9 @@ export function ThermalPathBuilderView() {
     const current = useNetworkStore.getState().network;
     if (!current || current.project_id !== projectId) return;
     useNetworkStore.getState().refreshMounts(components, materials);
+    // The draft object changes on every keystroke; only which project is open
+    // matters here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId, draft?.project_id, components, materials]);
 
   // One section at a time, matching the step. Three open panels in a 300 px

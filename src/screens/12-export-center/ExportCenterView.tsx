@@ -336,8 +336,6 @@ export function ExportCenterView() {
     projectId,
     components,
     analysis,
-    distribution,
-    distributionState,
     sourceRevision,
     stale,
   ]);
@@ -558,7 +556,6 @@ export function ExportCenterView() {
   }, [
     reportConfig,
     snapshot,
-    liveOverview,
     scenario,
     draft,
     projectId,
@@ -813,9 +810,6 @@ export function ExportCenterView() {
       payload,
       network,
       stale,
-      boundarySet,
-      components,
-      reportConfig,
       reportRender,
       directory,
       validation.warnings,

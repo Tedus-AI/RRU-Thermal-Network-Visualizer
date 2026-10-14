@@ -18,7 +18,7 @@ describe('SurfacePropertiesPanel', () => {
     ];
 
     const suppressSsrLayoutWarning = vi.spyOn(console, 'error').mockImplementation(() => {});
-    let html = '';
+    let html: string;
     try {
       html = renderToStaticMarkup(
         <SurfacePropertiesPanel
@@ -43,7 +43,7 @@ describe('SurfacePropertiesPanel', () => {
 
   it('masks absorptivity without deleting it when Screen 01 solar load is zero', () => {
     const suppressSsrLayoutWarning = vi.spyOn(console, 'error').mockImplementation(() => {});
-    let html = '';
+    let html: string;
     try {
       html = renderToStaticMarkup(
         <SurfacePropertiesPanel

@@ -538,6 +538,10 @@ export const ThermalGraphCanvas = forwardRef<
     } else {
       refit();
     }
+    // Lays out only when the elements or the stored positions change. Label
+    // visibility and the hand-placed flag are read at that moment; toggling
+    // either on its own must not re-run the layout.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [elements, network.layout.positions]);
 
   // Selection is owned by React; Cytoscape only reflects it.

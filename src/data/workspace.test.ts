@@ -266,6 +266,7 @@ describe('hydrateFromFolder', () => {
 
   it('restores mirroring even when a read throws', async () => {
     const folder = fakeFolder();
+    // eslint-disable-next-line require-yield -- a folder that fails on its first read yields nothing
     folder.values = async function* () {
       throw new Error('Folder vanished');
     };

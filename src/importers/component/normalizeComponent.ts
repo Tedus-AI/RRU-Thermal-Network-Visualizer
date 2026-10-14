@@ -33,7 +33,7 @@ export function parseNumericCell(raw: string | undefined | null): NumericParse {
   }
 
   let cleaned = text
-    .replace(/[\s '’]/g, '')
+    .replace(/[\s\u00a0'\u2019]/g, '')
     // Strip trailing units: W, C/W, °C, mm …
     .replace(/(w|c\/w|°c|℃|mm|ohm)$/i, '');
 

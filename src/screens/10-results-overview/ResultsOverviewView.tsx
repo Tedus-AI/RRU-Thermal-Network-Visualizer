@@ -467,7 +467,7 @@ export function ResultsOverviewView() {
             : [],
       };
     });
-  }, [solveNetwork, solution, stale, studies, activeScenarioId, boundaryContext]);
+  }, [solveNetwork, solution, stale, rankedParts, studies, activeScenarioId, boundaryContext]);
 
   /** What the Total Power card opens into: the same heat, split by category. */
   const powerSplit = useMemo(
