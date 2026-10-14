@@ -4,6 +4,7 @@ import { seedDemoProject } from '@/mock/seed';
 import { DEMO_PROJECT_ID } from '@/mock/demoProject';
 import {
   PERSISTENCE_COMPRESSION_PREFIX,
+  projectStorageKey,
   loadComponents,
   loadProject,
   loadProjects,
@@ -147,7 +148,9 @@ describe('hydrateFromFolder', () => {
 
     expect(result.projectIds).toEqual([DEMO_PROJECT_ID]);
     expect(storage.getItem('another.app.cache')).toHaveLength(100_000);
-    expect(storage.getItem('tnv.thermal_networks')).toMatch(
+    // Each project's slice has its own key now, so one project's save never
+    // re-serialises another's.
+    expect(storage.getItem(projectStorageKey('tnv.thermal_networks', DEMO_PROJECT_ID))).toMatch(
       new RegExp(`^${PERSISTENCE_COMPRESSION_PREFIX}`),
     );
     expect(loadProject(DEMO_PROJECT_ID)?.project_id).toBe(DEMO_PROJECT_ID);

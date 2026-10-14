@@ -14,7 +14,7 @@ import {
 } from '@/domain/project';
 import type { MaterialDefaults } from '@/domain/materials';
 import { createRevision } from '@/domain/revision';
-import { markSavePending } from './saveStatus';
+import { markSaveFailed, markSavePending } from './saveStatus';
 import {
   loadProject,
   loadProjects,
@@ -212,8 +212,7 @@ export const useProjectStore = create<ProjectStoreState>((set, get) => ({
     if (autoCommitTimer) clearTimeout(autoCommitTimer);
     autoCommitTimer = setTimeout(() => {
       autoCommitTimer = null;
-      const state = useProjectStore.getState();
-      if (state.dirty && !state.isNew && !state.isReadOnly()) state.commit();
+      commitIfDirty();
     }, AUTO_COMMIT_MS);
   },
 
@@ -259,3 +258,25 @@ export const useProjectStore = create<ProjectStoreState>((set, get) => ({
     return projectIdExists(projectId);
   },
 }));
+
+/**
+ * The auto-commit's body. A commit that throws used to escape from the timer
+ * with nobody told; it is reported and the draft stays dirty for the next try.
+ */
+function commitIfDirty(): void {
+  const state = useProjectStore.getState();
+  if (!state.dirty || state.isNew || state.isReadOnly()) return;
+  try {
+    state.commit();
+  } catch (error) {
+    markSaveFailed(error);
+  }
+}
+
+/** Commits a pending auto-commit now — for a tab that is being closed. */
+export function flushProjectAutoCommit(): void {
+  if (!autoCommitTimer) return;
+  clearTimeout(autoCommitTimer);
+  autoCommitTimer = null;
+  commitIfDirty();
+}

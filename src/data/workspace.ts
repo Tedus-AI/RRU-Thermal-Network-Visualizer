@@ -15,7 +15,7 @@
  * the sync cache means the storage layer changes and no screen has to.
  */
 
-import { clearOwnedStorage } from './buildStamp';
+import { clearWorkingCache } from './persistence';
 import { listProjectFiles, readTextFile, type DirectoryHandle } from './folderBinding';
 import { withSyncSuspended } from './syncSuspend';
 import { applyProjectFile, parseProjectFile } from './projectFile';
@@ -26,6 +26,8 @@ export interface HydrateResult {
   projectIds: string[];
   /** Newest valid source filename selected for each project id. */
   projectFiles: Record<string, string>;
+  /** That file's last-modified time, so later writes can detect outside edits. */
+  projectFileModifiedAt: Record<string, number>;
   /** Files that were present but could not be used, with the reason. */
   skipped: Array<{ filename: string; reason: string }>;
 }
@@ -43,11 +45,13 @@ export interface HydrateResult {
 export async function hydrateFromFolder(handle: DirectoryHandle): Promise<HydrateResult> {
   const entries = await listProjectFiles(handle);
   const projectIds: string[] = [];
-  const projectFiles: Record<string, string> = {};
+  // Maps, not objects: a project id is user text and `__proto__` is a valid one.
+  const projectFiles = new Map<string, string>();
+  const projectFileModifiedAt = new Map<string, number>();
   const skipped: Array<{ filename: string; reason: string }> = [];
 
   await withSyncSuspended(async () => {
-    if (typeof localStorage !== 'undefined') clearOwnedStorage(localStorage);
+    clearWorkingCache();
 
     for (const entry of entries) {
       // The component library lives in the same folder but is not a project;
@@ -67,7 +71,7 @@ export async function hydrateFromFolder(handle: DirectoryHandle): Promise<Hydrat
         continue;
       }
 
-      const existingFilename = projectFiles[parsed.file.project_id];
+      const existingFilename = projectFiles.get(parsed.file.project_id);
       if (existingFilename) {
         // Entries are newest-first. Loading this older duplicate would silently
         // roll the project back after a hard refresh.
@@ -80,9 +84,16 @@ export async function hydrateFromFolder(handle: DirectoryHandle): Promise<Hydrat
 
       applyProjectFile(parsed.file, 'overwrite');
       projectIds.push(parsed.file.project_id);
-      projectFiles[parsed.file.project_id] = entry.filename;
+      projectFiles.set(parsed.file.project_id, entry.filename);
+      projectFileModifiedAt.set(parsed.file.project_id, entry.modified_at);
     }
   });
 
-  return { projectIds, projectFiles, skipped };
+  return {
+    projectIds,
+    // `fromEntries` defines own properties, so an id like `__proto__` survives.
+    projectFiles: Object.fromEntries(projectFiles),
+    projectFileModifiedAt: Object.fromEntries(projectFileModifiedAt),
+    skipped,
+  };
 }

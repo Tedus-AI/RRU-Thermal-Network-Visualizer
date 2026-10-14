@@ -74,7 +74,16 @@ function read(): LibraryEntry[] {
 
 function write(entries: LibraryEntry[]): void {
   if (typeof localStorage === 'undefined') return;
-  localStorage.setItem(LIBRARY_KEY, JSON.stringify(entries));
+  try {
+    localStorage.setItem(LIBRARY_KEY, JSON.stringify(entries));
+  } catch (error) {
+    // The browser refused the catalogue — almost always its storage quota. A
+    // throw here used to abort the save before the in-memory list and the
+    // folder copy were updated, so the part looked saved and was not. The
+    // list stays in memory and the folder file is still written; only this
+    // browser's cache of it falls behind.
+    console.warn('[tnv] The component library could not be cached in browser storage.', error);
+  }
 }
 
 /** The catalogue's key: one row per part PER PROJECT. */

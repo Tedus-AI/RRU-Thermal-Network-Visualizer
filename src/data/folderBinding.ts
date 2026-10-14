@@ -211,6 +211,25 @@ export async function listProjectFiles(handle: DirectoryHandle): Promise<FolderE
   return entries.sort((a, b) => b.modified_at - a.modified_at);
 }
 
+/**
+ * A file's last-modified time, or null when it cannot be read.
+ *
+ * Recorded right after each write, so a later session can tell whether the
+ * file was changed by someone else since — the difference between "safe to
+ * overwrite with my newer edits" and "both sides changed".
+ */
+export async function fileModifiedAt(
+  handle: DirectoryHandle,
+  filename: string,
+): Promise<number | null> {
+  try {
+    const file = await handle.getFileHandle(filename);
+    return (await file.getFile()).lastModified;
+  } catch {
+    return null;
+  }
+}
+
 export async function readTextFile(
   handle: DirectoryHandle,
   filename: string,

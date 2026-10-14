@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEMO_PROJECT_ID } from '@/mock/demoProject';
 
 import { BUILD_STAMP_KEY } from './buildStamp';
+import { projectStorageKey } from './persistence';
 
 /**
  * Exercises the real boot path — `bootstrapStorage` -> `seedDemoProject` ->
@@ -137,7 +138,8 @@ describe('bootstrapStorage', () => {
 
     let seededBeforeReload: boolean | null = null;
     const reload = vi.fn(() => {
-      seededBeforeReload = store.getItem('tnv.thermal_solutions') != null;
+      seededBeforeReload =
+        store.getItem(projectStorageKey('tnv.thermal_solutions', DEMO_PROJECT_ID)) != null;
     });
     vi.stubGlobal('location', { reload });
 
