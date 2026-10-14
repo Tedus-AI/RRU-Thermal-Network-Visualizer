@@ -31,6 +31,8 @@ import type {
 } from '@/report/reportTypes';
 
 import {
+  clearProjectData,
+  withPersistenceTransaction,
   loadAnalyses,
   loadBoundarySets,
   loadComponentRevisions,
@@ -208,6 +210,46 @@ function arrayLength(value: unknown): number {
   return Array.isArray(value) ? value.length : 0;
 }
 
+/** The bundle's list sections; each, when present, must be a list of records. */
+const LIST_SECTIONS = [
+  'scenarios',
+  'components',
+  'boundary_sets',
+  'solutions',
+  'analyses',
+  'distributions',
+  'proposals',
+  'snapshots',
+  'report_configs',
+  'report_templates',
+  'export_payloads',
+] as const;
+
+/** The bundle's single-record sections; each, when present, must be a record. */
+const RECORD_SECTIONS = ['network', 'component_revisions', 'network_review', 'export_stamp'] as const;
+
+/**
+ * The first section whose SHAPE is wrong, or null.
+ *
+ * Shape only — a list where a list belongs, records inside it, a record where
+ * a record belongs. Field-level tolerance stays with the loaders. This used to
+ * be skipped entirely, so a file whose `scenarios` was an object reached
+ * `applyProjectFile`, wrote the project record, then threw on `.map` and left
+ * a half-imported project behind.
+ */
+function malformedSection(data: Record<string, unknown>): string | null {
+  for (const section of LIST_SECTIONS) {
+    const value = data[section];
+    if (value == null) continue;
+    if (!Array.isArray(value) || !value.every(isRecord)) return section;
+  }
+  for (const section of RECORD_SECTIONS) {
+    const value = data[section];
+    if (value != null && !isRecord(value)) return section;
+  }
+  return null;
+}
+
 /**
  * Validates a candidate file far enough to describe it, without trusting it.
  *
@@ -262,6 +304,15 @@ export function parseProjectFile(text: string): ParseResult {
     };
   }
 
+  const malformed = malformedSection(data);
+  if (malformed) {
+    return {
+      ok: false,
+      error: `The file's "${malformed}" section is malformed, so nothing was imported.`,
+      error_zh: `此檔案的「${malformed}」區段格式錯誤，未匯入任何資料。`,
+    };
+  }
+
   const network = isRecord(data.network) ? data.network : null;
 
   return {
@@ -305,14 +356,28 @@ export function availableProjectId(base: string): string {
 }
 
 /**
- * Writes a parsed file into storage.
+ * Writes a parsed file into storage — all of it, or none of it.
  *
  * In `copy` mode every record is re-pointed at the new project id before being
  * written; the id appears on each collection's rows as well as on the project,
  * so rewriting only the project record would leave orphans behind.
+ *
+ * In `overwrite` mode the project's existing data is cleared first, so the
+ * file REPLACES it. It used to be merged in: a solution, analysis or boundary
+ * set for a scenario the file no longer had survived the import and stayed
+ * attached to a network it was never solved on.
+ *
+ * The whole write is one transaction. A failure part-way used to leave a
+ * half-written project in the cache — which the folder mirror would then copy
+ * over the good file.
  */
 export function applyProjectFile(file: ProjectFile, mode: ImportMode): ImportOutcome {
+  return withPersistenceTransaction(() => writeProjectFile(file, mode));
+}
+
+function writeProjectFile(file: ProjectFile, mode: ImportMode): ImportOutcome {
   const targetId = mode === 'copy' ? availableProjectId(file.project_id) : file.project_id;
+  if (mode === 'overwrite') clearProjectData(targetId);
   const { data } = file;
   const written: string[] = [];
   const note = (label: string, count: number) => {

@@ -42,12 +42,38 @@ export function sanitizeSegment(raw: string): string {
   );
 }
 
-/** Joins pre-sanitized parts, dropping the empties so no `__` appears. */
-function join(parts: Array<string | null | undefined>): string {
-  return parts
-    .map((part) => (part ? sanitizeSegment(part) : ''))
-    .filter((part) => part.length > 0)
-    .join('_');
+/** True when the ASCII slug had to drop letters it could not spell — CJK, for one. */
+function losesText(raw: string): boolean {
+  // eslint-disable-next-line no-control-regex
+  return /[^\x00-\x7f]/.test(raw.normalize('NFKD').replace(/[\u0300-\u036f]/g, ''));
+}
+
+/** FNV-1a, 32-bit, as 8 hex digits: short, stable, ASCII. */
+function shortHash(text: string): string {
+  let value = 0x811c9dc5;
+  for (let index = 0; index < text.length; index += 1) {
+    value ^= text.charCodeAt(index);
+    value = Math.imul(value, 0x01000193);
+  }
+  return (value >>> 0).toString(16).padStart(8, '0');
+}
+
+/**
+ * A filename segment that still tells two names apart.
+ *
+ * `sanitizeSegment` keeps 12 §18's safe ASCII slug, which drops Traditional
+ * Chinese entirely: 「夏季高溫」 and 「冬季低溫」 both became nothing, and
+ * 「夏季 55C」/「冬季 55C」 both became `55C`, so two scenarios' reports carried
+ * the same name — and in folder mode the second silently replaced the first.
+ * When the slug lost text, the stable ASCII id is appended (or used outright
+ * when nothing was left); without one, a short hash of the original does the
+ * same job.
+ */
+export function identifyingSegment(raw: string, fallbackId?: string | null): string {
+  const slug = sanitizeSegment(raw);
+  if (!losesText(raw)) return slug;
+  const id = sanitizeSegment(fallbackId ?? '') || `x${shortHash(raw)}`;
+  return slug ? `${slug}_${id}` : id;
 }
 
 /** 12 §18 — `YYYYMMDD_HHmm`, in local time, which is what the engineer reads. */
@@ -63,6 +89,8 @@ export interface FilenameInput {
   config: ExportConfiguration;
   project_id: string;
   scenario_name: string;
+  /** Stable ASCII id, used when the name does not survive the ASCII slug. */
+  scenario_id?: string | null;
   now: Date;
   /** Overrides the catalog's slug — used for the two network CSV tables. */
   slug_override?: string;
@@ -74,8 +102,14 @@ export interface FilenameInput {
  * Kept separate from `filenameFor` so the Base Filename field can be seeded
  * with something meaningful and still be edited freely.
  */
-export function defaultBaseFilename(projectId: string, scenarioName: string): string {
-  return join([projectId, scenarioName]);
+export function defaultBaseFilename(
+  projectId: string,
+  scenarioName: string,
+  scenarioId?: string | null,
+): string {
+  return [identifyingSegment(projectId), identifyingSegment(scenarioName, scenarioId)]
+    .filter((part) => part.length > 0)
+    .join('_');
 }
 
 export function filenameFor(type: ArtifactType, input: FilenameInput): string {
@@ -90,8 +124,10 @@ export function filenameFor(type: ArtifactType, input: FilenameInput): string {
   // the preview to be readable.
   if (base.length > 0) parts.push(base);
   else {
-    if (config.include_project_id) parts.push(sanitizeSegment(input.project_id));
-    if (config.include_scenario_id) parts.push(sanitizeSegment(input.scenario_name));
+    if (config.include_project_id) parts.push(identifyingSegment(input.project_id));
+    if (config.include_scenario_id) {
+      parts.push(identifyingSegment(input.scenario_name, input.scenario_id));
+    }
   }
 
   parts.push(sanitizeSegment(input.slug_override ?? definition.artifact_slug));

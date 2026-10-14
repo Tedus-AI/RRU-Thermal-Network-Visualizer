@@ -193,6 +193,7 @@ async function generate(
         config,
         project_id: sources.project_id,
         scenario_name: sources.scenario.name,
+        scenario_id: sources.scenario.id,
         now: options.now,
         slug_override: slug,
         extension_override: extension,
