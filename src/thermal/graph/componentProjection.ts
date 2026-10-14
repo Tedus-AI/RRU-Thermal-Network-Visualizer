@@ -14,7 +14,8 @@ import {
 import type { ThermalEdge, ThermalNetwork, ThermalNode } from '../types';
 import { readLinkedInput } from './networkBuilder';
 import { limitReferenceNodeId } from './limitReference';
-import { SOURCE_AREA_OVERRIDE_KEY } from './hskBaseConnection';
+import { HSK_BASE_CONNECTION_ROLE, SOURCE_AREA_OVERRIDE_KEY } from './hskBaseConnection';
+import { spreadingVariantFor } from './spreadingVariant';
 
 function followsComponentPower(node: ThermalNode): boolean {
   if (node.metadata?.component_power_linked === true) return true;
@@ -127,6 +128,16 @@ function updateLinkedEdge(
     if (typeof stored === 'number' && Number.isFinite(stored) && stored > 0) {
       perDevice.source_area_mm2 = stored;
     }
+  }
+
+  // The base edge's Ψ variant follows the source it carries (see
+  // `spreadingVariant.ts`), so a project saved before that default existed
+  // solves with it even if Screen 05 has not refreshed the stored edge yet.
+  if (
+    edge.method === 'spreading_disc' &&
+    edge.metadata?.connection_role === HSK_BASE_CONNECTION_ROLE
+  ) {
+    perDevice.psi_variant = spreadingVariantFor(network, edge);
   }
 
   const parameters = scaleParametersForDevices(

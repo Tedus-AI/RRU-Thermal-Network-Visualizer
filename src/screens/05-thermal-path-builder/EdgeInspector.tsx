@@ -24,6 +24,11 @@ import { activeRth, setRthFromSource } from '@/thermal/rth';
 import { computeRth } from '@/thermal/resistance/calculators';
 import { discSpreadingResistance, type SpreadingVariant } from '@/thermal/resistance/spreading';
 import {
+  PSI_VARIANT_PINNED_KEY,
+  defaultSpreadingVariant,
+  isSpreadingVariantPinned,
+} from '@/thermal/graph/spreadingVariant';
+import {
   EDGE_TYPES,
   type Confidence,
   type DataSource,
@@ -164,14 +169,22 @@ function Row({ label, zh, children }: { label: string; zh?: string; children: Re
  * thin bases this tool models the two differ by 3–21% — better to show the gap
  * than to let someone find it and assume the tool is wrong.
  */
-function SpreadingBreakdown({
+export function SpreadingBreakdown({
   edge,
   readOnly,
+  defaultVariant,
+  pinned,
   onVariant,
+  onUseDefault,
 }: {
   edge: ThermalEdge;
   readOnly: boolean;
+  /** What this edge gets when nobody chose — see `spreadingVariant.ts`. */
+  defaultVariant: SpreadingVariant;
+  /** True once an engineer picked the variant here; refreshes then leave it alone. */
+  pinned: boolean;
   onVariant: (variant: SpreadingVariant) => void;
+  onUseDefault: () => void;
 }) {
   const params = edge.parameters ?? {};
   const number = (key: string) =>
@@ -217,16 +230,37 @@ function SpreadingBreakdown({
           value={variant}
           disabled={readOnly}
           items={[
-            { value: 'max', label: 'Peak, under the source (Ψ_max)' },
-            { value: 'avg', label: 'Average over the contact patch (Ψ_avg)' },
+            {
+              value: 'max',
+              label: `Peak, under the source (Ψ_max)${defaultVariant === 'max' ? ' — default' : ''}`,
+            },
+            {
+              value: 'avg',
+              label: `Average over the contact patch (Ψ_avg)${defaultVariant === 'avg' ? ' — default' : ''}`,
+            },
           ]}
           onChange={(event) => onVariant(event.target.value as SpreadingVariant)}
         />
         <p className="mt-1 text-[10px] leading-relaxed text-ink-400">
-          Peak is the default: the junction chain above this edge hangs off the hottest point of the
-          contact patch, so sizing a margin against the average would flatter it. /
-          預設取峰值，因為接面餘裕要看熱源正下方最高溫。
+          {defaultVariant === 'avg'
+            ? 'Average is the default here: the part is a metal body with no junction (Metal Base + Interface), and its own metal face evens out the contact patch, so there is no hot centre for a peak to report. / 此元件是無接面的金屬本體，金屬底面本身會把接觸面均溫，預設取平均。'
+            : 'Peak is the default: the junction chain above this edge hangs off the hottest point of the contact patch, so sizing a margin against the average would flatter it. / 預設取峰值，因為接面餘裕要看熱源正下方最高溫。'}
         </p>
+        {pinned && (
+          <p className="mt-1 text-[10px] leading-relaxed text-ink-500">
+            Chosen by hand — opening the project or editing Screen 01 keeps it. /
+            已手動指定，開啟專案或修改 01 都不會改回。{' '}
+            {!readOnly && (
+              <button
+                type="button"
+                className="font-bold text-accent-600 hover:underline"
+                onClick={onUseDefault}
+              >
+                Use default / 改回預設
+              </button>
+            )}
+          </p>
+        )}
       </div>
 
       {result ? (
@@ -484,9 +518,14 @@ export function EdgeInspector({
   const to = network.nodes[edge.to]?.name ?? edge.to;
 
   /** Recomputes the analytical slot; the manual slot is never touched. */
-  const applyParameters = (parameters: ThermalEdge['parameters'], method = edge.method) => {
+  const applyParameters = (
+    parameters: ThermalEdge['parameters'],
+    method = edge.method,
+    extra: Partial<ThermalEdge> = {},
+  ) => {
     const computed = computeRth(method, (parameters ?? {}) as Record<string, number>);
     onPatch({
+      ...extra,
       method,
       parameters,
       rth: setRthFromSource(
@@ -755,12 +794,27 @@ export function EdgeInspector({
               <SpreadingBreakdown
                 edge={edge}
                 readOnly={readOnly}
+                defaultVariant={defaultSpreadingVariant(network, edge.from)}
+                pinned={isSpreadingVariantPinned(edge)}
                 onVariant={(variant) =>
-                  applyParameters({
-                    ...(edge.parameters ?? {}),
-                    psi_variant: variant,
-                  })
+                  applyParameters(
+                    { ...(edge.parameters ?? {}), psi_variant: variant },
+                    edge.method,
+                    { metadata: { ...edge.metadata, [PSI_VARIANT_PINNED_KEY]: true } },
+                  )
                 }
+                onUseDefault={() => {
+                  const metadata = { ...edge.metadata };
+                  delete metadata[PSI_VARIANT_PINNED_KEY];
+                  applyParameters(
+                    {
+                      ...(edge.parameters ?? {}),
+                      psi_variant: defaultSpreadingVariant(network, edge.from),
+                    },
+                    edge.method,
+                    { metadata },
+                  );
+                }}
               />
             )}
           </div>

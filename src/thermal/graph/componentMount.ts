@@ -106,6 +106,7 @@ import {
 } from '@/domain/component';
 import type { MaterialDefaults } from '@/domain/materials';
 import { computeRth } from '../resistance/calculators';
+import type { SpreadingVariant } from '../resistance/spreading';
 import { createRth } from '../rth';
 import type { ThermalEdge, ThermalNode } from '../types';
 
@@ -271,6 +272,11 @@ export function buildMountChain(input: {
    * whether the block is wide enough to be a spreading problem.
    */
   sourceAreaMm2?: number | null;
+  /**
+   * Ψ variant for the block's own spreading step — the same one the base edge
+   * gets for this port (see `spreadingVariant.ts`). Peak when not stated.
+   */
+  psiVariant?: SpreadingVariant;
 }): MountChain {
   const { portNodeId, targetNodeId, componentRef, mount, materials, sourceAreaMm2 } = input;
   const type: MountType = mount.type;
@@ -394,9 +400,9 @@ export function buildMountChain(input: {
               ...(k != null ? { k_W_mK: k } : {}),
               plate_area_mm2: area!,
               source_area_mm2: sourceAreaMm2!,
-              // Peak under the source, matching the base edge: the junction
-              // chain upstream hangs off the hottest point of the patch.
-              psi_variant: 'max',
+              // Matching the base edge: peak under a junction, the patch
+              // average under a metal body that is itself the source.
+              psi_variant: input.psiVariant ?? 'max',
             }
           : {
               ...(mount.height_mm != null ? { length_mm: mount.height_mm } : {}),
