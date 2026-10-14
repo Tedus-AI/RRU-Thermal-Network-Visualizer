@@ -467,20 +467,43 @@ export interface FlothermMapping {
   confidence: Confidence;
 }
 
+/**
+ * Solver thresholds.
+ *
+ * The network solve is a single direct factorisation, so there is no iteration
+ * count or convergence tolerance to set. Earlier builds carried
+ * `max_iterations` and `tolerance` here anyway; nothing ever read them, and a
+ * setting that changes nothing is a claim about the solve that is not true.
+ * Temperature-dependent boundary coefficients are not iterated inside the solve
+ * either: they are evaluated at a stated surface temperature and checked
+ * against the result afterwards (`boundary/assumptionCheck.ts`).
+ */
 export interface SolverSettings {
   /** Energy-balance thresholds in %, 00 §14. Configurable in Settings. */
   energy_warn_pct: number;
   energy_error_pct: number;
-  max_iterations: number;
-  tolerance: number;
 }
 
 export const DEFAULT_SOLVER_SETTINGS: SolverSettings = {
   energy_warn_pct: 0.5,
   energy_error_pct: 2.0,
-  max_iterations: 200,
-  tolerance: 1e-9,
 };
+
+/**
+ * Settings read from storage or an imported file, reduced to what this build
+ * understands. A missing, non-finite or negative threshold falls back to its
+ * default, and retired keys are dropped rather than carried forward.
+ */
+export function normalizeSolverSettings(raw: unknown): SolverSettings {
+  const source = raw != null && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+  const threshold = (value: unknown, fallback: number) =>
+    typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : fallback;
+  const warn = threshold(source.energy_warn_pct, DEFAULT_SOLVER_SETTINGS.energy_warn_pct);
+  const error = threshold(source.energy_error_pct, DEFAULT_SOLVER_SETTINGS.energy_error_pct);
+  // A warning band above the error band would grade every result an error
+  // before it could ever be a warning; keep them ordered.
+  return { energy_warn_pct: Math.min(warn, error), energy_error_pct: error };
+}
 
 /** 05 §37. */
 export const NETWORK_STATUSES = [

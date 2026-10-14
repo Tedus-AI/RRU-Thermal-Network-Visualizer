@@ -27,6 +27,8 @@ function timeOf(iso: string | null): string {
 export function SaveIndicator() {
   const status = useFolderStore((s) => s.status);
   const pending = useSaveStatus((s) => s.pending);
+  const saveError = useSaveStatus((s) => s.error);
+  const cacheFailure = useSaveStatus((s) => s.cacheFailure);
   const syncing = useFolderStore((s) => s.syncing);
   const lastSyncAt = useFolderStore((s) => s.lastSyncAt);
   const folderName = useFolderStore((s) => s.folderName);
@@ -58,6 +60,23 @@ export function SaveIndicator() {
     );
   }
 
+  // A save that threw. It used to be swallowed by a timer, leaving "Writing…"
+  // up for good; the store keeps the edit and retries on the next change.
+  if (saveError && status !== 'error') {
+    return (
+      <span
+        className={`${base} border-danger-500/40 bg-danger-500/15 text-danger-500`}
+        title={biTitle(
+          `The last save failed: ${saveError}. The edit is kept and will be retried on the next change.`,
+          `最近一次儲存失敗：${saveError}。修改仍保留在畫面中，下次變更時會再嘗試寫入。`,
+        )}
+      >
+        <AlertTriangle className="size-3.5" aria-hidden />
+        Save Failed / 儲存失敗
+      </span>
+    );
+  }
+
   if (status === 'error') {
     return (
       <span
@@ -74,43 +93,61 @@ export function SaveIndicator() {
   }
 
   const busy = pending || syncing;
+
+  // The browser refused to cache a value. It is held in memory and still
+  // written to the folder, so this is a caution, not a failure.
+  const cacheWarning = cacheFailure ? (
+    <span
+      className={`${base} border-warn-500/40 bg-warn-500/15 text-warn-500`}
+      title={biTitle(
+        'Browser storage is full. Your edits are held in memory and still written to the project folder; do not close the tab while a write is pending.',
+        '瀏覽器儲存空間已滿。修改暫存在記憶體並照常寫入專案資料夾；寫入中請勿關閉分頁。',
+      )}
+    >
+      <AlertTriangle className="size-3.5" aria-hidden />
+      Cache Full / 快取已滿
+    </span>
+  ) : null;
   const syncedFilename = lastSyncedProjectId
     ? projectFilenames[lastSyncedProjectId]
     : null;
   const diskTarget = [folderName, syncedFilename].filter(Boolean).join(' / ');
 
   return (
-    <span
-      className={`${base} ${
-        busy
-          ? // Bright amber: the accent blue sat too close to the dark shell to read.
-            'border-warn-400/50 bg-warn-400/15 text-warn-400'
-          : 'border-ok-500/30 bg-ok-500/10 text-ok-500'
-      }`}
-      // aria-live so a screen reader hears the transition to saved, which is
-      // the whole reassurance this control exists to give.
-      aria-live="polite"
-      title={biTitle(
-        busy
-          ? 'Writing your latest changes to the project JSON file'
-          : `All changes written to ${diskTarget || 'the project JSON file'}`,
-        busy
-          ? '正在將最新變更寫入專案 JSON 檔案。'
-          : `所有變更已寫入 ${diskTarget || '專案 JSON 檔案'}；重新整理後仍會保留。`,
-      )}
-    >
-      {busy ? (
-        <>
-          <Loader2 className="size-3.5 animate-spin" aria-hidden />
-          Writing JSON… / 寫入中
-        </>
-      ) : (
-        <>
-          <Check className="size-3.5" aria-hidden />
-          Saved to JSON / 已寫入 JSON
-          {lastSyncAt && <span className="font-normal opacity-70">{timeOf(lastSyncAt)}</span>}
-        </>
-      )}
-    </span>
+    <>
+      {cacheWarning}
+      <span
+        className={`${base} ${
+          busy
+            ? // Bright amber: the accent blue sat too close to the dark shell to read.
+              'border-warn-400/50 bg-warn-400/15 text-warn-400'
+            : 'border-ok-500/30 bg-ok-500/10 text-ok-500'
+        }`}
+        // aria-live so a screen reader hears the transition to saved, which is
+        // the whole reassurance this control exists to give.
+        aria-live="polite"
+        title={biTitle(
+          busy
+            ? 'Writing your latest changes to the project JSON file'
+            : `All changes written to ${diskTarget || 'the project JSON file'}`,
+          busy
+            ? '正在將最新變更寫入專案 JSON 檔案。'
+            : `所有變更已寫入 ${diskTarget || '專案 JSON 檔案'}；重新整理後仍會保留。`,
+        )}
+      >
+        {busy ? (
+          <>
+            <Loader2 className="size-3.5 animate-spin" aria-hidden />
+            Writing JSON… / 寫入中
+          </>
+        ) : (
+          <>
+            <Check className="size-3.5" aria-hidden />
+            Saved to JSON / 已寫入 JSON
+            {lastSyncAt && <span className="font-normal opacity-70">{timeOf(lastSyncAt)}</span>}
+          </>
+        )}
+      </span>
+    </>
   );
 }

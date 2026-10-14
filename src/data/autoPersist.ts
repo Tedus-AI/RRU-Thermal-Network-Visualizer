@@ -23,7 +23,7 @@ import { useProjectStore } from './projectStore';
 import { useReportStore } from './reportStore';
 import { useScenarioStore } from './scenarioStore';
 import { useSolutionStore } from './solutionStore';
-import { markSaveIdle, markSavePending } from './saveStatus';
+import { markSaveFailed, markSaveIdle, markSavePending } from './saveStatus';
 
 /** A store that tracks unsaved edits and can flush them for a project. */
 interface PersistableStore {
@@ -92,18 +92,58 @@ export function startAutoPersist(): () => void {
             markSaveIdle();
             return;
           }
-          // Re-check: another path may have flushed it in the meantime.
-          if (store.getState().dirty) store.getState().save(projectId);
-          else markSaveIdle();
+          flushStore(store, projectId);
         }, FLUSH_MS),
       );
     }),
   );
 
+  activeTimers = timers;
+
   return () => {
     for (const off of unsubscribes) off();
     for (const timer of timers.values()) clearTimeout(timer);
     timers.clear();
+    activeTimers = null;
     started = false;
   };
+}
+
+/**
+ * Saves one store if it still has unsaved edits.
+ *
+ * A save that throws used to escape from the timer callback, where nothing
+ * caught it: the store stayed dirty, the light stayed on "Writing…" and the
+ * user was never told. It is reported now, and the store is left dirty so the
+ * next edit — or the unload flush — tries again.
+ */
+function flushStore(store: PersistableStore, projectId: string): void {
+  try {
+    // Re-check: another path may have flushed it in the meantime.
+    if (store.getState().dirty) store.getState().save(projectId);
+    else markSaveIdle();
+  } catch (error) {
+    markSaveFailed(error);
+  }
+}
+
+let activeTimers: Map<string, ReturnType<typeof setTimeout>> | null = null;
+
+/**
+ * Writes every dirty store NOW, skipping the debounce.
+ *
+ * For the moments there is no time left — the tab is being hidden or closed.
+ * Synchronous on purpose: localStorage writes complete before the page goes,
+ * where a timer might never fire.
+ */
+export function flushAutoPersistNow(): void {
+  const projectId = activeProjectId();
+  if (activeTimers) {
+    for (const timer of activeTimers.values()) clearTimeout(timer);
+    activeTimers.clear();
+  }
+  if (!projectId) return;
+  for (const { store } of STORES) {
+    if (store.getState().dirty) flushStore(store, projectId);
+  }
 }

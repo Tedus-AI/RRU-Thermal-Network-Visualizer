@@ -26,6 +26,7 @@ import { BUILD_ID, resetProjectStorage } from '@/data/bootstrapStorage';
 import { storageUsage } from '@/data/buildStamp';
 import { useProjectStore } from '@/data/projectStore';
 import { useFolderStore } from '@/data/folderStore';
+import { projectIdExists } from '@/data/persistence';
 import type { FolderStatus } from '@/data/folderStore';
 import type { FolderEntry } from '@/data/folderBinding';
 import { SCHEMA_VERSION } from '@/domain/project';
@@ -190,7 +191,11 @@ function LocalFolderSection({ onFileText }: { onFileText: (text: string) => void
             const ok = await useFolderStore.getState().bind();
             if (!ok) return;
             toast.success('Folder bound. Saves will be mirrored there.');
-            if (canMirror && projectId) await useFolderStore.getState().mirror(projectId);
+            // The new folder's projects replaced the cache; the one that was
+            // open may not be among them, and mirroring it would fail.
+            if (canMirror && projectId && projectIdExists(projectId)) {
+              await useFolderStore.getState().mirror(projectId);
+            }
           }}
         >
           {status === 'unbound' ? 'Choose Folder / 選擇資料夾' : 'Change Folder / 變更資料夾'}
@@ -214,7 +219,9 @@ function LocalFolderSection({ onFileText }: { onFileText: (text: string) => void
               variant="ghost"
               onClick={async () => {
                 await useFolderStore.getState().unbind();
-                toast.success('Folder disconnected. Local data is untouched.');
+                // The browser cache is emptied on disconnect (anything not yet
+                // on disk is written first); the files themselves stay put.
+                toast.success('Folder disconnected. Your project files in the folder are untouched.');
               }}
             >
               Disconnect / 解除綁定

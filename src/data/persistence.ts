@@ -10,6 +10,28 @@
  *   - unknown sibling fields written by other tools are preserved verbatim;
  *   - this tool only owns `project_name`, `project_context`, `active_scenario_id`,
  *     `status` and `meta`.
+ *
+ * Storage layout
+ * --------------
+ * The project index (`tnv.projects`) and the shared report templates are one
+ * document each. Everything that belongs to ONE project lives under its own key,
+ * `<collection>::<projectId>`. It used to be one document per collection for
+ * every project at once, so each keystroke re-read, re-parsed, re-serialised
+ * and re-compressed every project in the folder, and a folder of twenty
+ * projects paid for all twenty on every save. Data written in the older layout
+ * is still read, and is split into per-project keys the first time that
+ * collection is written.
+ *
+ * When the browser refuses a write
+ * --------------------------------
+ * localStorage has a small per-origin quota, shared on GitHub Pages with every
+ * other app on the origin. A refused `setItem` used to throw out of the save,
+ * leave the edit only in the screen's memory, and — because the folder mirror
+ * is triggered by a successful write — keep it out of the project file too,
+ * while the save light stayed on "Writing…" forever. Now the value is held in
+ * an in-memory overlay that every read consults first, the write listeners
+ * still fire so the folder (the durable copy) receives it, and the refusal is
+ * published for the UI to show (`onPersistenceWriteFailure`).
  */
 
 import type { Project, ProjectContext, Scenario } from '@/domain/project';
@@ -23,8 +45,8 @@ import {
 } from '@/domain/revision';
 import type { Component } from '@/domain/component';
 import {
-  DEFAULT_SOLVER_SETTINGS,
   normalizeNodeType,
+  normalizeSolverSettings,
   type ThermalNetwork,
   type ThermalNode,
 } from '@/thermal/types';
@@ -40,6 +62,7 @@ import type {
   ThermalReportConfig,
 } from '@/report/reportTypes';
 import { compressToUTF16, decompressFromUTF16 } from 'lz-string';
+import { UNSYNCED_STORAGE_KEY, clearOwnedStorage } from './buildStamp';
 import { migrateComponents } from './componentMigration';
 
 const PROJECTS_KEY = 'tnv.projects';
@@ -77,6 +100,14 @@ const EXPORT_PREFS_KEY = 'tnv.export_prefs';
 export const PERSISTENCE_COMPRESSION_PREFIX = 'tnv:lz16:';
 const PLAIN_JSON_KEYS = new Set([PROJECTS_KEY, COMPONENT_REVISIONS_KEY]);
 
+/** Separates a collection from the project its per-project key belongs to. */
+const BUCKET_SEPARATOR = '::';
+
+/** The localStorage key one project's slice of a collection lives under. */
+export function projectStorageKey(collectionKey: string, projectId: string): string {
+  return `${collectionKey}${BUCKET_SEPARATOR}${projectId}`;
+}
+
 /** Keys on a project document that belong to this tool. Everything else is foreign. */
 const OWNED_PROJECT_KEYS = [
   'project_id',
@@ -90,6 +121,34 @@ const OWNED_PROJECT_KEYS = [
 ] as const;
 
 type RawDoc = Record<string, unknown>;
+
+// --- own-property access ---------------------------------------------------
+// Project, scenario and proposal ids are user text and become object keys
+// here. Plain bracket access treats `__proto__` as the prototype and finds
+// `constructor` / `toString` on every object, so `projectIdExists('constructor')`
+// was true and a project named `__proto__` could never be stored. Every
+// id-keyed read and write goes through these instead.
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return value != null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function own<T = unknown>(record: Record<string, unknown>, key: string): T | undefined {
+  return Object.hasOwn(record, key) ? (record[key] as T) : undefined;
+}
+
+function setOwn(record: Record<string, unknown>, key: string, value: unknown): void {
+  // `defineProperty` never invokes the `__proto__` setter, so the id is stored
+  // as an ordinary property that JSON round-trips.
+  Object.defineProperty(record, key, {
+    value,
+    enumerable: true,
+    writable: true,
+    configurable: true,
+  });
+}
+
+// --- corruption ------------------------------------------------------------
 
 export interface PersistenceRecoveryIssue {
   key: string;
@@ -109,7 +168,180 @@ export class PersistenceCorruptionError extends Error {
 
 const recoveryIssues = new Map<string, PersistenceRecoveryIssue>();
 
-function parseCollection(key: string, raw: string): Record<string, RawDoc> {
+export function getPersistenceRecoveryIssues(): PersistenceRecoveryIssue[] {
+  return [...recoveryIssues.values()].map((issue) => ({ ...issue }));
+}
+
+// --- write failures and the in-memory overlay ------------------------------
+
+export interface PersistenceWriteFailure {
+  /** Storage key the browser refused. */
+  key: string;
+  message: string;
+  /** True for the browser's quota error, which is the usual cause. */
+  quota: boolean;
+  at: string;
+}
+
+/** Values the browser refused to store, held here so nothing is lost. */
+const overlay = new Map<string, string>();
+let writeFailure: PersistenceWriteFailure | null = null;
+const failureListeners = new Set<(failure: PersistenceWriteFailure | null) => void>();
+
+/** The current refusal, or null while every value is in localStorage. */
+export function getPersistenceWriteFailure(): PersistenceWriteFailure | null {
+  return writeFailure ? { ...writeFailure } : null;
+}
+
+/** Called whenever a refusal starts or clears. */
+export function onPersistenceWriteFailure(
+  listener: (failure: PersistenceWriteFailure | null) => void,
+): () => void {
+  failureListeners.add(listener);
+  return () => failureListeners.delete(listener);
+}
+
+function publishFailure(next: PersistenceWriteFailure | null): void {
+  writeFailure = next;
+  for (const listener of failureListeners) {
+    try {
+      listener(next ? { ...next } : null);
+    } catch {
+      // A broken listener must not turn a held value into a lost one.
+    }
+  }
+}
+
+function isQuotaError(error: unknown): boolean {
+  if (error == null || typeof error !== 'object') return false;
+  const { name } = error as { name?: unknown };
+  return name === 'QuotaExceededError' || name === 'NS_ERROR_DOM_QUOTA_REACHED';
+}
+
+function storageAvailable(): boolean {
+  try {
+    return typeof localStorage !== 'undefined' && localStorage != null;
+  } catch {
+    return false;
+  }
+}
+
+/** Retries the held values, oldest first, until the browser refuses again. */
+function flushOverlay(): void {
+  if (!storageAvailable()) return;
+  for (const [key, text] of [...overlay]) {
+    try {
+      localStorage.setItem(key, text);
+      overlay.delete(key);
+    } catch {
+      return;
+    }
+  }
+  if (overlay.size === 0 && writeFailure) publishFailure(null);
+}
+
+// --- transactions ----------------------------------------------------------
+
+interface Transaction {
+  /** What each touched key held before, so a failure can put it back. */
+  originals: Map<string, { stored: string | null; held: string | undefined }>;
+  /** Write notifications, sent once on commit. */
+  notifications: Array<{ key: string; projectId?: string }>;
+}
+
+let transaction: Transaction | null = null;
+
+function recordOriginal(storageKey: string): void {
+  if (!transaction || transaction.originals.has(storageKey)) return;
+  transaction.originals.set(storageKey, {
+    stored: storageAvailable() ? localStorage.getItem(storageKey) : null,
+    held: overlay.get(storageKey),
+  });
+}
+
+/**
+ * Runs `body` as one unit: either every write it makes lands, or none does.
+ *
+ * Importing a project is a dozen separate writes. One of them failing used to
+ * leave a half-written project behind — and the folder mirror, triggered by
+ * the writes that did land, would then copy that half over a good file. Inside
+ * a transaction the write listeners are held until the end, and a throw puts
+ * every touched key back exactly as it was before rethrowing. Nested calls
+ * join the outer transaction.
+ */
+export function withPersistenceTransaction<T>(body: () => T): T {
+  if (transaction) return body();
+  const current: Transaction = { originals: new Map(), notifications: [] };
+  transaction = current;
+  try {
+    const result = body();
+    transaction = null;
+    const seen = new Set<string>();
+    for (const entry of current.notifications) {
+      const id = `${entry.key}\u0000${entry.projectId ?? ''}`;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      notify(entry.key, entry.projectId);
+    }
+    return result;
+  } catch (error) {
+    transaction = null;
+    for (const [key, original] of current.originals) {
+      if (original.held !== undefined) overlay.set(key, original.held);
+      else overlay.delete(key);
+      if (!storageAvailable()) continue;
+      try {
+        if (original.stored == null) localStorage.removeItem(key);
+        else localStorage.setItem(key, original.stored);
+      } catch {
+        // Putting back a value the browser held a moment ago can only fail if
+        // something else filled the quota since; keep it in memory instead.
+        if (original.stored != null) overlay.set(key, original.stored);
+      }
+    }
+    throw error;
+  }
+}
+
+// --- raw access ------------------------------------------------------------
+
+function rawGet(storageKey: string): string | null {
+  const held = overlay.get(storageKey);
+  if (held !== undefined) return held;
+  if (!storageAvailable()) return null;
+  return localStorage.getItem(storageKey);
+}
+
+function rawSet(storageKey: string, text: string): void {
+  recordOriginal(storageKey);
+  if (!storageAvailable()) {
+    overlay.set(storageKey, text);
+    return;
+  }
+  try {
+    localStorage.setItem(storageKey, text);
+    overlay.delete(storageKey);
+    if (overlay.size > 0) flushOverlay();
+    else if (writeFailure) publishFailure(null);
+  } catch (error) {
+    overlay.set(storageKey, text);
+    publishFailure({
+      key: storageKey,
+      message: error instanceof Error ? error.message : String(error),
+      quota: isQuotaError(error),
+      at: new Date().toISOString(),
+    });
+  }
+}
+
+function rawRemove(storageKey: string): void {
+  recordOriginal(storageKey);
+  overlay.delete(storageKey);
+  if (storageAvailable()) localStorage.removeItem(storageKey);
+  if (overlay.size === 0 && writeFailure) publishFailure(null);
+}
+
+function decode(storageKey: string, raw: string): unknown {
   try {
     const encoded = raw.startsWith(PERSISTENCE_COMPRESSION_PREFIX)
       ? raw.slice(PERSISTENCE_COMPRESSION_PREFIX.length)
@@ -119,54 +351,56 @@ function parseCollection(key: string, raw: string): Record<string, RawDoc> {
       throw new Error('compressed collection could not be decoded');
     }
     const parsed: unknown = JSON.parse(json);
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-      throw new Error('expected a JSON object at the collection root');
-    }
-    recoveryIssues.delete(key);
-    return parsed as Record<string, RawDoc>;
+    recoveryIssues.delete(storageKey);
+    return parsed;
   } catch (error) {
     const message = error instanceof Error ? error.message : 'invalid JSON';
-    recoveryIssues.set(key, { key, raw, message });
-    throw new PersistenceCorruptionError(key, message);
+    recoveryIssues.set(storageKey, { key: storageKey, raw, message });
+    throw new PersistenceCorruptionError(storageKey, message);
   }
 }
 
-export function getPersistenceRecoveryIssues(): PersistenceRecoveryIssue[] {
-  return [...recoveryIssues.values()].map((issue) => ({ ...issue }));
+function encode(value: unknown, plain: boolean): string {
+  const json = JSON.stringify(value);
+  if (plain) return json;
+  const compressed = `${PERSISTENCE_COMPRESSION_PREFIX}${compressToUTF16(json)}`;
+  // Tiny documents can grow after adding the prefix. Keep those, and the
+  // project index, as readable JSON; compression starts automatically once it
+  // actually saves quota.
+  return compressed.length < json.length ? compressed : json;
+}
+
+/**
+ * Refuses to overwrite a value that was read as corrupt.
+ *
+ * Every save reads before it writes, so a corrupt value has always been met —
+ * and recorded — by the time a write to it is attempted. The raw blob is kept
+ * until someone explicitly discards it, so the next save cannot quietly replace
+ * user data nobody has looked at.
+ */
+function guardCorrupt(storageKey: string): void {
+  const issue = recoveryIssues.get(storageKey);
+  if (issue) throw new PersistenceCorruptionError(storageKey, issue.message);
 }
 
 /** Explicit recovery only; callers may export the raw issue before discarding. */
 export function discardCorruptCollection(key: string): void {
-  if (typeof localStorage === 'undefined') return;
-  localStorage.removeItem(key);
+  overlay.delete(key);
+  if (storageAvailable()) localStorage.removeItem(key);
   recoveryIssues.delete(key);
 }
 
-function readCollection(key: string): Record<string, RawDoc> {
-  if (typeof localStorage === 'undefined') return {};
-  try {
-    const raw = localStorage.getItem(key);
-    if (!raw) {
-      recoveryIssues.delete(key);
-      return {};
-    }
-    return parseCollection(key, raw);
-  } catch (error) {
-    // Preserve the raw blob and surface a typed error. The caller can present
-    // recovery options without silently replacing user data on the next save.
-    if (error instanceof PersistenceCorruptionError) throw error;
-    throw new PersistenceCorruptionError(key, error instanceof Error ? error.message : 'invalid JSON');
-  }
-}
+// --- write listeners -------------------------------------------------------
 
 /**
  * Write listeners.
  *
- * Every persisted change in the app passes through `writeCollection`, which
- * makes it the one place a mirror can hook without each store having to
- * remember to announce itself. Used by the local-folder sync.
+ * Every persisted change in the app passes through here, which makes it the
+ * one place a mirror can hook without each store having to remember to
+ * announce itself. Used by the local-folder sync. `projectId` names the project
+ * whose data changed, when the write belongs to one.
  */
-type StorageWriteListener = (key: string) => void;
+type StorageWriteListener = (key: string, projectId?: string) => void;
 const writeListeners = new Set<StorageWriteListener>();
 
 export function onStorageWrite(listener: StorageWriteListener): () => void {
@@ -174,32 +408,119 @@ export function onStorageWrite(listener: StorageWriteListener): () => void {
   return () => writeListeners.delete(listener);
 }
 
-function writeCollection(key: string, value: Record<string, RawDoc>): void {
-  if (typeof localStorage === 'undefined') return;
-  const existing = localStorage.getItem(key);
-  if (existing) parseCollection(key, existing);
-  const json = JSON.stringify(value);
-  const compressed = `${PERSISTENCE_COMPRESSION_PREFIX}${compressToUTF16(json)}`;
-  // Tiny documents can grow after adding the prefix. Keep those, and the
-  // project index, as readable JSON; compression starts automatically once it
-  // actually saves quota.
-  const stored =
-    !PLAIN_JSON_KEYS.has(key) && compressed.length < json.length ? compressed : json;
-  localStorage.setItem(key, stored);
-
+function notify(key: string, projectId?: string): void {
+  if (transaction) {
+    transaction.notifications.push({ key, projectId });
+    return;
+  }
   for (const listener of writeListeners) {
     try {
-      listener(key);
+      listener(key, projectId);
     } catch {
       // A broken mirror must never stop the write that already succeeded.
     }
   }
 }
 
+// --- documents -------------------------------------------------------------
+
+/** A whole-document collection: the project index, the shared templates. */
+function readCollection(key: string): Record<string, RawDoc> {
+  const raw = rawGet(key);
+  if (!raw) {
+    recoveryIssues.delete(key);
+    return {};
+  }
+  const parsed = decode(key, raw);
+  if (!isPlainObject(parsed)) {
+    const message = 'expected a JSON object at the collection root';
+    recoveryIssues.set(key, { key, raw, message });
+    throw new PersistenceCorruptionError(key, message);
+  }
+  return parsed as Record<string, RawDoc>;
+}
+
+function writeCollection(key: string, value: Record<string, unknown>, projectId?: string): void {
+  guardCorrupt(key);
+  rawSet(key, encode(value, PLAIN_JSON_KEYS.has(key)));
+  notify(key, projectId);
+}
+
+/** The pre-bucket layout of a per-project collection, or null if absent. */
+function readLegacyCollection(key: string): Record<string, unknown> | null {
+  const raw = rawGet(key);
+  if (!raw) return null;
+  const parsed = decode(key, raw);
+  if (!isPlainObject(parsed)) {
+    const message = 'expected a JSON object at the collection root';
+    recoveryIssues.set(key, { key, raw, message });
+    throw new PersistenceCorruptionError(key, message);
+  }
+  return parsed;
+}
+
+/**
+ * Splits an old whole-collection document into per-project keys.
+ *
+ * A key that already exists in the new layout was written after the old one
+ * and wins. Runs only on a write, so reading never changes storage.
+ */
+function migrateLegacyCollection(key: string): void {
+  const legacy = readLegacyCollection(key);
+  if (!legacy) return;
+  for (const [projectId, value] of Object.entries(legacy)) {
+    const storageKey = projectStorageKey(key, projectId);
+    if (rawGet(storageKey) != null) continue;
+    rawSet(storageKey, encode(value, PLAIN_JSON_KEYS.has(key)));
+  }
+  rawRemove(key);
+}
+
+/** One project's slice of a collection, or undefined when it has none. */
+function readBucket<T = unknown>(key: string, projectId: string): T | undefined {
+  const storageKey = projectStorageKey(key, projectId);
+  const raw = rawGet(storageKey);
+  if (raw) return decode(storageKey, raw) as T;
+  recoveryIssues.delete(storageKey);
+  const legacy = readLegacyCollection(key);
+  return legacy ? own<T>(legacy, projectId) : undefined;
+}
+
+/** Writes one project's slice; `undefined` removes it. */
+function writeBucket(key: string, projectId: string, value: unknown): void {
+  migrateLegacyCollection(key);
+  const storageKey = projectStorageKey(key, projectId);
+  guardCorrupt(storageKey);
+  if (value === undefined) rawRemove(storageKey);
+  else rawSet(storageKey, encode(value, PLAIN_JSON_KEYS.has(key)));
+  notify(key, projectId);
+}
+
+/** A project's slice that is itself keyed by id — scenarios, solutions, … */
+function readMap(key: string, projectId: string): Record<string, unknown> {
+  const value = readBucket(key, projectId);
+  return isPlainObject(value) ? { ...value } : {};
+}
+
+// --- working cache ---------------------------------------------------------
+
+/**
+ * Empties the working cache: every `tnv.*` key, and whatever the overlay was
+ * holding for them. Hydration and unbinding a folder start from here.
+ */
+export function clearWorkingCache(): string[] {
+  overlay.clear();
+  recoveryIssues.clear();
+  if (writeFailure) publishFailure(null);
+  return storageAvailable() ? clearOwnedStorage(localStorage) : [];
+}
+
+// --- projects --------------------------------------------------------------
+
 function splitForeignFields(raw: RawDoc): Record<string, unknown> {
   const foreign: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(raw)) {
-    if (!(OWNED_PROJECT_KEYS as readonly string[]).includes(key)) foreign[key] = value;
+    if (!(OWNED_PROJECT_KEYS as readonly string[]).includes(key)) setOwn(foreign, key, value);
   }
   return foreign;
 }
@@ -231,12 +552,14 @@ function hydrateProject(raw: RawDoc): Project {
 }
 
 export function loadProjects(): Project[] {
-  return Object.values(readCollection(PROJECTS_KEY)).map(hydrateProject);
+  return Object.values(readCollection(PROJECTS_KEY))
+    .filter(isPlainObject)
+    .map(hydrateProject);
 }
 
 export function loadProject(projectId: string): Project | null {
-  const raw = readCollection(PROJECTS_KEY)[projectId];
-  return raw ? hydrateProject(raw) : null;
+  const raw = own<RawDoc>(readCollection(PROJECTS_KEY), projectId);
+  return isPlainObject(raw) ? hydrateProject(raw) : null;
 }
 
 /**
@@ -245,13 +568,15 @@ export function loadProject(projectId: string): Project | null {
  */
 export function saveProject(project: Project): Project {
   const collection = readCollection(PROJECTS_KEY);
-  const existing = collection[project.project_id] ?? {};
+  const existing = own<RawDoc>(collection, project.project_id) ?? {};
   const preserved = splitForeignFields(existing);
 
-  const merged: RawDoc = {
-    // Foreign fields first so an owned key can never be shadowed by a stale one.
-    ...preserved,
-    ...(project.foreign_fields ?? {}),
+  const merged: RawDoc = {};
+  // Foreign fields first so an owned key can never be shadowed by a stale one.
+  for (const [key, value] of Object.entries({ ...preserved, ...(project.foreign_fields ?? {}) })) {
+    setOwn(merged, key, value);
+  }
+  Object.assign(merged, {
     project_id: project.project_id,
     project_name: project.project_name,
     revision: project.revision,
@@ -260,24 +585,24 @@ export function saveProject(project: Project): Project {
     active_scenario_id: project.active_scenario_id,
     status: project.status,
     meta: { ...project.meta, updated_at: new Date().toISOString() },
-  };
+  });
 
-  collection[project.project_id] = merged;
-  writeCollection(PROJECTS_KEY, collection);
+  setOwn(collection, project.project_id, merged);
+  writeCollection(PROJECTS_KEY, collection, project.project_id);
   return hydrateProject(merged);
 }
 
 export function deleteProject(projectId: string): void {
   const collection = readCollection(PROJECTS_KEY);
-  delete collection[projectId];
-  writeCollection(PROJECTS_KEY, collection);
+  if (Object.hasOwn(collection, projectId)) delete collection[projectId];
+  writeCollection(PROJECTS_KEY, collection, projectId);
 }
 
 /**
- * Every collection that stores one bucket per project.
+ * Every collection that stores one slice per project.
  *
- * Each of these is `{ [projectId]: … }`, which is what makes a purge uniform:
- * the project's row leaves all of them and no other project's does.
+ * Each of these is keyed `<collection>::<projectId>`, which is what makes a
+ * purge uniform: the project's keys leave and no other project's do.
  */
 const PER_PROJECT_KEYS = [
   SCENARIOS_KEY,
@@ -294,7 +619,28 @@ const PER_PROJECT_KEYS = [
   REPORT_CONFIGS_KEY,
   REPORT_PAYLOADS_KEY,
   EXPORT_STAMPS_KEY,
+  // Export preferences are per project too; they were missing here, so a
+  // deleted project's were left behind.
+  EXPORT_PREFS_KEY,
 ] as const;
+
+/**
+ * Removes everything stored under a project EXCEPT its index document.
+ *
+ * What "overwrite" has to mean for an import: the file replaces the project's
+ * data, rather than being merged into whatever an older copy left behind — a
+ * solution for a scenario the file no longer has would otherwise survive and
+ * be offered against a network it was never solved on. The index document is
+ * kept, because it carries foreign fields other tools wrote.
+ */
+export function clearProjectData(projectId: string): void {
+  withPersistenceTransaction(() => {
+    for (const key of PER_PROJECT_KEYS) {
+      if (readBucket(key, projectId) === undefined) continue;
+      writeBucket(key, projectId, undefined);
+    }
+  });
+}
 
 /**
  * Deletes a project AND everything stored under it.
@@ -308,17 +654,14 @@ const PER_PROJECT_KEYS = [
  * Report TEMPLATES are deliberately left alone — they are not per-project.
  */
 export function purgeProject(projectId: string): void {
-  for (const key of PER_PROJECT_KEYS) {
-    const collection = readCollection(key);
-    if (!(projectId in collection)) continue;
-    delete collection[projectId];
-    writeCollection(key, collection);
-  }
-  deleteProject(projectId);
+  withPersistenceTransaction(() => {
+    clearProjectData(projectId);
+    deleteProject(projectId);
+  });
 }
 
 export function projectIdExists(projectId: string): boolean {
-  return projectId in readCollection(PROJECTS_KEY);
+  return Object.hasOwn(readCollection(PROJECTS_KEY), projectId);
 }
 
 // --- Scenarios -------------------------------------------------------------
@@ -326,46 +669,42 @@ export function projectIdExists(projectId: string): boolean {
 // inside the shared project document (00 §35.2).
 
 export function loadScenarios(projectId: string): Scenario[] {
-  const all = readCollection(SCENARIOS_KEY);
-  const bucket = (all[projectId] ?? {}) as Record<string, Scenario>;
+  const bucket = readMap(SCENARIOS_KEY, projectId) as Record<string, Scenario>;
   const projectUpdatedAt = loadProject(projectId)?.meta.updated_at ?? projectId;
-  return Object.values(bucket).map((scenario) => ({
-    ...scenario,
-    revision: hydrateRevision(
-      scenario.revision,
-      'scenario',
-      `${projectUpdatedAt}:${scenario.id}`,
-    ),
-  }));
+  return Object.values(bucket)
+    .filter(isPlainObject)
+    .map((scenario) => ({
+      ...scenario,
+      revision: hydrateRevision(
+        scenario.revision,
+        'scenario',
+        `${projectUpdatedAt}:${scenario.id}`,
+      ),
+    }));
 }
 
 export function saveScenarios(projectId: string, scenarios: Scenario[]): void {
-  const all = readCollection(SCENARIOS_KEY);
   const bucket: Record<string, Scenario> = {};
   for (const scenario of scenarios) {
-    bucket[scenario.id] = {
+    setOwn(bucket, scenario.id, {
       ...scenario,
       revision: hydrateRevision(scenario.revision, 'scenario', `${projectId}:${scenario.id}`),
-    };
+    });
   }
-  all[projectId] = bucket;
-  writeCollection(SCENARIOS_KEY, all);
+  writeBucket(SCENARIOS_KEY, projectId, bucket);
 }
 
 // --- Components ------------------------------------------------------------
 // Screen 02 owns the import flow; this is the storage contract it will write to.
 
 export function loadComponents(projectId: string): Component[] {
-  const all = readCollection(COMPONENTS_KEY);
   // Records written by earlier versions are upgraded here, so no screen ever
   // sees a stale component shape.
-  return migrateComponents(all[projectId]);
+  return migrateComponents(readBucket(COMPONENTS_KEY, projectId));
 }
 
 export function saveComponents(projectId: string, components: Component[]): void {
-  const all = readCollection(COMPONENTS_KEY);
-  all[projectId] = components as unknown as RawDoc;
-  writeCollection(COMPONENTS_KEY, all);
+  writeBucket(COMPONENTS_KEY, projectId, components);
 }
 
 /**
@@ -376,8 +715,7 @@ export function loadComponentRevisions(
   projectId: string,
   components: Component[] = loadComponents(projectId),
 ): ComponentRevisionSet {
-  const all = readCollection(COMPONENT_REVISIONS_KEY);
-  const stored = all[projectId] as Partial<ComponentRevisionSet> | undefined;
+  const stored = readBucket<Partial<ComponentRevisionSet>>(COMPONENT_REVISIONS_KEY, projectId);
   const latestComponentTimestamp = components
     .flatMap((component) => [
       component.provenance.last_modified_at,
@@ -387,16 +725,14 @@ export function loadComponentRevisions(
     .sort()
     .at(-1);
   const fallback = latestComponentTimestamp ?? loadProject(projectId)?.meta.updated_at ?? projectId;
-  return hydrateComponentRevisionSet(stored, fallback);
+  return hydrateComponentRevisionSet(isPlainObject(stored) ? stored : undefined, fallback);
 }
 
 export function saveComponentRevisions(
   projectId: string,
   revisions: ComponentRevisionSet,
 ): void {
-  const all = readCollection(COMPONENT_REVISIONS_KEY);
-  all[projectId] = revisions as unknown as RawDoc;
-  writeCollection(COMPONENT_REVISIONS_KEY, all);
+  writeBucket(COMPONENT_REVISIONS_KEY, projectId, revisions);
 }
 
 // --- Thermal network -------------------------------------------------------
@@ -421,15 +757,14 @@ function migrateNodeTypes(nodes: Record<string, ThermalNode>): Record<string, Th
   for (const [id, node] of Object.entries(nodes)) {
     const type = normalizeNodeType(node.type);
     if (type !== node.type) changed = true;
-    migrated[id] = type === node.type ? node : { ...node, type };
+    setOwn(migrated, id, type === node.type ? node : { ...node, type });
   }
   return changed ? migrated : nodes;
 }
 
 export function loadNetwork(projectId: string): ThermalNetwork | null {
-  const all = readCollection(NETWORKS_KEY);
-  const stored = all[projectId];
-  if (!stored || typeof stored !== 'object') return null;
+  const stored = readBucket(NETWORKS_KEY, projectId);
+  if (!isPlainObject(stored)) return null;
   const network = stored as unknown as ThermalNetwork;
   // Tolerate networks written before a field existed.
   return {
@@ -454,16 +789,17 @@ export function loadNetwork(projectId: string): ThermalNetwork | null {
       hand_placed: network.layout?.hand_placed ?? false,
     },
     flotherm_mappings: network.flotherm_mappings ?? {},
-    solver_settings: network.solver_settings ?? { ...DEFAULT_SOLVER_SETTINGS },
+    solver_settings: normalizeSolverSettings(network.solver_settings),
   };
 }
 
 export function saveNetwork(projectId: string, network: ThermalNetwork): void {
-  const all = readCollection(NETWORKS_KEY);
   // 05 §53 — unknown metadata written by other tools survives a save.
-  const existing = (all[projectId] ?? {}) as Record<string, unknown>;
-  all[projectId] = { ...existing, ...network } as unknown as RawDoc;
-  writeCollection(NETWORKS_KEY, all);
+  const existing = readBucket(NETWORKS_KEY, projectId);
+  writeBucket(NETWORKS_KEY, projectId, {
+    ...(isPlainObject(existing) ? existing : {}),
+    ...network,
+  });
 }
 
 // --- Scenario boundary conditions ------------------------------------------
@@ -475,8 +811,7 @@ function boundaryKey(networkId: string, scenarioId: string): string {
 }
 
 export function loadBoundarySets(projectId: string): ScenarioBoundaryConditionSet[] {
-  const all = readCollection(BOUNDARY_KEY);
-  const bucket = (all[projectId] ?? {}) as Record<string, ScenarioBoundaryConditionSet>;
+  const bucket = readMap(BOUNDARY_KEY, projectId) as Record<string, ScenarioBoundaryConditionSet>;
   return Object.values(bucket)
     .filter((set) => set && typeof set === 'object')
     .map(normalizeBoundarySet);
@@ -486,13 +821,11 @@ export function saveBoundarySet(
   projectId: string,
   set: ScenarioBoundaryConditionSet,
 ): void {
-  const all = readCollection(BOUNDARY_KEY);
-  const bucket = (all[projectId] ?? {}) as Record<string, unknown>;
+  const bucket = readMap(BOUNDARY_KEY, projectId);
   // Normalized on write as well as on read: reading alone would clean what the
   // app sees while leaving the retired keys in storage for the next reader.
-  bucket[boundaryKey(set.network_id, set.scenario_id)] = normalizeBoundarySet(set);
-  all[projectId] = bucket as RawDoc;
-  writeCollection(BOUNDARY_KEY, all);
+  setOwn(bucket, boundaryKey(set.network_id, set.scenario_id), normalizeBoundarySet(set));
+  writeBucket(BOUNDARY_KEY, projectId, bucket);
 }
 
 export function deleteBoundarySet(
@@ -500,11 +833,9 @@ export function deleteBoundarySet(
   networkId: string,
   scenarioId: string,
 ): void {
-  const all = readCollection(BOUNDARY_KEY);
-  const bucket = (all[projectId] ?? {}) as Record<string, unknown>;
+  const bucket = readMap(BOUNDARY_KEY, projectId);
   delete bucket[boundaryKey(networkId, scenarioId)];
-  all[projectId] = bucket as RawDoc;
-  writeCollection(BOUNDARY_KEY, all);
+  writeBucket(BOUNDARY_KEY, projectId, bucket);
 }
 
 // --- Thermal solutions ------------------------------------------------------
@@ -513,8 +844,7 @@ export function deleteBoundarySet(
 // component master data or into the graph (07 §53).
 
 export function loadSolutions(projectId: string): ThermalSolution[] {
-  const all = readCollection(SOLUTIONS_KEY);
-  const bucket = (all[projectId] ?? {}) as Record<string, ThermalSolution>;
+  const bucket = readMap(SOLUTIONS_KEY, projectId) as Record<string, ThermalSolution>;
   return Object.values(bucket)
     .filter((solution) => solution && typeof solution === 'object' && solution.scenario_id)
     .map((solution) => ({
@@ -536,14 +866,14 @@ export interface NetworkReviewState {
 }
 
 export function loadNetworkReviewState(projectId: string): NetworkReviewState {
-  const all = readCollection(NETWORK_REVIEW_KEY);
-  const stored = all[projectId] as Partial<NetworkReviewState> | undefined;
+  const stored = readBucket<Partial<NetworkReviewState>>(NETWORK_REVIEW_KEY, projectId);
+  const review = isPlainObject(stored) ? stored : undefined;
   return {
-    requires_review: stored?.requires_review === true,
-    reasons: Array.isArray(stored?.reasons)
-      ? stored.reasons.filter((reason): reason is string => typeof reason === 'string')
+    requires_review: review?.requires_review === true,
+    reasons: Array.isArray(review?.reasons)
+      ? review.reasons.filter((reason): reason is string => typeof reason === 'string')
       : [],
-    updated_at: typeof stored?.updated_at === 'string' ? stored.updated_at : '',
+    updated_at: typeof review?.updated_at === 'string' ? review.updated_at : '',
   };
 }
 
@@ -551,20 +881,16 @@ export function saveNetworkReviewState(
   projectId: string,
   review: Omit<NetworkReviewState, 'updated_at'>,
 ): void {
-  const all = readCollection(NETWORK_REVIEW_KEY);
-  all[projectId] = {
+  writeBucket(NETWORK_REVIEW_KEY, projectId, {
     ...review,
     updated_at: new Date().toISOString(),
-  } as unknown as RawDoc;
-  writeCollection(NETWORK_REVIEW_KEY, all);
+  });
 }
 
 export function saveSolution(projectId: string, solution: ThermalSolution): void {
-  const all = readCollection(SOLUTIONS_KEY);
-  const bucket = (all[projectId] ?? {}) as Record<string, unknown>;
-  bucket[boundaryKey(solution.network_id, solution.scenario_id)] = solution;
-  all[projectId] = bucket as RawDoc;
-  writeCollection(SOLUTIONS_KEY, all);
+  const bucket = readMap(SOLUTIONS_KEY, projectId);
+  setOwn(bucket, boundaryKey(solution.network_id, solution.scenario_id), solution);
+  writeBucket(SOLUTIONS_KEY, projectId, bucket);
 }
 
 export function deleteSolution(
@@ -572,11 +898,9 @@ export function deleteSolution(
   networkId: string,
   scenarioId: string,
 ): void {
-  const all = readCollection(SOLUTIONS_KEY);
-  const bucket = (all[projectId] ?? {}) as Record<string, unknown>;
+  const bucket = readMap(SOLUTIONS_KEY, projectId);
   delete bucket[boundaryKey(networkId, scenarioId)];
-  all[projectId] = bucket as RawDoc;
-  writeCollection(SOLUTIONS_KEY, all);
+  writeBucket(SOLUTIONS_KEY, projectId, bucket);
 }
 
 // --- Bottleneck analyses and improvement proposals --------------------------
@@ -585,33 +909,27 @@ export function deleteSolution(
 // nothing here writes back into the network or the component records.
 
 export function loadAnalyses(projectId: string): BottleneckAnalysis[] {
-  const all = readCollection(ANALYSES_KEY);
-  const bucket = (all[projectId] ?? {}) as Record<string, BottleneckAnalysis>;
+  const bucket = readMap(ANALYSES_KEY, projectId) as Record<string, BottleneckAnalysis>;
   return Object.values(bucket).filter(
     (analysis) => analysis && typeof analysis === 'object' && analysis.scenario_id,
   );
 }
 
 export function saveAnalysis(projectId: string, analysis: BottleneckAnalysis): void {
-  const all = readCollection(ANALYSES_KEY);
-  const bucket = (all[projectId] ?? {}) as Record<string, unknown>;
-  bucket[boundaryKey(analysis.network_id, analysis.scenario_id)] = analysis;
-  all[projectId] = bucket as RawDoc;
-  writeCollection(ANALYSES_KEY, all);
+  const bucket = readMap(ANALYSES_KEY, projectId);
+  setOwn(bucket, boundaryKey(analysis.network_id, analysis.scenario_id), analysis);
+  writeBucket(ANALYSES_KEY, projectId, bucket);
 }
 
 export function deleteAnalysis(projectId: string, networkId: string, scenarioId: string): void {
-  const all = readCollection(ANALYSES_KEY);
-  const bucket = (all[projectId] ?? {}) as Record<string, unknown>;
+  const bucket = readMap(ANALYSES_KEY, projectId);
   delete bucket[boundaryKey(networkId, scenarioId)];
-  all[projectId] = bucket as RawDoc;
-  writeCollection(ANALYSES_KEY, all);
+  writeBucket(ANALYSES_KEY, projectId, bucket);
 }
 
 
 export function loadProposals(projectId: string): ImprovementStudy[] {
-  const all = readCollection(PROPOSALS_KEY);
-  const bucket = (all[projectId] ?? {}) as Record<string, ImprovementStudy>;
+  const bucket = readMap(PROPOSALS_KEY, projectId) as Record<string, ImprovementStudy>;
   // A record saved by the ranking screen was a single edge with no `segments`;
   // this build cannot render one, so it is left in storage rather than shown
   // half-empty.
@@ -619,19 +937,15 @@ export function loadProposals(projectId: string): ImprovementStudy[] {
 }
 
 export function saveProposal(projectId: string, proposal: ImprovementStudy): void {
-  const all = readCollection(PROPOSALS_KEY);
-  const bucket = (all[projectId] ?? {}) as Record<string, unknown>;
-  bucket[proposal.id] = proposal;
-  all[projectId] = bucket as RawDoc;
-  writeCollection(PROPOSALS_KEY, all);
+  const bucket = readMap(PROPOSALS_KEY, projectId);
+  setOwn(bucket, proposal.id, proposal);
+  writeBucket(PROPOSALS_KEY, projectId, bucket);
 }
 
 export function deleteProposal(projectId: string, proposalId: string): void {
-  const all = readCollection(PROPOSALS_KEY);
-  const bucket = (all[projectId] ?? {}) as Record<string, unknown>;
-  delete bucket[proposalId];
-  all[projectId] = bucket as RawDoc;
-  writeCollection(PROPOSALS_KEY, all);
+  const bucket = readMap(PROPOSALS_KEY, projectId);
+  if (Object.hasOwn(bucket, proposalId)) delete bucket[proposalId];
+  writeBucket(PROPOSALS_KEY, projectId, bucket);
 }
 
 // --- Results Overview snapshots ---------------------------------------------
@@ -640,27 +954,22 @@ export function deleteProposal(projectId: string, proposalId: string): void {
 // KPI back into component master data (10 §30).
 
 export function loadSnapshots(projectId: string): ResultsOverviewSnapshot[] {
-  const all = readCollection(SNAPSHOTS_KEY);
-  const bucket = (all[projectId] ?? {}) as Record<string, ResultsOverviewSnapshot>;
+  const bucket = readMap(SNAPSHOTS_KEY, projectId) as Record<string, ResultsOverviewSnapshot>;
   return Object.values(bucket).filter(
     (snapshot) => snapshot && typeof snapshot === 'object' && snapshot.scenario_id,
   );
 }
 
 export function saveSnapshot(projectId: string, snapshot: ResultsOverviewSnapshot): void {
-  const all = readCollection(SNAPSHOTS_KEY);
-  const bucket = (all[projectId] ?? {}) as Record<string, unknown>;
-  bucket[snapshot.scenario_id] = snapshot;
-  all[projectId] = bucket as RawDoc;
-  writeCollection(SNAPSHOTS_KEY, all);
+  const bucket = readMap(SNAPSHOTS_KEY, projectId);
+  setOwn(bucket, snapshot.scenario_id, snapshot);
+  writeBucket(SNAPSHOTS_KEY, projectId, bucket);
 }
 
 export function deleteSnapshot(projectId: string, scenarioId: string): void {
-  const all = readCollection(SNAPSHOTS_KEY);
-  const bucket = (all[projectId] ?? {}) as Record<string, unknown>;
-  delete bucket[scenarioId];
-  all[projectId] = bucket as RawDoc;
-  writeCollection(SNAPSHOTS_KEY, all);
+  const bucket = readMap(SNAPSHOTS_KEY, projectId);
+  if (Object.hasOwn(bucket, scenarioId)) delete bucket[scenarioId];
+  writeBucket(SNAPSHOTS_KEY, projectId, bucket);
 }
 
 // --- Report configuration, templates and export payloads --------------------
@@ -669,58 +978,52 @@ export function deleteSnapshot(projectId: string, scenarioId: string): void {
 // project result at all (11 §33, AC-11-33).
 
 export function loadReportConfigs(projectId: string): ThermalReportConfig[] {
-  const all = readCollection(REPORT_CONFIGS_KEY);
-  const bucket = (all[projectId] ?? {}) as Record<string, ThermalReportConfig>;
+  const bucket = readMap(REPORT_CONFIGS_KEY, projectId) as Record<string, ThermalReportConfig>;
   return Object.values(bucket).filter(
     (config) => config && typeof config === 'object' && config.scenario_id,
   );
 }
 
 export function saveReportConfig(projectId: string, config: ThermalReportConfig): void {
-  const all = readCollection(REPORT_CONFIGS_KEY);
-  const bucket = (all[projectId] ?? {}) as Record<string, unknown>;
-  bucket[config.scenario_id] = config;
-  all[projectId] = bucket as RawDoc;
-  writeCollection(REPORT_CONFIGS_KEY, all);
+  const bucket = readMap(REPORT_CONFIGS_KEY, projectId);
+  setOwn(bucket, config.scenario_id, config);
+  writeBucket(REPORT_CONFIGS_KEY, projectId, bucket);
 }
 
 export function deleteReportConfig(projectId: string, scenarioId: string): void {
-  const all = readCollection(REPORT_CONFIGS_KEY);
-  const bucket = (all[projectId] ?? {}) as Record<string, unknown>;
-  delete bucket[scenarioId];
-  all[projectId] = bucket as RawDoc;
-  writeCollection(REPORT_CONFIGS_KEY, all);
+  const bucket = readMap(REPORT_CONFIGS_KEY, projectId);
+  if (Object.hasOwn(bucket, scenarioId)) delete bucket[scenarioId];
+  writeBucket(REPORT_CONFIGS_KEY, projectId, bucket);
 }
 
 /** Templates are layout only, so they are shared across projects on purpose. */
 export function loadReportTemplates(): ReportTemplate[] {
   const all = readCollection(REPORT_TEMPLATES_KEY);
-  const bucket = (all.shared ?? {}) as Record<string, ReportTemplate>;
+  const shared = own<Record<string, ReportTemplate>>(all, 'shared');
+  const bucket = isPlainObject(shared) ? shared : {};
   return Object.values(bucket).filter((entry) => entry && typeof entry === 'object' && entry.name);
 }
 
 export function saveReportTemplate(template: ReportTemplate): void {
   const all = readCollection(REPORT_TEMPLATES_KEY);
-  const bucket = (all.shared ?? {}) as Record<string, unknown>;
-  bucket[template.id] = template;
+  const shared = own(all, 'shared');
+  const bucket: Record<string, unknown> = isPlainObject(shared) ? { ...shared } : {};
+  setOwn(bucket, template.id, template);
   all.shared = bucket as RawDoc;
   writeCollection(REPORT_TEMPLATES_KEY, all);
 }
 
 export function loadExportPayloads(projectId: string): ReportExportPayload[] {
-  const all = readCollection(REPORT_PAYLOADS_KEY);
-  const bucket = (all[projectId] ?? {}) as Record<string, ReportExportPayload>;
+  const bucket = readMap(REPORT_PAYLOADS_KEY, projectId) as Record<string, ReportExportPayload>;
   return Object.values(bucket).filter(
     (entry) => entry && typeof entry === 'object' && entry.scenario_id,
   );
 }
 
 export function saveExportPayload(projectId: string, payload: ReportExportPayload): void {
-  const all = readCollection(REPORT_PAYLOADS_KEY);
-  const bucket = (all[projectId] ?? {}) as Record<string, unknown>;
-  bucket[payload.scenario_id] = payload;
-  all[projectId] = bucket as RawDoc;
-  writeCollection(REPORT_PAYLOADS_KEY, all);
+  const bucket = readMap(REPORT_PAYLOADS_KEY, projectId);
+  setOwn(bucket, payload.scenario_id, payload);
+  writeBucket(REPORT_PAYLOADS_KEY, projectId, bucket);
 }
 
 /**
@@ -737,15 +1040,12 @@ export interface ExportStamp {
 }
 
 export function loadExportStamp(projectId: string): ExportStamp | null {
-  const all = readCollection(EXPORT_STAMPS_KEY);
-  const entry = all[projectId] as unknown as ExportStamp | undefined;
+  const entry = readBucket<ExportStamp>(EXPORT_STAMPS_KEY, projectId);
   return entry && typeof entry === 'object' && entry.lastExportAt ? entry : null;
 }
 
 export function saveExportStamp(projectId: string, stamp: ExportStamp): void {
-  const all = readCollection(EXPORT_STAMPS_KEY);
-  all[projectId] = stamp as unknown as RawDoc;
-  writeCollection(EXPORT_STAMPS_KEY, all);
+  writeBucket(EXPORT_STAMPS_KEY, projectId, stamp);
 }
 
 /**
@@ -818,12 +1118,98 @@ export function normalizeExportPreferences(raw: unknown): ExportPreferences | nu
 }
 
 export function loadExportPreferences(projectId: string): ExportPreferences | null {
-  const all = readCollection(EXPORT_PREFS_KEY);
-  return normalizeExportPreferences(all[projectId]);
+  return normalizeExportPreferences(readBucket(EXPORT_PREFS_KEY, projectId));
 }
 
 export function saveExportPreferences(projectId: string, prefs: ExportPreferences): void {
-  const all = readCollection(EXPORT_PREFS_KEY);
-  all[projectId] = prefs as unknown as RawDoc;
-  writeCollection(EXPORT_PREFS_KEY, all);
+  writeBucket(EXPORT_PREFS_KEY, projectId, prefs);
+}
+
+// --- sync bookkeeping --------------------------------------------------------
+// Small plain-JSON records the folder sync keeps beside the cache. Written
+// straight through rather than via `writeCollection`: they describe the cache,
+// they are not project data, and announcing them would make the mirror chase
+// its own bookkeeping.
+
+const UNSYNCED_KEY = UNSYNCED_STORAGE_KEY;
+const SYNC_STATE_KEY = 'tnv.sync_state';
+
+/** A project whose cached data changed after its last successful folder write. */
+export interface UnsyncedMarker {
+  since: string;
+  /** Bumped on every write, so a mirror can tell it raced a newer edit. */
+  version: number;
+}
+
+/** Which file a project was last written to, and its timestamp right after. */
+export interface SyncRecord {
+  filename: string;
+  modified_at: number;
+}
+
+function readPlain(key: string): Record<string, unknown> {
+  try {
+    const raw = rawGet(key);
+    const parsed: unknown = raw ? JSON.parse(raw) : {};
+    return isPlainObject(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function writePlain(key: string, value: Record<string, unknown>): void {
+  rawSet(key, JSON.stringify(value));
+}
+
+export function loadUnsyncedMarkers(): Record<string, UnsyncedMarker> {
+  const markers: Record<string, UnsyncedMarker> = {};
+  for (const [projectId, entry] of Object.entries(readPlain(UNSYNCED_KEY))) {
+    if (!isPlainObject(entry)) continue;
+    setOwn(markers, projectId, {
+      since: typeof entry.since === 'string' ? entry.since : '',
+      version: typeof entry.version === 'number' ? entry.version : 0,
+    });
+  }
+  return markers;
+}
+
+/** Records that `projectId`'s cache is ahead of its file. Returns the new version. */
+export function markProjectUnsynced(projectId: string): number {
+  const markers = readPlain(UNSYNCED_KEY);
+  const current = own<UnsyncedMarker>(markers, projectId);
+  const version = (current?.version ?? 0) + 1;
+  setOwn(markers, projectId, { since: current?.since || new Date().toISOString(), version });
+  writePlain(UNSYNCED_KEY, markers);
+  return version;
+}
+
+/**
+ * Clears the marker after a successful folder write — but only if no newer
+ * edit arrived while the file was being written. `version` is the marker's
+ * version when that write started.
+ */
+export function markProjectSynced(projectId: string, version?: number): void {
+  const markers = readPlain(UNSYNCED_KEY);
+  const current = own<UnsyncedMarker>(markers, projectId);
+  if (!current) return;
+  if (version != null && current.version !== version) return;
+  delete markers[projectId];
+  writePlain(UNSYNCED_KEY, markers);
+}
+
+export function loadSyncState(): Record<string, SyncRecord> {
+  const state: Record<string, SyncRecord> = {};
+  for (const [projectId, entry] of Object.entries(readPlain(SYNC_STATE_KEY))) {
+    if (!isPlainObject(entry)) continue;
+    if (typeof entry.filename !== 'string' || typeof entry.modified_at !== 'number') continue;
+    setOwn(state, projectId, { filename: entry.filename, modified_at: entry.modified_at });
+  }
+  return state;
+}
+
+export function saveSyncRecord(projectId: string, record: SyncRecord | null): void {
+  const state = readPlain(SYNC_STATE_KEY);
+  if (record) setOwn(state, projectId, record);
+  else if (Object.hasOwn(state, projectId)) delete state[projectId];
+  writePlain(SYNC_STATE_KEY, state);
 }

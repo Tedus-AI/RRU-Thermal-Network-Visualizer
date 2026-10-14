@@ -2,7 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { seedDemoProject } from '@/mock/seed';
 import { DEMO_PROJECT_ID } from '@/mock/demoProject';
-import { saveProject, loadProject, loadScenarios } from './persistence';
+import { saveProject, loadProject, loadScenarios, saveReportTemplate } from './persistence';
+import type { ReportTemplate } from '@/report/reportTypes';
 import { mirrorFilename } from './folderBinding';
 import type { DirectoryHandle, PermissionState } from './folderBinding';
 import { setSyncProject, startFolderAutoSync, useFolderStore } from './folderStore';
@@ -279,8 +280,25 @@ describe('auto-sync', () => {
     expect(folder.files.size).toBe(0);
   });
 
-  // An unsaved project has nothing on disk to read, so there is nothing to mirror.
-  it('stays quiet while no project is selected', async () => {
+  // Nothing names a project and none is open: there is no file to write into.
+  it('stays quiet when a write names no project and none is selected', async () => {
+    vi.useFakeTimers();
+    await seedDemoProject();
+    const folder = fakeFolder();
+    connect(folder);
+    setSyncProject(null);
+    stopAutoSync = startFolderAutoSync();
+
+    saveReportTemplate({ id: 'TPL_1', name: 'Shared layout' } as unknown as ReportTemplate);
+    await vi.advanceTimersByTimeAsync(2000);
+
+    expect(folder.files.size).toBe(0);
+  });
+
+  // A write that names its project — an import, a project just created — is
+  // that project's to mirror whichever one is open. It used to wait for the
+  // next edit made while that project happened to be selected.
+  it('mirrors the project a write belongs to, whether or not it is open', async () => {
     vi.useFakeTimers();
     await seedDemoProject();
     const folder = fakeFolder();
@@ -291,7 +309,7 @@ describe('auto-sync', () => {
     saveProject(loadProject(DEMO_PROJECT_ID)!);
     await vi.advanceTimersByTimeAsync(2000);
 
-    expect(folder.files.size).toBe(0);
+    expect([...folder.files.keys()]).toEqual([mirrorFilename(DEMO_PROJECT_ID)]);
   });
 });
 

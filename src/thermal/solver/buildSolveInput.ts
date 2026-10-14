@@ -23,6 +23,7 @@
 
 import type { MaterialDefaults } from '@/domain/materials';
 import { buildAllPreviews } from '../boundary/validation';
+import { windRecordedOnly } from '../boundary/wind';
 import { finRootLinkOf } from '../boundary/boundaryPorts';
 import { edgeResistance } from '../rth';
 import { projectComponentMaster } from '../graph/componentProjection';
@@ -66,6 +67,12 @@ export interface SolveInput {
 
   /** node id → pinned temperature, °C. */
   fixed_nodes: Record<string, number>;
+  /**
+   * Nodes pinned by a scenario `fixed_temperature_boundary` profile — the
+   * fixed temperatures that do NOT follow the ambient. The ambient reservoir
+   * itself is in `fixed_nodes` but not here.
+   */
+  pinned_node_ids: string[];
   boundary_edges: BoundaryEdgeAssignment[];
   /** Edges switched off because the port is adiabatic (06 §9.7). */
   adiabatic_edge_ids: string[];
@@ -203,6 +210,7 @@ export function buildSolveInput(options: BuildSolveInputOptions): SolveInput {
 
   const notes: SolverIssue[] = [];
   const fixedNodes: Record<string, number> = {};
+  const pinnedNodeIds = new Set<string>();
   const boundaryEdges: BoundaryEdgeAssignment[] = [];
   const adiabaticEdgeIds: string[] = [];
   const solarLoads: SolarInjection[] = [];
@@ -269,6 +277,7 @@ export function buildSolveInput(options: BuildSolveInputOptions): SolveInput {
             node.boundary_type = 'fixed_temperature';
             node.fixed_temperature_C = value as number;
             fixedNodes[node.id] = value as number;
+            pinnedNodeIds.add(node.id);
           }
           break;
         }
@@ -401,6 +410,24 @@ export function buildSolveInput(options: BuildSolveInputOptions): SolveInput {
     solarPower += load.q_W;
   }
 
+  // --- 5. wind, recorded but not applied ----------------------------------
+  // No coefficient in this solve depends on wind, so a scenario that states
+  // one is solved in still air. That is a property of the RESULT, and it is
+  // filed as a warning so it travels with the solution into Screens 08–12.
+  const wind = boundarySet?.site.wind_speed_m_s;
+  if (windRecordedOnly(wind)) {
+    notes.push(
+      issue(
+        'warning',
+        'wind_not_applied',
+        'boundary',
+        `The scenario states a wind speed of ${(wind as number).toFixed(1)} m/s, but no convection coefficient in this solve uses it: the fin correlation is a still-air fit, the plate correlations are natural convection and a stated h is used as stated. The result is a still-air result.`,
+        `此情境設定風速 ${(wind as number).toFixed(1)} m/s，但本次求解沒有任何對流係數使用風速：鰭片關聯式為靜止空氣擬合、平板為自然對流、手動 h 照填寫值使用。結果為無風條件下的結果。`,
+        { fix_in: '06' },
+      ),
+    );
+  }
+
   if (solarLoads.length > 0) {
     notes.push(
       issue(
@@ -425,6 +452,7 @@ export function buildSolveInput(options: BuildSolveInputOptions): SolveInput {
     power_scale: powerScale,
     ambient_C,
     fixed_nodes: fixedNodes,
+    pinned_node_ids: [...pinnedNodeIds],
     boundary_edges: boundaryEdges,
     adiabatic_edge_ids: adiabaticEdgeIds,
     solar_loads: solarLoads,

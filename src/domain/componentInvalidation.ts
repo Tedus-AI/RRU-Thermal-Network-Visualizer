@@ -66,12 +66,12 @@ export function effectOfChange(field: string, isMapped: boolean): InvalidationEf
         true,
         field === 'qty' ? 'component_qty_changed' : 'component_architecture_changed',
       );
-    case 'tim':
-    case 'tim.type':
     // Not merely a different k: choosing "direct contact" swaps the interface
     // edge from t/kA to 1/h·A, so the subgraph has to be rebuilt, not just
     // re-solved. `tim.tim_id` used to fall through to the default, which flagged
     // the solver but left the network believing its edges were still current.
+    case 'tim':
+    case 'tim.type':
     case 'tim.tim_id':
       return effect(true, true, 'component_tim_changed');
 

@@ -101,6 +101,28 @@ describe('ambientHeadroom', () => {
     ).toBe(false);
   });
 
+  // The ambient reservoir is fixed too, but it is fixed AT the ambient: it
+  // moves with the air, so it must not be mistaken for a cold plate.
+  it('does not count the ambient reservoir as a pinned node', () => {
+    const network = net([{ id: 'A', limit: 95 }, { id: 'AMB', fixed: true }]);
+    network.nodes.AMB.type = 'ambient';
+    expect(
+      ambientHeadroom(network, solved({ A: 90, AMB: 45 }), 45)!.assumes_uniform_rise,
+    ).toBe(true);
+  });
+
+  // A scenario fixed-temperature profile pins a node on the solve clone only;
+  // the stored network does not show it, so the solve has to say.
+  it('flags a node the solve pinned even when the stored network does not show it', () => {
+    const answer = ambientHeadroom(
+      net([{ id: 'A', limit: 95 }, { id: 'PLATE' }]),
+      solved({ A: 90, PLATE: 40 }),
+      45,
+      { pinnedNodeIds: ['PLATE'] },
+    );
+    expect(answer!.assumes_uniform_rise).toBe(false);
+  });
+
   it('answers nothing rather than zero when there is nothing to answer', () => {
     expect(ambientHeadroom(net([{ id: 'A' }]), solved({ A: 90 }), 45)).toBeNull();
     expect(ambientHeadroom(net([{ id: 'A', limit: 95 }]), null, 45)).toBeNull();

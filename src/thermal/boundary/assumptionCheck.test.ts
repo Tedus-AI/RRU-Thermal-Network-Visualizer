@@ -61,9 +61,11 @@ describe('checking a surface assumption against the solve', () => {
     expect(check.solved_C).toBe(79.2);
     expect(check.delta_C).toBeCloseTo(-5.8, 1);
     // The whole point: the boundary is not the same boundary at 79.2 °C.
-    expect(check.r_assumed_C_per_W).toBeCloseTo(0.558, 3);
+    // (Radiation is the secant form to the 45 °C ambient; the surface-only
+    // 4εσFTs³ it replaced made this 0.558 °C/W and the gap 4.7 %.)
+    expect(check.r_assumed_C_per_W).toBeCloseTo(0.616, 3);
     expect(check.r_solved_C_per_W).toBeGreaterThan(check.r_assumed_C_per_W!);
-    expect(check.r_error_pct).toBeCloseTo(4.7, 1);
+    expect(check.r_error_pct).toBeCloseTo(3.4, 1);
     expect(check.verdict).toBe('off');
   });
 

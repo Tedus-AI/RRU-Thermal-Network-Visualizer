@@ -236,6 +236,9 @@ export function ReportNetworkFigures({
   useEffect(() => {
     const scales = resultScales(context.solution);
     for (const figure of figures) void startFigure(figure, context, scales);
+    // Keyed on the parts of the context a figure is drawn from; the context
+    // object itself is rebuilt on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [figures, context.network, context.solution, context.scenarioId, signature]);
 
   if (figures.length === 0) {

@@ -21,8 +21,10 @@
 import { seedDemoProject } from '@/mock/seed';
 
 import {
+  BUILD_STAMP_KEY,
   clearOwnedStorage,
   syncBuildStamp,
+  unsyncedProjectIds,
   type BuildStampOutcome,
   type StorageLike,
 } from './buildStamp';
@@ -57,6 +59,20 @@ export async function bootstrapStorage(
 ): Promise<BuildStampOutcome | null> {
   const store = storage();
   if (store == null) return null;
+
+  // A new build normally empties the cache, because the folder is reloaded
+  // into it anyway. Not when the cache holds edits the folder never received —
+  // a tab closed mid-save, a lapsed permission — because then the cache is the
+  // only copy. The folder sync writes those out before it reloads.
+  const previous = store.getItem(BUILD_STAMP_KEY);
+  const unsynced = unsyncedProjectIds(store);
+  if (previous !== buildId && unsynced.length > 0) {
+    store.setItem(BUILD_STAMP_KEY, buildId);
+    console.info(
+      `[tnv] Build changed to "${buildId}", but ${unsynced.length} project(s) have edits that never reached the folder; the cache is kept until they are written out.`,
+    );
+    return { action: 'deferred', build_id: buildId, previous_build_id: previous, unsynced };
+  }
 
   const outcome = syncBuildStamp(buildId, store);
 

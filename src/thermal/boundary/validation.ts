@@ -10,6 +10,7 @@
  * screen says so rather than quietly passing it to Screen 07.
  */
 
+import { windRecordedOnly } from './wind';
 import {
   buildDerivedPreview,
   finArrayOf,
@@ -607,13 +608,17 @@ export function validateBoundarySet(input: BoundaryValidationInput): BoundaryVal
   }
 
   // --- Site-level warnings ----------------------------------------------
-  if ((set.site.wind_speed_m_s ?? 0) > 0 && set.site.convection_method === 'manual_h') {
+  // Every convection method in this build is still-air, not just the manual
+  // one: the fin correlation is a natural-convection fit and the plate
+  // correlations are natural convection. Warning only for `manual_h` let a
+  // stated 3 m/s pass silently on a fin-geometry profile.
+  if (windRecordedOnly(set.site.wind_speed_m_s)) {
     warnings.push(
       message(
         'warning',
-        'WIND_WITH_MANUAL_H',
-        'Wind speed is set but convection still uses a manual h. The wind value is recorded, not applied.',
-        '已設定風速，但對流仍使用手動 h；風速只被記錄，不會自動套用。',
+        'WIND_NOT_APPLIED',
+        'Wind speed is set but no convection model in this tool applies it: fin and plate correlations are natural convection and a manual h is used as stated. The wind value is recorded, not applied.',
+        '已設定風速，但本工具沒有任何對流模型會套用風速：鰭片與平板關聯式皆為自然對流，手動 h 照填寫值使用。風速只被記錄，不會套用。',
       ),
     );
   }

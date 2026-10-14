@@ -957,6 +957,8 @@ export function BoundaryConditionsView() {
                   heatSinkBase={{
                     L_mm: draft?.materials.hsk_base_L_mm?.value ?? null,
                     W_mm: draft?.materials.hsk_base_W_mm?.value ?? null,
+                    // A die-cast fin is the base's own metal.
+                    k_W_mK: draft?.materials.hsk_base_k_W_mK?.value ?? null,
                   }}
                   readOnly={readOnly}
                   onEditAmbient={editScenarioSettings}

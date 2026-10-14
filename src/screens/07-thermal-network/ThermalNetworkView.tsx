@@ -172,6 +172,7 @@ export function ThermalNetworkView() {
   const checks = useSolutionStore((s) => s.checks);
   const signature = useSolutionStore((s) => s.signature);
   const solving = useSolutionStore((s) => s.solving);
+  const solveInput = useSolutionStore((s) => s.input);
 
   /*
      The toolbar's choices are REMEMBERED, not reset on every mount.
@@ -332,8 +333,13 @@ export function ThermalNetworkView() {
      headroom the current inputs no longer support.
   */
   const headroom = useMemo(
-    () => (limited ? ambientHeadroom(limited, stale ? null : solution, ambient) : null),
-    [limited, solution, stale, ambient],
+    () =>
+      limited
+        ? ambientHeadroom(limited, stale ? null : solution, ambient, {
+            pinnedNodeIds: solveInput?.pinned_node_ids,
+          })
+        : null,
+    [limited, solution, stale, ambient, solveInput],
   );
 
   const flows = useMemo(

@@ -27,6 +27,8 @@ import { useProjectStore } from '@/data/projectStore';
 import { setSyncProject, startFolderAutoSync, useFolderStore } from '@/data/folderStore';
 import { WorkspaceGate } from './WorkspaceGate';
 import { startAutoPersist } from '@/data/autoPersist';
+import { startUnloadGuard } from '@/data/unloadGuard';
+import { toast } from '@/ui/toast';
 
 export function AppShell() {
   const [collapsed, setCollapsed] = useState(false);
@@ -40,11 +42,23 @@ export function AppShell() {
     void useFolderStore.getState().restore();
     const stopSync = startFolderAutoSync();
     const stopPersist = startAutoPersist();
+    // A tab closed inside the save debounce used to lose the edit.
+    const stopGuard = startUnloadGuard();
     return () => {
       stopSync();
       stopPersist();
+      stopGuard();
     };
   }, []);
+
+  // A one-off message from the folder sync, such as edits kept as a recovered
+  // copy. Shown once, then cleared, so it cannot repeat on every render.
+  const folderNotice = useFolderStore((s) => s.notice);
+  useEffect(() => {
+    if (!folderNotice) return;
+    toast.warning(folderNotice);
+    useFolderStore.getState().clearNotice();
+  }, [folderNotice]);
 
   // Only a created project can be mirrored — a new one has no file yet.
   useEffect(() => {

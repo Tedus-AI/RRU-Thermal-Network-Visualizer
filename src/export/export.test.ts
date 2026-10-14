@@ -21,12 +21,14 @@ import type { ThermalNetwork } from '@/thermal/types';
 import type { ReportExportPayload } from '@/report/reportTypes';
 
 import { encodeJson } from './csv';
+import { freeFolderFilename } from './download';
 import { createExportSession } from './exportSession';
 import { buildManifest } from './manifestBuilder';
 import {
   capLength,
   defaultBaseFilename,
   filenameFor,
+  identifyingSegment,
   sanitizeSegment,
   timestampOf,
   uniqueFilename,
@@ -138,7 +140,7 @@ function network(): ThermalNetwork {
     zones: {},
     layout: { mode: 'dagre', positions: {} },
     flotherm_mappings: {},
-    solver_settings: { energy_warn_pct: 0.5, energy_error_pct: 2, max_iterations: 200, tolerance: 1e-9 },
+    solver_settings: { energy_warn_pct: 0.5, energy_error_pct: 2 },
     metadata: { origin: 'unit-test' },
   };
 }
@@ -650,6 +652,48 @@ describe('Test F — filename sanitization (12 §58 F, §18, §21)', () => {
 
   it('formats the timestamp as YYYYMMDD_HHmm', () => {
     expect(timestampOf(new Date('2026-01-05T09:07:00'))).toBe('20260105_0907');
+  });
+
+  // The ASCII slug drops Traditional Chinese, and two scenarios' reports
+  // used to come out under one name — the second replacing the first in a
+  // folder. A name that loses text keeps its stable id beside it.
+  it('keeps two Chinese-named scenarios apart', () => {
+    const named = (scenario_name: string, scenario_id: string) =>
+      filenameFor('pdf_report', {
+        config: { ...CONFIG, base_filename: '' },
+        project_id: 'CBNG_FR1',
+        scenario_name,
+        scenario_id,
+        now: NOW,
+      });
+
+    const summer = named('夏季 55C', 'SCN_001');
+    const winter = named('冬季 55C', 'SCN_002');
+    expect(summer).toBe('CBNG_FR1_55C_SCN_001_Thermal_Report_20260812_1250.pdf');
+    expect(winter).toBe('CBNG_FR1_55C_SCN_002_Thermal_Report_20260812_1250.pdf');
+    // Nothing ASCII left at all: the id stands in for the name.
+    expect(named('夏季高溫', 'SCN_003')).toBe('CBNG_FR1_SCN_003_Thermal_Report_20260812_1250.pdf');
+  });
+
+  it('gives a non-ASCII project id a stable ASCII stand-in', () => {
+    expect(identifyingSegment('專案甲')).toMatch(/^x[0-9a-f]{8}$/);
+    expect(identifyingSegment('專案甲')).toBe(identifyingSegment('專案甲'));
+    expect(identifyingSegment('專案甲')).not.toBe(identifyingSegment('專案乙'));
+    // ASCII names are untouched.
+    expect(identifyingSegment('Baseline 55C', 'SCN_001')).toBe('Baseline_55C');
+  });
+
+  it('picks a free name against what is really in the folder', async () => {
+    const present = new Set(['Report.pdf', 'Report_2.pdf']);
+    const directory = {
+      name: 'out',
+      async getFileHandle(name: string) {
+        if (!present.has(name)) throw new Error('NotFoundError');
+        return { createWritable: async () => ({ write: async () => {}, close: async () => {} }) };
+      },
+    };
+    expect(await freeFolderFilename(directory, 'Report.pdf')).toBe('Report_3.pdf');
+    expect(await freeFolderFilename(directory, 'Other.pdf')).toBe('Other.pdf');
   });
 
   it('seeds the base filename from project and scenario', () => {

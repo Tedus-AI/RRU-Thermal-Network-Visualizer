@@ -320,7 +320,7 @@ export function ReportPreviewView() {
    */
   const reportSnapshot = useMemo(
     () => (snapshot ? withTranslatedActions(snapshot) : null),
-    [snapshot, liveOverview],
+    [snapshot],
   );
 
   // --- the config -----------------------------------------------------------
@@ -460,6 +460,8 @@ export function ReportPreviewView() {
   const readiness = validation ? previewReadiness(validation, evaluation.state) : 'BLOCKED';
 
   // --- zoom -----------------------------------------------------------------
+  // The canvas element exists only once there is a config to render.
+  const hasConfig = config != null;
   useEffect(() => {
     const element = canvasRef.current;
     if (!element) return;
@@ -469,7 +471,7 @@ export function ReportPreviewView() {
     });
     observer.observe(element);
     return () => observer.disconnect();
-  }, [config != null]);
+  }, [hasConfig]);
 
   const scale = useMemo(() => {
     if (!config) return 1;

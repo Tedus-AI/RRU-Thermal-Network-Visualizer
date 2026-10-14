@@ -59,26 +59,47 @@ export function calculateConvectionRth(
 }
 
 /**
- * Linearised radiation coefficient, 06 §13.2:
- *   h_rad ≈ 4 · ε · σ · F · T_ref_K³
+ * Linearised radiation coefficient, 06 §13.2 — the exact secant form:
  *
- * The reference temperature is the engineer's pre-solve surface guess. Screen 06
- * cannot know the real surface temperature — that is the whole point of Screen
- * 07 — so the guess is an explicit, visible assumption.
+ *   h_rad = ε · σ · F · (Ts² + Tsur²) · (Ts + Tsur)        (kelvin)
+ *
+ * so that h_rad · (Ts − Tsur) is EXACTLY ε·σ·F·(Ts⁴ − Tsur⁴) at the stated
+ * surface temperature. The familiar `4·ε·σ·F·T³` is the limit of this as
+ * Ts → Tsur, and it is only a good approximation with T the MEAN of the two.
+ * This function used to evaluate it at the surface temperature alone, which
+ * over-states h_rad by 12 % at Ts − Tsur = 25 K, 18 % at 40 K and 31 % at 70 K
+ * — always in the optimistic direction, since a larger h is a cooler surface.
+ *
+ * The surroundings are taken to be at the scenario ambient. That is the sink
+ * the convection term already uses; a sky colder than the air (an RRU facing
+ * open sky at night) would need its own stated sink temperature, which is a
+ * separate input the model does not carry yet. Without an ambient there is no
+ * sink, so there is no coefficient — the result is null, never a guess.
+ *
+ * The surface temperature is the engineer's pre-solve guess. Screen 06 cannot
+ * know the real one — that is the whole point of Screen 07 — so the guess is
+ * an explicit, visible assumption, checked against the solve afterwards
+ * (`assumptionCheck.ts`).
  */
 export function calculateLinearizedRadiationHrad(input: {
   emissivity: number | null | undefined;
   viewFactor: number | null | undefined;
   surfaceReferenceTemperatureGuess_C: number | null | undefined;
+  /** Radiation sink temperature — the scenario ambient. */
+  surroundingsTemperature_C: number | null | undefined;
 }): number | null {
   const emissivity = inUnitRange(input.emissivity);
   const viewFactor = inUnitRange(input.viewFactor);
-  const tGuess = numeric(input.surfaceReferenceTemperatureGuess_C);
-  if (emissivity == null || viewFactor == null || tGuess == null) return null;
+  const tSurface = numeric(input.surfaceReferenceTemperatureGuess_C);
+  const tSurroundings = numeric(input.surroundingsTemperature_C);
+  if (emissivity == null || viewFactor == null || tSurface == null || tSurroundings == null) {
+    return null;
+  }
 
-  const tRefK = tGuess + 273.15;
-  if (tRefK <= 0) return null;
-  return 4 * emissivity * SIGMA * viewFactor * tRefK ** 3;
+  const ts = tSurface + 273.15;
+  const tsur = tSurroundings + 273.15;
+  if (ts <= 0 || tsur <= 0) return null;
+  return emissivity * SIGMA * viewFactor * (ts * ts + tsur * tsur) * (ts + tsur);
 }
 
 /** R_rad = 1 / (h_rad · A). */
@@ -412,6 +433,7 @@ export function buildDerivedPreview(
           emissivity: parameter(profile, 'emissivity'),
           viewFactor: parameter(profile, 'viewFactor'),
           surfaceReferenceTemperatureGuess_C: guess,
+          surroundingsTemperature_C: options.ambient_C,
         });
         preview.h_rad_W_m2K = hrad;
         preview.r_rad_C_per_W = calculateRadiationRth(hrad, area);
@@ -448,6 +470,7 @@ export function buildDerivedPreview(
           emissivity: parameter(profile, 'emissivity'),
           viewFactor: parameter(profile, 'viewFactor'),
           surfaceReferenceTemperatureGuess_C: guess,
+          surroundingsTemperature_C: options.ambient_C,
         });
         preview.h_rad_W_m2K = hrad;
         preview.r_conv_C_per_W = calculateConvectionRth(hconv, area);

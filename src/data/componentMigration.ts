@@ -326,6 +326,7 @@ function migrateMount(spec: Raw, dissolved: MountType | undefined): MountSpec {
     heat_pipe_count: num(raw.heat_pipe_count),
     height_mm: num(raw.height_mm),
     heat_pipe_R_C_per_W: num(raw.heat_pipe_R_C_per_W),
+    heat_pipe_qmax_W: num(raw.heat_pipe_qmax_W),
     // Written after the mount axis shipped. A record from before says nothing
     // about them, and `emptyMount` already holds what that silence meant: a
     // boss milled out of the base, in the base's own metal, with no joint.

@@ -61,7 +61,7 @@ function preview(overrides: Partial<BoundaryDerivedPreview> = {}): BoundaryDeriv
 describe('why a filled-in port still says Assumption', () => {
   it('names the assumption and its value instead of only the badge', () => {
     const suppressSsrLayoutWarning = vi.spyOn(console, 'error').mockImplementation(() => {});
-    let html = '';
+    let html: string;
     try {
       html = renderToStaticMarkup(
         <BoundaryInspector
@@ -102,7 +102,7 @@ describe('why a filled-in port still says Assumption', () => {
 
   it('says nothing when the preview carries no assumptions', () => {
     const suppressSsrLayoutWarning = vi.spyOn(console, 'error').mockImplementation(() => {});
-    let html = '';
+    let html: string;
     try {
       html = renderToStaticMarkup(
         <BoundaryInspector
@@ -158,7 +158,7 @@ describe('BoundaryInspector simplification', () => {
 
   it('combines setup, required inputs, applicable preview and validation for a surface', () => {
     const suppressSsrLayoutWarning = vi.spyOn(console, 'error').mockImplementation(() => {});
-    let html = '';
+    let html: string;
     try {
       html = renderToStaticMarkup(
         <BoundaryInspector
@@ -192,7 +192,7 @@ describe('BoundaryInspector simplification', () => {
 
   it('keeps HSK fin effective area editable when topology has no derived area', () => {
     const suppressSsrLayoutWarning = vi.spyOn(console, 'error').mockImplementation(() => {});
-    let html = '';
+    let html: string;
     try {
       html = renderToStaticMarkup(
         <BoundaryInspector
@@ -218,7 +218,7 @@ describe('BoundaryInspector simplification', () => {
   // offered there at all — the geometry panel replaces it.
   it('offers only the fin geometry on a finned surface', () => {
     const suppressSsrLayoutWarning = vi.spyOn(console, 'error').mockImplementation(() => {});
-    let html = '';
+    let html: string;
     try {
       html = renderToStaticMarkup(
         <BoundaryInspector
@@ -248,8 +248,8 @@ describe('BoundaryInspector simplification', () => {
   // offered as a computed value there — and only there.
   it('offers the plate coefficient on a flat wall and not on a fin stack', () => {
     const suppressSsrLayoutWarning = vi.spyOn(console, 'error').mockImplementation(() => {});
-    let flat = '';
-    let finned = '';
+    let flat: string;
+    let finned: string;
     try {
       flat = renderToStaticMarkup(
         <BoundaryInspector
@@ -285,7 +285,7 @@ describe('BoundaryInspector simplification', () => {
 
   it('replaces the h field with the plate readout once enabled', () => {
     const suppressSsrLayoutWarning = vi.spyOn(console, 'error').mockImplementation(() => {});
-    let html = '';
+    let html: string;
     try {
       html = renderToStaticMarkup(
         <BoundaryInspector
@@ -330,7 +330,7 @@ describe('BoundaryInspector simplification', () => {
 
   it('shows Chinese labels in the data-source selector', () => {
     const suppressSsrLayoutWarning = vi.spyOn(console, 'error').mockImplementation(() => {});
-    let html = '';
+    let html: string;
     try {
       html = renderToStaticMarkup(
         <BoundaryInspector
@@ -355,7 +355,7 @@ describe('BoundaryInspector simplification', () => {
 
   it('shows profile emissivity as inherited from the authoritative surface property', () => {
     const suppressSsrLayoutWarning = vi.spyOn(console, 'error').mockImplementation(() => {});
-    let html = '';
+    let html: string;
     try {
       html = renderToStaticMarkup(
         <BoundaryInspector
@@ -386,7 +386,7 @@ describe('BoundaryInspector simplification', () => {
 
   it('retains but disables a solar profile when Screen 01 solar load is zero', () => {
     const suppressSsrLayoutWarning = vi.spyOn(console, 'error').mockImplementation(() => {});
-    let html = '';
+    let html: string;
     try {
       html = renderToStaticMarkup(
         <BoundaryInspector
@@ -428,7 +428,7 @@ describe('BoundaryInspector simplification', () => {
 
   it('marks an adiabatic reason as optional', () => {
     const suppressSsrLayoutWarning = vi.spyOn(console, 'error').mockImplementation(() => {});
-    let html = '';
+    let html: string;
     try {
       html = renderToStaticMarkup(
         <BoundaryInspector

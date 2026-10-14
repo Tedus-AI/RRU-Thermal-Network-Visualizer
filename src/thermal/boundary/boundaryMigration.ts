@@ -5,11 +5,12 @@ import type { ScenarioBoundaryConditionSet } from './types';
  *
  * `radiation_surrounding_C` (on the ambient block) and its per-profile copy
  * `radiationTemperature_C` were written by Screen 06 and read by nobody: the V1
- * linearized coefficient is `4·ε·σ·F·T_ref³`, which takes the SURFACE reference
- * temperature and no sink temperature at all. Screen 06 never offered an input
- * for the ambient one either, so whatever a project stored — one carried
- * -3 °C — was a number the engineer could neither see nor change, sitting in
- * the parameter table looking like it was radiating to a winter sky.
+ * linearized coefficient took the SURFACE reference temperature and no sink
+ * temperature at all. (It now radiates to the scenario ambient — see
+ * `calculateLinearizedRadiationHrad` — never to these keys.) Screen 06 never
+ * offered an input for the ambient one either, so whatever a project stored —
+ * one carried -3 °C — was a number the engineer could neither see nor change,
+ * sitting in the parameter table looking like it was radiating to a winter sky.
  *
  * They are stripped rather than left in place because a value that is displayed
  * but unused is worse than no value: it invites the reader to reason about a

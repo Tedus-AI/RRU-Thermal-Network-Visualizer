@@ -302,7 +302,11 @@ export function ExportCenterView() {
     if (!projectId) return;
     useExportStore
       .getState()
-      .loadFor(projectId, activeScenarioId, defaultBaseFilename(projectId, scenarioName));
+      .loadFor(
+        projectId,
+        activeScenarioId,
+        defaultBaseFilename(projectId, scenarioName, activeScenarioId),
+      );
   }, [projectId, activeScenarioId, scenarioName]);
 
   // --- freshness ------------------------------------------------------------
@@ -332,8 +336,6 @@ export function ExportCenterView() {
     projectId,
     components,
     analysis,
-    distribution,
-    distributionState,
     sourceRevision,
     stale,
   ]);
@@ -554,7 +556,6 @@ export function ExportCenterView() {
   }, [
     reportConfig,
     snapshot,
-    liveOverview,
     scenario,
     draft,
     projectId,
@@ -576,6 +577,7 @@ export function ExportCenterView() {
           config,
           project_id: projectId,
           scenario_name: scenario.name,
+          scenario_id: scenario.id,
           now,
         }),
       }));
@@ -642,6 +644,7 @@ export function ExportCenterView() {
           config,
           project_id: projectId,
           scenario_name: scenario.name,
+          scenario_id: scenario.id,
           now,
         });
         const delivered = await deliver({
@@ -663,7 +666,7 @@ export function ExportCenterView() {
         }
         nextQueue.push({
           type: 'package_zip',
-          filename: zipName,
+          filename: delivered.filename,
           status: 'EXPORTED',
           size_bytes: built.blob.size,
           object_url: delivered.object_url,
@@ -693,7 +696,7 @@ export function ExportCenterView() {
             time: now.toISOString(),
             label: 'Engineering Package',
             status: sessionStatus === 'COMPLETE' ? 'EXPORTED' : sessionStatus === 'PARTIAL' ? 'PARTIAL' : sessionStatus === 'CANCELLED' ? 'CANCELLED' : 'FAILED',
-            filename: zipName,
+            filename: delivered.filename,
             size_bytes: built.blob.size,
             artifact_count: built.entry_count,
             warnings: built.manifest.warnings,
@@ -735,7 +738,7 @@ export function ExportCenterView() {
           });
           nextQueue.push({
             type: artifact.type,
-            filename: file.filename,
+            filename: delivered.filename,
             status: 'EXPORTED',
             size_bytes: file.blob.size,
             object_url: delivered.object_url,
@@ -807,9 +810,6 @@ export function ExportCenterView() {
       payload,
       network,
       stale,
-      boundarySet,
-      components,
-      reportConfig,
       reportRender,
       directory,
       validation.warnings,

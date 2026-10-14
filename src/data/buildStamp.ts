@@ -44,7 +44,34 @@ export type BuildStampOutcome =
       build_id: string;
       previous_build_id: string | null;
       cleared: string[];
+    }
+  /**
+   * Mismatch, but the cache holds edits that never reached the project folder.
+   * Clearing would destroy the only copy, so it is left for the folder sync to
+   * write out before it replaces the cache (see `folderStore.hydrate`).
+   */
+  | {
+      action: 'deferred';
+      build_id: string;
+      previous_build_id: string | null;
+      unsynced: string[];
     };
+
+/** Where the folder sync records projects whose cache is ahead of their file. */
+export const UNSYNCED_STORAGE_KEY = 'tnv.unsynced';
+
+/** Project ids the cache holds edits for that never reached the folder. */
+export function unsyncedProjectIds(storage: StorageLike): string[] {
+  try {
+    const raw = storage.getItem(UNSYNCED_STORAGE_KEY);
+    const parsed: unknown = raw ? JSON.parse(raw) : null;
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? Object.keys(parsed)
+      : [];
+  } catch {
+    return [];
+  }
+}
 
 /**
  * Every owned key currently in storage, excluding the stamp.

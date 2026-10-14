@@ -224,17 +224,18 @@ export interface BoundaryValidationState {
 /**
  * `radiation_surrounding_C` was retired here.
  *
- * It was never editable — Screen 06 has no input for it — and the linearized
- * radiation coefficient does not take a sink temperature at all:
- * `calculateLinearizedRadiationHrad` is `4·ε·σ·F·T_ref³`, where `T_ref` is the
- * SURFACE reference guess. So the field was written on every profile, exported,
- * and read by nothing. A stored value (one project carried -3 °C) looked like a
- * radiating sky the model was using, and it was not.
+ * It was never editable — Screen 06 has no input for it — and at the time the
+ * linearized radiation coefficient took no sink temperature at all. So the
+ * field was written on every profile, exported, and read by nothing. A stored
+ * value (one project carried -3 °C) looked like a radiating sky the model was
+ * using, and it was not.
  *
- * Removing it is not the same as deciding radiation needs no sink temperature.
- * It does; that is a modelling change with its own input and its own place in
- * the formula, and it should arrive as one rather than as a resurrected key
- * whose value never reached an equation.
+ * The coefficient now does take a sink: `calculateLinearizedRadiationHrad` is
+ * the secant `ε·σ·F·(Ts² + Tsur²)·(Ts + Tsur)`, with the surroundings at the
+ * scenario ambient (`external_ambient_C` below). A sink colder than the air —
+ * an open night sky — would be a separate, stated input; this retired key is
+ * deliberately NOT revived for it, because the values old files carry in it
+ * were never seen by the engineer who saved them.
  */
 export interface AmbientDefinition {
   external_ambient_C: number | null;

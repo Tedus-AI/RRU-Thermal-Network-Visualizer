@@ -99,6 +99,7 @@ import {
   mountHasSeat,
   mountHasVendorResistance,
   mountPipeCount,
+  mountPipeQmax,
   mountPipeRth,
   type MountSpec,
   type MountType,
@@ -122,6 +123,18 @@ export const MOUNT_ROLE_KEY = 'mount_role';
  * carries a changed power or limit.
  */
 export const MOUNT_SPEC_KEY = 'mount_spec';
+
+/**
+ * The two-phase device's transport limit, as an edge parameter.
+ *
+ * Carried on the heat-pipe edge so the solve can compare the heat it routed
+ * through the device against it (see `solveScenario`). Absent when nobody
+ * stated one; the solve reports that as unchecked rather than as a pass.
+ */
+function qmaxParameter(mount: MountSpec): { q_max_W?: number } {
+  const qmax = mountPipeQmax(mount);
+  return qmax != null ? { q_max_W: qmax } : {};
+}
 
 /** Reads the stamped spec back, defaulting to Direct for anything older. */
 export function mountOf(node: { metadata?: Record<string, unknown> }): MountSpec {
@@ -310,6 +323,7 @@ export function buildMountChain(input: {
               ? { R_per_pipe_C_per_W: mount.heat_pipe_R_C_per_W }
               : {}),
             pipes: mountPipeCount(mount),
+            ...qmaxParameter(mount),
           },
           missingNote:
             'Heat pipe resistance is a vendor number and cannot be derived from geometry. State it in Screen 04, for ONE pipe — the count beside it puts them in parallel.',
@@ -414,8 +428,10 @@ export function buildMountChain(input: {
       mountEdge(portNodeId, 'VAPOR_CHAMBER', cursor, chamber.id, componentRef, {
         type: 'heat_pipe',
         method: 'direct_rth',
-        parameters:
-          mount.heat_pipe_R_C_per_W != null ? { R_C_per_W: mount.heat_pipe_R_C_per_W } : {},
+        parameters: {
+          ...(mount.heat_pipe_R_C_per_W != null ? { R_C_per_W: mount.heat_pipe_R_C_per_W } : {}),
+          ...qmaxParameter(mount),
+        },
         missingNote:
           'Vapour chamber resistance is a vendor number, quoted at a stated power and source size. It cannot be derived from geometry — state it in Screen 04.',
       }),
@@ -483,8 +499,10 @@ export function buildMountChain(input: {
         mountEdge(portNodeId, 'HEAT_PIPE', block.id, targetNodeId, componentRef, {
           type: 'heat_pipe',
           method: 'direct_rth',
-          parameters:
-            mount.heat_pipe_R_C_per_W != null ? { R_C_per_W: mount.heat_pipe_R_C_per_W } : {},
+          parameters: {
+            ...(mount.heat_pipe_R_C_per_W != null ? { R_C_per_W: mount.heat_pipe_R_C_per_W } : {}),
+            ...qmaxParameter(mount),
+          },
           missingNote:
             'Heat pipe resistance is a vendor number and cannot be derived from geometry. State it in Screen 04.',
         }),

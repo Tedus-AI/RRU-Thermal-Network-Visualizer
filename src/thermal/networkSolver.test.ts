@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { solveNetwork } from './networkSolver';
 import { validateNetwork } from './networkValidation';
 import { createRth, deriveRthFromDeltaT, effectivePathRja, setRthFromSource } from './rth';
-import { DEFAULT_SOLVER_SETTINGS } from './types';
+import { DEFAULT_SOLVER_SETTINGS, normalizeSolverSettings } from './types';
 import type { ThermalEdge, ThermalNetwork, ThermalNode } from './types';
 
 function node(id: string, power: number, fixedT?: number): ThermalNode {
@@ -125,6 +125,59 @@ describe('solveNetwork', () => {
     expect(result.message).toContain('singular');
   });
 
+  /**
+   * An island with no fixed node is a singular block of [G]. The pivot test
+   * used to be an absolute 1e-14, and at RRU-sized conductances the round-off
+   * left behind is larger than that — so 41 % of these "solved" to ~1e13 °C
+   * and reported success. The island must be refused every time.
+   */
+  it('refuses every floating island, whatever the resistance scale', () => {
+    let seed = 12345;
+    const random = () => (seed = (seed * 1664525 + 1013904223) % 4294967296) / 4294967296;
+    for (let trial = 0; trial < 500; trial += 1) {
+      const scale = 10 ** (-4 + 4 * random());
+      const net = network(
+        [node('A', 5), node('B', 0), node('C', 0), node('D', 0), node('AMB', 0, 25)],
+        [
+          edge('e1', 'A', 'B', scale * (0.2 + random())),
+          edge('e2', 'B', 'C', scale * (0.2 + random())),
+          edge('e3', 'A', 'C', scale * (0.2 + random())),
+          edge('e4', 'D', 'AMB', 1),
+        ],
+      );
+      const result = solveNetwork(net);
+      expect(result.ok).toBe(false);
+      expect(result.message).toContain('A');
+    }
+  });
+
+  it('names the nodes of a floating island', () => {
+    const net = network(
+      [node('PA', 10), node('LID', 0), node('J', 1), node('AMB', 0, 25)],
+      [edge('a', 'PA', 'LID', 0.3), edge('b', 'J', 'AMB', 1)],
+    );
+    const result = solveNetwork(net);
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain('PA, LID');
+    expect(result.message).not.toContain('J');
+  });
+
+  // The relative pivot test must not mistake a stiff but grounded network for
+  // a singular one: a near-short in series with a large resistance is legal.
+  it('solves a grounded network with a 1e9 spread of resistances', () => {
+    const net = network(
+      [node('J', 10), node('M', 0), node('AMB', 0, 25)],
+      [edge('short', 'J', 'M', 1e-6), edge('long', 'M', 'AMB', 1e3)],
+    );
+    const result = solveNetwork(net);
+    expect(result.ok).toBe(true);
+    expect(result.temperatures.J).toBeCloseTo(25 + 10 * (1e3 + 1e-6), 3);
+    // Q through a 1e-6 °C/W short is back-calculated from a ~1e-5 °C drop, so
+    // the balance carries some round-off — still three orders below the 0.5 %
+    // warning band.
+    expect(result.energy.error_pct).toBeLessThan(1e-3);
+  });
+
   it('reports energy balance status against the configured thresholds', () => {
     const net = network([node('J', 10), node('AMB', 0, 25)], [edge('E', 'J', 'AMB', 1)]);
     const result = solveNetwork(net);
@@ -207,5 +260,33 @@ describe('Rule 9 — analytical, CFD and measured values coexist', () => {
     const analytical = createRth(0.12, 'Analytical', 'medium');
     const withCfd = setRthFromSource(analytical, 'FloTHERM', 0.15, 'high');
     expect(withCfd.active_source).toBe('Analytical');
+  });
+});
+
+describe('normalizeSolverSettings', () => {
+  // Earlier builds stored an iteration count and a tolerance that nothing read.
+  it('drops retired keys and keeps the thresholds', () => {
+    expect(
+      normalizeSolverSettings({
+        energy_warn_pct: 1,
+        energy_error_pct: 3,
+        max_iterations: 200,
+        tolerance: 1e-9,
+      }),
+    ).toEqual({ energy_warn_pct: 1, energy_error_pct: 3 });
+  });
+
+  it('falls back to the defaults for missing or unusable values', () => {
+    expect(normalizeSolverSettings(undefined)).toEqual(DEFAULT_SOLVER_SETTINGS);
+    expect(normalizeSolverSettings({ energy_warn_pct: 'x', energy_error_pct: -1 })).toEqual(
+      DEFAULT_SOLVER_SETTINGS,
+    );
+  });
+
+  it('never lets the warning band sit above the error band', () => {
+    expect(normalizeSolverSettings({ energy_warn_pct: 5, energy_error_pct: 2 })).toEqual({
+      energy_warn_pct: 2,
+      energy_error_pct: 2,
+    });
   });
 });

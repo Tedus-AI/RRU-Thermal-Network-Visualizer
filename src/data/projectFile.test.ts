@@ -185,6 +185,77 @@ describe('applyProjectFile', () => {
   });
 });
 
+describe('a file that is not what it claims', () => {
+  // Shape is checked BEFORE anything is written; a malformed section used to
+  // be found by a TypeError halfway through the import.
+  it('rejects a section of the wrong shape and writes nothing', async () => {
+    await seedDemoProject();
+    const file = collectProject(DEMO_PROJECT_ID, 'test')!;
+    const broken = JSON.parse(serializeProjectFile(file));
+    broken.project_id = 'BROKEN';
+    broken.data.project.project_id = 'BROKEN';
+    broken.data.scenarios = { not: 'a list' };
+
+    const result = parseProjectFile(JSON.stringify(broken));
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toContain('scenarios');
+    expect(loadProject('BROKEN')).toBeNull();
+  });
+
+  it('rejects a list holding something that is not a record', async () => {
+    await seedDemoProject();
+    const file = JSON.parse(serializeProjectFile(collectProject(DEMO_PROJECT_ID, 'test')!));
+    file.data.solutions = [null];
+    expect(parseProjectFile(JSON.stringify(file)).ok).toBe(false);
+  });
+
+  // Something can still fail part-way through a write. Then nothing of the
+  // import may remain — least of all a project record with no data under it,
+  // which the folder mirror would copy over a good file.
+  it('leaves storage exactly as it was when the import fails part-way', async () => {
+    await seedDemoProject();
+    const file = collectProject(DEMO_PROJECT_ID, 'test')!;
+    const before = loadProject(DEMO_PROJECT_ID)!;
+    const scenariosBefore = loadScenarios(DEMO_PROJECT_ID);
+
+    const poisoned = {
+      ...file,
+      project_id: 'HALF',
+      data: {
+        ...file.data,
+        project: { ...file.data.project, project_id: 'HALF' },
+        boundary_sets: [
+          {
+            get ambient(): never {
+              throw new Error('unreadable boundary set');
+            },
+          },
+        ],
+      },
+    } as unknown as typeof file;
+
+    expect(() => applyProjectFile(poisoned, 'overwrite')).toThrow('unreadable boundary set');
+    expect(loadProject('HALF')).toBeNull();
+    expect(loadScenarios('HALF')).toEqual([]);
+    expect(loadProject(DEMO_PROJECT_ID)?.project_name).toBe(before.project_name);
+    expect(loadScenarios(DEMO_PROJECT_ID)).toEqual(scenariosBefore);
+  });
+
+  // Overwrite has to mean replace: a solution for a scenario the file does not
+  // have must not survive and stay attached to a network it was not solved on.
+  it('replaces the project’s data on overwrite instead of merging into it', async () => {
+    await seedDemoProject();
+    expect(loadSolutions(DEMO_PROJECT_ID).length).toBeGreaterThan(0);
+    const file = collectProject(DEMO_PROJECT_ID, 'test')!;
+    const withoutResults = { ...file, data: { ...file.data, solutions: [] } };
+
+    applyProjectFile(withoutResults, 'overwrite');
+
+    expect(loadSolutions(DEMO_PROJECT_ID)).toEqual([]);
+    expect(loadComponents(DEMO_PROJECT_ID).length).toBe(file.data.components.length);
+  });
+});
+
 describe('export preferences carried by a file', () => {
   it('stores a well-formed block, and leaves out one that is not', async () => {
     await seedDemoProject();

@@ -8,6 +8,7 @@ import {
   loadSolutions,
   saveComponentRevisions,
   saveProject,
+  projectStorageKey,
 } from './persistence';
 import { createComponentRevisionSet, createRevision } from '@/domain/revision';
 
@@ -136,11 +137,12 @@ describe('Phase 1 persistence hydration', () => {
     saveComponentRevisions('P', revisions);
 
     expect(loadComponentRevisions('P', [])).toEqual(revisions);
-    const stored = JSON.parse(localStorage.getItem('tnv.component_revisions')!) as Record<
-      string,
-      unknown
-    >;
-    expect(stored.P).toEqual(revisions);
+    // Plain JSON under the project's own key, beside — not inside — the
+    // legacy-shaped component array.
+    const stored = JSON.parse(
+      localStorage.getItem(projectStorageKey('tnv.component_revisions', 'P'))!,
+    ) as unknown;
+    expect(stored).toEqual(revisions);
   });
 
   it('hydrates complete source provenance onto a legacy solution', () => {

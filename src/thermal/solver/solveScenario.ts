@@ -296,6 +296,9 @@ export function solveScenario(options: SolveScenarioOptions): SolveScenarioOutco
     };
   }
 
+  // --- two-phase transport limits -------------------------------------------
+  postIssues.push(...heatPipeLimitIssues(input.network, edgeResults));
+
   // --- energy balance (07 §18, §19) ----------------------------------------
   const generated = result.energy.total_generated_W;
   const solar = input.solar_power_W;
@@ -416,4 +419,67 @@ export function displayRth(
 ): number | null {
   const edge = network.edges[edgeId];
   return edge ? edgeResistance(edge, scenarioId) : null;
+}
+
+/**
+ * Heat routed through a heat pipe or vapour chamber, against what it can carry.
+ *
+ * The solve gives a two-phase device a constant vendor resistance, which is
+ * only true below its transport (capillary / dry-out) limit. Past it the wick
+ * dries, the device stops spreading heat and its resistance climbs by an order
+ * of magnitude — a temperature the linear network cannot show. So the heat it
+ * was asked to carry is checked against the stated Qmax and an overload is a
+ * warning on the result, not a footnote.
+ *
+ * A device with no stated Qmax is reported once, as unchecked, rather than
+ * passed silently: "not checked" and "checked and fine" must not read alike.
+ */
+export function heatPipeLimitIssues(
+  network: ThermalNetwork,
+  edgeResults: Record<string, EdgeSolutionResult>,
+): SolverIssue[] {
+  const issues: SolverIssue[] = [];
+  const unchecked: string[] = [];
+
+  for (const edge of Object.values(network.edges)) {
+    if (edge.type !== 'heat_pipe') continue;
+    const result = edgeResults[edge.id];
+    if (!result) continue;
+    const qmax = edge.parameters?.q_max_W;
+    const carried = Math.abs(result.heat_flow_W);
+    if (typeof qmax !== 'number' || !Number.isFinite(qmax) || qmax <= 0) {
+      unchecked.push(edge.id);
+      continue;
+    }
+    if (carried <= qmax) continue;
+
+    const from = network.nodes[edge.from]?.name ?? edge.from;
+    const to = network.nodes[edge.to]?.name ?? edge.to;
+    const percent = ((carried / qmax) * 100).toFixed(0);
+    issues.push(
+      issue(
+        'warning',
+        'heat_pipe_qmax_exceeded',
+        'result_integrity',
+        `Heat pipe "${from} → ${to}" carries ${carried.toFixed(1)} W against a stated Qmax of ${qmax.toFixed(1)} W (${percent} %). Above Qmax the wick dries out and its resistance rises sharply, so the temperatures upstream of it are optimistic.`,
+        `熱管「${from} → ${to}」承載 ${carried.toFixed(1)} W，超過標示的 Qmax ${qmax.toFixed(1)} W（${percent} %）。超過 Qmax 時毛細結構乾涸、熱阻急遽上升，上游溫度會被低估。`,
+        { edge_id: edge.id, fix_in: '04' },
+      ),
+    );
+  }
+
+  if (unchecked.length > 0) {
+    issues.push(
+      issue(
+        'info',
+        'heat_pipe_qmax_unchecked',
+        'result_integrity',
+        `${unchecked.length} heat pipe / vapour chamber edge(s) have no stated Qmax, so the heat routed through them was not checked against a dry-out limit. State Qmax in Screen 04.`,
+        `有 ${unchecked.length} 條熱管／均熱板連線未標示 Qmax，未檢查其承載熱量是否超過乾涸極限。請於 04 填寫 Qmax。`,
+        { edge_id: unchecked[0], fix_in: '04' },
+      ),
+    );
+  }
+
+  return issues;
 }

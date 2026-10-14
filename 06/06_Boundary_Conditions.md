@@ -732,28 +732,35 @@ Optional:
 
 - `surfaceReferenceTemperatureGuess_C`
 
-V1 may use a linearized radiation coefficient:
+V1 uses the secant linearization of the radiative exchange with the
+surroundings, taken at the scenario ambient:
 
 ```text
-hrad ≈ 4 * epsilon * sigma * viewFactor * Tref_K^3
+hrad = epsilon * sigma * viewFactor * (Ts_K^2 + Tsur_K^2) * (Ts_K + Tsur_K)
 Rrad = 1 / (hrad * area_m2)
 ```
+
+`hrad * (Ts - Tsur)` is then exactly `epsilon * sigma * viewFactor * (Ts^4 - Tsur^4)`
+at the stated surface temperature. The shorter `4 * epsilon * sigma * viewFactor * T^3`
+is the limit of this as Ts → Tsur and is only a good approximation with T the
+MEAN of the two; evaluated at the surface temperature alone (as V1 first did) it
+over-states hrad by 12 % at a 25 K difference and 31 % at 70 K — always in the
+optimistic direction.
 
 Because actual surface temperature is not known until Screen 07 solve, the 06 value is a pre-solve input estimate.
 
 `radiationTemperature_C` was listed here as required and was never used: the
-linearized form above takes `Tref` — the SURFACE reference — and no sink
-temperature. Screen 06 offered no input for it either, so it was written on
-every profile from a hidden ambient field and read by nothing. It is retired
-rather than left present-but-ignored, because a stored number the reader can
-see in the parameter table but the solve never touches misrepresents what was
-modelled.
+first linearized form took only the SURFACE reference and no sink temperature.
+Screen 06 offered no input for it either, so it was written on every profile
+from a hidden ambient field and read by nothing. It is retired rather than left
+present-but-ignored, because a stored number the reader can see in the
+parameter table but the solve never touches misrepresents what was modelled.
 
-A radiation sink temperature is still a real modelling gap — the linearized
-coefficient assumes the surroundings sit at the same temperature as the
-convective ambient, which an RRU facing open sky does not. Closing it means a
-different `hrad` form with the sink temperature in it and an input to state it,
-not restoring a key whose value never reached an equation.
+The secant form above does carry a sink temperature, and it is the scenario
+ambient — the same air the convection term uses. A sink colder than the air
+(an RRU facing open sky at night) is still not modelled; it needs its own
+stated input, not a revival of the retired key, whose stored values were never
+seen by the engineers who saved them.
 
 ### 9.4 Combined Convection + Radiation
 
