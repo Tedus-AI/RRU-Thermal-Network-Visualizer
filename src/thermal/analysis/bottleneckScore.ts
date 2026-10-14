@@ -36,8 +36,8 @@ import {
 } from './sensitivityRunner';
 import {
   ANALYSIS_SCHEMA_VERSION,
-  SCORE_WEIGHTS,
   classify,
+  scoreWeightsFor,
   type AnalysisIssue,
   type AnalysisSettings,
   type BottleneckAnalysis,
@@ -139,6 +139,20 @@ export async function runAnalysis(
     powerScale: 1,
     settings: input.solverSettings,
   });
+  // Falling back to Screen 07's stored temperatures here would be exactly the
+  // mismatched pair described above — every candidate measured against a
+  // different network than the one it was modified from. So a baseline that
+  // cannot be re-solved stops the run instead of ranking against it.
+  if (!baselineSolve.ok) {
+    issues.push(
+      issue(
+        'error',
+        'baseline_resolve_failed',
+        `The baseline could not be re-solved (${baselineSolve.message ?? 'unknown reason'}). Ranking against the stored Screen 07 temperatures would compare two different networks, so nothing was ranked. Re-solve Screen 07 and run the analysis again.`,
+        `無法重新求解 baseline（${baselineSolve.message ?? '原因不明'}）。若改用 07 儲存的溫度排名，等於拿兩個不同的網路比較，因此本次不做排名。請回 07 重新求解後再執行分析。`,
+      ),
+    );
+  }
   const baselineTemperatures = baselineSolve.ok
     ? baselineSolve.temperatures
     : input.baselineSolution.node_temperatures_C;
@@ -174,6 +188,8 @@ export async function runAnalysis(
     reduction_pct: input.settings.reduction_pct,
   };
 
+  const runnable = baselineSolve.ok ? candidates : [];
+
   if (candidates.length === 0) {
     issues.push(
       issue(
@@ -188,10 +204,10 @@ export async function runAnalysis(
   // --- one full re-solve per candidate ------------------------------------
   const outcomes: Array<{ candidate: (typeof candidates)[number]; outcome: ReturnType<typeof runCandidate> }> = [];
 
-  for (let index = 0; index < candidates.length; index++) {
+  for (let index = 0; index < runnable.length; index++) {
     if (options.shouldCancel?.()) throw new AnalysisCancelled();
 
-    const candidate = candidates[index];
+    const candidate = runnable[index];
     const outcome = runCandidate(candidate, context);
     outcomes.push({ candidate, outcome });
 
@@ -244,13 +260,14 @@ export async function runAnalysis(
       );
     }
 
-    options.onProgress?.(index + 1, candidates.length);
+    options.onProgress?.(index + 1, runnable.length);
     if ((index + 1) % yieldEvery === 0) {
       await new Promise((resolve) => setTimeout(resolve, 0));
     }
   }
 
   // --- normalise and score --------------------------------------------------
+  const weights = scoreWeightsFor(input.settings.target_metric);
   const deltaNorm = normalizeMagnitude(outcomes.map((entry) => entry.candidate.delta_T_C));
   const sensitivityNorm = normalizeAgainstMax(
     outcomes.map((entry) => entry.outcome.target_improvement_C),
@@ -272,9 +289,9 @@ export async function runAnalysis(
         ? 0
         : Math.round(
             100 *
-              (SCORE_WEIGHTS.delta_t * normalized.delta_t +
-                SCORE_WEIGHTS.sensitivity * normalized.sensitivity +
-                SCORE_WEIGHTS.margin_impact * normalized.margin_impact),
+              (weights.delta_t * normalized.delta_t +
+                weights.sensitivity * normalized.sensitivity +
+                weights.margin_impact * normalized.margin_impact),
           );
 
     const solutionEdge = input.baselineSolution.edge_results[entry.candidate.edge.id];
@@ -336,6 +353,7 @@ export async function runAnalysis(
     results,
     rejected,
     issues,
+    score_weights: weights,
     summary: {
       top_bottleneck: results[0]?.edge_label ?? null,
       top_score: results[0]?.score ?? null,

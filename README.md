@@ -71,7 +71,8 @@ Cytoscape 只是 view / interaction layer：Graph 的唯一真實來源是 `netw
   `projectId + networkId + scenarioId`，不寫進 base topology。
 - 06 **不求解**，也不顯示節點溫度、Edge Heat Flow Q、ΔT 或瓶頸排名。
 - 邊界熱阻只是**求解前的輸入預覽**，畫面上明確標示；
-  `Rconv = 1/(hA)`、`h_rad ≈ 4εσF·T³`、對流與輻射為**並聯（導熱率相加）**。
+  `Rconv = 1/(hA)`、`h_rad = εσF·(Ts²+Ta²)(Ts+Ta)`（割線線性化，周圍溫度取情境環境溫度；
+  `4εσF·T³` 只在 T 取兩者平均時才近似成立）、對流與輻射為**並聯（導熱率相加）**。
 - 太陽負載是**外部熱輸入**，與元件功耗分開儲存，由 07 決定如何注入求解。
 - 固定溫度是 Dirichlet 邊界，絕熱是「刻意不導熱」，兩者都不會被偽造成熱阻。
 - 參數不足一律維持 `null` 並在驗證中擋下，不會被填 0。

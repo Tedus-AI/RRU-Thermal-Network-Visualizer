@@ -364,6 +364,25 @@ describe('Composite score (08 §4)', () => {
     }
   });
 
+  // Under the worst-margin target, Sensitivity and Margin impact are one and
+  // the same number; the score is unchanged, but the weight now sits on the
+  // term that carries it instead of being split across a duplicate.
+  it('folds Margin impact into Sensitivity when the target IS the worst margin', async () => {
+    const margin = await runAnalysis(analysisInputFor(net, { target_metric: 'worst_thermal_margin' }));
+    expect(margin.score_weights).toEqual({ delta_t: 0.35, sensitivity: 0.65, margin_impact: 0 });
+    for (const result of margin.results) {
+      expect(result.normalized.sensitivity).toBe(result.normalized.margin_impact);
+      expect(result.score).toBe(
+        Math.round(100 * (0.35 * result.normalized.delta_t + 0.65 * result.normalized.sensitivity)),
+      );
+    }
+
+    const temperature = await runAnalysis(
+      analysisInputFor(net, { target_metric: 'worst_component_temperature' }),
+    );
+    expect(temperature.score_weights).toEqual({ ...SCORE_WEIGHTS });
+  });
+
   it('classifies by the documented thresholds', () => {
     expect(classify(92)).toBe('Critical');
     expect(classify(80)).toBe('Critical');
@@ -480,6 +499,27 @@ describe('Candidate eligibility (08 §5)', () => {
 // --- Failure isolation (08 §21) --------------------------------------------
 
 describe('Failure isolation and warnings (08 §21)', () => {
+  // Ranking against Screen 07's stored temperatures when the baseline cannot
+  // be re-solved compares two different networks; the run must stop instead.
+  it('refuses to rank when the baseline cannot be re-solved', async () => {
+    const net = network(
+      [
+        node('SRC', { power: 50, component: 'CMP', limit: 110 }),
+        node('MID'),
+        node('AMB', { ambient: true }),
+      ],
+      [edge('E1', 'SRC', 'MID', 0.3), edge('E2', 'MID', 'AMB', 0.2)],
+    );
+    const input = analysisInputFor(net);
+    // The solve-ready clone loses its only fixed temperature.
+    input.baselineInput.network.nodes.AMB.fixed_temperature_C = null;
+
+    const analysis = await runAnalysis(input);
+    expect(analysis.state).toBe('FAILED');
+    expect(analysis.results).toHaveLength(0);
+    expect(analysis.issues.map((entry) => entry.code)).toContain('baseline_resolve_failed');
+  });
+
   it('keeps ranking the rest when one candidate carries a low-confidence value', async () => {
     const net = network(
       [

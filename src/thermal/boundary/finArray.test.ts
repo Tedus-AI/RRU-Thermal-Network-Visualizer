@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
+import { hskMaterialDefaultK } from '@/domain/materials';
+
 import {
+  defaultFinConductivity,
+  FIN_TECHNOLOGY_DEFAULT_K_W_mK,
   finArrayBoundary,
   finAspectRatio,
   finAspectRatioVerdict,
@@ -62,19 +66,41 @@ describe('the FR1 RRU reference heat sink', () => {
     expect(rise(honest) - rise(withResidual)).toBeCloseTo(2.72, 2);
   });
 
-  // Two fits reach eta = 0.930: pure aluminium at 1.2 mm and ADC12 at 1.5 mm.
-  // The screens do not distinguish them, so neither does this — but the
-  // conductivity has to be an input rather than a constant for both to be
-  // expressible.
-  it('reaches the same efficiency for ADC12 at a thicker fin', () => {
+  // Two fits reach eta = 0.930: pure aluminium at 1.2 mm and a 160 W/m·K
+  // die-cast alloy at 1.5 mm. The screens do not distinguish them, so neither
+  // does this — but the conductivity has to be an input rather than a constant
+  // for both to be expressible.
+  it('reaches the same efficiency for a 160 W/m·K die-cast alloy at a thicker fin', () => {
     const dieCast = finArrayBoundary({
+      ...RRU,
+      technology: 'DieCasting',
+      thickness_mm: 1.5,
+      draftAngle_deg: 0,
+      k_W_mK: 160,
+    })!;
+
+    expect(dieCast.eta_fin).toBeCloseTo(0.93, 3);
+  });
+
+  // ADC12 itself is ~96 W/m·K, and the same 1.5 mm fin in it is visibly worse.
+  // The default used to be 160 under the ADC12 label, which is what made the
+  // two indistinguishable.
+  it('defaults a die-cast fin to the same ADC12 the base defaults to', () => {
+    const adc12 = finArrayBoundary({
       ...RRU,
       technology: 'DieCasting',
       thickness_mm: 1.5,
       draftAngle_deg: 0,
     })!;
 
-    expect(dieCast.eta_fin).toBeCloseTo(0.93, 3);
+    expect(FIN_TECHNOLOGY_DEFAULT_K_W_mK.DieCasting).toBe(hskMaterialDefaultK('ADC12'));
+    expect(adc12.eta_fin).toBeLessThan(0.93);
+  });
+
+  it('seeds a die-cast fin from the project base material, not a bonded one', () => {
+    expect(defaultFinConductivity('DieCasting', 150)).toBe(150);
+    expect(defaultFinConductivity('DieCasting', null)).toBe(FIN_TECHNOLOGY_DEFAULT_K_W_mK.DieCasting);
+    expect(defaultFinConductivity('Embedded', 96)).toBe(FIN_TECHNOLOGY_DEFAULT_K_W_mK.Embedded);
   });
 });
 

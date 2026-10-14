@@ -42,11 +42,37 @@ export const FIN_TECHNOLOGY_LABELS: Record<FinTechnology, { en: string; zh: stri
  * Fin conductivity by process: pure aluminium for a bonded or extruded stack,
  * ADC12 for a die-casting. Defaults only — a project that knows its alloy says
  * so, and `k_W_mK` overrides this.
+ *
+ * The die-cast default was 160 W/m·K under the ADC12 label, while Screen 01
+ * gives an ADC12 base 96 — the same alloy at two conductivities in one model.
+ * ADC12 is ~96 W/m·K; 150–180 is a high-conductivity die-cast alloy, which a
+ * project selects as its base material rather than inherits by accident. A
+ * die-cast fin is cast in one piece with the base, so the inspector seeds it
+ * from the project's base material (`defaultFinConductivity`); this constant
+ * is only the fallback when no base material is known.
  */
 export const FIN_TECHNOLOGY_DEFAULT_K_W_mK: Record<FinTechnology, number> = {
   Embedded: 200,
-  DieCasting: 160,
+  DieCasting: 96,
 };
+
+/** The die-cast default before it was corrected; see above. */
+export const RETIRED_DIE_CAST_DEFAULT_K_W_mK = 160;
+
+/**
+ * The conductivity a new fin profile starts from.
+ *
+ * Die-cast fins are the base's own metal, so they take the project's base
+ * conductivity when there is one; a bonded or extruded stack is a different
+ * material from the base and keeps the process default.
+ */
+export function defaultFinConductivity(
+  technology: FinTechnology,
+  baseK_W_mK?: number | null,
+): number {
+  if (technology === 'DieCasting' && positive(baseK_W_mK) != null) return baseK_W_mK as number;
+  return FIN_TECHNOLOGY_DEFAULT_K_W_mK[technology];
+}
 
 /** A die-cast fin has to draw from the mould; a bonded one does not. */
 export const FIN_TECHNOLOGY_DEFAULT_DRAFT_DEG: Record<FinTechnology, number> = {

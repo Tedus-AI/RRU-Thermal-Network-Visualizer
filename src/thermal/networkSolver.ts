@@ -50,18 +50,41 @@ export interface SolveOptions {
   settings?: SolverSettings;
 }
 
+/**
+ * A pivot this small relative to its column's largest original entry is taken
+ * as zero.
+ *
+ * The test used to be an absolute `|pivot| < 1e-14`. A floating island's last
+ * pivot is round-off, and round-off scales with the conductances: at R ≈ 1e-3
+ * °C/W the residue sits around 1e-13, above that floor, so an island with no
+ * path to a boundary "solved" to 1e13 °C and reported success in 41 % of
+ * randomised trials. Relative to the column it is ~1e-16 regardless of scale,
+ * while a legitimate pivot stays above this even for a 1e9 spread between the
+ * smallest and largest resistance in the network.
+ */
+const RELATIVE_PIVOT_TOLERANCE = 1e-12;
+
 /** Dense Gaussian elimination with partial pivoting. n is small (hundreds). */
-function solveLinearSystem(A: number[][], b: number[]): number[] | null {
+export function solveLinearSystem(A: number[][], b: number[]): number[] | null {
   const n = b.length;
   // Work on copies; the caller keeps its matrices.
   const M = A.map((row, i) => [...row, b[i]]);
+
+  const columnScale = new Array<number>(n).fill(0);
+  for (let r = 0; r < n; r++) {
+    for (let c = 0; c < n; c++) {
+      const magnitude = Math.abs(A[r][c]);
+      if (magnitude > columnScale[c]) columnScale[c] = magnitude;
+    }
+  }
 
   for (let col = 0; col < n; col++) {
     let pivot = col;
     for (let r = col + 1; r < n; r++) {
       if (Math.abs(M[r][col]) > Math.abs(M[pivot][col])) pivot = r;
     }
-    if (Math.abs(M[pivot][col]) < 1e-14) return null; // singular: floating island
+    const magnitude = Math.abs(M[pivot][col]);
+    if (!(magnitude > RELATIVE_PIVOT_TOLERANCE * columnScale[col])) return null; // singular
     if (pivot !== col) [M[col], M[pivot]] = [M[pivot], M[col]];
 
     const diag = M[col][col];
@@ -83,6 +106,62 @@ function solveLinearSystem(A: number[][], b: number[]): number[] | null {
 
 function isFixed(node: ThermalNode): boolean {
   return node.boundary_type === 'fixed_temperature' && node.fixed_temperature_C != null;
+}
+
+/**
+ * Groups of unknown nodes that no active edge ties to a fixed temperature.
+ *
+ * Each such group is a singular block of [G]: its temperatures are defined only
+ * up to a constant, so there is no answer to report. This is decided from the
+ * topology, exactly, before any arithmetic — the pivot test in
+ * `solveLinearSystem` is the numerical backstop, not the primary check — so
+ * every caller of the solver gets the same verdict whether or not it ran the
+ * pre-solve checks first.
+ */
+export function ungroundedGroups(
+  network: ThermalNetwork,
+  unknownIds: readonly string[],
+  edges: ReadonlyArray<{ edge: ThermalEdge }>,
+): string[][] {
+  const parent = new Map<string, string>(unknownIds.map((id) => [id, id]));
+  const find = (id: string): string => {
+    let root = id;
+    while (parent.get(root) !== root) root = parent.get(root) as string;
+    // Path compression keeps the walk short on a long chain.
+    let cursor = id;
+    while (parent.get(cursor) !== root) {
+      const next = parent.get(cursor) as string;
+      parent.set(cursor, root);
+      cursor = next;
+    }
+    return root;
+  };
+
+  const groundedEnds: string[] = [];
+  for (const { edge } of edges) {
+    const fromUnknown = parent.has(edge.from);
+    const toUnknown = parent.has(edge.to);
+    if (fromUnknown && toUnknown) {
+      const a = find(edge.from);
+      const b = find(edge.to);
+      if (a !== b) parent.set(a, b);
+    } else if (fromUnknown && isFixed(network.nodes[edge.to])) {
+      groundedEnds.push(edge.from);
+    } else if (toUnknown && isFixed(network.nodes[edge.from])) {
+      groundedEnds.push(edge.to);
+    }
+  }
+
+  const grounded = new Set(groundedEnds.map(find));
+  const groups = new Map<string, string[]>();
+  for (const id of unknownIds) {
+    const root = find(id);
+    if (grounded.has(root)) continue;
+    const group = groups.get(root);
+    if (group) group.push(id);
+    else groups.set(root, [id]);
+  }
+  return [...groups.values()];
 }
 
 /** Edges that carry heat under the given scenario, with a usable positive resistance. */
@@ -139,6 +218,27 @@ export function solveNetwork(network: ThermalNetwork, options: SolveOptions = {}
       max_node_residual_W: 0,
       solve_time_ms: performance.now() - started,
       message: 'Network has no solvable node. Every node is a fixed-temperature boundary.',
+    };
+  }
+
+  const floating = ungroundedGroups(network, unknowns, edges);
+  if (floating.length > 0) {
+    const label = (group: string[]) =>
+      group
+        .slice(0, 3)
+        .map((id) => network.nodes[id]?.name ?? id)
+        .join(', ') + (group.length > 3 ? ', …' : '');
+    return {
+      ok: false,
+      temperatures,
+      edges: {},
+      energy: emptyEnergy,
+      max_node_residual_W: 0,
+      solve_time_ms: performance.now() - started,
+      message:
+        `${floating.length} group(s) of nodes have no conduction path to a fixed-temperature ` +
+        `boundary (${floating.map(label).join('; ')}), so the conductance matrix is singular ` +
+        `and their temperatures are undefined.`,
     };
   }
 

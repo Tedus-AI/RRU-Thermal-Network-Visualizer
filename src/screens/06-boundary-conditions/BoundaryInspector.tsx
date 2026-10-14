@@ -53,8 +53,9 @@ import {
 import {
   FIN_ASPECT_RATIO_BAND,
   FIN_TECHNOLOGIES,
-  FIN_TECHNOLOGY_DEFAULT_K_W_mK,
   FIN_TECHNOLOGY_LABELS,
+  RETIRED_DIE_CAST_DEFAULT_K_W_mK,
+  defaultFinConductivity,
   finAspectRatioVerdict,
   type FinArrayResult,
   type FinTechnology,
@@ -133,7 +134,7 @@ const FIN_GEOMETRY_FIELDS: Array<{
     label: 'Fin k',
     zh: '鰭片導熱係數',
     unit: 'W/mK',
-    tip: '鰭片本身的導熱係數，決定鰭片效率。預設由製程帶入：純鋁 200、ADC12 壓鑄 160。',
+    tip: '鰭片本身的導熱係數，決定鰭片效率。預設由製程帶入：埋入/擠型純鋁 200；壓鑄鰭片與基座一體成形，取 01 的散熱器基座材料 k（ADC12 為 96）。',
   },
   {
     key: FIN_GEOMETRY_KEYS.draftAngle,
@@ -189,7 +190,7 @@ const TYPE_PARAMETERS: Record<
       label: 'Surface Temperature Guess',
       zh: '表面溫度假設',
       unit: '°C',
-      tip: '線性化輻射係數需要表面溫度假設；留白時以環境溫度 + 35°C 預估，真實值由 07 求解。',
+      tip: '線性化輻射係數 εσF(Ts²+Ta²)(Ts+Ta) 需要表面溫度假設，周圍溫度取情境環境溫度；留白時以環境溫度 + 35°C 預估，真實值由 07 求解。',
     },
   ],
   combined_convection_radiation: [
@@ -202,7 +203,7 @@ const TYPE_PARAMETERS: Record<
       label: 'Surface Temperature Guess',
       zh: '表面溫度假設',
       unit: '°C',
-      tip: '留白時以環境溫度 + 35°C 預估；真實表面溫度由 07 求解。',
+      tip: '對流關聯式與輻射係數 εσF(Ts²+Ta²)(Ts+Ta) 共用此假設，周圍溫度取情境環境溫度；留白時以環境溫度 + 35°C 預估，真實表面溫度由 07 求解。',
     },
   ],
   solar_load: [
@@ -669,11 +670,13 @@ function FinGeometryPanel({
   result,
   readOnly,
   onPatch,
+  onTechnologyChange,
 }: {
   profile: BoundaryConditionProfile;
   result: FinArrayResult | null;
   readOnly: boolean;
   onPatch: (key: string, value: number | string | null) => void;
+  onTechnologyChange: (technology: FinTechnology) => void;
 }) {
   const technology: FinTechnology =
     profile.parameters[FIN_GEOMETRY_KEYS.technology] === 'DieCasting' ? 'DieCasting' : 'Embedded';
@@ -699,7 +702,9 @@ function FinGeometryPanel({
             value,
             label: `${FIN_TECHNOLOGY_LABELS[value].en} / ${FIN_TECHNOLOGY_LABELS[value].zh}`,
           }))}
-          onChange={(event) => onPatch(FIN_GEOMETRY_KEYS.technology, event.target.value)}
+          onChange={(event) =>
+            onTechnologyChange(event.target.value === 'DieCasting' ? 'DieCasting' : 'Embedded')
+          }
         />
       </div>
 
@@ -1019,7 +1024,7 @@ export function BoundaryInspector({
   ambientTemperature_C: number | null;
   solarEnabled: boolean;
   /** Screen 01's heat sink base, used to seed a fin-geometry profile. */
-  heatSinkBase?: { L_mm: number | null; W_mm: number | null } | null;
+  heatSinkBase?: { L_mm: number | null; W_mm: number | null; k_W_mK?: number | null } | null;
   readOnly: boolean;
   onEditAmbient: () => void;
   onUpsertProfile: (profile: BoundaryConditionProfile) => void;
@@ -1119,7 +1124,40 @@ export function BoundaryInspector({
         ? { [FIN_GEOMETRY_KEYS.baseWidth]: heatSinkBase.W_mm }
         : {}),
       ...(p[FIN_GEOMETRY_KEYS.conductivity] == null
-        ? { [FIN_GEOMETRY_KEYS.conductivity]: FIN_TECHNOLOGY_DEFAULT_K_W_mK[technology] }
+        ? {
+            [FIN_GEOMETRY_KEYS.conductivity]: defaultFinConductivity(
+              technology,
+              heatSinkBase?.k_W_mK,
+            ),
+          }
+        : {}),
+    });
+  };
+
+  /**
+   * Changes the fin process, and with it a conductivity that was only ever the
+   * old process's default.
+   *
+   * Two separate `patchParameter` calls would each start from the same stale
+   * profile and the second would undo the first, so both keys go in one patch.
+   * A conductivity someone typed is theirs and stays; one still equal to the
+   * previous process's default (or to the retired 160 die-cast default) was
+   * seeded, and follows the process it was seeded for.
+   */
+  const setFinTechnology = (next: FinTechnology) => {
+    if (!activeProfile) return;
+    const p = activeProfile.parameters;
+    const previous: FinTechnology =
+      p[FIN_GEOMETRY_KEYS.technology] === 'DieCasting' ? 'DieCasting' : 'Embedded';
+    const storedK = p[FIN_GEOMETRY_KEYS.conductivity];
+    const seeded =
+      storedK == null ||
+      storedK === defaultFinConductivity(previous, heatSinkBase?.k_W_mK) ||
+      (previous === 'DieCasting' && storedK === RETIRED_DIE_CAST_DEFAULT_K_W_mK);
+    patchParameters({
+      [FIN_GEOMETRY_KEYS.technology]: next,
+      ...(seeded
+        ? { [FIN_GEOMETRY_KEYS.conductivity]: defaultFinConductivity(next, heatSinkBase?.k_W_mK) }
         : {}),
     });
   };
@@ -1358,6 +1396,7 @@ export function BoundaryInspector({
                     result={finResult}
                     readOnly={readOnly}
                     onPatch={patchParameter}
+                    onTechnologyChange={setFinTechnology}
                   />
                 )}
 

@@ -208,6 +208,36 @@ describe('downstreamResistance', () => {
     close(downstreamResistance(net, 'BASE', 'SCN_A')!, 0.3, 1e-9);
   });
 
+  // A part with a second route to a boundary — a board, a lid on the housing —
+  // used to give the probe a way back up through the spreading edge being
+  // refined, so the far face looked better cooled than it is.
+  it('does not count a route back through the source as part of the far face', () => {
+    const net = baseNetwork(0.05);
+    net.nodes.AMB.boundary_type = 'fixed_temperature';
+    net.nodes.AMB.fixed_temperature_C = 45;
+    net.edges.E_BOUNDARY.rth = createRth(0.25, 'Analytical', 'high');
+    net.edges.E_BOUNDARY.resolution = 'resolved';
+    net.edges.E_TOP = plain('E_TOP', 'SRC', 'AMB', 2);
+
+    close(downstreamResistance(net, 'BASE', 'SCN_A')!, 0.3, 1e-9);
+  });
+
+  it('keeps a shared structure hanging off the plate in the downstream path', () => {
+    const net = baseNetwork(0.05);
+    net.nodes.AMB.boundary_type = 'fixed_temperature';
+    net.nodes.AMB.fixed_temperature_C = 45;
+    net.edges.E_BOUNDARY.rth = createRth(0.25, 'Analytical', 'high');
+    net.edges.E_BOUNDARY.resolution = 'resolved';
+    // A cover bolted to the base, drawn pointing INTO the base, with its own
+    // way to ambient: it is metal around the plate, not the source side.
+    net.nodes.COVER = node('COVER', { type: 'custom' });
+    net.edges.E_COVER = plain('E_COVER', 'COVER', 'BASE', 0.3);
+    net.edges.E_COVER_AMB = plain('E_COVER_AMB', 'COVER', 'AMB', 0.3);
+
+    // 0.05 + 0.25 through the fins, in parallel with 0.3 + 0.3 through the cover.
+    close(downstreamResistance(net, 'BASE', 'SCN_A')!, 1 / (1 / 0.3 + 1 / 0.6), 1e-9);
+  });
+
   it('halves when a second boundary path is added in parallel', () => {
     const net = baseNetwork(0);
     net.nodes.AMB.boundary_type = 'fixed_temperature';
@@ -338,6 +368,83 @@ describe('refineSpreadingWithBiot', () => {
     const [refined] = refineSpreadingWithBiot(net, 'SCN_A');
     // b comes from A_plate / devices, matching the area the series actually uses.
     close(refined.bi, (refined.h_eff_W_m2K * Math.sqrt(PLATE_MM2 / 4 / 1e6 / Math.PI)) / K, 1e-12);
+  });
+
+  /**
+   * A boss on the base is a plate whose downstream path contains the base's
+   * own spreading edge. Refined first, it was probed against that edge at its
+   * Bi → ∞ floor; the base is refined first now, whatever order the edges
+   * happen to be stored in.
+   */
+  it('refines a boss on a base downstream-first, independent of edge order', () => {
+    const BOSS_MM2 = 50 * 50;
+    const bossAtInfiniteBi = discSpreadingResistance({
+      source_area_mm2: SOURCE_MM2,
+      plate_area_mm2: BOSS_MM2,
+      thickness_mm: 5,
+      k_W_mK: K,
+      variant: 'max',
+    })!.R_C_per_W;
+    const baseAtInfiniteBi = discSpreadingResistance({
+      source_area_mm2: BOSS_MM2,
+      plate_area_mm2: PLATE_MM2,
+      thickness_mm: THICKNESS_MM,
+      k_W_mK: K,
+      variant: 'max',
+    })!.R_C_per_W;
+
+    const build = (bossFirst: boolean) => {
+      const net = baseNetwork(0.05);
+      delete net.edges.E_SPREAD;
+      net.nodes.AMB.boundary_type = 'fixed_temperature';
+      net.nodes.AMB.fixed_temperature_C = 45;
+      net.edges.E_BOUNDARY.rth = createRth(0.25, 'Analytical', 'high');
+      net.edges.E_BOUNDARY.resolution = 'resolved';
+      net.nodes.BOSS = node('BOSS', { type: 'custom' });
+      const boss = spreadingEdge({
+        id: 'E_BOSS',
+        from: 'SRC',
+        to: 'BOSS',
+        rth: createRth(bossAtInfiniteBi, 'Analytical', 'medium'),
+        parameters: {
+          source_area_mm2: SOURCE_MM2,
+          plate_area_mm2: BOSS_MM2,
+          thickness_mm: 5,
+          k_W_mK: K,
+          psi_variant: 'max',
+        },
+      });
+      const base = spreadingEdge({
+        id: 'E_BASE',
+        from: 'BOSS',
+        to: 'BASE',
+        rth: createRth(baseAtInfiniteBi, 'Analytical', 'medium'),
+        parameters: {
+          source_area_mm2: BOSS_MM2,
+          plate_area_mm2: PLATE_MM2,
+          thickness_mm: THICKNESS_MM,
+          k_W_mK: K,
+          psi_variant: 'max',
+        },
+      });
+      const { E_FIN, E_BOUNDARY } = net.edges;
+      net.edges = bossFirst
+        ? { E_BOSS: boss, E_BASE: base, E_FIN, E_BOUNDARY }
+        : { E_BASE: base, E_BOSS: boss, E_FIN, E_BOUNDARY };
+      const refined = refineSpreadingWithBiot(net, 'SCN_A');
+      return Object.fromEntries(refined.map((entry) => [entry.edge_id, entry]));
+    };
+
+    const bossFirst = build(true);
+    const baseFirst = build(false);
+    close(bossFirst.E_BOSS.R_after_C_per_W, baseFirst.E_BOSS.R_after_C_per_W, 1e-12);
+    close(bossFirst.E_BASE.R_after_C_per_W, baseFirst.E_BASE.R_after_C_per_W, 1e-12);
+    // The boss saw the base's REFINED spreading, not its floor.
+    close(
+      bossFirst.E_BOSS.R_downstream_C_per_W,
+      bossFirst.E_BASE.R_after_C_per_W + bossFirst.E_BASE.R_downstream_C_per_W,
+      1e-9,
+    );
   });
 
   it('gives a stronger boundary a larger Bi and a smaller spreading resistance', () => {

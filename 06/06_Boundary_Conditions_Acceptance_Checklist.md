@@ -194,7 +194,7 @@ rather than the mock's illustrative figure. The mock's convection
 
 | Group | Covers |
 | --- | --- |
-| Calculations | `1/(hA)`; the linearised `4εσFT³`; conductances summed for combined, not resistances; solar as `G·A·α·proj·shade`; null (never 0) for every missing input |
+| Calculations | `1/(hA)`; the secant-linearised `εσF(Ts²+Tsur²)(Ts+Tsur)` radiating to the scenario ambient; conductances summed for combined, not resistances; solar as `G·A·α·proj·shade`; null (never 0) for every missing input |
 | Derived preview | pre-solve disclaimer on every preview; no Rth invented for fixed-temperature or adiabatic; solar stays a load |
 | Boundary ports | derived from the 05 topology; ambient placeholder is a reference, not a dissipating surface; the topology object is not mutated |
 | Validation | every blocking rule in §12.1, the warnings in §12.2, and a guard that refuses to carry a solved value into Screen 07 |
@@ -226,7 +226,8 @@ Run at 1680×1000 and 1440×900; the document does not scroll at either size.
   allows. Wind speed is recorded and warned about rather than applied.
 - The linearised radiation coefficient needs a surface-temperature guess. When
   none is given, ambient + 35 °C is used and the preview is marked as an
-  assumption rather than hidden.
+  assumption rather than hidden. The surroundings are taken at the scenario
+  ambient; a colder sky sink is not modelled.
 - Boundary port area is not derivable from the 05 topology, so it starts null
   and must be entered per profile. That is why a freshly generated default set
   is still `blocked` until the engineer supplies areas.

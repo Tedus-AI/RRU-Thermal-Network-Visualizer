@@ -7,7 +7,7 @@
 
 export const T08 = {
   score:
-    '由 Edge ΔT、full-network sensitivity、thermal margin impact 組合，不是單純依 Rth 排序。',
+    '由 Edge ΔT、full-network sensitivity、thermal margin impact 組合，不是單純依 Rth 排序：0.35·ΔT + 0.45·Sensitivity + 0.20·Margin Impact（各項以本批最大值正規化）。目標指標為 Worst Thermal Margin 時，Sensitivity 與 Margin Impact 是同一個量，權重合併為 0.65·Sensitivity，不重複計分。',
   sensitivity: '降低 candidate edge Rth 後重新求解完整 General Thermal Graph。',
   reduction: 'V1 預設 20%，只做假設分析，不直接修改正式 network。',
   affected: 're-solve 後溫度改善達 threshold 的元件數。',

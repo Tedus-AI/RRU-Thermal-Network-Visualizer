@@ -1013,6 +1013,38 @@ export function ComponentInspector({
                       )}
 
                       {/*
+                        The vendor resistance only holds below the device's
+                        transport limit. The solve checks the heat it routes
+                        through the device against this; left blank, it says
+                        the limit was not checked rather than passing it.
+                      */}
+                      {mountHasVendorResistance(mount.type) && (
+                        <div className="flex flex-col gap-1.5">
+                          <FieldLabel
+                            label={
+                              mount.type === 'EmbeddedHeatPipe' ? 'Qmax (one pipe)' : 'Qmax'
+                            }
+                            zh={mount.type === 'EmbeddedHeatPipe' ? '單根最大傳熱量' : '最大傳熱量'}
+                            unit="W"
+                            htmlFor="ins-mount-qmax"
+                            tooltip={
+                              mount.type === 'EmbeddedHeatPipe'
+                                ? '原廠在實際擺放方向與工作溫度下的最大傳熱量（毛細／乾涸極限），填「單根」的數值，會乘上根數。求解後會檢查流經熱管的熱量是否超過；超過時熱管乾涸、熱阻急遽上升，結果偏樂觀。'
+                                : '原廠在實際擺放方向與工作溫度下的最大傳熱量（毛細／乾涸極限）。求解後會檢查流經此元件的熱量是否超過；超過時熱阻急遽上升，結果偏樂觀。'
+                            }
+                          />
+                          <NumberInput
+                            id="ins-mount-qmax"
+                            value={mount.heat_pipe_qmax_W ?? ''}
+                            disabled={readOnly}
+                            onChange={(event) =>
+                              patchMount({ heat_pipe_qmax_W: numberOrNull(event.target.value) })
+                            }
+                          />
+                        </div>
+                      )}
+
+                      {/*
                         Machined or bolted. A vapour chamber is never milled out
                         of the heat sink, so it is not asked — it is fixed.
                       */}

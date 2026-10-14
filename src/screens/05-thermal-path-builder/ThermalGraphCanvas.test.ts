@@ -93,8 +93,6 @@ function fanInNetwork(count: number, reversedIndex = -1): ThermalNetwork {
     solver_settings: {
       energy_warn_pct: 0.5,
       energy_error_pct: 2,
-      max_iterations: 200,
-      tolerance: 1e-9,
     },
   };
 

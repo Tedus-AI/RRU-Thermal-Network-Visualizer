@@ -126,17 +126,51 @@ describe('boundary calculations (06 §13)', () => {
     expect(calculateConvectionRth(-5, 0.42)).toBeNull();
   });
 
-  it('linearises the radiation coefficient as 4·ε·σ·F·T³', () => {
+  // The secant form makes h·(Ts − Tsur) reproduce the T⁴ exchange exactly at the
+  // stated surface temperature; it is not an approximation of it.
+  it('linearises radiation so that h·ΔT is exactly εσF(Ts⁴ − Tsur⁴)', () => {
     const hrad = calculateLinearizedRadiationHrad({
       emissivity: 0.86,
       viewFactor: 0.9,
       surfaceReferenceTemperatureGuess_C: 90,
+      surroundingsTemperature_C: 45,
     })!;
-    const expected = 4 * 0.86 * SIGMA * 0.9 * (90 + 273.15) ** 3;
-    expect(hrad).toBeCloseTo(expected, 10);
-    // Sanity: a hot anodised fin radiates a few W/m²K, not hundreds.
+    const ts = 90 + 273.15;
+    const tsur = 45 + 273.15;
+    const exchange = 0.86 * SIGMA * 0.9 * (ts ** 4 - tsur ** 4);
+    expect(hrad * (ts - tsur)).toBeCloseTo(exchange, 9);
+    // Sanity: a hot anodised surface radiates a few W/m²K, not hundreds.
     expect(hrad).toBeGreaterThan(3);
     expect(hrad).toBeLessThan(12);
+  });
+
+  // `4·ε·σ·F·T³` at the SURFACE temperature is what this used to compute. It
+  // is the right number only when the two temperatures meet, and otherwise
+  // flatters the surface by more the hotter it runs.
+  it('is no larger than 4·ε·σ·F·Ts³ and meets it only as Ts → Tsur', () => {
+    const at = (surface: number, surroundings: number) =>
+      calculateLinearizedRadiationHrad({
+        emissivity: 1,
+        viewFactor: 1,
+        surfaceReferenceTemperatureGuess_C: surface,
+        surroundingsTemperature_C: surroundings,
+      })!;
+    const surfaceCube = (surface: number) => 4 * SIGMA * (surface + 273.15) ** 3;
+
+    expect(at(55, 55)).toBeCloseTo(surfaceCube(55), 9);
+    expect(surfaceCube(60) / at(60, 25)).toBeCloseTo(1.172, 3);
+    expect(surfaceCube(125) / at(125, 55)).toBeCloseTo(1.306, 3);
+  });
+
+  it('has no coefficient without a sink temperature', () => {
+    expect(
+      calculateLinearizedRadiationHrad({
+        emissivity: 0.86,
+        viewFactor: 0.9,
+        surfaceReferenceTemperatureGuess_C: 90,
+        surroundingsTemperature_C: null,
+      }),
+    ).toBeNull();
   });
 
   it('refuses an emissivity or view factor outside 0–1', () => {
@@ -145,6 +179,7 @@ describe('boundary calculations (06 §13)', () => {
         emissivity: 1.4,
         viewFactor: 0.9,
         surfaceReferenceTemperatureGuess_C: 90,
+        surroundingsTemperature_C: 45,
       }),
     ).toBeNull();
     expect(
@@ -152,6 +187,7 @@ describe('boundary calculations (06 §13)', () => {
         emissivity: 0.8,
         viewFactor: 1.5,
         surfaceReferenceTemperatureGuess_C: 90,
+        surroundingsTemperature_C: 45,
       }),
     ).toBeNull();
   });
@@ -509,8 +545,14 @@ describe('a flat wall whose h is computed from the plate', () => {
       { ambient_C: 45 },
     );
 
-    // eps 0.8, F 1.0 at the same 80 C guess the convection used.
-    expect(preview.h_rad_W_m2K).toBeCloseTo(4 * 0.8 * SIGMA * 1 * (80 + 273.15) ** 3, 9);
+    // eps 0.8, F 1.0 at the same 80 C guess the convection used, radiating to
+    // the 45 C ambient.
+    const ts = 80 + 273.15;
+    const tsur = 45 + 273.15;
+    expect(preview.h_rad_W_m2K).toBeCloseTo(
+      0.8 * SIGMA * 1 * (ts * ts + tsur * tsur) * (ts + tsur),
+      9,
+    );
     expect(preview.r_rad_C_per_W).toBeCloseTo(1 / (preview.h_rad_W_m2K! * 0.1405), 9);
   });
 
@@ -671,12 +713,13 @@ describe('named assumptions behind a warning', () => {
 
     // The four numbers this port puts on screen, to four decimals. They pin
     // both correlations at once: Churchill-Chu at Ra 8.10e7 for h_conv, and
-    // 4εFσT³ at 358.15 K for h_rad.
+    // the secant εFσ(Ts²+Tsur²)(Ts+Tsur) between 358.15 K and 318.15 K for
+    // h_rad. (The surface-only 4εFσTs³ this replaced read 7.5024 here.)
     expect(preview.plate_convection?.h_conv_W_m2K).toBeCloseTo(4.9662, 4);
-    expect(preview.h_rad_W_m2K).toBeCloseTo(7.5024, 4);
+    expect(preview.h_rad_W_m2K).toBeCloseTo(6.3365, 4);
     expect(preview.r_conv_C_per_W).toBeCloseTo(1.4010, 4);
-    expect(preview.r_rad_C_per_W).toBeCloseTo(0.9274, 4);
-    expect(preview.r_combined_C_per_W).toBeCloseTo(0.5580, 4);
+    expect(preview.r_rad_C_per_W).toBeCloseTo(1.0980, 4);
+    expect(preview.r_combined_C_per_W).toBeCloseTo(0.6156, 4);
   });
 
   it('leaves a blocked port without assumptions, so the missing input stands alone', () => {
@@ -1308,7 +1351,11 @@ describe('06_Boundary_Conditions_mock.json', () => {
     const fin = previews.find((preview) => preview.boundary_port_id === 'BP_FIN_RF_EXTERNAL_AIR')!;
     expect(fin.r_conv_C_per_W).toBeCloseTo(0.132, 3);
 
-    const expectedHrad = 4 * 0.86 * SIGMA * 0.9 * (90 + 273.15) ** 3;
+    // ε 0.86, F 0.9, a 90 °C surface radiating to the mock's 55 °C ambient.
+    // The mock's own 5.2 W/m²K was typed, not computed; §13.2 is followed.
+    const ts = 90 + 273.15;
+    const tsur = 55 + 273.15;
+    const expectedHrad = 0.86 * SIGMA * 0.9 * (ts * ts + tsur * tsur) * (ts + tsur);
     expect(fin.h_rad_W_m2K).toBeCloseTo(expectedHrad, 6);
     expect(fin.r_rad_C_per_W).toBeCloseTo(1 / (expectedHrad * 0.42), 6);
     expect(fin.r_combined_C_per_W).toBeCloseTo(1 / ((18 + expectedHrad) * 0.42), 6);

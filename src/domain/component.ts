@@ -852,6 +852,20 @@ export interface MountSpec {
    * pipes and two routes, and the parallel is the tool's to do.
    */
   heat_pipe_R_C_per_W: number | null;
+  /**
+   * Vendor maximum heat transport of the two-phase device, W — the capillary
+   * (dry-out) limit at the orientation and operating temperature the product
+   * runs at. Per PIPE for an embedded pipe, like the resistance beside it; for
+   * a vapour chamber or a pipe under a local block, the device as a whole.
+   *
+   * The resistance above is only valid below this: past it the wick dries
+   * out, the device stops being a two-phase spreader and its resistance rises
+   * by an order of magnitude. A network solve with a constant R cannot see
+   * that, so the solve checks the heat it routed through the device against
+   * this number instead. Null means nobody stated it — the check says so
+   * rather than passing it.
+   */
+  heat_pipe_qmax_W: number | null;
   /** Milled out of the base, or a separate piece bolted to it. */
   attachment: MountAttachment;
   /**
@@ -879,6 +893,7 @@ export function emptyMount(type: MountType = 'Direct'): MountSpec {
     heat_pipe_count: null,
     height_mm: null,
     heat_pipe_R_C_per_W: null,
+    heat_pipe_qmax_W: null,
     attachment: mountAttachmentIsFixed(type) ? 'Bolted' : 'Integral',
     block_k_W_mK: null,
     joint_tim_id: null,
@@ -933,6 +948,16 @@ export function mountPipeRth(mount: MountSpec): number | null {
   const R = mount.heat_pipe_R_C_per_W;
   if (R == null || !Number.isFinite(R) || R <= 0) return null;
   return R / mountPipeCount(mount);
+}
+
+/**
+ * What the pipe branch can carry before it dries out, W — `Qmax_one × pipes`.
+ * Null when no positive limit was stated.
+ */
+export function mountPipeQmax(mount: MountSpec): number | null {
+  const Q = mount.heat_pipe_qmax_W;
+  if (Q == null || !Number.isFinite(Q) || Q <= 0) return null;
+  return Q * mountPipeCount(mount);
 }
 
 export function mountContactAreaMm2(spec: ThermalSpec): number | null {

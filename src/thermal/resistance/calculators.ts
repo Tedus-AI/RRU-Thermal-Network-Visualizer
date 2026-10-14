@@ -30,6 +30,17 @@ function unresolved(missing: string[], note?: string): RthComputation {
   return { value: null, resolution: 'unresolved', missing, note };
 }
 
+/**
+ * Every slab-type method divides a length by a conductance, so a zero or
+ * negative length is not a small resistance — it is a sign error or a blank
+ * field read as 0, and the result would be a zero or NEGATIVE resistance
+ * reported as `resolved`. The pre-solve checks would block the solve later,
+ * but the Edge Inspector would already have shown it as a good number.
+ */
+function nonPositiveLength(name: string): RthComputation {
+  return unresolved([], `${name} must be positive.`);
+}
+
 /** R = L / (k·A). Length in mm, k in W/m·K, area in mm² → °C/W. */
 export function conductionRth(params: EdgeParameters): RthComputation {
   const L = numeric(params, 'length_mm');
@@ -45,6 +56,7 @@ export function conductionRth(params: EdgeParameters): RthComputation {
   if (k! <= 0 || A! <= 0) {
     return unresolved([], 'Conductivity and area must be positive.');
   }
+  if (L! <= 0) return nonPositiveLength('Length');
 
   // mm / (W/m·K × mm²) → multiply by 1000 to convert mm→m against k's metre basis.
   const value = L! / 1000 / (k! * (A! / 1e6));
@@ -64,6 +76,7 @@ export function timRth(params: EdgeParameters): RthComputation {
   if (missing.length > 0) return unresolved(missing);
 
   if (k! <= 0 || A! <= 0) return unresolved([], 'Conductivity and area must be positive.');
+  if (t! <= 0) return nonPositiveLength('Thickness');
 
   const value = t! / 1000 / (k! * (A! / 1e6));
   return { value, resolution: 'resolved', missing: [] };
@@ -85,8 +98,15 @@ export function viaArrayRth(params: EdgeParameters): RthComputation {
   if (A == null) missing.push('area_mm2');
   if (missing.length > 0) return unresolved(missing);
   if (k! <= 0 || A! <= 0) return unresolved([], 'Effective k and area must be positive.');
+  if (t! <= 0) return nonPositiveLength('Thickness');
 
+  // The fraction of the array that conducts as modelled. 0 used to give an
+  // infinite resistance marked `resolved` (which JSON then stored as null), a
+  // negative value a negative one, and anything above 1 a free bonus.
   const efficiency = numeric(params, 'via_efficiency') ?? 1;
+  if (!(efficiency > 0 && efficiency <= 1)) {
+    return unresolved([], 'Via efficiency must be a fraction above 0 and at most 1.');
+  }
   const value = t! / 1000 / (k! * (A! / 1e6) * efficiency);
   return { value, resolution: 'resolved', missing: [] };
 }
@@ -114,6 +134,7 @@ export function solderVoidingRth(params: EdgeParameters): RthComputation {
   if (missing.length > 0) return unresolved(missing);
 
   if (k! <= 0 || A! <= 0) return unresolved([], 'Conductivity and area must be positive.');
+  if (t! <= 0) return nonPositiveLength('Thickness');
 
   // Absent, a joint is assumed void-free rather than unresolvable — that is the
   // nominal case, and it errs towards a LOWER resistance, so it can never hide
@@ -131,6 +152,10 @@ export function solderVoidingRth(params: EdgeParameters): RthComputation {
 export function directRth(params: EdgeParameters): RthComputation {
   const R = numeric(params, 'R_C_per_W');
   if (R == null) return unresolved(['R_C_per_W']);
+  // A negative resistance pumps heat uphill and is never a quotation. Zero is
+  // kept as stated: an Rjc of 0 is a real (if unsolvable) claim that the part
+  // is isothermal, and the pre-solve check has a specific message for it.
+  if (R < 0) return unresolved([], 'A quoted resistance cannot be negative.');
   return { value: R, resolution: 'resolved', missing: [] };
 }
 
@@ -272,7 +297,15 @@ export function scaleParametersForDevices(
     }
     case 'direct_rth': {
       const R = numeric(params, 'R_C_per_W');
-      return R == null ? params : { ...params, R_C_per_W: R / devices };
+      // A heat pipe's transport limit scales the other way: N copies of the
+      // device carry N times the heat before any of them dries out.
+      const qmax = numeric(params, 'q_max_W');
+      if (R == null && qmax == null) return params;
+      return {
+        ...params,
+        ...(R != null ? { R_C_per_W: R / devices } : {}),
+        ...(qmax != null ? { q_max_W: qmax * devices } : {}),
+      };
     }
     // Spreading does not scale by area: N patches on one plate each get their
     // own share of it, and the calculator needs the count to say so.

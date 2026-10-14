@@ -138,7 +138,7 @@ function network(): ThermalNetwork {
     zones: {},
     layout: { mode: 'dagre', positions: {} },
     flotherm_mappings: {},
-    solver_settings: { energy_warn_pct: 0.5, energy_error_pct: 2, max_iterations: 200, tolerance: 1e-9 },
+    solver_settings: { energy_warn_pct: 0.5, energy_error_pct: 2 },
     metadata: { origin: 'unit-test' },
   };
 }

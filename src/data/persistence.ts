@@ -23,8 +23,8 @@ import {
 } from '@/domain/revision';
 import type { Component } from '@/domain/component';
 import {
-  DEFAULT_SOLVER_SETTINGS,
   normalizeNodeType,
+  normalizeSolverSettings,
   type ThermalNetwork,
   type ThermalNode,
 } from '@/thermal/types';
@@ -454,7 +454,7 @@ export function loadNetwork(projectId: string): ThermalNetwork | null {
       hand_placed: network.layout?.hand_placed ?? false,
     },
     flotherm_mappings: network.flotherm_mappings ?? {},
-    solver_settings: network.solver_settings ?? { ...DEFAULT_SOLVER_SETTINGS },
+    solver_settings: normalizeSolverSettings(network.solver_settings),
   };
 }
 

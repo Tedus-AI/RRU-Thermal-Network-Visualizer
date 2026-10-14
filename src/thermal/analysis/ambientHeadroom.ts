@@ -37,8 +37,13 @@
  *     solve is a natural-convection one.
  */
 
-import type { ThermalNetwork } from '../types';
+import type { ThermalNetwork, ThermalNode } from '../types';
 import type { ThermalSolution } from '../solver/solverTypes';
+
+/** The placeholder Screen 07 pins to the scenario ambient. */
+function isAmbientReservoir(node: ThermalNode): boolean {
+  return node.type === 'ambient' || node.boundary_role != null;
+}
 
 export interface AmbientHeadroom {
   /** Smallest limit − temperature over every node that has a limit, °C. */
@@ -73,6 +78,16 @@ export function ambientHeadroom(
   network: ThermalNetwork,
   solution: ThermalSolution | null,
   ambient_C: number | null,
+  options: {
+    /**
+     * Nodes the SOLVE pinned that do not follow the ambient — the solve
+     * input's `pinned_node_ids`. A scenario fixed-temperature profile pins a
+     * node only on the solve clone, so the stored network passed in here
+     * cannot show it; without this the check reported a uniform rise for a
+     * scenario that pins a cold plate at 40 °C.
+     */
+    pinnedNodeIds?: Iterable<string> | null;
+  } = {},
 ): AmbientHeadroom | null {
   if (!solution || ambient_C == null || !Number.isFinite(ambient_C)) return null;
 
@@ -85,10 +100,16 @@ export function ambientHeadroom(
   } | null = null;
   let limited = 0;
   let pinned = false;
+  for (const id of options.pinnedNodeIds ?? []) {
+    if (network.nodes[id]?.disabled) continue;
+    pinned = true;
+  }
 
   for (const node of Object.values(network.nodes)) {
     if (node.disabled) continue;
-    if (node.boundary_type === 'fixed_temperature') pinned = true;
+    // The ambient reservoir is the one fixed temperature that DOES move with
+    // the air, so it is not what breaks the arithmetic.
+    if (node.boundary_type === 'fixed_temperature' && !isAmbientReservoir(node)) pinned = true;
     if (node.limit_C == null) continue;
     const temperature = solution.node_temperatures_C[node.id];
     if (!Number.isFinite(temperature)) continue;

@@ -66,6 +66,12 @@ export interface SolveInput {
 
   /** node id → pinned temperature, °C. */
   fixed_nodes: Record<string, number>;
+  /**
+   * Nodes pinned by a scenario `fixed_temperature_boundary` profile — the
+   * fixed temperatures that do NOT follow the ambient. The ambient reservoir
+   * itself is in `fixed_nodes` but not here.
+   */
+  pinned_node_ids: string[];
   boundary_edges: BoundaryEdgeAssignment[];
   /** Edges switched off because the port is adiabatic (06 §9.7). */
   adiabatic_edge_ids: string[];
@@ -203,6 +209,7 @@ export function buildSolveInput(options: BuildSolveInputOptions): SolveInput {
 
   const notes: SolverIssue[] = [];
   const fixedNodes: Record<string, number> = {};
+  const pinnedNodeIds = new Set<string>();
   const boundaryEdges: BoundaryEdgeAssignment[] = [];
   const adiabaticEdgeIds: string[] = [];
   const solarLoads: SolarInjection[] = [];
@@ -269,6 +276,7 @@ export function buildSolveInput(options: BuildSolveInputOptions): SolveInput {
             node.boundary_type = 'fixed_temperature';
             node.fixed_temperature_C = value as number;
             fixedNodes[node.id] = value as number;
+            pinnedNodeIds.add(node.id);
           }
           break;
         }
@@ -425,6 +433,7 @@ export function buildSolveInput(options: BuildSolveInputOptions): SolveInput {
     power_scale: powerScale,
     ambient_C,
     fixed_nodes: fixedNodes,
+    pinned_node_ids: [...pinnedNodeIds],
     boundary_edges: boundaryEdges,
     adiabatic_edge_ids: adiabaticEdgeIds,
     solar_loads: solarLoads,

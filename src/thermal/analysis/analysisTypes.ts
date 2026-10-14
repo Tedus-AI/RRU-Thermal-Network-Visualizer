@@ -20,6 +20,30 @@ export const ANALYSIS_SCHEMA_VERSION = '1.0';
 /** 08 §4 — fixed V1 weights. Rth is context only, never a ranking weight. */
 export const SCORE_WEIGHTS = { delta_t: 0.35, sensitivity: 0.45, margin_impact: 0.2 } as const;
 
+export type ScoreWeights = { delta_t: number; sensitivity: number; margin_impact: number };
+
+/**
+ * The weights a run actually applies.
+ *
+ * With the worst thermal margin as the target, "Sensitivity" (how much the
+ * target improves) and "Margin impact" (how much the worst margin improves) are
+ * the SAME number by construction, so 0.45 + 0.20 of the score was one signal
+ * counted twice while the breakdown showed three independent terms. The total
+ * is unchanged here — it is still 0.35·ΔT + 0.65·S — but the weight now sits on
+ * the one term that carries it, and Margin impact is not shown as a separate
+ * contribution it never made.
+ */
+export function scoreWeightsFor(targetMetric: TargetMetric): ScoreWeights {
+  if (targetMetric === 'worst_thermal_margin') {
+    return {
+      delta_t: SCORE_WEIGHTS.delta_t,
+      sensitivity: SCORE_WEIGHTS.sensitivity + SCORE_WEIGHTS.margin_impact,
+      margin_impact: 0,
+    };
+  }
+  return { ...SCORE_WEIGHTS };
+}
+
 /** 08 §12 — a component counts as affected at this much improvement. */
 export const AFFECTED_THRESHOLD_C = 0.5;
 
@@ -296,6 +320,8 @@ export interface BottleneckAnalysis {
   results: BottleneckResult[];
   rejected: RejectedCandidate[];
   issues: AnalysisIssue[];
+  /** The weights the scores were built with; see `scoreWeightsFor`. */
+  score_weights?: ScoreWeights;
 
   summary: {
     top_bottleneck: string | null;
