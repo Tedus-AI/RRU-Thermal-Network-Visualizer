@@ -44,6 +44,7 @@ import { hskBaseAreaMm2, type MaterialDefaults } from '@/domain/materials';
 import { activeRth, createRth, setRthFromSource } from '../rth';
 import { computeRth } from '../resistance/calculators';
 import type { ThermalEdge, ThermalNetwork } from '../types';
+import { defaultSpreadingVariant, spreadingVariantFor } from './spreadingVariant';
 
 export const HSK_BASE_CONNECTION_ROLE = 'hsk_base_conduction';
 
@@ -129,6 +130,7 @@ function baseConductionInputs(
   sourceNodeId: string,
   materials: MaterialDefaults,
   overrideAreaMm2?: number | null,
+  existing?: ThermalEdge,
 ): BaseConductionInputs {
   const read = terminalArea(network, sourceNodeId);
   const area = finitePositive(overrideAreaMm2)
@@ -143,10 +145,13 @@ function baseConductionInputs(
   if (finitePositive(k)) parameters.k_W_mK = k;
   if (finitePositive(plate)) parameters.plate_area_mm2 = plate;
   if (finitePositive(area.area_mm2)) parameters.source_area_mm2 = area.area_mm2;
-  // Peak temperature under the source, not the base average: the junction chain
-  // upstream of this edge hangs off the hottest point of the contact patch, and
-  // sizing a margin against the average would flatter it.
-  parameters.psi_variant = 'max';
+  // Peak under the source for a junction — it hangs off the hottest point of the
+  // patch — and the patch average for a metal body that is itself the source.
+  // An engineer's pinned choice on an existing edge outranks both; see
+  // `spreadingVariant.ts`.
+  parameters.psi_variant = existing
+    ? spreadingVariantFor(network, existing)
+    : defaultSpreadingVariant(network, sourceNodeId);
 
   const computed = computeRth('spreading_disc', parameters);
   return {
@@ -207,7 +212,13 @@ export function hskBaseConnectionPatch(
   };
 }
 
-/** Refreshes existing linked edges after Screen 01 changes k, thickness or size. */
+/**
+ * Refreshes existing linked edges after Screen 01 changes k, thickness or size.
+ *
+ * It also brings an edge's Ψ variant up to the current default, which is how a
+ * project saved before metal-body sources defaulted to Ψ_avg picks that up when
+ * it is opened. A variant an engineer pinned is left alone.
+ */
 export function refreshHskBaseConnectionEdges(
   network: ThermalNetwork,
   materials: MaterialDefaults,
@@ -222,6 +233,7 @@ export function refreshHskBaseConnectionEdges(
       edge.from,
       materials,
       typeof override === 'number' ? override : null,
+      edge,
     );
     // Refresh the analytical slot without taking control away from a valid
     // manual, measurement or future FloTHERM selection.
@@ -238,6 +250,7 @@ export function refreshHskBaseConnectionEdges(
       edge.parameters?.k_W_mK === inputs.parameters.k_W_mK &&
       edge.parameters?.plate_area_mm2 === inputs.parameters.plate_area_mm2 &&
       edge.parameters?.source_area_mm2 === inputs.parameters.source_area_mm2 &&
+      edge.parameters?.psi_variant === inputs.parameters.psi_variant &&
       edge.rth.analytical === inputs.value &&
       edge.resolution === nextResolution &&
       edge.resolution_note === nextNote &&

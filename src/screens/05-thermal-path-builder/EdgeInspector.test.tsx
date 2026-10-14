@@ -2,9 +2,10 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
 import { buildSharedStructure } from '@/thermal/graph/sharedStructure';
-import { DEFAULT_SOLVER_SETTINGS, type ThermalNetwork } from '@/thermal/types';
+import { createRth } from '@/thermal/rth';
+import { DEFAULT_SOLVER_SETTINGS, type ThermalEdge, type ThermalNetwork } from '@/thermal/types';
 
-import { EdgeInspector } from './EdgeInspector';
+import { EdgeInspector, SpreadingBreakdown } from './EdgeInspector';
 import type { ScenarioBoundaryEdgeView } from './scenarioBoundaryProjection';
 
 function network(): ThermalNetwork {
@@ -176,3 +177,73 @@ describe('Edge Inspector scenario display', () => {
   });
 });
 
+
+/**
+ * The Ψ variant a spreading edge reports — see `spreadingVariant.ts`. The panel
+ * has to say which reading is this edge's default and why, and once an engineer
+ * picks one, that it is now theirs and how to give it back. Which default an
+ * edge gets is `defaultSpreadingVariant`'s job and is covered beside it; this
+ * covers what the panel says about it.
+ */
+describe('Edge Inspector spreading variant', () => {
+  const edge: ThermalEdge = {
+    id: 'EDGE_PORT_PM_HSK',
+    from: 'NODE_CMP_PM_TIM',
+    to: 'NODE_HSK_BASE',
+    type: 'spreading',
+    method: 'spreading_disc',
+    rth: createRth(0.0132, 'Analytical', 'medium'),
+    parameters: {
+      source_area_mm2: 3538,
+      plate_area_mm2: 92208,
+      thickness_mm: 7,
+      k_W_mK: 150,
+      psi_variant: 'avg',
+    },
+    heat_flow_W: null,
+    delta_T_C: null,
+    resolution: 'resolved',
+    enabled: true,
+    origin: { kind: 'shared_structure', component_id: 'CMP_PM' },
+    metadata: { connection_role: 'hsk_base_conduction' },
+  };
+
+  const render = (
+    defaultVariant: 'avg' | 'max',
+    options: { pinned?: boolean; readOnly?: boolean; variant?: 'avg' | 'max' } = {},
+  ) =>
+    renderToStaticMarkup(
+      <SpreadingBreakdown
+        edge={{ ...edge, parameters: { ...edge.parameters, psi_variant: options.variant ?? defaultVariant } }}
+        readOnly={options.readOnly ?? false}
+        defaultVariant={defaultVariant}
+        pinned={options.pinned ?? false}
+        onVariant={() => undefined}
+        onUseDefault={() => undefined}
+      />,
+    );
+
+  it('marks the patch average as the default under a metal body and says why', () => {
+    const html = render('avg');
+    expect(html).toContain('Average over the contact patch (Ψ_avg) — default');
+    expect(html).not.toContain('Peak, under the source (Ψ_max) — default');
+    expect(html).toContain('Average is the default here');
+    expect(html).not.toContain('Chosen by hand');
+  });
+
+  it('keeps the peak as the default when a junction sits above the base', () => {
+    const html = render('max');
+    expect(html).toContain('Peak, under the source (Ψ_max) — default');
+    expect(html).toContain('Peak is the default');
+  });
+
+  it('says a pinned choice is the engineer’s and offers the default back', () => {
+    const html = render('avg', { pinned: true, variant: 'max' });
+    expect(html).toContain('Chosen by hand');
+    expect(html).toContain('Use default / 改回預設');
+    // Read-only shows the state but offers no way to change it.
+    expect(render('avg', { pinned: true, variant: 'max', readOnly: true })).not.toContain(
+      'Use default / 改回預設',
+    );
+  });
+});
