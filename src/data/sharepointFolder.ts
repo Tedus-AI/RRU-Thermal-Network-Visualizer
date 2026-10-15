@@ -374,6 +374,11 @@ export class SharePointDirectory implements DirectoryHandle {
     return this.uncertain.get(name) === text;
   }
 
+  /** The file's text as this session last read or wrote it, or null. */
+  cachedText(name: string): string | null {
+    return this.known.get(name)?.text ?? null;
+  }
+
   /** What is known about a file without asking SharePoint. */
   cached(name: string): RemoteFileMeta | null {
     const meta = this.known.get(name);

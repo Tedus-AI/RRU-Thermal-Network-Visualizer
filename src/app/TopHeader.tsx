@@ -186,7 +186,8 @@ export function TopHeader() {
 
   const picker = useProjectFilePicker(openImport);
 
-  const backend = useFolderStore((s) => s.backend);
+  const onSharePoint = useFolderStore((s) => s.sharepoint.enabled);
+  const hasLocal = useFolderStore((s) => s.handle != null);
 
   // Edits are already on disk, so switching away can never lose anything.
   const handleProjectChange = async (value: string) => {
@@ -245,13 +246,20 @@ export function TopHeader() {
           <button
             type="button"
             disabled={!draft || isNew}
-            onClick={() =>
-              draft &&
+            onClick={() => {
+              if (!draft) return;
+              // A place that is set up but out of reach would keep the file,
+              // and the next read would bring the project straight back.
+              const blocker = useFolderStore.getState().deleteBlocker();
+              if (blocker) {
+                toast.error(blocker);
+                return;
+              }
               setConfirmDelete({
                 id: draft.project_id,
                 name: draft.project_name || draft.project_id,
-              })
-            }
+              });
+            }}
             title={biTitle(
               'Delete this project and everything in it',
               '刪除目前專案及其所有資料',
@@ -322,7 +330,7 @@ export function TopHeader() {
         </span>
       )}
 
-      <div className="ml-auto flex min-w-0 shrink items-center">
+      <div className="ml-auto flex shrink-0 items-center">
         <SaveIndicator onOpenSettings={() => setDialog('settings')} />
       </div>
 
@@ -453,9 +461,7 @@ export function TopHeader() {
                       if (removed) toast.success(`Deleted ${name}. / 已刪除 ${name}。`);
                       else
                         toast.error(
-                          backend === 'sharepoint'
-                            ? `Deleted ${name} here, but its file is still on SharePoint. / 已刪除 ${name}，但 SharePoint 上的檔案仍在。`
-                            : `Deleted ${name} here, but its file is still in the folder. / 已刪除 ${name}，但資料夾中的檔案仍在。`,
+                          `Deleted ${name} here, but a file of it is still in storage — see the storage lights. / 已刪除 ${name}，但儲存位置中仍有它的檔案，請查看右上角儲存狀態。`,
                         );
                     });
                 }}
@@ -465,24 +471,20 @@ export function TopHeader() {
             </>
           }
         >
-          {backend === 'sharepoint' ? (
-            <p className="text-[12px] text-ink-500">
-              Its file is deleted from SharePoint for everyone. Until the site&apos;s Recycle Bin
-              is emptied, a SharePoint site owner can restore it from there.
-              <span className="block text-ink-400">
-                專案檔會從 SharePoint 刪除，所有人都看不到；在網站資源回收筒清空之前，
-                可由網站管理者從資源回收筒還原。
-              </span>
-            </p>
-          ) : (
-            <p className="text-[12px] text-ink-500">
-              Export the project file first if you may need it again — a project
-              file is the only copy that outlives this browser.
-              <span className="block text-ink-400">
-                若日後可能還需要，請先匯出專案檔；專案檔是唯一能離開這個瀏覽器保存的副本。
-              </span>
-            </p>
-          )}
+          <p className="text-[12px] text-ink-500">
+            {onSharePoint && hasLocal
+              ? 'Its file is deleted from SharePoint (for everyone) and from the local folder. A SharePoint site owner can restore it from the site’s Recycle Bin until that is emptied.'
+              : onSharePoint
+                ? 'Its file is deleted from SharePoint for everyone. A SharePoint site owner can restore it from the site’s Recycle Bin until that is emptied.'
+                : 'Its file is deleted from the local folder. Export the project file first if you may need it again.'}
+            <span className="block text-ink-400">
+              {onSharePoint && hasLocal
+                ? '專案檔會從 SharePoint（所有人都看不到）與本機資料夾刪除；在網站資源回收筒清空之前，可由網站管理者還原。'
+                : onSharePoint
+                  ? '專案檔會從 SharePoint 刪除，所有人都看不到；在網站資源回收筒清空之前，可由網站管理者還原。'
+                  : '專案檔會從本機資料夾刪除；若日後可能還需要，請先匯出專案檔。'}
+            </span>
+          </p>
         </Modal>
       )}
       {pending && (

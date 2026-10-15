@@ -57,20 +57,26 @@ export type BuildStampOutcome =
       unsynced: string[];
     };
 
-/** Where the folder sync records projects whose cache is ahead of their file. */
+/** Where the folder sync records projects whose cache is ahead of their local file. */
 export const UNSYNCED_STORAGE_KEY = 'tnv.unsynced';
+/** The same, for SharePoint (offline, signed out, a write that failed). */
+export const UNSYNCED_SP_STORAGE_KEY = 'tnv.unsynced_sp';
 
-/** Project ids the cache holds edits for that never reached the folder. */
+/** Project ids the cache holds edits for that never reached the local folder or SharePoint. */
 export function unsyncedProjectIds(storage: StorageLike): string[] {
-  try {
-    const raw = storage.getItem(UNSYNCED_STORAGE_KEY);
-    const parsed: unknown = raw ? JSON.parse(raw) : null;
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
-      ? Object.keys(parsed)
-      : [];
-  } catch {
-    return [];
+  const ids = new Set<string>();
+  for (const key of [UNSYNCED_STORAGE_KEY, UNSYNCED_SP_STORAGE_KEY]) {
+    try {
+      const raw = storage.getItem(key);
+      const parsed: unknown = raw ? JSON.parse(raw) : null;
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        for (const id of Object.keys(parsed)) ids.add(id);
+      }
+    } catch {
+      // An unreadable record defers nothing.
+    }
   }
+  return [...ids];
 }
 
 /**

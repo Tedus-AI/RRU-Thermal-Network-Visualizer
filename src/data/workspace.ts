@@ -51,7 +51,8 @@ export async function hydrateFromFolder(handle: DirectoryHandle): Promise<Hydrat
   const skipped: Array<{ filename: string; reason: string }> = [];
 
   await withSyncSuspended(async () => {
-    clearWorkingCache();
+    // What each target is still owed survives the refill; see `clearWorkingCache`.
+    clearWorkingCache({ keepSyncState: true });
 
     for (const entry of entries) {
       // The component library lives in the same folder but is not a project;

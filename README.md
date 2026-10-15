@@ -96,12 +96,21 @@ Header / Sidebar / Breadcrumb / Status Bar 為全專案共用且集中維護，�
 首次開啟時可在空狀態頁按「載入示範專案」，載入 `01/01_Project_Info_mock.json`
 對應的示範資料（18 components / 9 heat sources / 412.3 W）以檢視已填值的畫面狀態。
 
-開啟時先選擇專案儲存位置：**SharePoint**（團隊共用）或**本機資料夾**（Chrome / Edge）。
+專案同時存在 **SharePoint**（團隊共用）與**本機資料夾**（Chrome / Edge），見下節。
 瀏覽器的 localStorage 只是工作副本，每次開啟都會從儲存位置重新讀取。
 
-## 專案儲存位置
+## 專案儲存位置：SharePoint ＋ 本機資料夾（同時使用）
 
-### SharePoint（線上共用）
+每次存檔都會**同時寫入**已設定的兩個位置，兩邊各自記錄「還沒寫到哪一邊」，
+連不上的那一邊恢復後自動補寫：
+
+- **SharePoint**（團隊共用）：開啟時優先從這裡讀取，拿到所有人的最新版本。
+- **本機資料夾**（這台電腦的副本）：SharePoint 離線或登入過期時照常存檔；
+  SharePoint 連不上時直接用本機副本開啟繼續工作，恢復連線後點一下就補傳。
+
+任一個即可開始使用，另一個之後可在右上角儲存狀態或 Settings 設定。
+
+### SharePoint
 
 連線方式與 Project TIM Manager 相同：同一個 Azure 應用程式（MSAL.js 彈出式登入，
 重新導向頁 `auth.html`）、同一個 SharePoint 網站 `Thermal-Spec-DB`，設定在
@@ -120,14 +129,12 @@ Thermal-Spec-DB（網站）
 - 不另設 Backup 資料夾：SharePoint 會保留每個檔案的版本歷程，刪除的檔案在網站資源回收筒可還原。
 - 每次寫入都帶 `If-Match: <eTag>`（新檔案用 `conflictBehavior=fail`），不會覆蓋別人的版本。
   同一專案被同事先存了新版本時（412），你的版本另存為「`<名稱> (conflict copy …)`」新專案並自動切換過去，
-  原專案顯示 SharePoint 上的版本。對方只是重存而內容相同、或自己逾時但其實已寫入的那次存檔，不算衝突。
+  原專案顯示 SharePoint 上的版本（本機副本兩個都會有）。以下情況不算衝突：對方只是重存而內容相同、
+  自己逾時但其實已寫入、或檔案正是這台瀏覽器上次同步的版本。
 - 元件庫是共用檔：兩人同時存檔時依項目合併（每個零件以較新的 `saved_at` 為準）；
   代價是剛刪除的零件若同時有人存檔元件庫，會被合併回來。
 - 切換專案前會先比對 SharePoint，有較新版本（且本機沒有未寫入的修改）就先讀入；
   切回分頁時也會檢查目前專案，Header 顯示「Newer online / 雲端有新版」可重新載入。
-- Microsoft 登入過期時畫面不會被收起：Header 儲存狀態變成「Sign in / 需重新登入」，點一下即重新登入並補寫。
-- 本機資料夾的專案可在 **Settings → Move to SharePoint / 搬到 SharePoint** 一次上傳
-  （SharePoint 上已有的同名專案不覆蓋、元件庫合併、本機檔案不變），之後改用 SharePoint。
 
 **部署前提**：Azure 應用程式（clientId `17fc1ab4-…`）的「單頁應用程式（SPA）」重新導向 URI 必須加入
 `https://tedus-ai.github.io/RRU-Thermal-Network-Visualizer/auth.html`
@@ -135,14 +142,29 @@ Thermal-Spec-DB（網站）
 
 ### 本機資料夾
 
-選擇一個資料夾，每個專案存成一個 `.tnv.json`，加上 `component-library.tnv.json`；與 SharePoint 的
-`Database` 資料夾內容相同。需要 File System Access API（Chrome / Edge）。
+每個專案一個 `.tnv.json`，加上 `component-library.tnv.json`；與 SharePoint 的 `Database` 資料夾內容相同。
+需要 File System Access API（Chrome / Edge）。從 SharePoint 讀取後，本機副本會自動更新成同樣內容：
+
+- 本機有、SharePoint 沒有的專案 → 上傳到 SharePoint。
+- 第一次與 SharePoint 配對（或本機檔案被工具以外改過）而內容不同 → SharePoint 版本不動，
+  本機版本另存為「`<名稱> (local copy …)`」新專案（兩邊都有），不會覆蓋任何一邊。
+- SharePoint 上已刪除的專案 → 本機檔案移到資料夾內的 `Replaced/`，不會刪除。
+- 刪除專案時兩邊都要連得上（否則另一邊的檔案會讓專案再出現），工具會先提示。
 
 ### Header 儲存狀態
 
-Header 中間的兩行區塊：第一行是儲存位置（SharePoint · 帳號 ID，或 Local · 資料夾名稱），
-第二行是寫入狀態（Saved / Saving… / Sign in / Not saved / Newer online）。點擊展開位置、帳號、
-上次寫入檔案，以及「開啟資料夾」「切換帳號」「重新載入」「儲存設定」。
+Header 中間的兩行區塊，高度與原本相同：
+
+```text
+☁ SharePoint  ✓ Saved / 已儲存   10:09
+🖴 Local       ✓ Saved / 已儲存   10:09
+```
+
+每一行顯示該位置的寫入狀態：Saved / Saving… / Sign in（需重新登入）/ Reconnect（需重新授權）/
+Offline（離線，改用本機副本）/ Not saved / Newer online / Not set up，右側數字是待補寫的專案數。
+登入過期或權限失效時**點該行即可修復**；其他情況點擊展開面板，可看完整位置、帳號、上次寫入，
+以及「連線 SharePoint」「選擇資料夾」「開啟資料夾」「切換帳號」「重新載入」「儲存設定」。
+螢幕寬度不足 1500 px 時只顯示英文狀態，中文與時間在滑鼠提示中。
 
 ## 開發指令
 
@@ -182,7 +204,7 @@ src/
     networkValidation.ts  Solve 前檢查（orphan、boundary、zero/negative Rth …）
   data/           Shared stores：project / scenario / component / network / solver
     persistence.ts    localStorage adapter，merge 寫入並保留他工具的欄位
-    folderStore.ts    儲存位置（SharePoint / 本機資料夾）、自動寫入、未同步救援、衝突副本
+    folderStore.ts    兩個儲存位置（SharePoint ＋ 本機資料夾）同時寫入、讀取來源、補寫、配對、衝突副本
     sharepoint.ts     MSAL 登入與 Microsoft Graph 請求（設定同 Project TIM Manager）
     sharepointFolder.ts  SharePoint 資料夾（與本機資料夾同一個 DirectoryHandle 介面，eTag 條件寫入）
   project/        Screen 01 Project Info
