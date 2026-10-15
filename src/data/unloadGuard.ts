@@ -33,7 +33,7 @@ export function flushPendingWork(): void {
 /** Whether leaving now could cost an edit that has not reached disk. */
 export function hasWorkNotOnDisk(): boolean {
   const { status } = useFolderStore.getState();
-  if (status === 'unbound' || status === 'unsupported') return false;
+  if (status === 'unbound') return false;
   return useSaveStatus.getState().pending || hasUnsyncedProjects();
 }
 

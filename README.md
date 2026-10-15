@@ -96,7 +96,53 @@ Header / Sidebar / Breadcrumb / Status Bar 為全專案共用且集中維護，�
 首次開啟時可在空狀態頁按「載入示範專案」，載入 `01/01_Project_Info_mock.json`
 對應的示範資料（18 components / 9 heat sources / 412.3 W）以檢視已填值的畫面狀態。
 
-> 專案資料目前存在瀏覽器的 localStorage，不會上傳，也不會在不同裝置之間同步。
+開啟時先選擇專案儲存位置：**SharePoint**（團隊共用）或**本機資料夾**（Chrome / Edge）。
+瀏覽器的 localStorage 只是工作副本，每次開啟都會從儲存位置重新讀取。
+
+## 專案儲存位置
+
+### SharePoint（線上共用）
+
+連線方式與 Project TIM Manager 相同：同一個 Azure 應用程式（MSAL.js 彈出式登入，
+重新導向頁 `auth.html`）、同一個 SharePoint 網站 `Thermal-Spec-DB`，設定在
+`src/data/sharepoint.ts` 的 `SHAREPOINT_CONFIG`。資料樹與本機資料夾相同，每個專案一個檔：
+
+```text
+Thermal-Spec-DB（網站）
+└─ 文件（Shared Documents）
+   └─ RRU_Thermal_Network/
+      └─ Database/
+         ├─ <專案代號>.tnv.json          每個專案一個檔
+         └─ component-library.tnv.json   共用元件庫
+```
+
+- 資料夾不存在時視為空的專案清單，第一次存檔會自動建立。
+- 不另設 Backup 資料夾：SharePoint 會保留每個檔案的版本歷程，刪除的檔案在網站資源回收筒可還原。
+- 每次寫入都帶 `If-Match: <eTag>`（新檔案用 `conflictBehavior=fail`），不會覆蓋別人的版本。
+  同一專案被同事先存了新版本時（412），你的版本另存為「`<名稱> (conflict copy …)`」新專案並自動切換過去，
+  原專案顯示 SharePoint 上的版本。對方只是重存而內容相同、或自己逾時但其實已寫入的那次存檔，不算衝突。
+- 元件庫是共用檔：兩人同時存檔時依項目合併（每個零件以較新的 `saved_at` 為準）；
+  代價是剛刪除的零件若同時有人存檔元件庫，會被合併回來。
+- 切換專案前會先比對 SharePoint，有較新版本（且本機沒有未寫入的修改）就先讀入；
+  切回分頁時也會檢查目前專案，Header 顯示「Newer online / 雲端有新版」可重新載入。
+- Microsoft 登入過期時畫面不會被收起：Header 儲存狀態變成「Sign in / 需重新登入」，點一下即重新登入並補寫。
+- 本機資料夾的專案可在 **Settings → Move to SharePoint / 搬到 SharePoint** 一次上傳
+  （SharePoint 上已有的同名專案不覆蓋、元件庫合併、本機檔案不變），之後改用 SharePoint。
+
+**部署前提**：Azure 應用程式（clientId `17fc1ab4-…`）的「單頁應用程式（SPA）」重新導向 URI 必須加入
+`https://tedus-ai.github.io/RRU-Thermal-Network-Visualizer/auth.html`
+（本機開發另加 `http://localhost:5173/auth.html`），否則登入會出現 AADSTS50011。
+
+### 本機資料夾
+
+選擇一個資料夾，每個專案存成一個 `.tnv.json`，加上 `component-library.tnv.json`；與 SharePoint 的
+`Database` 資料夾內容相同。需要 File System Access API（Chrome / Edge）。
+
+### Header 儲存狀態
+
+Header 中間的兩行區塊：第一行是儲存位置（SharePoint · 帳號 ID，或 Local · 資料夾名稱），
+第二行是寫入狀態（Saved / Saving… / Sign in / Not saved / Newer online）。點擊展開位置、帳號、
+上次寫入檔案，以及「開啟資料夾」「切換帳號」「重新載入」「儲存設定」。
 
 ## 開發指令
 
@@ -136,6 +182,9 @@ src/
     networkValidation.ts  Solve 前檢查（orphan、boundary、zero/negative Rth …）
   data/           Shared stores：project / scenario / component / network / solver
     persistence.ts    localStorage adapter，merge 寫入並保留他工具的欄位
+    folderStore.ts    儲存位置（SharePoint / 本機資料夾）、自動寫入、未同步救援、衝突副本
+    sharepoint.ts     MSAL 登入與 Microsoft Graph 請求（設定同 Project TIM Manager）
+    sharepointFolder.ts  SharePoint 資料夾（與本機資料夾同一個 DirectoryHandle 介面，eTag 條件寫入）
   project/        Screen 01 Project Info
   screens/        Screen 02 Import Components、04 Component Manager，以及其餘佔位頁
   ui/             共用 UI primitives 與 toast

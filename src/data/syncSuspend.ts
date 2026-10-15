@@ -26,3 +26,13 @@ export async function withSyncSuspended<T>(body: () => Promise<T>): Promise<T> {
     depth -= 1;
   }
 }
+
+/** `withSyncSuspended` for synchronous work that must not be split by a timer. */
+export function withSyncSuspendedSync<T>(body: () => T): T {
+  depth += 1;
+  try {
+    return body();
+  } finally {
+    depth -= 1;
+  }
+}

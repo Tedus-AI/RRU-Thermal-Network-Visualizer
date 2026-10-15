@@ -16,8 +16,8 @@
  * Screen 01's Project Overview already carries those.
  */
 
-import { useEffect, useState } from 'react';
-import { Outlet, useLocation } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { TopHeader } from './TopHeader';
 import { MainSidebar } from './MainSidebar';
 import { BreadcrumbBar } from './BreadcrumbBar';
@@ -29,10 +29,29 @@ import { WorkspaceGate } from './WorkspaceGate';
 import { startAutoPersist } from '@/data/autoPersist';
 import { startUnloadGuard } from '@/data/unloadGuard';
 import { toast } from '@/ui/toast';
+import { Button, Modal } from '@/ui/primitives';
+import { projectPath } from './navigation';
+
+/** `/project/<id>/<screen>` → its parts, or null elsewhere. */
+function routeProject(pathname: string): { projectId: string; screen: string } | null {
+  const match = /^\/project\/([^/]+)\/([^/]+)/.exec(pathname);
+  if (!match) return null;
+  try {
+    return { projectId: decodeURIComponent(match[1]), screen: match[2] };
+  } catch {
+    return null;
+  }
+}
+
+/** How often, at most, the open project is compared with SharePoint. */
+const REMOTE_CHECK_MS = 30_000;
 
 export function AppShell() {
   const [collapsed, setCollapsed] = useState(false);
   const location = useLocation();
+  const navigate = useNavigate();
+  const locationRef = useRef(location.pathname);
+  locationRef.current = location.pathname;
   const projectId = useProjectStore((s) => s.draft?.project_id ?? null);
   const isNewProject = useProjectStore((s) => s.isNew);
 
@@ -65,6 +84,47 @@ export function AppShell() {
     setSyncProject(isNewProject ? null : projectId);
   }, [projectId, isNewProject]);
 
+  // A save found the open project changed on SharePoint by someone else: this
+  // session's version is now a separate project (see folderStore
+  // `resolveConflict`). Move onto it in the same tick the store says so —
+  // a subscription, not an effect — so nothing can be saved into the original
+  // in between. The same screen stays open.
+  useEffect(
+    () =>
+      useFolderStore.subscribe((state, previous) => {
+        const conflict = state.conflict;
+        if (!conflict || conflict === previous.conflict) return;
+        const route = routeProject(locationRef.current);
+        if (route?.projectId !== conflict.projectId) return;
+        navigate(projectPath(conflict.copyId, route.screen), { replace: true });
+      }),
+    [navigate],
+  );
+  const conflict = useFolderStore((s) => s.conflict);
+
+  // SharePoint is shared: when the tab comes back into view (and every few
+  // minutes while it is), ask whether someone saved the open project since.
+  // The header offers a reload; nothing is replaced under the engineer's hands.
+  useEffect(() => {
+    let last = 0;
+    const check = () => {
+      if (document.visibilityState !== 'visible') return;
+      if (Date.now() - last < REMOTE_CHECK_MS) return;
+      const { draft, isNew } = useProjectStore.getState();
+      if (!draft || isNew) return;
+      last = Date.now();
+      void useFolderStore.getState().checkRemote(draft.project_id);
+    };
+    window.addEventListener('focus', check);
+    document.addEventListener('visibilitychange', check);
+    const timer = setInterval(check, 4 * REMOTE_CHECK_MS);
+    return () => {
+      window.removeEventListener('focus', check);
+      document.removeEventListener('visibilitychange', check);
+      clearInterval(timer);
+    };
+  }, []);
+
   return (
     <WorkspaceGate>
       <div className="flex h-full flex-col overflow-hidden">
@@ -82,6 +142,57 @@ export function AppShell() {
           </main>
         </div>
         <ToastViewport />
+        {conflict && (
+          <Modal
+            title="Saved as a conflict copy / 已另存為衝突副本"
+            width="max-w-lg"
+            onClose={() => useFolderStore.getState().clearConflict()}
+            footer={
+              <>
+                <Button
+                  onClick={() => {
+                    const route = routeProject(locationRef.current);
+                    useFolderStore.getState().clearConflict();
+                    navigate(projectPath(conflict.projectId, route?.screen ?? 'info'));
+                  }}
+                >
+                  Open SharePoint Version / 開啟 SharePoint 版本
+                </Button>
+                <Button
+                  variant="primary"
+                  onClick={() => useFolderStore.getState().clearConflict()}
+                >
+                  Continue in My Copy / 繼續編輯我的副本
+                </Button>
+              </>
+            }
+          >
+            <div className="flex flex-col gap-2 text-[12.5px] leading-relaxed text-ink-700">
+              <p>
+                <span className="font-semibold">{conflict.projectName}</span> was saved on
+                SharePoint by{' '}
+                <span className="font-semibold">{conflict.remoteBy ?? 'someone else'}</span>
+                {conflict.remoteAt ? ` at ${new Date(conflict.remoteAt).toLocaleString()}` : ''}{' '}
+                while you were editing it. Nothing was overwritten: your version is now the
+                project <span className="font-semibold">{conflict.copyName}</span>, which is open
+                now, and {conflict.projectName} shows the SharePoint version.
+              </p>
+              <p className="text-ink-500">
+                「{conflict.projectName}」在你編輯期間已被
+                {conflict.remoteBy ?? '其他人'}
+                {conflict.remoteAt ? `（${new Date(conflict.remoteAt).toLocaleString()}）` : ''}
+                存到 SharePoint。沒有任何資料被覆蓋：你的版本已另存為專案「{conflict.copyName}」並已開啟，
+                原專案顯示 SharePoint 上的版本。
+              </p>
+              <p className="rounded border border-line bg-surface-muted px-2.5 py-1.5 text-[11.5px] text-ink-500">
+                Compare the two, carry over what you need, then delete the one you no longer want.
+                <span className="block text-ink-400">
+                  請比對兩個版本、整合需要的內容後，刪除不再需要的那一個。
+                </span>
+              </p>
+            </div>
+          </Modal>
+        )}
       </div>
     </WorkspaceGate>
   );

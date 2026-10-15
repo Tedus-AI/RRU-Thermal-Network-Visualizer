@@ -186,12 +186,22 @@ export function TopHeader() {
 
   const picker = useProjectFilePicker(openImport);
 
+  const backend = useFolderStore((s) => s.backend);
+
   // Edits are already on disk, so switching away can never lose anything.
-  const handleProjectChange = (value: string) => {
+  const handleProjectChange = async (value: string) => {
     if (value === '__new__') {
       navigate('/project/new/info');
       return;
     }
+    // On SharePoint a colleague may have saved this project since it was
+    // read. Its newer version is read in first when it arrives quickly;
+    // otherwise the cached copy opens, and a save still cannot overwrite theirs.
+    const wait = 2500;
+    await Promise.race([
+      useFolderStore.getState().refreshProject(value, Date.now() + wait),
+      new Promise((resolve) => setTimeout(resolve, wait)),
+    ]);
     navigate(projectPath(value, currentScreen.path));
   };
 
@@ -216,7 +226,7 @@ export function TopHeader() {
             id="hdr-project"
             className={HEADER_SELECT_CLASS}
             value={isNew ? '__new__' : (draft?.project_id ?? '')}
-            onChange={(event) => handleProjectChange(event.target.value)}
+            onChange={(event) => void handleProjectChange(event.target.value)}
           >
             {isNew && <option value="__new__">New Project</option>}
             {projects.map((project) => (
@@ -312,8 +322,8 @@ export function TopHeader() {
         </span>
       )}
 
-      <div className="ml-auto flex shrink-0 items-center gap-2">
-        <SaveIndicator />
+      <div className="ml-auto flex min-w-0 shrink items-center">
+        <SaveIndicator onOpenSettings={() => setDialog('settings')} />
       </div>
 
       <div className="flex shrink-0 items-center gap-1">
@@ -443,7 +453,9 @@ export function TopHeader() {
                       if (removed) toast.success(`Deleted ${name}. / 已刪除 ${name}。`);
                       else
                         toast.error(
-                          `Deleted ${name} here, but its file is still in the folder. / 已刪除 ${name}，但資料夾中的檔案仍在。`,
+                          backend === 'sharepoint'
+                            ? `Deleted ${name} here, but its file is still on SharePoint. / 已刪除 ${name}，但 SharePoint 上的檔案仍在。`
+                            : `Deleted ${name} here, but its file is still in the folder. / 已刪除 ${name}，但資料夾中的檔案仍在。`,
                         );
                     });
                 }}
@@ -453,13 +465,24 @@ export function TopHeader() {
             </>
           }
         >
-          <p className="text-[12px] text-ink-500">
-            Export the project file first if you may need it again — a project
-            file is the only copy that outlives this browser.
-            <span className="block text-ink-400">
-              若日後可能還需要，請先匯出專案檔；專案檔是唯一能離開這個瀏覽器保存的副本。
-            </span>
-          </p>
+          {backend === 'sharepoint' ? (
+            <p className="text-[12px] text-ink-500">
+              Its file is deleted from SharePoint for everyone. Until the site&apos;s Recycle Bin
+              is emptied, a SharePoint site owner can restore it from there.
+              <span className="block text-ink-400">
+                專案檔會從 SharePoint 刪除，所有人都看不到；在網站資源回收筒清空之前，
+                可由網站管理者從資源回收筒還原。
+              </span>
+            </p>
+          ) : (
+            <p className="text-[12px] text-ink-500">
+              Export the project file first if you may need it again — a project
+              file is the only copy that outlives this browser.
+              <span className="block text-ink-400">
+                若日後可能還需要，請先匯出專案檔；專案檔是唯一能離開這個瀏覽器保存的副本。
+              </span>
+            </p>
+          )}
         </Modal>
       )}
       {pending && (
