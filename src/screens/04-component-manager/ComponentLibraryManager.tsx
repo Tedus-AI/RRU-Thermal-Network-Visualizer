@@ -239,7 +239,8 @@ export function ComponentLibraryManager({
           <span className="tabular font-medium text-ink-700">{LIBRARY_FILENAME}</span>
           {folderName ? (
             <span>
-              in <span className="font-medium text-ink-700">{folderName}</span> / 已寫入資料夾
+              in <span className="font-medium text-ink-700">{folderName}</span> /{' '}
+              {folderName === 'SharePoint' ? '已寫入 SharePoint' : '已寫入資料夾'}
             </span>
           ) : (
             <span className="text-warn-600">

@@ -9,6 +9,7 @@
 import { useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
+  Cloud,
   Database,
   FileDown,
   FileUp,
@@ -16,7 +17,10 @@ import {
   FolderSync,
   HardDrive,
   Info,
+  Loader2,
+  LogIn,
   RotateCcw,
+  UserRound,
 } from 'lucide-react';
 
 import { Badge, Button, Modal, type Tone } from '@/ui/primitives';
@@ -26,6 +30,7 @@ import { BUILD_ID, resetProjectStorage } from '@/data/bootstrapStorage';
 import { storageUsage } from '@/data/buildStamp';
 import { useProjectStore } from '@/data/projectStore';
 import { useFolderStore } from '@/data/folderStore';
+import { sharePoint } from '@/data/sharepoint';
 import { projectIdExists } from '@/data/persistence';
 import type { FolderStatus } from '@/data/folderStore';
 import type { FolderEntry } from '@/data/folderBinding';
@@ -80,33 +85,31 @@ function Row({ label, zh, value }: { label: string; zh: string; value: React.Rea
   );
 }
 
-// --- Local folder ----------------------------------------------------------
+// --- Storage (SharePoint or local folder) ------------------------------------
 
 const FOLDER_TONE: Record<FolderStatus, { tone: Tone; label: string; zh: string }> = {
-  unsupported: {
-    tone: 'neutral',
-    label: 'Not available in this browser',
-    zh: '此瀏覽器不支援',
-  },
-  unbound: { tone: 'neutral', label: 'No folder bound', zh: '尚未綁定資料夾' },
+  unbound: { tone: 'neutral', label: 'Not connected', zh: '尚未連線' },
   connected: { tone: 'ok', label: 'Connected', zh: '已連線' },
   needs_permission: {
     tone: 'warn',
-    label: 'Permission needed',
-    zh: '需要重新授權',
+    label: 'Action needed',
+    zh: '需要重新授權或登入',
   },
   error: { tone: 'danger', label: 'Last write failed', zh: '上次寫入失敗' },
 };
 
 /**
- * Binding a folder gives the working store a durable copy on real disk.
+ * Where projects are written, and the controls that go with it.
  *
- * The whole section is honest about being Chromium-only: on a browser without
- * `showDirectoryPicker` it says so and points at the project file instead of
- * offering a button that could not work.
+ * One section for both places, because they behave the same — every save is a
+ * project file, one per project — and differ only in how access is regained
+ * (a folder permission vs. a Microsoft sign-in) and in what else can be done
+ * (SharePoint: switch account, open in the browser; local: move to SharePoint).
  */
-function LocalFolderSection({ onFileText }: { onFileText: (text: string) => void }) {
+function StorageSection({ onFileText }: { onFileText: (text: string) => void }) {
   const status = useFolderStore((s) => s.status);
+  const backend = useFolderStore((s) => s.backend);
+  const account = useFolderStore((s) => s.account);
   const folderName = useFolderStore((s) => s.folderName);
   const lastSyncAt = useFolderStore((s) => s.lastSyncAt);
   const lastSyncedProjectId = useFolderStore((s) => s.lastSyncedProjectId);
@@ -119,44 +122,98 @@ function LocalFolderSection({ onFileText }: { onFileText: (text: string) => void
 
   const [files, setFiles] = useState<FolderEntry[] | null>(null);
   const [busy, setBusy] = useState(false);
+  const [confirmingMove, setConfirmingMove] = useState(false);
 
   const meta = FOLDER_TONE[status];
+  const onSharePoint = backend === 'sharepoint';
+  const spLocation = sharePoint.location();
 
-  if (status === 'unsupported') {
-    return (
-      <Section icon={FolderSync} title="Local folder" zh="本機資料夾">
-        <p className="text-[11.5px] leading-relaxed text-ink-500">
-          This browser has no File System Access API, so a folder cannot be bound. Chrome and Edge
-          support it; Firefox and Safari do not. Use the project file above instead — it works
-          everywhere.
-          <span className="mt-0.5 block text-ink-400">
-            此瀏覽器不支援 File System Access API，無法綁定資料夾。Chrome 與 Edge 支援，Firefox
-            與 Safari 不支援；請改用上方的專案檔匯出／匯入。
-          </span>
-        </p>
-      </Section>
-    );
-  }
+  const run = async (action: () => Promise<void>) => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await action();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const moveToSharePoint = () =>
+    run(async () => {
+      setConfirmingMove(false);
+      const report = await useFolderStore.getState().uploadToSharePoint();
+      if (!report.ok) {
+        if (report.error) toast.error(report.error);
+        return;
+      }
+      const parts = [
+        `${report.uploaded.length} project(s) uploaded`,
+        report.skipped.length > 0
+          ? `${report.skipped.length} already on SharePoint and left as they were (${report.skipped.join(', ')})`
+          : '',
+        report.library ? 'component library merged' : '',
+      ].filter(Boolean);
+      toast.success(
+        `Now on SharePoint: ${parts.join('; ')}. The local files are unchanged. / 已改用 SharePoint：上傳 ${report.uploaded.length} 個專案${report.skipped.length > 0 ? `，${report.skipped.length} 個 SharePoint 上已有、未覆蓋` : ''}${report.library ? '，元件庫已合併' : ''}；本機檔案保持不變。`,
+      );
+    });
 
   return (
-    <Section icon={FolderSync} title="Local folder" zh="本機資料夾">
+    <Section
+      icon={onSharePoint ? Cloud : FolderSync}
+      title={onSharePoint ? 'SharePoint' : 'Local folder'}
+      zh={onSharePoint ? '線上共用儲存' : '本機資料夾'}
+    >
       <p className="text-[11.5px] leading-relaxed text-ink-500">
-        Bind a folder and every save is also written there as a project file, one file per
-        project. The folder survives a browser reset or a new deployment.
-        <span className="mt-0.5 block text-ink-400">
-          綁定資料夾後，每次儲存都會同步寫入一份專案檔（每個專案一個檔案）。
-          即使瀏覽器資料被清除或部署新版本，資料夾中的副本仍然存在。
-        </span>
+        {onSharePoint ? (
+          <>
+            Every save is written to SharePoint as a project file, one file per project, shared
+            with everyone who can open the site. A save never overwrites a colleague&apos;s newer
+            version: it is kept as a separate conflict copy instead.
+            <span className="mt-0.5 block text-ink-400">
+              每次儲存都會寫入 SharePoint（每個專案一個檔案），與能開啟該網站的同事共用。
+              若同事已先存了較新的版本，不會被覆蓋，你的版本會另存為衝突副本。
+            </span>
+          </>
+        ) : (
+          <>
+            Every save is written to the folder as a project file, one file per project. The
+            folder survives a browser reset or a new deployment.
+            <span className="mt-0.5 block text-ink-400">
+              每次儲存都會寫入資料夾中的專案檔（每個專案一個檔案）。即使瀏覽器資料被清除或部署新版本，
+              資料夾中的檔案仍然存在。
+            </span>
+          </>
+        )}
       </p>
 
       <div className="flex flex-col gap-1 rounded border border-line bg-surface-muted px-2.5 py-2">
         <div className="flex items-center justify-between gap-2">
           <span className="flex min-w-0 items-center gap-1.5 text-[11.5px] text-ink-700">
-            <FolderOpen className="size-3.5 shrink-0 text-ink-400" aria-hidden />
-            <span className="truncate font-mono">{folderName ?? '—'}</span>
+            {onSharePoint ? (
+              <Cloud className="size-3.5 shrink-0 text-accent-600" aria-hidden />
+            ) : (
+              <FolderOpen className="size-3.5 shrink-0 text-ink-400" aria-hidden />
+            )}
+            <span className="font-mono break-all">{onSharePoint ? spLocation : (folderName ?? '—')}</span>
           </span>
           <Badge tone={meta.tone}>{syncing ? 'Syncing…' : meta.label}</Badge>
         </div>
+        {onSharePoint && (
+          <p className="flex items-center gap-1.5 text-[11px] text-ink-700">
+            <UserRound className="size-3.5 shrink-0 text-ink-400" aria-hidden />
+            {account ? (
+              <span className="min-w-0 truncate">
+                {account.name}
+                {account.email && account.email !== account.name ? (
+                  <span className="text-ink-400"> · {account.email}</span>
+                ) : null}
+              </span>
+            ) : (
+              <span className="text-ink-400">Not signed in / 尚未登入</span>
+            )}
+          </p>
+        )}
         <p className="text-[10.5px] text-ink-400">
           {meta.zh}
           {lastSyncAt && (
@@ -166,74 +223,160 @@ function LocalFolderSection({ onFileText }: { onFileText: (text: string) => void
             </>
           )}
         </p>
-        {lastError && <p className="text-[10.5px] text-danger-600">{lastError}</p>}
+        {lastError && <p className="text-[10.5px] break-words text-danger-600">{lastError}</p>}
       </div>
 
       <div className="flex flex-wrap gap-2">
         {status === 'needs_permission' && (
           <Button
             variant="primary"
-            icon={<FolderSync className="size-3.5" aria-hidden />}
-            onClick={async () => {
-              const ok = await useFolderStore.getState().reconnect();
-              toast[ok ? 'success' : 'error'](
-                ok ? 'Folder reconnected.' : 'Permission was not granted.',
-              );
-            }}
+            disabled={busy}
+            icon={
+              onSharePoint ? (
+                <LogIn className="size-3.5" aria-hidden />
+              ) : (
+                <FolderSync className="size-3.5" aria-hidden />
+              )
+            }
+            onClick={() =>
+              void run(async () => {
+                const ok = await useFolderStore.getState().reconnect();
+                toast[ok ? 'success' : 'error'](
+                  onSharePoint
+                    ? ok
+                      ? 'Signed in. / 已登入。'
+                      : 'Not signed in. / 尚未登入。'
+                    : ok
+                      ? 'Folder reconnected.'
+                      : 'Permission was not granted.',
+                );
+              })
+            }
           >
-            Reconnect / 重新授權
+            {onSharePoint ? 'Sign in / 登入' : 'Reconnect / 重新授權'}
+          </Button>
+        )}
+        {onSharePoint ? (
+          <Button
+            variant="secondary"
+            disabled={busy}
+            icon={<UserRound className="size-3.5" aria-hidden />}
+            onClick={() =>
+              void run(async () => {
+                const ok = await useFolderStore.getState().connectSharePoint({ select: true });
+                const error = useFolderStore.getState().lastError;
+                if (ok) toast.success('Microsoft account switched. / 已切換 Microsoft 帳號。');
+                else if (error) toast.error(error);
+              })
+            }
+          >
+            Switch Account / 切換帳號
+          </Button>
+        ) : (
+          <Button
+            variant="secondary"
+            disabled={busy}
+            icon={<FolderOpen className="size-3.5" aria-hidden />}
+            onClick={() =>
+              void run(async () => {
+                const ok = await useFolderStore.getState().bind();
+                if (!ok) return;
+                toast.success('Folder bound. Saves will be mirrored there.');
+                // The new folder's projects replaced the cache; the one that was
+                // open may not be among them, and mirroring it would fail.
+                if (canMirror && projectId && projectIdExists(projectId)) {
+                  await useFolderStore.getState().mirror(projectId);
+                }
+              })
+            }
+          >
+            Change Folder / 變更資料夾
           </Button>
         )}
         <Button
           variant="secondary"
-          icon={<FolderOpen className="size-3.5" aria-hidden />}
-          onClick={async () => {
-            const ok = await useFolderStore.getState().bind();
-            if (!ok) return;
-            toast.success('Folder bound. Saves will be mirrored there.');
-            // The new folder's projects replaced the cache; the one that was
-            // open may not be among them, and mirroring it would fail.
-            if (canMirror && projectId && projectIdExists(projectId)) {
-              await useFolderStore.getState().mirror(projectId);
-            }
-          }}
+          disabled={!canMirror || status !== 'connected' || busy}
+          onClick={() =>
+            void run(async () => {
+              if (!projectId) return;
+              const ok = await useFolderStore.getState().mirror(projectId);
+              toast[ok ? 'success' : 'error'](
+                ok
+                  ? `Wrote ${projectId} to ${onSharePoint ? 'SharePoint' : 'the folder'}.`
+                  : `Could not write to ${onSharePoint ? 'SharePoint' : 'the folder'}.`,
+              );
+            })
+          }
         >
-          {status === 'unbound' ? 'Choose Folder / 選擇資料夾' : 'Change Folder / 變更資料夾'}
+          Sync Now / 立即同步
         </Button>
-        {status !== 'unbound' && (
-          <>
-            <Button
-              variant="secondary"
-              disabled={!canMirror || status !== 'connected'}
-              onClick={async () => {
-                if (!projectId) return;
-                const ok = await useFolderStore.getState().mirror(projectId);
-                toast[ok ? 'success' : 'error'](
-                  ok ? `Wrote ${projectId} to the folder.` : 'Could not write to the folder.',
-                );
-              }}
-            >
-              Sync Now / 立即同步
-            </Button>
-            <Button
-              variant="ghost"
-              onClick={async () => {
-                await useFolderStore.getState().unbind();
-                // The browser cache is emptied on disconnect (anything not yet
-                // on disk is written first); the files themselves stay put.
-                toast.success('Folder disconnected. Your project files in the folder are untouched.');
-              }}
-            >
-              Disconnect / 解除綁定
-            </Button>
-          </>
-        )}
+        <Button
+          variant="ghost"
+          disabled={busy}
+          onClick={() =>
+            void run(async () => {
+              await useFolderStore.getState().unbind();
+              // The browser cache is emptied on disconnect (anything not yet
+              // written is written first); the files themselves stay put.
+              toast.success(
+                onSharePoint
+                  ? 'Disconnected from SharePoint. The project files there are untouched. / 已中斷 SharePoint 連線，檔案不受影響。'
+                  : 'Folder disconnected. Your project files in the folder are untouched.',
+              );
+            })
+          }
+        >
+          Disconnect / 中斷連線
+        </Button>
       </div>
 
-      {status !== 'unbound' && !canMirror && (
+      {!canMirror && (
         <p className="text-[11px] text-ink-400">
-          Open a saved project to mirror it. 請先開啟已儲存的專案才能同步。
+          Open a saved project to sync it. 請先開啟已儲存的專案才能同步。
         </p>
+      )}
+
+      {/* The way an existing local workspace reaches SharePoint. */}
+      {!onSharePoint && status === 'connected' && (
+        <div className="flex flex-col gap-2 rounded border border-accent-500/30 bg-accent-50 px-2.5 py-2">
+          <p className="text-[11.5px] leading-relaxed text-ink-700">
+            <span className="font-semibold">Move to SharePoint</span> — uploads every project in
+            this folder and the component library to{' '}
+            <span className="font-mono break-all">{spLocation}</span>, then continues there. A
+            project already on SharePoint is not overwritten; the files here are not changed.
+            <span className="mt-0.5 block text-ink-400">
+              搬到 SharePoint：把此資料夾的所有專案與元件庫上傳到上列位置，之後改用 SharePoint。
+              SharePoint 上已有的同名專案不會被覆蓋；本機檔案保持不變。
+            </span>
+          </p>
+          {confirmingMove ? (
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="primary"
+                disabled={busy}
+                icon={busy ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : <Cloud className="size-3.5" aria-hidden />}
+                onClick={() => void moveToSharePoint()}
+              >
+                Sign in and Upload / 登入並上傳
+              </Button>
+              <Button variant="ghost" disabled={busy} onClick={() => setConfirmingMove(false)}>
+                Cancel / 取消
+              </Button>
+            </div>
+          ) : (
+            <div>
+              <Button
+                variant="secondary"
+                disabled={busy}
+                icon={<Cloud className="size-3.5" aria-hidden />}
+                onMouseEnter={() => void sharePoint.preload()}
+                onClick={() => setConfirmingMove(true)}
+              >
+                Move to SharePoint / 搬到 SharePoint
+              </Button>
+            </div>
+          )}
+        </div>
       )}
 
       {/* A backup you cannot restore from is not a backup. */}
@@ -242,18 +385,18 @@ function LocalFolderSection({ onFileText }: { onFileText: (text: string) => void
           <Button
             variant="ghost"
             disabled={busy}
-            onClick={async () => {
-              setBusy(true);
-              setFiles(await useFolderStore.getState().listFiles());
-              setBusy(false);
-            }}
+            onClick={() =>
+              void run(async () => {
+                setFiles(await useFolderStore.getState().listFiles());
+              })
+            }
           >
-            {files == null ? 'Browse Folder / 瀏覽資料夾' : 'Refresh / 重新整理'}
+            {files == null ? 'Browse Files / 瀏覽檔案' : 'Refresh / 重新整理'}
           </Button>
 
           {files != null && files.length === 0 && (
             <p className="text-[11px] text-ink-400">
-              No project files in this folder yet. 此資料夾尚無專案檔。
+              No project files here yet. 尚無專案檔。
             </p>
           )}
 
@@ -354,18 +497,20 @@ export function SettingsDialog({
       <div className="flex max-h-[60vh] flex-col gap-5 overflow-y-auto">
         <Section icon={HardDrive} title="Where your data is stored" zh="資料儲存位置">
           <p className="text-[11.5px] leading-relaxed text-ink-500">
-            Projects live in this browser&apos;s local storage on this machine. They are not
-            uploaded anywhere, and they do not follow you to another browser or computer.
+            Projects live where the section below says — on SharePoint or in a local folder. This
+            browser keeps only a working copy, read again every time the tool opens, so clearing
+            site data or a new build being deployed loses nothing that was saved.
             <span className="mt-0.5 block text-ink-400">
-              專案儲存在本機瀏覽器，不會上傳，也不會跟著你換到其他瀏覽器或電腦。
+              專案存放在下方所列的位置（SharePoint 或本機資料夾）。瀏覽器只保留工作副本，每次開啟工具都會重新讀取；
+              清除瀏覽器資料或部署新版本都不會遺失已儲存的內容。
             </span>
           </p>
           <div className="rounded border border-warn-500/40 bg-warn-100/50 px-2.5 py-2">
             <p className="text-[11.5px] leading-relaxed text-warn-700">
-              Clearing site data, or a new build being deployed, removes them. Export a project
-              file for anything you need to keep.
+              An edit reaches storage about a second after it is made; the light at the top right
+              says when. Do not close the tab while it reads &ldquo;Saving&rdquo;.
               <span className="mt-0.5 block">
-                清除瀏覽器資料或部署新版本都會清空；需要保留的請匯出專案檔。
+                修改約在一秒內寫入；右上角的儲存狀態會顯示。顯示「寫入中」時請勿關閉分頁。
               </span>
             </p>
           </div>
@@ -403,7 +548,7 @@ export function SettingsDialog({
           )}
         </Section>
 
-        <LocalFolderSection onFileText={onFileText} />
+        <StorageSection onFileText={onFileText} />
 
         <Section icon={Database} title="Storage usage" zh="儲存用量">
           {usage == null || usage.entries.length === 0 ? (

@@ -17,6 +17,8 @@ import {
   serializeLibrary,
 } from './componentLibraryFile';
 import { readTextFile, writeTextFile } from './folderBinding';
+import { isSharePointError } from './sharepoint';
+import { isSharePointDirectory } from './sharepointFolder';
 import {
   COMPONENT_CATEGORIES,
   emptyArchitecturePrep,
@@ -150,18 +152,63 @@ export function fromLibraryEntry(
 }
 
 /**
- * Writes the library to the bound folder, if there is one.
+ * Writes the library to the bound folder (or SharePoint), if there is one.
  *
  * Best effort by design: the folder is a mirror, and a browser with no folder
  * bound — or a write that fails — must leave the app working exactly as before.
  * The import is dynamic to keep this module out of the folder store's cycle.
+ *
+ * One write at a time, always of the CURRENT list: two overlapping writes
+ * would race each other on SharePoint and read as someone else's change, and
+ * an older list could land after a newer one.
+ *
+ * On SharePoint the library is shared. When someone else saved it since it
+ * was read, their file and ours are merged (newest `saved_at` of each part
+ * wins, `mergeLibraries`) and the union written — so nobody's parts are lost.
+ * The price: a part deleted here while someone else saved the library comes
+ * back, because a missing entry cannot be told from one never seen.
  */
-async function mirrorToFolder(entries: LibraryEntry[]): Promise<void> {
+let mirrorRun: Promise<void> | null = null;
+let mirrorAgain = false;
+
+function mirrorToFolder(): Promise<void> {
+  if (mirrorRun) {
+    mirrorAgain = true;
+    return mirrorRun;
+  }
+  mirrorRun = (async () => {
+    try {
+      do {
+        mirrorAgain = false;
+        await writeLibraryOnce();
+      } while (mirrorAgain);
+    } finally {
+      mirrorRun = null;
+    }
+  })();
+  return mirrorRun;
+}
+
+async function writeLibraryOnce(): Promise<void> {
   try {
     const { useFolderStore } = await import('./folderStore');
     const handle = useFolderStore.getState().handle;
     if (!handle) return;
-    await writeTextFile(handle, LIBRARY_FILENAME, serializeLibrary(entries));
+    const entries = useComponentLibraryStore.getState().entries;
+    try {
+      await writeTextFile(handle, LIBRARY_FILENAME, serializeLibrary(entries));
+    } catch (error) {
+      if (!isSharePointDirectory(handle) || !isSharePointError(error) || !error.conflict) throw error;
+      const remote = await handle.readRemote(LIBRARY_FILENAME);
+      const parsed = remote ? parseLibraryFile(remote.text) : null;
+      const merged = mergeLibraries(
+        useComponentLibraryStore.getState().entries,
+        parsed?.ok ? parsed.file.entries : [],
+      );
+      await writeTextFile(handle, LIBRARY_FILENAME, serializeLibrary(merged));
+      write(merged);
+      useComponentLibraryStore.setState({ entries: merged });
+    }
   } catch {
     // localStorage already has the entry; the mirror is a bonus, not the store.
   }
@@ -317,7 +364,7 @@ export const useComponentLibraryStore = create<LibraryState>((set, get) => ({
     );
     write(entries);
     set({ entries });
-    void mirrorToFolder(entries);
+    void mirrorToFolder();
     return entry;
   },
 
@@ -339,7 +386,7 @@ export const useComponentLibraryStore = create<LibraryState>((set, get) => ({
     }
     write(entries);
     set({ entries });
-    void mirrorToFolder(entries);
+    void mirrorToFolder();
     return { saved: seen.size, overwritten };
   },
 
@@ -361,7 +408,7 @@ export const useComponentLibraryStore = create<LibraryState>((set, get) => ({
       .sort((a, b) => a.name.localeCompare(b.name));
     write(entries);
     set({ entries });
-    void mirrorToFolder(entries);
+    void mirrorToFolder();
   },
 
   setNotes: (id, notes) => {
@@ -372,14 +419,14 @@ export const useComponentLibraryStore = create<LibraryState>((set, get) => ({
     );
     write(entries);
     set({ entries });
-    void mirrorToFolder(entries);
+    void mirrorToFolder();
   },
 
   remove: (id) => {
     const entries = get().entries.filter((entry) => entry.id !== id);
     write(entries);
     set({ entries });
-    void mirrorToFolder(entries);
+    void mirrorToFolder();
   },
 
   importFile: (text) => {
@@ -400,7 +447,7 @@ export const useComponentLibraryStore = create<LibraryState>((set, get) => ({
     const entries = mergeLibraries(get().entries, parsed.file.entries);
     write(entries);
     set({ entries });
-    void mirrorToFolder(entries);
+    void mirrorToFolder();
     return { ok: true, added, updated, kept };
   },
 
