@@ -51,6 +51,7 @@ import {
 } from '@/ui/graphViewport';
 import { layoutOptions } from '@/screens/05-thermal-path-builder/ThermalGraphCanvas';
 import {
+  PARALLEL_BRACE_BOW_PX,
   parallelBraceElement,
   parallelBraceStyle,
   parallelBranchGeometry,
@@ -58,6 +59,13 @@ import {
   parallelPairNames,
   parallelPairs,
 } from '@/screens/05-thermal-path-builder/parallelPairs';
+import {
+  BADGE_ROOM_PX,
+  placeEdgeBadges,
+  type Box as BadgeBox,
+  type EdgeBadgeRequest,
+  type Point as BadgePoint,
+} from './badgePlacement';
 import type { ThermalNetwork, ThermalNode } from '@/thermal/types';
 import type { ThermalSolution } from '@/thermal/solver/solverTypes';
 
@@ -326,42 +334,99 @@ export function solvedStylesheet(): StylesheetCSS[] {
 }
 
 /**
- * Put every tuned badge over the middle of the segment it marks.
+ * Put every badge where it marks its segment and covers nothing.
  *
- * Above the line by a badge's height, so it never lands on the edge's own
- * label — that one is already `text-margin-y: -11` and centred, and two things
- * fighting for the same 20 px is how a marker becomes noise. Called from the
- * same snapshot the buses are placed in, which is after the layout has settled.
+ * A part's badge sits to the left of the part. A segment's sits just beyond the
+ * segment's own label, on the side the label went — above an ordinary edge,
+ * above the upper branch of a parallel pair and below the lower one — and is
+ * then moved clear of every label, box and badge already on the picture; see
+ * `placeEdgeBadges`. Measured from what Cytoscape actually drew, which is why
+ * this runs from the same snapshot the buses are placed in, after the layout
+ * has settled: the old fixed lift over the straight line between the two nodes
+ * put both branches of a heat-pipe + spreading pair on ONE spot, on top of a
+ * label.
  */
 export function positionTunedBadges(cy: Core): void {
+  const placed: BadgePoint[] = [];
+  const onEdges: cytoscape.NodeSingular[] = [];
   cy.nodes('.tuned-badge, .alert-badge').forEach((badge) => {
     const anchorId = badge.data('anchorNodeId') as string | undefined;
-    if (anchorId) {
-      const node = cy.getElementById(anchorId);
-      if (!node || node.length === 0) return;
-      const at = node.position();
-      if (!Number.isFinite(at.x)) return;
-      // Outside the node's own box, so it never sits on the name inside it.
-      badge.position({ x: at.x - node.width() / 2 - BADGE_GAP_PX, y: at.y });
+    if (!anchorId) {
+      onEdges.push(badge);
       return;
     }
+    const node = cy.getElementById(anchorId);
+    if (!node || node.length === 0) return;
+    const at = node.position();
+    if (!Number.isFinite(at.x)) return;
+    // Outside the node's own box, so it never sits on the name inside it.
+    const spot = { x: at.x - node.width() / 2 - BADGE_GAP_PX, y: at.y };
+    badge.position(spot);
+    placed.push(spot);
+  });
+  if (onEdges.length === 0) return;
+
+  const requests: EdgeBadgeRequest[] = [];
+  for (const badge of onEdges) {
     const edge = cy.getElementById(badge.data('edgeId') as string);
-    if (!edge || edge.length === 0) return;
+    if (!edge || edge.length === 0 || !edge.isEdge()) continue;
     const from = edge.source().position();
     const to = edge.target().position();
-    if (!Number.isFinite(from.x) || !Number.isFinite(to.x)) return;
-    badge.position({ x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 - BADGE_LIFT_PX });
+    if (!Number.isFinite(from.x) || !Number.isFinite(to.x)) continue;
+    const drawn = edge.midpoint();
+    const mid =
+      drawn && Number.isFinite(drawn.x) && Number.isFinite(drawn.y)
+        ? { x: drawn.x, y: drawn.y }
+        : { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 };
+    requests.push({
+      id: badge.id(),
+      mid,
+      from: { x: from.x, y: from.y },
+      to: { x: to.x, y: to.y },
+      label: drawnLabelBox(edge),
+    });
+  }
+
+  // Everything a badge must not cover: every part and bus piece, and every
+  // label as drawn — the pair's own brace included.
+  const obstacles: BadgeBox[] = [];
+  cy.nodes().forEach((node) => {
+    if (node.hasClass('tuned-badge') || node.hasClass('alert-badge') || !node.visible()) return;
+    const box = node.boundingBox({ includeLabels: true, includeOverlays: false });
+    if (isDrawnBox(box)) obstacles.push(box);
   });
+  cy.edges().forEach((edge) => {
+    const box = drawnLabelBox(edge);
+    if (box) obstacles.push(box);
+  });
+
+  for (const [id, at] of placeEdgeBadges(requests, obstacles, placed)) {
+    cy.getElementById(id).position(at);
+  }
 }
 
-/**
- * Clear of the edge's own label, which sits 11 px above the line.
- *
- * 11 for the label's offset, half of its ~15 px box, half of the badge's 20,
- * and the 6 px halo an active one wears — under about 34 the halo lands on the
- * ΔT text and the two read as one smudged glyph.
- */
-const BADGE_LIFT_PX = 36;
+/** An edge's label as drawn, or null when it shows none. */
+function drawnLabelBox(edge: cytoscape.EdgeSingular): BadgeBox | null {
+  if (!edge.visible()) return null;
+  const box = edge.boundingBox({
+    includeNodes: false,
+    includeEdges: false,
+    includeLabels: true,
+    includeOverlays: false,
+  });
+  return isDrawnBox(box) ? { x1: box.x1, y1: box.y1, x2: box.x2, y2: box.y2 } : null;
+}
+
+function isDrawnBox(box: { x1: number; y1: number; x2: number; y2: number; w: number; h: number }) {
+  return (
+    Number.isFinite(box.x1) &&
+    Number.isFinite(box.y1) &&
+    Number.isFinite(box.x2) &&
+    Number.isFinite(box.y2) &&
+    box.w > 0 &&
+    box.h > 0
+  );
+}
 
 /**
  * How far left of a part its rank badge sits.
@@ -716,8 +781,18 @@ export function buildElements(
       const value = parallelNote(network, solution, pair.edgeIds, quantity, scenarioId);
       if (!value) continue;
       const names = parallelPairNames(network, pair.edgeIds, quantity);
+      // A marked branch on the brace's side wears its badge between its own
+      // label and the brace's, where the two labels otherwise sit a few pixels
+      // apart — so the brace bows out by one badge's room (its label rides at
+      // half the bow).
+      const marked = pair.edgeIds.some((id) => tunedEdges?.has(id));
       elements.push(
-        parallelBraceElement(pair, names ? `${names}\n${value}` : value, HSK_BUS_COLOR),
+        parallelBraceElement(
+          pair,
+          names ? `${names}\n${value}` : value,
+          HSK_BUS_COLOR,
+          marked ? PARALLEL_BRACE_BOW_PX + 2 * BADGE_ROOM_PX : PARALLEL_BRACE_BOW_PX,
+        ),
       );
     }
   }

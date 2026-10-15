@@ -14,6 +14,9 @@ import { describe, expect, it } from 'vitest';
 
 import type { ThermalNetwork } from '@/thermal/types';
 
+import { PARALLEL_BRACE_BOW_PX } from '@/screens/05-thermal-path-builder/parallelPairs';
+
+import { BADGE_ROOM_PX } from './badgePlacement';
 import { buildElements } from './SolvedGraphCanvas';
 import { buildScale } from './resultViewModel';
 
@@ -160,6 +163,89 @@ describe('over-limit alarm badges', () => {
   it('stays off unless a screen asks for it — 08 marks its own way', () => {
     expect(build(false).filter((e) => String(e.classes ?? '').includes('alert-badge'))).toHaveLength(
       0,
+    );
+  });
+});
+
+/**
+ * A marked pair makes room under its brace.
+ *
+ * A heat pipe and a spreading path between the same two parts each carry a
+ * badge on Screen 08: the upper branch's over its label, the lower branch's
+ * under its own — which is where the brace naming both used to sit, a few
+ * pixels below. So the brace bows out by one badge's room, and only when a
+ * branch is actually marked; 07 draws it where it always was.
+ */
+describe('the brace over a marked pair', () => {
+  const paired = (): ThermalNetwork => {
+    const net = network();
+    const edge = (id: string, type: string) => ({
+      id,
+      from: 'A',
+      to: 'B',
+      type,
+      enabled: true,
+      rth: { analytical: 0.3, active_source: 'Analytical', provenance: {} },
+    });
+    net.edges = {
+      EDGE_SPREADING: edge('EDGE_SPREADING', 'spreading'),
+      EDGE_PIPE: edge('EDGE_PIPE', 'heat_pipe'),
+    } as unknown as ThermalNetwork['edges'];
+    return net;
+  };
+  const solved = {
+    node_temperatures_C: { A: 90, B: 88 },
+    edge_results: Object.fromEntries(
+      ['EDGE_SPREADING', 'EDGE_PIPE'].map((id) => [
+        id,
+        {
+          edge_id: id,
+          from: 'A',
+          to: 'B',
+          heat_flow_W: 5,
+          delta_T_C: 2,
+          actual_direction: 'forward',
+          active_rth_C_per_W: 0.3,
+          active_rth_source: 'Analytical',
+          rth_origin: 'edge',
+        },
+      ]),
+    ),
+  } as unknown as import('../../thermal/solver/solverTypes').ThermalSolution;
+
+  const braceBow = (tuned?: ReadonlyMap<string, { rank: number; active: boolean }>) => {
+    const brace = buildElements(
+      paired(),
+      solved,
+      'temperature_delta',
+      DISPLAY,
+      'SCN_001',
+      'LeftRight',
+      SCALES,
+      new Set<string>(),
+      undefined,
+      undefined,
+      tuned,
+    ).find((element) => String(element.classes ?? '').includes('parallel-brace'));
+    expect(brace).toBeDefined();
+    return brace!.data.bow as number;
+  };
+
+  it('bows out by one badge’s room when a branch is marked', () => {
+    const marked = braceBow(
+      new Map([
+        ['EDGE_SPREADING', { rank: 4, active: false }],
+        ['EDGE_PIPE', { rank: 5, active: false }],
+      ]),
+    );
+
+    expect(marked).toBe(PARALLEL_BRACE_BOW_PX + 2 * BADGE_ROOM_PX);
+  });
+
+  it('stays where it always was when nothing on the pair is marked', () => {
+    expect(braceBow()).toBe(PARALLEL_BRACE_BOW_PX);
+    expect(braceBow(new Map([['EDGE_OTHER', { rank: 1, active: true }]]))).toBe(
+      PARALLEL_BRACE_BOW_PX,
     );
   });
 });

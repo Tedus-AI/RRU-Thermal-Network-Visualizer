@@ -215,6 +215,8 @@ export function parallelBraceElement(
   pair: ParallelPair,
   label: string,
   color: string,
+  /** Wider on Screen 08 when a branch carries a rank badge under the brace. */
+  bow: number = PARALLEL_BRACE_BOW_PX,
 ): ElementDefinition {
   return {
     group: 'edges',
@@ -226,7 +228,7 @@ export function parallelBraceElement(
       color,
       // Read by the stylesheet, so one constant governs the bow and the
       // clearance the branches need beneath it.
-      bow: PARALLEL_BRACE_BOW_PX,
+      bow,
     },
     classes: 'view-only parallel-brace',
     selectable: false,
