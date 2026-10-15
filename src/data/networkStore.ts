@@ -29,9 +29,14 @@ import type {
   PortKind,
 } from '@/thermal/types';
 import { validateGraph, type GraphValidationResult } from '@/thermal/graph/graphValidation';
-import { hskBaseConnectionPatch, terminalArea } from '@/thermal/graph/hskBaseConnection';
+import {
+  hskBaseConnectionPatch,
+  refreshHskBaseConnectionEdges,
+  terminalArea,
+} from '@/thermal/graph/hskBaseConnection';
 import { defaultSpreadingVariant } from '@/thermal/graph/spreadingVariant';
-import { mountSpec, type Component } from '@/domain/component';
+import { SPREADING_DOMAIN_KEY, spreadingDomainStamp } from '@/thermal/graph/spreadingDomain';
+import { mountSpec, spreadingDomainOf, type Component } from '@/domain/component';
 import {
   MOUNT_SPEC_KEY,
   buildMountChain,
@@ -639,10 +644,22 @@ export const useNetworkStore = create<NetworkStoreState>((set, get) => ({
     const byId = new Map(components.map((component) => [component.id, component]));
 
     const plan: Array<{ nodeId: string; portKind: PortKind; targetNodeId: string }> = [];
+    // The spreading domain rides on the same port node. It is a number on the
+    // existing base edge, not topology, so a stale one is restamped and the
+    // base edges refreshed in place — no reconnect, which would also throw away
+    // a Ψ variant pinned on the edge.
+    const restamp: string[] = [];
     for (const node of Object.values(network.nodes)) {
       if (!node.component_ref) continue;
       const component = byId.get(node.component_ref);
       if (!component) continue;
+      if (
+        (node.ports ?? []).length > 0 &&
+        JSON.stringify(spreadingDomainStamp(node)) !==
+          JSON.stringify(spreadingDomainOf(component.thermal_spec))
+      ) {
+        restamp.push(node.id);
+      }
       const wanted = mountSpec(component.thermal_spec);
       // Only touch a port whose stamp is out of date; rebuilding every mount on
       // every visit would churn the graph and its undo history for nothing.
@@ -658,10 +675,19 @@ export const useNetworkStore = create<NetworkStoreState>((set, get) => ({
         plan.push({ nodeId: node.id, portKind: 'HEAT_OUT', targetNodeId: '' });
       }
     }
-    if (plan.length === 0) return 0;
+    if (plan.length === 0 && restamp.length === 0) return 0;
 
     get().mutate(
       (draft) => {
+        for (const nodeId of restamp) {
+          const node = draft.nodes[nodeId];
+          const component = node?.component_ref ? byId.get(node.component_ref) : undefined;
+          if (!node || !component) continue;
+          node.metadata = {
+            ...node.metadata,
+            [SPREADING_DOMAIN_KEY]: spreadingDomainOf(component.thermal_spec),
+          };
+        }
         for (const step of plan) {
           const node = draft.nodes[step.nodeId];
           if (!node?.component_ref) continue;
@@ -681,10 +707,11 @@ export const useNetworkStore = create<NetworkStoreState>((set, get) => ({
             );
           }
         }
+        if (restamp.length > 0) refreshHskBaseConnectionEdges(draft, materials);
       },
       { skipHistory: true },
     );
-    return plan.filter((step) => step.targetNodeId).length;
+    return plan.filter((step) => step.targetNodeId).length + restamp.length;
   },
 
   disconnectPort: (nodeId, portKind) =>

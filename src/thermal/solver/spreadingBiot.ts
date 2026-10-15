@@ -264,8 +264,13 @@ export function refineSpreadingWithBiot(
   return refinements;
 }
 
-/** Re-resolves one spreading edge against the downstream resistance of its plate. */
-function refineEdge(
+/**
+ * Re-resolves one spreading edge against the downstream resistance of its plate.
+ *
+ * Exported for the heat-share domain refinement, which moves an edge's
+ * `plate_area_mm2` and has to re-solve its Bi against the new domain.
+ */
+export function refineEdge(
   edge: ThermalEdge,
   R_down: number,
   scenarioId: string,
@@ -276,7 +281,11 @@ function refineEdge(
   const before = edgeResistance(edge, scenarioId) as number;
 
   const plateArea_m2 = plateArea / 1e6;
-  const h_eff = 1 / (R_down * plateArea_m2);
+  // h is taken off the WHOLE base: that is the area the downstream path cools.
+  // An edge spreading into a reduced domain (see `spreadingDomain.ts`) carries
+  // the base separately; for every other edge the two are the same plate.
+  const baseArea = positive(params.base_area_mm2) ? params.base_area_mm2 : plateArea;
+  const h_eff = 1 / (R_down * (baseArea / 1e6));
 
   // h is intensive, so N devices sharing a plate see the same h — but each
   // spreads inside its own share of it, and Bi is built on THAT radius,

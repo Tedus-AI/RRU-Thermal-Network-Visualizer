@@ -24,11 +24,14 @@ import {
   type ComponentGeometry,
   mountSpec,
   mountHasBlock,
+  spreadingDomainOf,
   type MountSpec,
+  type SpreadingDomainSpec,
 } from '@/domain/component';
 import {
   coinAreaMm2,
   defaultMaterials,
+  hskBaseAreaMm2,
   resolveTim,
   type MaterialDefaults,
 } from '@/domain/materials';
@@ -203,6 +206,10 @@ export function deriveInspector(
           };
   const patchMount = (patch: Partial<MountSpec>) =>
     patchSpec({ mount: { ...mount, ...patch } }, ['mount']);
+  const spreadingDomain = spreadingDomainOf(spec);
+  const patchSpreadingDomain = (patch: Partial<SpreadingDomainSpec>) =>
+    patchSpec({ spreading_domain: { ...spreadingDomain, ...patch } }, ['spreading_domain']);
+  const baseAreaMm2 = hskBaseAreaMm2(materials);
   const rule = GEOMETRY_RULES[heatPath];
   const resolvedTim = resolveTim(spec.tim, materials);
   const projectCoin = {
@@ -261,6 +268,9 @@ export function deriveInspector(
     mountBlock,
     mountFootprint,
     patchMount,
+    spreadingDomain,
+    patchSpreadingDomain,
+    baseAreaMm2,
     rule,
     resolvedTim,
     sourceFace,

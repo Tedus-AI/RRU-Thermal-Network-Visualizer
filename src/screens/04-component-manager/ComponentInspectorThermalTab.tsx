@@ -26,11 +26,15 @@ import {
   MOUNT_TYPES,
   MOUNT_TYPE_LABELS,
   MOUNT_TYPE_HINTS,
+  SPREADING_DOMAIN_HINTS,
+  SPREADING_DOMAIN_LABELS,
+  SPREADING_DOMAIN_MODES,
   mountAttachmentIsFixed,
   mountHasOwnBody,
   mountHasVendorResistance,
   type MountAttachment,
   type MountType,
+  type SpreadingDomainMode,
 } from '@/domain/component';
 import { withValue } from '@/domain/sourcedValue';
 import {
@@ -59,10 +63,14 @@ export function ThermalSpecTab({ component, readOnly, onPatch, derived }: Inspec
     patchMount,
     patchSpec,
     patchSpecPrefillingCavityFilter,
+    patchSpreadingDomain,
     resolvedTim,
     spec,
+    spreadingDomain,
+    baseAreaMm2,
     surfaceReferenced,
   } = derived;
+  const domainArea = spreadingDomain.area_mm2;
   return (
     <>
       {/* Heat path first: it selects the whole chain, so everything
@@ -587,6 +595,72 @@ export function ThermalSpecTab({ component, readOnly, onPatch, derived }: Inspec
                   </>
                 )}
               </p>
+            </div>
+          )}
+        </div>
+      </fieldset>
+
+      {/*
+        How much of the base the part spreads into. It sits after the mount
+        because it is the same question one step further on: once the heat is
+        in the base, how far does this part's own edge carry it.
+      */}
+      <fieldset className="rounded-md border border-line p-3">
+        <legend className="px-1 text-[12px] font-semibold text-ink-700">
+          Spreading into the Base / 擴散範圍
+        </legend>
+        <div className="flex flex-col gap-2">
+          <Select
+            id="ins-spreading-domain"
+            aria-label="Spreading domain"
+            items={SPREADING_DOMAIN_MODES.map((mode) => ({
+              value: mode,
+              label: `${SPREADING_DOMAIN_LABELS[mode].en} / ${SPREADING_DOMAIN_LABELS[mode].zh}${
+                mode === 'WholeBase' ? ' — default' : ''
+              }`,
+              hint: `${SPREADING_DOMAIN_HINTS[mode].en}\n${SPREADING_DOMAIN_HINTS[mode].zh}`,
+            }))}
+            value={spreadingDomain.mode}
+            disabled={readOnly}
+            onChange={(event) =>
+              patchSpreadingDomain({ mode: event.target.value as SpreadingDomainMode })
+            }
+          />
+          <p className="text-[11px] leading-relaxed text-ink-400">
+            {SPREADING_DOMAIN_HINTS[spreadingDomain.mode].en}
+            <span className="mt-0.5 block">{SPREADING_DOMAIN_HINTS[spreadingDomain.mode].zh}</span>
+          </p>
+          {spreadingDomain.mode === 'Manual' && (
+            <div className="flex flex-col gap-1.5 rounded-md border border-line bg-surface-muted p-2.5">
+              <FieldLabel
+                label="Area per device"
+                zh="每顆擴散面積"
+                unit="mm²"
+                htmlFor="ins-spreading-area"
+                tooltip="這顆元件在實際 layout 上可以獨佔的底座面積（每顆）。會限制在接觸面積與整片基座之間。"
+              />
+              <NumberInput
+                id="ins-spreading-area"
+                value={domainArea ?? ''}
+                disabled={readOnly}
+                onChange={(event) => patchSpreadingDomain({ area_mm2: numberOrNull(event.target.value) })}
+              />
+              {domainArea == null ? (
+                <p className="text-[10px] leading-relaxed text-warn-600">
+                  No area stated — this part spreads into the whole base until one is. /
+                  尚未填面積——在填寫之前，這顆以整片基座計算。
+                </p>
+              ) : (
+                <p className="text-[10px] leading-relaxed text-ink-400">
+                  {baseAreaMm2 != null
+                    ? `${((100 * Math.min(domainArea, baseAreaMm2)) / baseAreaMm2).toFixed(1)} % of the ${Math.round(baseAreaMm2).toLocaleString('en-US')} mm² base${
+                        domainArea > baseAreaMm2 ? ' — larger than the base, so the whole base is used' : ''
+                      }. / 佔整片基座 ${Math.round(baseAreaMm2).toLocaleString('en-US')} mm² 的 ${((100 * Math.min(domainArea, baseAreaMm2)) / baseAreaMm2).toFixed(1)} %${
+                        domainArea > baseAreaMm2 ? '，大於基座，以整片基座計算' : ''
+                      }。`
+                    : 'Screen 01 has no HSK base size yet, so the share cannot be shown. / Screen 01 尚未設定 HSK 基座尺寸，無法顯示比例。'}
+                </p>
+              )}
             </div>
           )}
         </div>

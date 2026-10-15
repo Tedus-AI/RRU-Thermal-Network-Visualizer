@@ -247,3 +247,61 @@ describe('Edge Inspector spreading variant', () => {
     );
   });
 });
+
+describe('Edge Inspector spreading domain', () => {
+  const edge = (params: Record<string, number | string>): ThermalEdge => ({
+    id: 'EDGE_PORT_PM_HSK',
+    from: 'NODE_CMP_PM_TIM',
+    to: 'NODE_HSK_BASE',
+    type: 'spreading',
+    method: 'spreading_disc',
+    rth: createRth(0.0132, 'Analytical', 'medium'),
+    parameters: {
+      source_area_mm2: 3538,
+      plate_area_mm2: 92208,
+      thickness_mm: 7,
+      k_W_mK: 150,
+      psi_variant: 'avg',
+      ...params,
+    },
+    heat_flow_W: null,
+    delta_T_C: null,
+    resolution: 'resolved',
+    enabled: true,
+    origin: { kind: 'shared_structure', component_id: 'CMP_PM' },
+    metadata: { connection_role: 'hsk_base_conduction' },
+  });
+
+  const render = (target: ThermalEdge) =>
+    renderToStaticMarkup(
+      <SpreadingBreakdown
+        edge={target}
+        readOnly={false}
+        defaultVariant="avg"
+        pinned={false}
+        onVariant={() => undefined}
+        onUseDefault={() => undefined}
+      />,
+    );
+
+  it('shows the whole base on an edge that keeps it', () => {
+    const html = render(edge({}));
+    expect(html).toContain('Whole base / 整片基座');
+    expect(html).toContain('92,208 mm²');
+    expect(html).not.toContain('Set in Screen 04');
+  });
+
+  it('shows a stated area as a share of the base', () => {
+    const html = render(edge({ plate_area_mm2: 8000, base_area_mm2: 92208, spreading_domain: 'Manual' }));
+    expect(html).toContain('Stated area / 指定面積');
+    expect(html).toContain('8,000 mm² (8.7 % of the base)');
+    expect(html).toContain('Set in Screen 04 for the component.');
+  });
+
+  it('says a heat share is sized in Screen 07 and shows the whole base until then', () => {
+    const html = render(edge({ base_area_mm2: 92208, spreading_domain: 'HeatShare' }));
+    expect(html).toContain('Own share of the heat / 依熱量分配');
+    expect(html).toContain('it is sized in Screen 07');
+    expect(html).toContain('92,208 mm²');
+  });
+});

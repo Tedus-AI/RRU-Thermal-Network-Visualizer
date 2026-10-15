@@ -34,7 +34,7 @@ export const PSI_VARIANT_PINNED_KEY = 'psi_variant_pinned';
  * its own face, so a spreading edge may start on a mount node; the part it
  * carries is the port that owns that mount.
  */
-function portNodeOf(network: ThermalNetwork, nodeId: string): ThermalNode | undefined {
+export function portNodeOf(network: ThermalNetwork, nodeId: string): ThermalNode | undefined {
   const node = network.nodes[nodeId];
   const owner = node?.metadata?.[MOUNT_OWNER_KEY];
   return typeof owner === 'string' ? (network.nodes[owner] ?? node) : node;

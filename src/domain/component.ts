@@ -675,6 +675,12 @@ export interface ThermalSpec {
    * `Direct`, which is what every one of those projects modelled.
    */
   mount?: MountSpec;
+  /**
+   * How much of the HSK base this part's spreading edge spreads into. Optional
+   * for the same reason as `mount`: every record written before it existed
+   * spread into the whole base, and `spreadingDomainOf` says so.
+   */
+  spreading_domain?: SpreadingDomainSpec;
 }
 
 /**
@@ -912,6 +918,77 @@ export function mountSpec(spec: ThermalSpec): MountSpec {
 }
 
 /**
+ * How much of the HSK base a part spreads into — 05 spreading edge, Lee's plate.
+ *
+ * The base edge used to treat every part as if it alone heated the whole base:
+ * Lee's series over the full L × W at the scenario's Bi. But the base's average
+ * temperature is already a node of its own (`HSK_BASE`), set by everything on
+ * it, so for a part with company the far-field share of that series is counted
+ * twice — once in the base node and again in the part's own edge. At low Bi the
+ * far field is most of the series: 5.75 °C of the STARKCORE power module's
+ * spreading step came from heat travelling to base corners the base average
+ * had already accounted for.
+ *
+ *   - `WholeBase` keeps the series over the full base. Still the default, and
+ *     the right call inside a cluster of hot parts, whose region really is
+ *     hotter than the base average.
+ *   - `HeatShare` spreads into the share of the base matching this edge's share
+ *     of the heat entering it (a uniformly loaded unit cell). The share comes
+ *     from the solve, never from the part's nameplate power (00 Rule 4), so it
+ *     is only known in Screen 07.
+ *   - `Manual` spreads into an area the engineer states, per device — the region
+ *     around the part on the real layout.
+ *
+ * Neither reduced domain knows where the part sits. That is why they are a
+ * per-part choice and not a project switch: they suit a part away from the hot
+ * cluster and flatter one inside it.
+ */
+export const SPREADING_DOMAIN_MODES = ['WholeBase', 'HeatShare', 'Manual'] as const;
+export type SpreadingDomainMode = (typeof SPREADING_DOMAIN_MODES)[number];
+
+export interface SpreadingDomainSpec {
+  mode: SpreadingDomainMode;
+  /** `Manual` only: the area one device spreads into, mm². Null until stated. */
+  area_mm2: number | null;
+}
+
+export const SPREADING_DOMAIN_LABELS: Record<SpreadingDomainMode, { en: string; zh: string }> = {
+  WholeBase: { en: 'Whole base', zh: '整片基座' },
+  HeatShare: { en: 'Own share of the heat', zh: '依熱量分配' },
+  Manual: { en: 'Stated area', zh: '指定面積' },
+};
+
+export const SPREADING_DOMAIN_HINTS: Record<SpreadingDomainMode, { en: string; zh: string }> = {
+  WholeBase: {
+    en: 'Spreads across the whole HSK base, as if this part alone heated it. Right for a part inside the hot cluster; conservative for one away from it.',
+    zh: '擴散到整片 HSK 基座，等於假設只有這顆在加熱底座。適合位在熱源群聚區的元件；對遠離熱源群的元件偏保守。',
+  },
+  HeatShare: {
+    en: "Spreads into the share of the base matching this part's share of the heat entering it. Solved in Screen 07 from the solved heat flows; Screen 05 shows the whole-base value until then. Optimistic for a part inside the hot cluster.",
+    zh: '擴散到「這顆佔進入底座熱量的比例」對應的那一塊底座。面積由 07 依求解熱流決定，05 在求解前顯示整片基座的值。對熱源群聚區內的元件偏樂觀。',
+  },
+  Manual: {
+    en: 'Spreads into the area you state, per device — the region around this part on the real layout. Clamped between the contact patch and the whole base.',
+    zh: '擴散到你指定的面積（每顆），例如實際 layout 上這顆周圍可用的區域。會限制在接觸面積與整片基座之間。',
+  },
+};
+
+export function emptySpreadingDomain(): SpreadingDomainSpec {
+  return { mode: 'WholeBase', area_mm2: null };
+}
+
+/** The part's domain; anything missing or unrecognised reads as the whole base. */
+export function spreadingDomainOf(spec: Pick<ThermalSpec, 'spreading_domain'>): SpreadingDomainSpec {
+  const stored = spec.spreading_domain;
+  if (!stored || !SPREADING_DOMAIN_MODES.includes(stored.mode)) return emptySpreadingDomain();
+  const area = stored.area_mm2;
+  return {
+    mode: stored.mode,
+    area_mm2: typeof area === 'number' && Number.isFinite(area) && area > 0 ? area : null,
+  };
+}
+
+/**
  * How many pipes run under the part. Only an embedded pipe has a count; every
  * other mount presents one block, and anything missing or nonsensical is one.
  */
@@ -1103,6 +1180,7 @@ export function emptyThermalSpec(
     heat_path_confirmed: false,
     tim: emptyTim(),
     mount: emptyMount(),
+    spreading_domain: emptySpreadingDomain(),
   };
 }
 

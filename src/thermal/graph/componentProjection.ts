@@ -1,7 +1,7 @@
 /** Projects Screen 04 master values onto a clone without mutating Screen 05. */
 
 import type { Component } from '@/domain/component';
-import { mountFootprintMm2, mountSpec, powerWOf } from '@/domain/component';
+import { mountFootprintMm2, mountSpec, powerWOf, spreadingDomainOf } from '@/domain/component';
 import { valueOf } from '@/domain/sourcedValue';
 
 import { defaultMaterials, type MaterialDefaults } from '@/domain/materials';
@@ -15,7 +15,8 @@ import type { ThermalEdge, ThermalNetwork, ThermalNode } from '../types';
 import { readLinkedInput } from './networkBuilder';
 import { limitReferenceNodeId } from './limitReference';
 import { HSK_BASE_CONNECTION_ROLE, SOURCE_AREA_OVERRIDE_KEY } from './hskBaseConnection';
-import { spreadingVariantFor } from './spreadingVariant';
+import { portNodeOf, spreadingVariantFor } from './spreadingVariant';
+import { applySpreadingDomain } from './spreadingDomain';
 
 function followsComponentPower(node: ThermalNode): boolean {
   if (node.metadata?.component_power_linked === true) return true;
@@ -133,16 +134,29 @@ function updateLinkedEdge(
   // The base edge's Ψ variant follows the source it carries (see
   // `spreadingVariant.ts`), so a project saved before that default existed
   // solves with it even if Screen 05 has not refreshed the stored edge yet.
+  //
+  // Its domain is the component's own choice as it stands, read here rather
+  // than off the port's stamp so a Screen 04 edit is solved with at once; the
+  // stamp only catches up when Screen 05 next opens (see `spreadingDomain.ts`).
+  let projected = perDevice;
   if (
     edge.method === 'spreading_disc' &&
     edge.metadata?.connection_role === HSK_BASE_CONNECTION_ROLE
   ) {
     perDevice.psi_variant = spreadingVariantFor(network, edge);
+    // A stated area is per device; the base edge itself carries no device count,
+    // so it is read off the port, exactly as the edge was built.
+    const portDevices = Number(portNodeOf(network, edge.from)?.metadata?.devices_represented);
+    projected = applySpreadingDomain(
+      perDevice as NonNullable<ThermalEdge['parameters']>,
+      spreadingDomainOf(component.thermal_spec),
+      Number.isFinite(portDevices) && portDevices > 0 ? portDevices : 1,
+    );
   }
 
   const parameters = scaleParametersForDevices(
     edge.method,
-    perDevice,
+    projected,
     Number.isFinite(devices) ? devices : 1,
   );
 

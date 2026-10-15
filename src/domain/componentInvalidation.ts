@@ -46,6 +46,11 @@ export function effectOfChange(field: string, isMapped: boolean): InvalidationEf
   if (field === 'mount' || field.startsWith('mount.')) {
     return effect(true, true, 'component_architecture_changed');
   }
+  // How much of the base a part spreads into is a number on its existing base
+  // edge, not a node: re-solve, no rebuild. Screen 05 restamps the port itself.
+  if (field === 'spreading_domain' || field.startsWith('spreading_domain.')) {
+    return effect(false, true, 'component_geometry_changed');
+  }
   if (field.startsWith('heat_path.parameters.')) {
     // Contact/exposed-area parameters are embedded in generated edges and node
     // boundary metadata. Re-apply is explicit so a hand-edited subgraph is never
