@@ -16,7 +16,7 @@ import {
   parseLibraryFile,
   serializeLibrary,
 } from './componentLibraryFile';
-import { readTextFile, writeTextFile } from './folderBinding';
+import { readTextFile, writeTextFile, type DirectoryHandle } from './folderBinding';
 import { isSharePointError } from './sharepoint';
 import { isSharePointDirectory } from './sharepointFolder';
 import {
@@ -189,44 +189,70 @@ function mirrorToFolder(): Promise<void> {
   return mirrorRun;
 }
 
+/** The library's storage places that can be written now: SharePoint and/or the local folder. */
+async function libraryHandles(): Promise<DirectoryHandle[]> {
+  const { useFolderStore } = await import('./folderStore');
+  const state = useFolderStore.getState();
+  const handles: DirectoryHandle[] = [];
+  const sp = state.sharepoint;
+  if (sp?.enabled && sp.handle && sp.status === 'connected') handles.push(sp.handle);
+  // The local folder: connected, or set (a write tells it apart from a
+  // revoked permission and reports nothing either way).
+  if (state.handle && state.status !== 'needs_permission') handles.push(state.handle);
+  return handles;
+}
+
 async function writeLibraryOnce(): Promise<void> {
+  let handles: DirectoryHandle[];
   try {
-    const { useFolderStore } = await import('./folderStore');
-    const handle = useFolderStore.getState().handle;
-    if (!handle) return;
-    const entries = useComponentLibraryStore.getState().entries;
-    try {
-      await writeTextFile(handle, LIBRARY_FILENAME, serializeLibrary(entries));
-    } catch (error) {
-      if (!isSharePointDirectory(handle) || !isSharePointError(error) || !error.conflict) throw error;
-      const remote = await handle.readRemote(LIBRARY_FILENAME);
-      const parsed = remote ? parseLibraryFile(remote.text) : null;
-      const merged = mergeLibraries(
-        useComponentLibraryStore.getState().entries,
-        parsed?.ok ? parsed.file.entries : [],
-      );
-      await writeTextFile(handle, LIBRARY_FILENAME, serializeLibrary(merged));
-      write(merged);
-      useComponentLibraryStore.setState({ entries: merged });
-    }
+    handles = await libraryHandles();
   } catch {
-    // localStorage already has the entry; the mirror is a bonus, not the store.
+    return;
+  }
+  for (const handle of handles) {
+    try {
+      const entries = useComponentLibraryStore.getState().entries;
+      try {
+        await writeTextFile(handle, LIBRARY_FILENAME, serializeLibrary(entries));
+      } catch (error) {
+        if (!isSharePointDirectory(handle) || !isSharePointError(error) || !error.conflict) throw error;
+        const remote = await handle.readRemote(LIBRARY_FILENAME);
+        const parsed = remote ? parseLibraryFile(remote.text) : null;
+        const merged = mergeLibraries(
+          useComponentLibraryStore.getState().entries,
+          parsed?.ok ? parsed.file.entries : [],
+        );
+        await writeTextFile(handle, LIBRARY_FILENAME, serializeLibrary(merged));
+        write(merged);
+        useComponentLibraryStore.setState({ entries: merged });
+      }
+    } catch {
+      // localStorage already has the entry; the files are a bonus, not the
+      // store — and one place failing must not keep the other from its copy.
+    }
   }
 }
 
-/** Reads the folder's library file, if one is there. */
+/** Reads the library file from every storage place there is, merged. */
 export async function readLibraryFromFolder(): Promise<LibraryEntry[]> {
+  let handles: DirectoryHandle[];
   try {
-    const { useFolderStore } = await import('./folderStore');
-    const handle = useFolderStore.getState().handle;
-    if (!handle) return [];
-    const text = await readTextFile(handle, LIBRARY_FILENAME);
-    if (text == null) return [];
-    const parsed = parseLibraryFile(text);
-    return parsed.ok ? parsed.file.entries : [];
+    handles = await libraryHandles();
   } catch {
     return [];
   }
+  let entries: LibraryEntry[] = [];
+  for (const handle of handles) {
+    try {
+      const text = await readTextFile(handle, LIBRARY_FILENAME);
+      if (text == null) continue;
+      const parsed = parseLibraryFile(text);
+      if (parsed.ok) entries = mergeLibraries(entries, parsed.file.entries);
+    } catch {
+      // One unreadable copy does not hide the other.
+    }
+  }
+  return entries;
 }
 
 export interface ImportLibraryResult {
@@ -255,6 +281,8 @@ interface LibraryState {
    * would silently start over each time a new version shipped.
    */
   loadWithFolder: () => Promise<void>;
+  /** Writes the library to every storage place (SharePoint and the local folder). */
+  syncToFolders: () => Promise<void>;
   saveComponent: (component: Component, project: LibraryProject) => LibraryEntry;
   /**
    * Files a whole table into the catalogue at once.
@@ -452,6 +480,9 @@ export const useComponentLibraryStore = create<LibraryState>((set, get) => ({
   },
 
   exportText: () => serializeLibrary(get().entries),
+
+  // An empty library is not written: it would only create a file to say so.
+  syncToFolders: () => (get().entries.length > 0 ? mirrorToFolder() : Promise.resolve()),
 }));
 
 // --- the catalogue as a tree -----------------------------------------------

@@ -11,8 +11,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { seedDemoProject } from '@/mock/seed';
 import { DEMO_PROJECT_ID } from '@/mock/demoProject';
 import { BUILD_ID } from './bootstrapStorage';
-import { mirrorFilename } from './folderBinding';
-import { useFolderStore } from './folderStore';
+import { mirrorFilename, type DirectoryHandle } from './folderBinding';
+import { hasUnsyncedProjects, useFolderStore } from './folderStore';
 import {
   clearWorkingCache,
   loadProject,
@@ -77,6 +77,8 @@ function fakeGraph() {
     beforePut: null as ((file: DriveFile) => void) | null,
     /** Fails the next PUT with this status AFTER applying it (a reply lost on the way). */
     lostReply: null as number | null,
+    /** SharePoint cannot be reached at all (offline, VPN down). */
+    down: false,
     put(path: string, text: string, by = 'Colleague B'): DriveFile {
       let file = files.get(path);
       if (!file) {
@@ -109,6 +111,7 @@ function fakeGraph() {
   const notFound = () => json(404, { error: { code: 'itemNotFound', message: 'not found' } });
 
   const fetchImpl = async (input: string | URL | Request, init: RequestInit = {}) => {
+    if (drive.down) throw new TypeError('Failed to fetch');
     const url = new URL(String(input));
     const method = (init.method ?? 'GET').toUpperCase();
     const path = decodeURIComponent(url.pathname).replace(/^\/v1\.0/, '');
@@ -200,6 +203,72 @@ function fakeMsal(state: { expired: boolean; logins: number; popups: number }) {
   };
 }
 
+// --- a local folder in memory ----------------------------------------------------
+
+interface MemoryFolder extends DirectoryHandle {
+  files: Map<string, { text: string; modified: number }>;
+  /** `Replaced/`, created on first use. */
+  sub: Map<string, MemoryFolder>;
+  /** Someone else changes a file: new content, newer timestamp. */
+  touch: (name: string, text: string) => void;
+}
+
+function memoryFolder(name = 'ThermalProjects', files: Record<string, string> = {}): MemoryFolder {
+  let clock = 1000;
+  const map = new Map(Object.entries(files).map(([k, v]) => [k, { text: v, modified: (clock += 10) }]));
+  const sub = new Map<string, MemoryFolder>();
+  const fileHandle = (file: string) => ({
+    name: file,
+    kind: 'file' as const,
+    async getFile() {
+      const entry = map.get(file);
+      if (!entry) throw new Error('missing');
+      return { text: async () => entry.text, lastModified: entry.modified, size: entry.text.length };
+    },
+    async createWritable() {
+      let buffer = '';
+      return {
+        async write(data: string | Blob) {
+          buffer += String(data);
+        },
+        async close() {
+          map.set(file, { text: buffer, modified: (clock += 10) });
+        },
+      };
+    },
+  });
+  const folder: MemoryFolder = {
+    name,
+    kind: 'directory',
+    files: map,
+    sub,
+    touch(file, text) {
+      map.set(file, { text, modified: (clock += 10) });
+    },
+    async getFileHandle(file: string, options?: { create?: boolean }) {
+      if (!map.has(file) && !options?.create) throw new Error('missing');
+      return fileHandle(file);
+    },
+    async getDirectoryHandle(dir: string) {
+      if (!sub.has(dir)) sub.set(dir, memoryFolder(dir));
+      return sub.get(dir)!;
+    },
+    async removeEntry(file: string) {
+      map.delete(file);
+    },
+    async *values() {
+      for (const file of [...map.keys()]) yield fileHandle(file);
+    },
+    async queryPermission() {
+      return 'granted' as const;
+    },
+    async requestPermission() {
+      return 'granted' as const;
+    },
+  };
+  return folder;
+}
+
 // --- harness --------------------------------------------------------------------
 
 let graph: ReturnType<typeof fakeGraph>;
@@ -207,12 +276,17 @@ let auth: { expired: boolean; logins: number; popups: number };
 
 const DEMO_FILE = mirrorFilename(DEMO_PROJECT_ID);
 
-/** The demo project as a file on SharePoint, and an empty browser cache. */
-async function demoOnSharePoint(): Promise<string> {
+/** The demo project as a file, and an empty browser cache. */
+async function demoFile(): Promise<string> {
   await seedDemoProject();
   const text = serializeProjectFile(collectProject(DEMO_PROJECT_ID, BUILD_ID)!);
-  graph.drive.put(`${FOLDER}/${DEMO_FILE}`, text);
   clearWorkingCache();
+  return text;
+}
+
+async function demoOnSharePoint(): Promise<string> {
+  const text = await demoFile();
+  graph.drive.put(`${FOLDER}/${DEMO_FILE}`, text);
   return text;
 }
 
@@ -220,8 +294,26 @@ async function openSharePoint(): Promise<void> {
   expect(await useFolderStore.getState().connectSharePoint()).toBe(true);
 }
 
-function rename(name: string) {
-  saveProject({ ...loadProject(DEMO_PROJECT_ID)!, project_name: name });
+/** A local folder, open as the only storage (as before SharePoint). */
+async function openLocal(folder: MemoryFolder): Promise<void> {
+  useFolderStore.setState({ handle: folder, folderName: folder.name, status: 'connected', source: 'local' });
+  await useFolderStore.getState().hydrate();
+  expect(useFolderStore.getState().hydrated).toBe(true);
+}
+
+/** Lets the background catch-up of the local copy finish. */
+async function settle(): Promise<void> {
+  await vi.waitFor(() => expect(useFolderStore.getState().syncing).toBe(false));
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  await vi.waitFor(() => expect(useFolderStore.getState().syncing).toBe(false));
+}
+
+function rename(name: string, projectId = DEMO_PROJECT_ID) {
+  saveProject({ ...loadProject(projectId)!, project_name: name });
+}
+
+function nameIn(text: string | null | undefined): string | undefined {
+  return text ? JSON.parse(text).project_name : undefined;
 }
 
 beforeEach(() => {
@@ -234,29 +326,42 @@ beforeEach(() => {
   sharePoint.__reset();
   useFolderStore.setState({
     status: 'unbound',
-    backend: null,
     handle: null,
     folderName: null,
-    account: null,
     lastSyncAt: null,
     lastSyncedProjectId: null,
     lastError: null,
     syncing: false,
     projectFilenames: {},
+    sharepoint: {
+      status: 'unbound',
+      syncing: false,
+      lastSyncAt: null,
+      lastSyncedProjectId: null,
+      lastError: null,
+      projectFilenames: {},
+      enabled: false,
+      handle: null,
+      account: null,
+    },
+    source: null,
+    pendingCount: { local: 0, sharepoint: 0 },
     hydrated: false,
+    busy: null,
     conflict: null,
     remoteChange: null,
     notice: null,
   });
 });
 
-afterEach(() => {
+afterEach(async () => {
+  await settle().catch(() => undefined);
   useProjectStore.getState().clear();
   vi.unstubAllGlobals();
   vi.useRealTimers();
 });
 
-// --- tests ------------------------------------------------------------------------
+// --- SharePoint alone ---------------------------------------------------------------
 
 describe('opening SharePoint', () => {
   it('signs in once, remembers the choice, and reads the projects from the shared folder', async () => {
@@ -265,11 +370,12 @@ describe('opening SharePoint', () => {
 
     const state = useFolderStore.getState();
     expect(auth.logins).toBe(1);
-    expect(state.backend).toBe('sharepoint');
-    expect(state.status).toBe('connected');
+    expect(state.source).toBe('sharepoint');
+    expect(state.sharepoint.enabled).toBe(true);
+    expect(state.sharepoint.status).toBe('connected');
     expect(state.hydrated).toBe(true);
-    expect(state.account?.email).toBe('tester.a@example.test');
-    expect(localStorage.getItem('tnv-storage-backend')).toBe('sharepoint');
+    expect(state.sharepoint.account?.email).toBe('tester.a@example.test');
+    expect(localStorage.getItem('tnv-storage-sharepoint')).toBe('on');
     expect(loadProjects().map((p) => p.project_id)).toEqual([DEMO_PROJECT_ID]);
     // The same site and folder the TIM Manager's connection points at.
     expect(graph.drive.log.some((entry) => entry.path === SITE_PATH)).toBe(true);
@@ -283,7 +389,7 @@ describe('opening SharePoint', () => {
   });
 });
 
-describe('saving', () => {
+describe('saving to SharePoint', () => {
   it('writes with If-Match, and each save carries the eTag of the one before', async () => {
     await demoOnSharePoint();
     await openSharePoint();
@@ -297,8 +403,8 @@ describe('saving', () => {
     expect(puts).toHaveLength(2);
     expect(puts.every((entry) => entry.ifMatch)).toBe(true);
     expect(puts[0].ifMatch).not.toBe(puts[1].ifMatch);
-    expect(JSON.parse(graph.drive.text(DEMO_FILE)!).project_name).toBe('Second edit');
-    expect(loadUnsyncedMarkers()).toEqual({});
+    expect(nameIn(graph.drive.text(DEMO_FILE))).toBe('Second edit');
+    expect(loadUnsyncedMarkers('sharepoint')).toEqual({});
   });
 
   it('creates a new project file without overwriting one that appeared meanwhile', async () => {
@@ -323,7 +429,7 @@ describe('saving', () => {
 
     expect(graph.drive.log.some((entry) => entry.method === 'PUT' && !entry.ifMatch)).toBe(false);
     expect(useFolderStore.getState().conflict).toBeNull();
-    expect(JSON.parse(graph.drive.text(DEMO_FILE)!).project_name).toBe('B');
+    expect(nameIn(graph.drive.text(DEMO_FILE))).toBe('B');
   });
 });
 
@@ -342,7 +448,7 @@ describe('when someone else saved the project meanwhile', () => {
     expect(await useFolderStore.getState().mirror(DEMO_PROJECT_ID)).toBe(true);
 
     // Nothing of theirs was overwritten…
-    expect(JSON.parse(graph.drive.text(DEMO_FILE)!).project_name).toBe('Their edit');
+    expect(nameIn(graph.drive.text(DEMO_FILE))).toBe('Their edit');
     expect(loadProject(DEMO_PROJECT_ID)?.project_name).toBe('Their edit');
     // …and nothing of ours was lost.
     const conflict = useFolderStore.getState().conflict!;
@@ -351,9 +457,7 @@ describe('when someone else saved the project meanwhile', () => {
     expect(conflict.remoteBy).toBe('Colleague B');
     expect(loadProject(conflict.copyId)?.project_name).toMatch(/^My edit \(conflict copy /);
     await vi.waitFor(() => expect(graph.drive.text(mirrorFilename(conflict.copyId))).not.toBeNull());
-    expect(JSON.parse(graph.drive.text(mirrorFilename(conflict.copyId))!).project_name).toMatch(
-      /^My edit \(conflict copy /,
-    );
+    expect(nameIn(graph.drive.text(mirrorFilename(conflict.copyId)))).toMatch(/^My edit \(conflict copy /);
 
     // The original takes the next edit without another conflict.
     rename('Edited after the conflict');
@@ -375,7 +479,7 @@ describe('when someone else saved the project meanwhile', () => {
     expect(await useFolderStore.getState().mirror(DEMO_PROJECT_ID)).toBe(true);
 
     expect(useFolderStore.getState().conflict).toBeNull();
-    expect(JSON.parse(graph.drive.text(DEMO_FILE)!).project_name).toBe('My edit');
+    expect(nameIn(graph.drive.text(DEMO_FILE))).toBe('My edit');
     expect(loadProjects()).toHaveLength(1);
   });
 
@@ -386,11 +490,11 @@ describe('when someone else saved the project meanwhile', () => {
     graph.drive.lostReply = 504;
     rename('Landed, reply lost');
     expect(await useFolderStore.getState().mirror(DEMO_PROJECT_ID)).toBe(false);
-    expect(useFolderStore.getState().status).toBe('error');
+    expect(useFolderStore.getState().sharepoint.status).toBe('error');
 
     expect(await useFolderStore.getState().mirror(DEMO_PROJECT_ID)).toBe(true);
     expect(useFolderStore.getState().conflict).toBeNull();
-    expect(useFolderStore.getState().status).toBe('connected');
+    expect(useFolderStore.getState().sharepoint.status).toBe('connected');
     expect(loadProjects()).toHaveLength(1);
   });
 });
@@ -410,9 +514,12 @@ describe('the component library', () => {
     };
   }
 
-  it('merges a colleague’s parts in when both saved the library', async () => {
+  it('merges a colleague’s parts in when both saved the library, and keeps the local copy in step', async () => {
     graph.drive.put(`${FOLDER}/${LIBRARY_FILENAME}`, serializeLibrary([entry('LIB_A', '2026-01-01')]));
+    const local = memoryFolder();
+    useFolderStore.setState({ handle: local, folderName: local.name, status: 'connected' });
     await openSharePoint();
+    await settle();
     await useComponentLibraryStore.getState().loadWithFolder();
 
     // A colleague adds a part after this session read the library.
@@ -420,13 +527,13 @@ describe('the component library', () => {
       `${FOLDER}/${LIBRARY_FILENAME}`,
       serializeLibrary([entry('LIB_A', '2026-01-01'), entry('LIB_THEIRS', '2026-02-01')]),
     );
-    useComponentLibraryStore.getState().importFile(
-      serializeLibrary([entry('LIB_MINE', '2026-03-01')]),
-    );
+    useComponentLibraryStore.getState().importFile(serializeLibrary([entry('LIB_MINE', '2026-03-01')]));
 
+    const ids = (text: string | null | undefined) =>
+      (JSON.parse(text ?? '{"entries":[]}').entries as LibraryEntry[]).map((e) => e.id).sort();
     await vi.waitFor(() => {
-      const ids = JSON.parse(graph.drive.text(LIBRARY_FILENAME)!).entries.map((e: LibraryEntry) => e.id);
-      expect(ids.sort()).toEqual(['LIB_A', 'LIB_MINE', 'LIB_THEIRS']);
+      expect(ids(graph.drive.text(LIBRARY_FILENAME))).toEqual(['LIB_A', 'LIB_MINE', 'LIB_THEIRS']);
+      expect(ids(local.files.get(LIBRARY_FILENAME)?.text)).toContain('LIB_MINE');
     });
     expect(useComponentLibraryStore.getState().entries.map((e) => e.id).sort()).toEqual([
       'LIB_A',
@@ -437,21 +544,21 @@ describe('the component library', () => {
 });
 
 describe('an expired sign-in', () => {
-  it('stops writing, asks for a click, and writes the edits made meanwhile after it', async () => {
+  it('stops writing to SharePoint, asks for a click, and writes the edits made meanwhile after it', async () => {
     await demoOnSharePoint();
     await openSharePoint();
 
     auth.expired = true;
     rename('Edited while signed out');
-    markProjectUnsynced(DEMO_PROJECT_ID);
+    markProjectUnsynced(DEMO_PROJECT_ID, 'sharepoint');
     expect(await useFolderStore.getState().mirror(DEMO_PROJECT_ID)).toBe(false);
-    expect(useFolderStore.getState().status).toBe('needs_permission');
+    expect(useFolderStore.getState().sharepoint.status).toBe('needs_permission');
 
-    expect(await useFolderStore.getState().reconnect()).toBe(true);
+    expect(await useFolderStore.getState().reconnect('sharepoint')).toBe(true);
     expect(auth.popups).toBe(1);
-    expect(JSON.parse(graph.drive.text(DEMO_FILE)!).project_name).toBe('Edited while signed out');
+    expect(nameIn(graph.drive.text(DEMO_FILE))).toBe('Edited while signed out');
     expect(loadProject(DEMO_PROJECT_ID)?.project_name).toBe('Edited while signed out');
-    expect(loadUnsyncedMarkers()).toEqual({});
+    expect(loadUnsyncedMarkers('sharepoint')).toEqual({});
   });
 });
 
@@ -486,7 +593,7 @@ describe('a newer version on SharePoint', () => {
     theirs.data.project.project_name = 'Theirs';
     graph.drive.put(`${FOLDER}/${DEMO_FILE}`, JSON.stringify(theirs));
     rename('Mine, not yet written');
-    markProjectUnsynced(DEMO_PROJECT_ID);
+    markProjectUnsynced(DEMO_PROJECT_ID, 'sharepoint');
 
     await useFolderStore.getState().refreshProject(DEMO_PROJECT_ID);
     expect(loadProject(DEMO_PROJECT_ID)?.project_name).toBe('Mine, not yet written');
@@ -512,95 +619,213 @@ describe('SharePointDirectory', () => {
   });
 });
 
-describe('moving a local folder to SharePoint', () => {
-  /** A local folder in memory. */
-  function localFolder(files: Record<string, string>) {
-    const map = new Map(Object.entries(files));
-    const fileHandle = (name: string) => ({
-      name,
-      kind: 'file' as const,
-      async getFile() {
-        const text = map.get(name);
-        if (text == null) throw new Error('missing');
-        return { text: async () => text, lastModified: 1, size: text.length };
-      },
-      async createWritable() {
-        let buffer = '';
-        return {
-          async write(data: string | Blob) {
-            buffer += String(data);
-          },
-          async close() {
-            map.set(name, buffer);
-          },
-        };
-      },
-    });
-    return {
-      name: 'ThermalProjects',
-      kind: 'directory' as const,
-      map,
-      async getFileHandle(name: string, options?: { create?: boolean }) {
-        if (!map.has(name) && !options?.create) throw new Error('missing');
-        return fileHandle(name);
-      },
-      async *values() {
-        for (const name of [...map.keys()]) yield fileHandle(name);
-      },
-      async queryPermission() {
-        return 'granted' as const;
-      },
-      async requestPermission() {
-        return 'granted' as const;
-      },
-    };
-  }
+// --- SharePoint and the local folder together ------------------------------------
 
-  it('uploads what SharePoint lacks, leaves what it has, merges the library, and continues there', async () => {
-    await seedDemoProject();
-    const demo = serializeProjectFile(collectProject(DEMO_PROJECT_ID, BUILD_ID)!);
+describe('SharePoint and a local folder together', () => {
+  it('writes every save to both, and keeps a local copy of what SharePoint has', async () => {
+    await demoOnSharePoint();
+    const local = memoryFolder();
+    useFolderStore.setState({ handle: local, folderName: local.name, status: 'connected' });
+    await openSharePoint();
+    await settle();
+
+    // Read from SharePoint; the local folder now holds the same project.
+    expect(useFolderStore.getState().source).toBe('sharepoint');
+    expect(nameIn(local.files.get(DEMO_FILE)?.text)).toBe(nameIn(graph.drive.text(DEMO_FILE)));
+
+    rename('Saved to both');
+    expect(await useFolderStore.getState().mirror(DEMO_PROJECT_ID)).toBe(true);
+    expect(nameIn(graph.drive.text(DEMO_FILE))).toBe('Saved to both');
+    expect(nameIn(local.files.get(DEMO_FILE)?.text)).toBe('Saved to both');
+    const state = useFolderStore.getState();
+    expect(state.lastSyncAt).not.toBeNull();
+    expect(state.sharepoint.lastSyncAt).not.toBeNull();
+    expect(state.pendingCount).toEqual({ local: 0, sharepoint: 0 });
+  });
+
+  it('keeps saving to the local folder while SharePoint is signed out, and catches SharePoint up after', async () => {
+    await demoOnSharePoint();
+    const local = memoryFolder();
+    useFolderStore.setState({ handle: local, folderName: local.name, status: 'connected' });
+    await openSharePoint();
+    await settle();
+
+    auth.expired = true;
+    rename('Written locally first');
+    markProjectUnsynced(DEMO_PROJECT_ID, 'sharepoint');
+    markProjectUnsynced(DEMO_PROJECT_ID, 'local');
+    expect(await useFolderStore.getState().mirror(DEMO_PROJECT_ID)).toBe(false);
+
+    // Safe on this computer, owed to SharePoint.
+    expect(nameIn(local.files.get(DEMO_FILE)?.text)).toBe('Written locally first');
+    expect(useFolderStore.getState().sharepoint.status).toBe('needs_permission');
+    expect(useFolderStore.getState().pendingCount).toEqual({ local: 0, sharepoint: 1 });
+    expect(hasUnsyncedProjects()).toBe(false);
+
+    expect(await useFolderStore.getState().reconnect('sharepoint')).toBe(true);
+    expect(nameIn(graph.drive.text(DEMO_FILE))).toBe('Written locally first');
+    expect(useFolderStore.getState().pendingCount).toEqual({ local: 0, sharepoint: 0 });
+  });
+
+  it('opens from the local copy when SharePoint cannot be reached, and reads SharePoint again once it can', async () => {
+    await demoOnSharePoint();
+    const local = memoryFolder();
+    useFolderStore.setState({ handle: local, folderName: local.name, status: 'connected' });
+    await openSharePoint();
+    await settle();
+
+    // A day offline: SharePoint answers nothing.
+    graph.drive.down = true;
+    await useFolderStore.getState().hydrate();
+    expect(useFolderStore.getState().source).toBe('local');
+    expect(useFolderStore.getState().hydrated).toBe(true);
+    expect(useFolderStore.getState().sharepoint.status).toBe('error');
+    expect(loadProject(DEMO_PROJECT_ID)).not.toBeNull();
+
+    // Work goes on, into the local folder; SharePoint is owed it.
+    rename('Offline edit');
+    markProjectUnsynced(DEMO_PROJECT_ID, 'sharepoint');
+    markProjectUnsynced(DEMO_PROJECT_ID, 'local');
+    await useFolderStore.getState().mirror(DEMO_PROJECT_ID);
+    expect(nameIn(local.files.get(DEMO_FILE)?.text)).toBe('Offline edit');
+
+    // Back online.
+    graph.drive.down = false;
+    expect(await useFolderStore.getState().reconnect('sharepoint')).toBe(true);
+    await settle();
+    expect(useFolderStore.getState().source).toBe('sharepoint');
+    expect(nameIn(graph.drive.text(DEMO_FILE))).toBe('Offline edit');
+    expect(loadUnsyncedMarkers('sharepoint')).toEqual({});
+  });
+
+  it('pairs a local folder with SharePoint without overwriting either side', async () => {
+    const demo = await demoFile();
     const other = JSON.parse(demo);
     other.project_id = 'OTHER';
-    other.project_name = 'Other';
+    other.project_name = 'Other (local)';
     other.data.project.project_id = 'OTHER';
-    other.data.project.project_name = 'Other';
-    clearWorkingCache();
-    const local = localFolder({
-      // A timestamped export goes up under the project's own name.
-      [`${DEMO_PROJECT_ID}_20260101000000.tnv.json`]: demo,
+    other.data.project.project_name = 'Other (local)';
+    const theirs = JSON.parse(JSON.stringify(other));
+    theirs.project_name = 'Other (SharePoint)';
+    theirs.data.project.project_name = 'Other (SharePoint)';
+    graph.drive.put(`${FOLDER}/OTHER.tnv.json`, JSON.stringify(theirs));
+
+    // The local folder is the whole workspace so far.
+    const local = memoryFolder('ThermalProjects', {
+      [DEMO_FILE]: demo,
       'OTHER.tnv.json': JSON.stringify(other),
-      [LIBRARY_FILENAME]: serializeLibrary([
-        {
-          id: 'LIB_LOCAL',
-          name: 'LIB_LOCAL',
-          source_project_id: 'P',
-          source_project_name: 'P',
-          category: 'Digital',
-          default_power_W: 1,
-          thermal_spec: {} as LibraryEntry['thermal_spec'],
-          template_preference: null as unknown as LibraryEntry['template_preference'],
-          saved_at: '2026-01-01',
-        },
-      ]),
     });
-    // OTHER is already on SharePoint: it must not be replaced.
-    graph.drive.put(`${FOLDER}/OTHER.tnv.json`, '{"format":"tnv.project","keep":"me"}');
-    useFolderStore.setState({ backend: 'folder', handle: local, folderName: local.name, status: 'connected' });
+    await openLocal(local);
+
+    await openSharePoint();
+    await settle();
+
+    // What only the folder had went up…
+    expect(nameIn(graph.drive.text(DEMO_FILE))).toBe(nameIn(demo));
+    // …SharePoint's version of OTHER stayed, and the local one became its own project.
+    expect(nameIn(graph.drive.text('OTHER.tnv.json'))).toBe('Other (SharePoint)');
+    expect(loadProject('OTHER')?.project_name).toBe('Other (SharePoint)');
+    const copy = loadProjects().find((p) => p.project_id.startsWith('OTHER_local_copy'))!;
+    expect(copy.project_name).toMatch(/^Other \(local\) \(local copy /);
+    await vi.waitFor(() => expect(graph.drive.text(mirrorFilename(copy.project_id))).not.toBeNull());
+    // The local folder now mirrors SharePoint, the copy included.
+    expect(nameIn(local.files.get('OTHER.tnv.json')?.text)).toBe('Other (SharePoint)');
+    expect(local.files.has(mirrorFilename(copy.project_id))).toBe(true);
+    expect(useFolderStore.getState().notice).toContain('local copy');
+  });
+
+  it('keeps a local file changed outside the tool as its own project instead of overwriting it', async () => {
+    await demoOnSharePoint();
+    const local = memoryFolder();
+    useFolderStore.setState({ handle: local, folderName: local.name, status: 'connected' });
+    await openSharePoint();
+    await settle();
+
+    // Someone edits the local copy by hand.
+    const edited = JSON.parse(local.files.get(DEMO_FILE)!.text);
+    edited.project_name = 'Edited by hand';
+    edited.data.project.project_name = 'Edited by hand';
+    local.touch(DEMO_FILE, JSON.stringify(edited));
+
     await useFolderStore.getState().hydrate();
+    await settle();
 
-    const report = await useFolderStore.getState().uploadToSharePoint();
+    expect(loadProjects().some((p) => /^Edited by hand \(local copy /.test(p.project_name))).toBe(true);
+    expect(nameIn(local.files.get(DEMO_FILE)?.text)).toBe(nameIn(graph.drive.text(DEMO_FILE)));
+  });
 
-    expect(report.ok).toBe(true);
-    expect(report.uploaded).toEqual([DEMO_FILE]);
-    expect(report.skipped).toEqual(['OTHER.tnv.json']);
-    expect(report.library).toBe(true);
-    expect(graph.drive.text('OTHER.tnv.json')).toBe('{"format":"tnv.project","keep":"me"}');
-    expect(JSON.parse(graph.drive.text(DEMO_FILE)!).project_id).toBe(DEMO_PROJECT_ID);
-    expect(JSON.parse(graph.drive.text(LIBRARY_FILENAME)!).entries[0].id).toBe('LIB_LOCAL');
-    // The local files are untouched, and the tool now works on SharePoint.
-    expect(local.map.get('OTHER.tnv.json')).toBe(JSON.stringify(other));
-    expect(useFolderStore.getState().backend).toBe('sharepoint');
-    expect(localStorage.getItem('tnv-storage-backend')).toBe('sharepoint');
+  it('moves the local file of a project deleted on SharePoint into Replaced/, never deleting it', async () => {
+    await demoOnSharePoint();
+    const local = memoryFolder();
+    useFolderStore.setState({ handle: local, folderName: local.name, status: 'connected' });
+    await openSharePoint();
+    await settle();
+    expect(local.files.has(DEMO_FILE)).toBe(true);
+
+    // A colleague deletes the project on SharePoint.
+    graph.drive.files.delete(`${FOLDER}/${DEMO_FILE}`);
+    await useFolderStore.getState().hydrate();
+    await settle();
+
+    expect(loadProject(DEMO_PROJECT_ID)).toBeNull();
+    expect(local.files.has(DEMO_FILE)).toBe(false);
+    const replaced = local.sub.get('Replaced')!;
+    expect([...replaced.files.keys()].some((name) => name.startsWith('FR1_RRU_GOLDEN_DEMO_'))).toBe(true);
+  });
+
+  it('will not delete a project while SharePoint is signed out', async () => {
+    await demoOnSharePoint();
+    await openSharePoint();
+    useFolderStore.setState((state) => ({ sharepoint: { ...state.sharepoint, status: 'needs_permission' } }));
+    expect(useFolderStore.getState().deleteBlocker()).toMatch(/SharePoint/);
+  });
+
+  it('stops using SharePoint without touching its files, and goes on from the local copy', async () => {
+    await demoOnSharePoint();
+    const local = memoryFolder();
+    useFolderStore.setState({ handle: local, folderName: local.name, status: 'connected' });
+    await openSharePoint();
+    await settle();
+
+    await useFolderStore.getState().disconnect('sharepoint');
+
+    expect(useFolderStore.getState().source).toBe('local');
+    expect(useFolderStore.getState().sharepoint.enabled).toBe(false);
+    expect(localStorage.getItem('tnv-storage-sharepoint')).toBeNull();
+    expect(graph.drive.text(DEMO_FILE)).not.toBeNull();
     expect(loadProject(DEMO_PROJECT_ID)).not.toBeNull();
+  });
+});
+
+describe('a session that opened while SharePoint was unreachable', () => {
+  it('writes over the file it last synced, instead of calling it a conflict', async () => {
+    await demoOnSharePoint();
+    await openSharePoint();
+    rename('Synced before going offline');
+    expect(await useFolderStore.getState().mirror(DEMO_PROJECT_ID)).toBe(true);
+
+    // A new session that never read the folder: it does not know the eTag.
+    useFolderStore.setState((state) => ({
+      sharepoint: { ...state.sharepoint, handle: new SharePointDirectory(), projectFilenames: {} },
+    }));
+    rename('Written after coming back');
+    expect(await useFolderStore.getState().mirror(DEMO_PROJECT_ID)).toBe(true);
+
+    expect(useFolderStore.getState().conflict).toBeNull();
+    expect(nameIn(graph.drive.text(DEMO_FILE))).toBe('Written after coming back');
+    expect(loadProjects()).toHaveLength(1);
+  });
+});
+
+describe('closing the tab', () => {
+  it('warns while an edit has reached neither place, with only SharePoint set up', async () => {
+    const { hasWorkNotOnDisk } = await import('./unloadGuard');
+    await demoOnSharePoint();
+    await openSharePoint();
+    expect(hasWorkNotOnDisk()).toBe(false);
+
+    rename('Not yet written');
+    markProjectUnsynced(DEMO_PROJECT_ID, 'sharepoint');
+    expect(hasWorkNotOnDisk()).toBe(true);
   });
 });

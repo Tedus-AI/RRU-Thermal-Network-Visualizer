@@ -62,7 +62,7 @@ import type {
   ThermalReportConfig,
 } from '@/report/reportTypes';
 import { compressToUTF16, decompressFromUTF16 } from 'lz-string';
-import { UNSYNCED_STORAGE_KEY, clearOwnedStorage } from './buildStamp';
+import { UNSYNCED_SP_STORAGE_KEY, UNSYNCED_STORAGE_KEY, clearOwnedStorage } from './buildStamp';
 import { migrateComponents } from './componentMigration';
 
 const PROJECTS_KEY = 'tnv.projects';
@@ -508,11 +508,20 @@ function readMap(key: string, projectId: string): Record<string, unknown> {
  * Empties the working cache: every `tnv.*` key, and whatever the overlay was
  * holding for them. Hydration and unbinding a folder start from here.
  */
-export function clearWorkingCache(): string[] {
+export function clearWorkingCache(options: { keepSyncState?: boolean } = {}): string[] {
   overlay.clear();
   recoveryIssues.clear();
   if (writeFailure) publishFailure(null);
-  return storageAvailable() ? clearOwnedStorage(localStorage) : [];
+  if (!storageAvailable()) return [];
+  // A refill from one target must not forget what the OTHER target is still
+  // owed: with SharePoint offline, its pending markers are the only record of
+  // the edits that still have to go up.
+  const kept = options.keepSyncState
+    ? SYNC_BOOKKEEPING_KEYS.map((key) => [key, rawGet(key)] as const)
+    : [];
+  const cleared = clearOwnedStorage(localStorage);
+  for (const [key, value] of kept) if (value != null) rawSet(key, value);
+  return cleared;
 }
 
 // --- projects --------------------------------------------------------------
@@ -1131,10 +1140,27 @@ export function saveExportPreferences(projectId: string, prefs: ExportPreference
 // they are not project data, and announcing them would make the mirror chase
 // its own bookkeeping.
 
-const UNSYNCED_KEY = UNSYNCED_STORAGE_KEY;
-const SYNC_STATE_KEY = 'tnv.sync_state';
+/**
+ * Where a project file is written. Every save goes to each configured target,
+ * and each keeps its own bookkeeping: an edit can be on the local disk and not
+ * yet on SharePoint (offline, signed out), or the other way round.
+ */
+export type SyncTarget = 'local' | 'sharepoint';
 
-/** A project whose cached data changed after its last successful folder write. */
+/** `tnv.unsynced` / `tnv.sync_state` predate SharePoint and stay the local folder's. */
+const UNSYNCED_KEYS: Record<SyncTarget, string> = {
+  local: UNSYNCED_STORAGE_KEY,
+  sharepoint: UNSYNCED_SP_STORAGE_KEY,
+};
+const SYNC_STATE_KEYS: Record<SyncTarget, string> = {
+  local: 'tnv.sync_state',
+  sharepoint: 'tnv.sync_state_sp',
+};
+
+/** Every bookkeeping key, so a cache refill can carry them across (see `clearWorkingCache`). */
+const SYNC_BOOKKEEPING_KEYS = [...Object.values(UNSYNCED_KEYS), ...Object.values(SYNC_STATE_KEYS)];
+
+/** A project whose cached data changed after its last successful write to a target. */
 export interface UnsyncedMarker {
   since: string;
   /** Bumped on every write, so a mirror can tell it raced a newer edit. */
@@ -1161,9 +1187,9 @@ function writePlain(key: string, value: Record<string, unknown>): void {
   rawSet(key, JSON.stringify(value));
 }
 
-export function loadUnsyncedMarkers(): Record<string, UnsyncedMarker> {
+export function loadUnsyncedMarkers(target: SyncTarget = 'local'): Record<string, UnsyncedMarker> {
   const markers: Record<string, UnsyncedMarker> = {};
-  for (const [projectId, entry] of Object.entries(readPlain(UNSYNCED_KEY))) {
+  for (const [projectId, entry] of Object.entries(readPlain(UNSYNCED_KEYS[target]))) {
     if (!isPlainObject(entry)) continue;
     setOwn(markers, projectId, {
       since: typeof entry.since === 'string' ? entry.since : '',
@@ -1173,33 +1199,39 @@ export function loadUnsyncedMarkers(): Record<string, UnsyncedMarker> {
   return markers;
 }
 
-/** Records that `projectId`'s cache is ahead of its file. Returns the new version. */
-export function markProjectUnsynced(projectId: string): number {
-  const markers = readPlain(UNSYNCED_KEY);
+/** Records that `projectId`'s cache is ahead of its file in `target`. Returns the new version. */
+export function markProjectUnsynced(projectId: string, target: SyncTarget = 'local'): number {
+  const key = UNSYNCED_KEYS[target];
+  const markers = readPlain(key);
   const current = own<UnsyncedMarker>(markers, projectId);
   const version = (current?.version ?? 0) + 1;
   setOwn(markers, projectId, { since: current?.since || new Date().toISOString(), version });
-  writePlain(UNSYNCED_KEY, markers);
+  writePlain(key, markers);
   return version;
 }
 
 /**
- * Clears the marker after a successful folder write — but only if no newer
- * edit arrived while the file was being written. `version` is the marker's
- * version when that write started.
+ * Clears the marker after a successful write to `target` — but only if no
+ * newer edit arrived while the file was being written. `version` is the
+ * marker's version when that write started.
  */
-export function markProjectSynced(projectId: string, version?: number): void {
-  const markers = readPlain(UNSYNCED_KEY);
+export function markProjectSynced(
+  projectId: string,
+  version?: number,
+  target: SyncTarget = 'local',
+): void {
+  const key = UNSYNCED_KEYS[target];
+  const markers = readPlain(key);
   const current = own<UnsyncedMarker>(markers, projectId);
   if (!current) return;
   if (version != null && current.version !== version) return;
   delete markers[projectId];
-  writePlain(UNSYNCED_KEY, markers);
+  writePlain(key, markers);
 }
 
-export function loadSyncState(): Record<string, SyncRecord> {
+export function loadSyncState(target: SyncTarget = 'local'): Record<string, SyncRecord> {
   const state: Record<string, SyncRecord> = {};
-  for (const [projectId, entry] of Object.entries(readPlain(SYNC_STATE_KEY))) {
+  for (const [projectId, entry] of Object.entries(readPlain(SYNC_STATE_KEYS[target]))) {
     if (!isPlainObject(entry)) continue;
     if (typeof entry.filename !== 'string' || typeof entry.modified_at !== 'number') continue;
     setOwn(state, projectId, { filename: entry.filename, modified_at: entry.modified_at });
@@ -1207,9 +1239,14 @@ export function loadSyncState(): Record<string, SyncRecord> {
   return state;
 }
 
-export function saveSyncRecord(projectId: string, record: SyncRecord | null): void {
-  const state = readPlain(SYNC_STATE_KEY);
+export function saveSyncRecord(
+  projectId: string,
+  record: SyncRecord | null,
+  target: SyncTarget = 'local',
+): void {
+  const key = SYNC_STATE_KEYS[target];
+  const state = readPlain(key);
   if (record) setOwn(state, projectId, record);
   else if (Object.hasOwn(state, projectId)) delete state[projectId];
-  writePlain(SYNC_STATE_KEY, state);
+  writePlain(key, state);
 }

@@ -27,6 +27,8 @@ export interface DirectoryHandle {
   readonly name: string;
   readonly kind: 'directory';
   getFileHandle(name: string, options?: { create?: boolean }): Promise<FileHandle>;
+  /** Sub-folders; optional so a stand-in folder in a test need not have them. */
+  getDirectoryHandle?(name: string, options?: { create?: boolean }): Promise<DirectoryHandle>;
   removeEntry?(name: string): Promise<void>;
   values(): AsyncIterableIterator<DirectoryHandle | FileHandle>;
   queryPermission?(descriptor: { mode: 'read' | 'readwrite' }): Promise<PermissionState>;

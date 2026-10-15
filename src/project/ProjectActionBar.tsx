@@ -38,7 +38,8 @@ export function ProjectActionBar({
   onCreate: () => void;
   onContinue: () => void;
 }) {
-  const onSharePoint = useFolderStore((s) => s.backend === 'sharepoint');
+  const onSharePoint = useFolderStore((s) => s.sharepoint.enabled);
+  const hasLocal = useFolderStore((s) => s.handle != null);
 
   return (
     <div className="flex shrink-0 items-center gap-2 border-t border-line bg-surface px-6 py-3">
@@ -53,9 +54,11 @@ export function ProjectActionBar({
         {readOnly && <Badge tone="accent">READ ONLY / 唯讀</Badge>}
         {!readOnly && !isNew && (
           <span className="text-[12px] text-ink-400">
-            {onSharePoint
-              ? 'Changes are saved to SharePoint automatically / 變更會自動儲存至 SharePoint'
-              : 'Changes are saved to the project folder automatically / 變更會自動儲存至專案資料夾'}
+            {onSharePoint && hasLocal
+              ? 'Changes are saved to SharePoint and the local folder automatically / 變更會自動儲存至 SharePoint 與本機資料夾'
+              : onSharePoint
+                ? 'Changes are saved to SharePoint automatically / 變更會自動儲存至 SharePoint'
+                : 'Changes are saved to the project folder automatically / 變更會自動儲存至專案資料夾'}
           </span>
         )}
         {!readOnly && warningCount > 0 && (

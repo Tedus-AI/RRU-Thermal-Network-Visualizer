@@ -186,7 +186,10 @@ export function ComponentLibraryManager({
   const remove = useComponentLibraryStore((s) => s.remove);
   const importFile = useComponentLibraryStore((s) => s.importFile);
   const exportText = useComponentLibraryStore((s) => s.exportText);
-  const folderName = useFolderStore((s) => s.handle?.name ?? null);
+  const folderName = useFolderStore((s) =>
+    [s.sharepoint.enabled ? 'SharePoint' : null, s.handle?.name ?? null].filter(Boolean).join(' + ') ||
+      null,
+  );
 
   const [search, setSearch] = useState('');
   const [collapsedProjects, setCollapsedProjects] = useState<ReadonlySet<string>>(
@@ -240,7 +243,7 @@ export function ComponentLibraryManager({
           {folderName ? (
             <span>
               in <span className="font-medium text-ink-700">{folderName}</span> /{' '}
-              {folderName === 'SharePoint' ? '已寫入 SharePoint' : '已寫入資料夾'}
+              {folderName.includes('SharePoint') ? `已寫入 ${folderName}` : '已寫入資料夾'}
             </span>
           ) : (
             <span className="text-warn-600">
