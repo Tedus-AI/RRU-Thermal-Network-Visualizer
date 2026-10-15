@@ -93,6 +93,19 @@ export interface EdgeSolutionResult {
     /** The Bi → ∞ value Screen 05 stored. Always the lower of the two. */
     R_bi_infinite_C_per_W: number;
   };
+  /**
+   * Present only on a base edge spreading into less than the whole base (see
+   * `spreadingDomain.ts`): the domain it used, and for a heat share, the solved
+   * share of the base's inflow that sized it.
+   */
+  spreading_domain?: {
+    mode: 'HeatShare' | 'Manual';
+    plate_area_mm2: number;
+    base_area_mm2: number;
+    heat_share: number | null;
+    /** Heat left the base through this edge, so it kept the whole base. */
+    reverse: boolean;
+  };
 }
 
 export type EnergyGrade = 'green' | 'warning' | 'error';

@@ -61,6 +61,10 @@ Cytoscape 只是 view / interaction layer：Graph 的唯一真實來源是 `netw
   `DIRECT_BASE_OUT`），不硬綁 Main Base；Step 4 才把 port 接到共用結構。
 - Graph 不限制為 Tree：series / parallel / branch / merge / shared node / coupling cycle
   都合法，區域間的耦合迴圈不會被判為錯誤。
+- 元件進 HSK 基座的擴散邊（Lee 圓盤擴散）擴散到多大的底座，由 04 逐元件選擇：
+  **整片基座**（預設）、**依熱量分配**（面積 = 基座 × 該邊熱流 ÷ 進入基座總熱流，
+  熱流取自 07 的求解，不用元件額定功耗；05 在求解前顯示整片基座）、**指定面積**（每顆）。
+  縮小範圍假設周圍底座不比平均溫度高，適合遠離熱源群的元件；07 的求解訊息會列出所有縮小範圍的元件。
 
 ## Screen 06 的物理界線
 

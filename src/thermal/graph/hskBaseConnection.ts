@@ -44,7 +44,8 @@ import { hskBaseAreaMm2, type MaterialDefaults } from '@/domain/materials';
 import { activeRth, createRth, setRthFromSource } from '../rth';
 import { computeRth } from '../resistance/calculators';
 import type { ThermalEdge, ThermalNetwork } from '../types';
-import { defaultSpreadingVariant, spreadingVariantFor } from './spreadingVariant';
+import { defaultSpreadingVariant, portNodeOf, spreadingVariantFor } from './spreadingVariant';
+import { applySpreadingDomain, spreadingDomainAt } from './spreadingDomain';
 
 export const HSK_BASE_CONNECTION_ROLE = 'hsk_base_conduction';
 
@@ -152,6 +153,17 @@ function baseConductionInputs(
   parameters.psi_variant = existing
     ? spreadingVariantFor(network, existing)
     : defaultSpreadingVariant(network, sourceNodeId);
+  // How much of the base the part spreads into, from its port's stamp. A stated
+  // area is per device, and the port says how many devices this edge carries —
+  // the solver's projection reads the same count.
+  const devices = Number(portNodeOf(network, sourceNodeId)?.metadata?.devices_represented);
+  const domained = applySpreadingDomain(
+    parameters,
+    spreadingDomainAt(network, sourceNodeId),
+    Number.isFinite(devices) && devices > 0 ? devices : 1,
+  );
+  for (const key of Object.keys(parameters)) delete parameters[key];
+  Object.assign(parameters, domained);
 
   const computed = computeRth('spreading_disc', parameters);
   return {
@@ -251,6 +263,8 @@ export function refreshHskBaseConnectionEdges(
       edge.parameters?.plate_area_mm2 === inputs.parameters.plate_area_mm2 &&
       edge.parameters?.source_area_mm2 === inputs.parameters.source_area_mm2 &&
       edge.parameters?.psi_variant === inputs.parameters.psi_variant &&
+      edge.parameters?.base_area_mm2 === inputs.parameters.base_area_mm2 &&
+      edge.parameters?.spreading_domain === inputs.parameters.spreading_domain &&
       edge.rth.analytical === inputs.value &&
       edge.resolution === nextResolution &&
       edge.resolution_note === nextNote &&

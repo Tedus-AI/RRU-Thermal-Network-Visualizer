@@ -35,6 +35,7 @@ import {
 } from './buildSolveInput';
 import { runPreSolveChecks, type PreSolveReport } from './preSolveChecks';
 import { refineSpreadingWithBiot, type SpreadingBiotRefinement } from './spreadingBiot';
+import { refineSpreadingDomains, type SpreadingDomainResult } from './spreadingDomain';
 import {
   SOLUTION_SCHEMA_VERSION,
   SOLVER_ENGINE,
@@ -67,6 +68,8 @@ export interface SolveScenarioOutcome {
   signature: string;
   /** Spreading edges re-solved at finite Bi for this scenario; see spreadingBiot.ts. */
   spreading_refinements: SpreadingBiotRefinement[];
+  /** Base edges spreading into less than the whole base; see spreadingDomain.ts. */
+  spreading_domains: SpreadingDomainResult[];
 }
 
 function emptySolution(
@@ -136,6 +139,7 @@ export function checkScenario(options: SolveScenarioOptions): {
   input: SolveInput;
   signature: string;
   spreading_refinements: SpreadingBiotRefinement[];
+  spreading_domains: SpreadingDomainResult[];
 } {
   const settings = options.settings ?? options.network.solver_settings ?? DEFAULT_SOLVER_SETTINGS;
   const input = buildSolveInput({
@@ -155,19 +159,38 @@ export function checkScenario(options: SolveScenarioOptions): {
   // the far-face h can be measured off the network itself and the edge re-solved
   // against it. See `spreadingBiot.ts`; it refines nothing when the plate has no
   // finite path to a boundary, so an unsolvable network simply keeps Bi → ∞.
-  const spreading_refinements = refineSpreadingWithBiot(
-    input.network,
-    input.scenario_id,
-    settings,
-  );
+  const biot = refineSpreadingWithBiot(input.network, input.scenario_id, settings);
 
-  return { checks: runPreSolveChecks(input), input, signature, spreading_refinements };
+  // Heat-share domains are sized from solved flows, so they are found here too —
+  // after the Biot pass, which they re-run for every edge they resize — and the
+  // network every caller gets back already carries them.
+  const domainPass = refineSpreadingDomains(input.network, input.scenario_id, settings);
+  const resized = new Set(
+    domainPass.domains.filter((entry) => entry.mode === 'HeatShare').map((entry) => entry.edge_id),
+  );
+  const spreading_refinements = [
+    ...biot.filter((entry) => !resized.has(entry.edge_id)),
+    ...domainPass.biot,
+  ];
+
+  return {
+    checks: runPreSolveChecks(input),
+    input,
+    signature,
+    spreading_refinements,
+    spreading_domains: domainPass.domains,
+  };
 }
 
 export function solveScenario(options: SolveScenarioOptions): SolveScenarioOutcome {
   const settings = options.settings ?? options.network.solver_settings ?? DEFAULT_SOLVER_SETTINGS;
-  const { checks, input, signature, spreading_refinements: spreadingRefinements } =
-    checkScenario(options);
+  const {
+    checks,
+    input,
+    signature,
+    spreading_refinements: spreadingRefinements,
+    spreading_domains: spreadingDomains,
+  } = checkScenario(options);
 
   if (!checks.can_solve) {
     return {
@@ -176,6 +199,7 @@ export function solveScenario(options: SolveScenarioOptions): SolveScenarioOutco
       input,
       signature,
       spreading_refinements: [],
+      spreading_domains: [],
     };
   }
 
@@ -208,12 +232,87 @@ export function solveScenario(options: SolveScenarioOptions): SolveScenarioOutco
     );
   }
 
+  // --- reduced spreading domains ---------------------------------------------
+  // A part spreading into less than the whole base is an assumption about where
+  // it sits, and the result has to say which parts rest on it.
+  const domainByEdge = new Map(spreadingDomains.map((entry) => [entry.edge_id, entry]));
+  const reduced = spreadingDomains.filter((entry) => !entry.reverse);
+  if (reduced.length > 0) {
+    const nameOf = (entry: SpreadingDomainResult) => {
+      const edge = input.network.edges[entry.edge_id];
+      return input.network.nodes[edge?.from ?? '']?.name ?? entry.edge_id;
+    };
+    const area = (entry: SpreadingDomainResult) =>
+      `${Math.round(entry.plate_area_mm2).toLocaleString('en-US')} mm² (${(
+        (100 * entry.plate_area_mm2) /
+        entry.base_area_mm2
+      ).toFixed(1)} %)`;
+    const listEn = reduced
+      .map(
+        (entry) =>
+          `${nameOf(entry)} — ${entry.mode === 'HeatShare' ? 'own share of the heat' : 'stated area'}, ${area(entry)}`,
+      )
+      .join('; ');
+    const listZh = reduced
+      .map(
+        (entry) =>
+          `${nameOf(entry)}：${entry.mode === 'HeatShare' ? '依熱量分配' : '指定面積'} ${area(entry)}`,
+      )
+      .join('；');
+    spreadingIssues.push(
+      issue(
+        'info',
+        'spreading_domain_reduced',
+        'result_integrity',
+        `${reduced.length} base edge(s) spread into less than the whole HSK base: ${listEn}. Percentages are of the base. These parts assume the base around them runs no hotter than its average — reasonable away from the hot cluster, optimistic inside it.`,
+        `有 ${reduced.length} 條基座擴散邊只擴散到部分 HSK 基座：${listZh}。百分比為佔整片基座的比例。這些元件假設周圍底座不比平均溫度高——遠離熱源群時合理，位在熱源群內則偏樂觀。`,
+        { fix_in: '04' },
+      ),
+    );
+  }
+  const unsettled = spreadingDomains.filter(
+    (entry) => entry.mode === 'HeatShare' && !entry.converged,
+  );
+  if (unsettled.length > 0) {
+    spreadingIssues.push(
+      issue(
+        'warning',
+        'spreading_domain_unconverged',
+        'result_integrity',
+        `The heat-share spreading domains did not settle within ${unsettled[0].passes} passes; the areas shown are the last pass, not a converged answer.`,
+        `「依熱量分配」的擴散面積在 ${unsettled[0].passes} 次迭代內未收斂；顯示的是最後一次的面積，並非收斂結果。`,
+        { edge_id: unsettled[0].edge_id, fix_in: '04' },
+      ),
+    );
+  }
+  const backflow = spreadingDomains.filter((entry) => entry.reverse);
+  if (backflow.length > 0) {
+    spreadingIssues.push(
+      issue(
+        'info',
+        'spreading_domain_reverse',
+        'result_integrity',
+        `${backflow.length} base edge(s) set to spread into their own share of the heat carry heat OUT of the base, so they have no share to spread into and keep the whole base.`,
+        `有 ${backflow.length} 條設為「依熱量分配」的基座擴散邊，熱是從底座流出，沒有可分配的份額，維持整片基座。`,
+        { edge_id: backflow[0].edge_id, fix_in: '04' },
+      ),
+    );
+  }
+
   // The note belongs in BOTH places. Screen 07 reads `checks` while a run is
   // fresh and falls back to the solution's warnings once it is not, so a note
   // filed only on the solution would be invisible for the whole time anyone is
   // actually looking at the result.
+  const spreadingWarnings = spreadingIssues.filter((entry) => entry.severity === 'warning');
+  const spreadingInfos = spreadingIssues.filter((entry) => entry.severity !== 'warning');
   const report: PreSolveReport =
-    spreadingIssues.length > 0 ? { ...checks, infos: [...checks.infos, ...spreadingIssues] } : checks;
+    spreadingIssues.length > 0
+      ? {
+          ...checks,
+          warnings: [...checks.warnings, ...spreadingWarnings],
+          infos: [...checks.infos, ...spreadingInfos],
+        }
+      : checks;
 
   // Power scale and solar are already baked into the clone's node powers, so the
   // numeric core is handed a plain network and a scale of 1.
@@ -240,6 +339,7 @@ export function solveScenario(options: SolveScenarioOptions): SolveScenarioOutco
       input,
       signature,
       spreading_refinements: spreadingRefinements,
+      spreading_domains: spreadingDomains,
     };
   }
 
@@ -269,6 +369,7 @@ export function solveScenario(options: SolveScenarioOptions): SolveScenarioOutco
     const edge = input.network.edges[edgeId];
     if (!edge) continue;
     const refined = spreadingByEdge.get(edgeId);
+    const domain = domainByEdge.get(edgeId);
     edgeResults[edgeId] = {
       edge_id: edgeId,
       from: edgeResult.from,
@@ -290,6 +391,17 @@ export function solveScenario(options: SolveScenarioOptions): SolveScenarioOutco
               h_eff_W_m2K: refined.h_eff_W_m2K,
               bi: refined.bi,
               R_bi_infinite_C_per_W: refined.R_before_C_per_W,
+            },
+          }
+        : {}),
+      ...(domain
+        ? {
+            spreading_domain: {
+              mode: domain.mode,
+              plate_area_mm2: domain.plate_area_mm2,
+              base_area_mm2: domain.base_area_mm2,
+              heat_share: domain.heat_share,
+              reverse: domain.reverse,
             },
           }
         : {}),
@@ -395,6 +507,7 @@ export function solveScenario(options: SolveScenarioOptions): SolveScenarioOutco
     input,
     signature,
     spreading_refinements: spreadingRefinements,
+    spreading_domains: spreadingDomains,
   };
 }
 

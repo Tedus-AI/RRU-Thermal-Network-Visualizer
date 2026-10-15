@@ -274,6 +274,41 @@ export function EdgeResultInspector({
                 </p>
               </>
             )}
+            {result?.spreading_domain && (
+              <>
+                <Row
+                  label="Spreading domain"
+                  zh="擴散範圍"
+                  value={
+                    result.spreading_domain.mode === 'HeatShare'
+                      ? 'Own share of the heat / 依熱量分配'
+                      : 'Stated area / 指定面積'
+                  }
+                  tooltip="在 04 的元件設定中選擇。只擴散到部分底座，假設周圍底座不比平均溫度高。"
+                />
+                <Row
+                  label="Domain area"
+                  zh="擴散面積"
+                  value={`${Math.round(result.spreading_domain.plate_area_mm2).toLocaleString('en-US')} mm² (${(
+                    (100 * result.spreading_domain.plate_area_mm2) /
+                    result.spreading_domain.base_area_mm2
+                  ).toFixed(1)} %)`}
+                  tooltip="括號內為佔整片 HSK 基座的比例。"
+                />
+                {result.spreading_domain.mode === 'HeatShare' && (
+                  <Row
+                    label="Heat share"
+                    zh="熱量佔比"
+                    value={
+                      result.spreading_domain.reverse
+                        ? 'Heat leaves the base here — whole base kept / 熱由此流出底座，維持整片基座'
+                        : `${((result.spreading_domain.heat_share ?? 0) * 100).toFixed(2)} % of the heat entering the base`
+                    }
+                    tooltip="本邊求得的熱流 ÷ 進入底座的總熱流，皆來自本次求解，不是元件額定功耗。"
+                  />
+                )}
+              </>
+            )}
             <p className="mt-2 text-[11px] leading-relaxed text-ink-400">
               Q is computed from this edge's own resistance. A segment resistance
               is never derived from ΔT and a component's total power.

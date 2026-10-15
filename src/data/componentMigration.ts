@@ -37,7 +37,10 @@ import {
   type MountSpec,
   type MountType,
   type PackageType,
+  type SpreadingDomainMode,
+  type SpreadingDomainSpec,
   MOUNT_ATTACHMENTS,
+  SPREADING_DOMAIN_MODES,
 } from '@/domain/component';
 import { sourced, unknownValue, type SourcedValue } from '@/domain/sourcedValue';
 import { BUILTIN_TIM_IDS, LEGACY_SOLDER_TIM_ID } from '@/domain/materials';
@@ -342,6 +345,22 @@ function migrateMount(spec: Raw, dissolved: MountType | undefined): MountSpec {
   };
 }
 
+/**
+ * How much of the base the part spreads into. Every record written before the
+ * choice existed spread into the whole base, so that is what its silence means;
+ * an unrecognised mode falls back the same way rather than dropping the record.
+ * A stated area survives only as a positive number — an unknown one stays null,
+ * never 0 (00 Rule 6).
+ */
+function migrateSpreadingDomain(spec: Raw): SpreadingDomainSpec {
+  const raw = isObject(spec.spreading_domain) ? spec.spreading_domain : {};
+  const mode = SPREADING_DOMAIN_MODES.includes(raw.mode as SpreadingDomainMode)
+    ? (raw.mode as SpreadingDomainMode)
+    : 'WholeBase';
+  const area = num(raw.area_mm2);
+  return { mode, area_mm2: area != null && area > 0 ? area : null };
+}
+
 export function migrateComponent(raw: unknown, index: number): Component | null {
   if (!isObject(raw)) return null;
 
@@ -396,6 +415,7 @@ export function migrateComponent(raw: unknown, index: number): Component | null 
       geometry: migrateGeometry(specRaw),
       ...heat,
       mount: migrateMount(specRaw, dissolved),
+      spreading_domain: migrateSpreadingDomain(specRaw),
       // Built field by field rather than spread, so a dropped field (such as the
       // never-solved `compression_pct`) cannot ride back in from stored data.
       tim: migratedTim.tim,

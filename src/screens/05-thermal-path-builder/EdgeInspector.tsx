@@ -28,6 +28,8 @@ import {
   defaultSpreadingVariant,
   isSpreadingVariantPinned,
 } from '@/thermal/graph/spreadingVariant';
+import { edgeSpreadingDomain } from '@/thermal/graph/spreadingDomain';
+import { SPREADING_DOMAIN_LABELS } from '@/domain/component';
 import {
   EDGE_TYPES,
   type Confidence,
@@ -263,6 +265,8 @@ export function SpreadingBreakdown({
         )}
       </div>
 
+      <SpreadingDomainRow edge={edge} />
+
       {result ? (
         <div className="mt-2">
           <Row label="ε = a/b" zh="相對熱源尺寸">
@@ -323,6 +327,43 @@ export function SpreadingBreakdown({
         採用精確級數而非封閉近似解；此結果已含板厚一維熱阻，勿再串一段 L/kA。
       </p>
     </section>
+  );
+}
+
+/**
+ * How much of the base this edge spreads into (see `spreadingDomain.ts`). The
+ * choice is the component's, made in Screen 04; this only says what it came to.
+ */
+function SpreadingDomainRow({ edge }: { edge: ThermalEdge }) {
+  const domain = edgeSpreadingDomain(edge);
+  const area = (value: number | null) =>
+    value == null ? '—' : `${Math.round(value).toLocaleString('en-US')} mm²`;
+  const percent =
+    domain.plate_area_mm2 != null && domain.base_area_mm2 != null
+      ? ` (${((100 * domain.plate_area_mm2) / domain.base_area_mm2).toFixed(1)} % of the base)`
+      : '';
+  const label = SPREADING_DOMAIN_LABELS[domain.mode];
+
+  return (
+    <div className="mt-2">
+      <Row label="Spreading domain" zh="擴散範圍">
+        {label.en} / {label.zh}
+      </Row>
+      <Row label="Plate area" zh="擴散面積">
+        {domain.mode === 'Manual' ? `${area(domain.plate_area_mm2)}${percent}` : area(domain.base_area_mm2)}
+      </Row>
+      {domain.mode === 'HeatShare' && (
+        <p className="mt-1 text-[10px] leading-relaxed text-ink-400">
+          The share is a solved heat flow, so it is sized in Screen 07; this panel shows the whole
+          base until then. / 分配面積來自求解熱流，由 07 決定；求解前此處顯示整片基座。
+        </p>
+      )}
+      {domain.mode !== 'WholeBase' && (
+        <p className="mt-1 text-[10px] leading-relaxed text-ink-400">
+          Set in Screen 04 for the component. / 在 04 的元件設定中選擇。
+        </p>
+      )}
+    </div>
   );
 }
 

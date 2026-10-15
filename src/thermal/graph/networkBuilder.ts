@@ -18,6 +18,7 @@ import {
 import {
   metalBaseExposedAreaMm2,
   mountSpec,
+  spreadingDomainOf,
   metalBaseExposedSurfaceEnabled,
   metalBaseSourceModel,
   powerWOf,
@@ -37,6 +38,7 @@ import {
 import { getTemplate } from '../templates/templateRegistry';
 import type { ThermalTemplate } from '../templates/types';
 import { MOUNT_SPEC_KEY } from './componentMount';
+import { SPREADING_DOMAIN_KEY } from './spreadingDomain';
 import { edgeId, instanceKeys, instanceMultiplier, nodeId, structureNodeId } from './idFactory';
 import { limitReferenceRole } from './limitReference';
 import type {
@@ -555,7 +557,12 @@ export function buildComponentSubgraph(
       // data is read into the graph; stamping it here also means a mount
       // changed in Screen 04 reaches Screen 05 by the same rebuild that carries
       // a changed power or limit.
-      node.metadata = { ...node.metadata, [MOUNT_SPEC_KEY]: mountSpec(component.thermal_spec) };
+      node.metadata = {
+        ...node.metadata,
+        [MOUNT_SPEC_KEY]: mountSpec(component.thermal_spec),
+        // How much of the base this part spreads into; see `spreadingDomain.ts`.
+        [SPREADING_DOMAIN_KEY]: spreadingDomainOf(component.thermal_spec),
+      };
     }
   });
 

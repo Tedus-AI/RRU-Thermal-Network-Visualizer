@@ -491,6 +491,11 @@ export function solveInputSignature(input: SolveInput): string {
   for (const edge of Object.values(input.network.edges).sort((a, b) => a.id.localeCompare(b.id))) {
     const R = edgeResistance(edge, input.scenario_id);
     parts.push(`E:${edge.id}:${edge.from}>${edge.to}:${R ?? 'null'}:${edge.enabled ? 1 : 0}`);
+    // A heat-share domain is sized during the solve, so switching an edge onto
+    // it moves no resistance this hash can see yet. Only edges that HAVE a
+    // reduced domain add a part, so every other project's signature is unchanged.
+    const domain = edge.parameters?.spreading_domain;
+    if (typeof domain === 'string') parts.push(`D:${edge.id}:${domain}`);
   }
 
   return hash(parts.join('|'));
