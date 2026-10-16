@@ -16,11 +16,12 @@
 
 import { describe, expect, it } from 'vitest';
 
-import type { ThermalNetwork } from '@/thermal/types';
+import type { ThermalEdge, ThermalNetwork } from '@/thermal/types';
 
 import { cytoscapeStylesheet } from '@/ui/graphStyles';
 
 import {
+  branchShortName,
   floorPrefix,
   isSpreadingFloor,
   parallelBraceElement,
@@ -127,6 +128,27 @@ describe('finding the pairs a bus is not drawing', () => {
     net.edges[PIPE].enabled = false;
 
     expect(parallelPairs(net, NONE, NONE)).toEqual([]);
+  });
+});
+
+describe('what a mount edge is called', () => {
+  /**
+   * A vapour chamber is built as a `heat_pipe` edge and the interface under it
+   * as a `tim` edge, so by type alone a chain with no heat pipe in it read
+   * "TIM → Heat Pipe → TIM" — two TIMs, one of them really the joint.
+   */
+  const mountEdge = (type: string, role: string) =>
+    ({ id: `E_${role}`, type, metadata: { mount_role: role } }) as unknown as ThermalEdge;
+
+  it('names the chamber and the joint, not their edge types', () => {
+    expect(branchShortName(mountEdge('heat_pipe', 'VAPOR_CHAMBER'))).toBe('Vapour Chamber');
+    expect(branchShortName(mountEdge('tim', 'BASE_JOINT'))).toBe('Joint');
+    expect(branchShortName(mountEdge('contact', 'BASE_JOINT'))).toBe('Joint');
+  });
+
+  it('leaves a real heat pipe and the part’s own TIM as they were', () => {
+    expect(branchShortName(mountEdge('heat_pipe', 'HEAT_PIPE'))).toBe('Heat Pipe');
+    expect(branchShortName({ id: 'E', type: 'tim' } as unknown as ThermalEdge)).toBe('TIM');
   });
 });
 

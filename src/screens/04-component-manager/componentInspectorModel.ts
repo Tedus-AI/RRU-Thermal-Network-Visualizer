@@ -25,6 +25,7 @@ import {
   mountSpec,
   mountHasBlock,
   spreadingDomainOf,
+  switchMountType,
   type MountSpec,
   type SpreadingDomainSpec,
 } from '@/domain/component';
@@ -205,7 +206,11 @@ export function deriveInspector(
             tooltip: '凸台／小基座貼在底座上的外形尺寸。這是底座擴散的起算面積。',
           };
   const patchMount = (patch: Partial<MountSpec>) =>
-    patchSpec({ mount: { ...mount, ...patch } }, ['mount']);
+    patch.type != null && patch.type !== mount.type
+      ? // A new type starts from its own numbers, never the outgoing type's:
+        // one pipe's width and R are not a vapour chamber's.
+        patchSpec(switchMountType(spec, patch.type), ['mount'])
+      : patchSpec({ mount: { ...mount, ...patch } }, ['mount']);
   const spreadingDomain = spreadingDomainOf(spec);
   const patchSpreadingDomain = (patch: Partial<SpreadingDomainSpec>) =>
     patchSpec({ spreading_domain: { ...spreadingDomain, ...patch } }, ['spreading_domain']);
