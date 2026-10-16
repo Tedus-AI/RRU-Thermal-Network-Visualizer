@@ -11,6 +11,8 @@ import {
   buildMountChain,
   isOwnedByMount,
   mountOf,
+  mountTopFace,
+  partPrefix,
   type MountChain,
 } from './componentMount';
 
@@ -357,6 +359,43 @@ describe('component mount chains', () => {
   });
 
   /** A mount is disposable: changing it has to remove every piece of the old one. */
+  /**
+   * The mount's faces carry the part's name, so a list of segments on Screen
+   * 08 reads "FPGA-A VC Bottom → FPGA-A TIM", not "VC Bottom → Base Seat".
+   */
+  it('names the mount’s faces after the part, the exit after its joint', () => {
+    const named = (mount: Partial<MountSpec> & { type: MountType }) =>
+      buildMountChain({
+        portNodeId: PORT,
+        targetNodeId: BASE,
+        componentRef: 'CMP_PA',
+        mount: { ...emptyMount(mount.type), ...mount },
+        materials: materials(),
+        partName: 'FPGA-A',
+      }).nodes.map((node) => node.name);
+
+    expect(named({ type: 'VaporChamber', joint_tim_id: 'TIM_GREASE' })).toEqual([
+      'FPGA-A VC Bottom',
+      'FPGA-A TIM',
+    ]);
+    expect(named({ type: 'VaporChamber' })).toEqual(['FPGA-A VC Bottom', 'FPGA-A Contact']);
+    expect(named({ type: 'Pedestal', attachment: 'Integral' })).toEqual(['FPGA-A Boss Root']);
+    expect(named({ type: 'SmallBaseHeatPipe' })).toEqual(['FPGA-A Small Base', 'FPGA-A Contact']);
+  });
+
+  it('tells which face each mount puts under the part, and strips the interface word', () => {
+    expect(mountTopFace('VaporChamber')).toBe('VC Top');
+    expect(mountTopFace('Pedestal')).toBe('Boss Top');
+    expect(mountTopFace('SmallBaseHeatPipe')).toBe('Small Base Top');
+    // The TIM lands on the base itself: the port keeps its own name.
+    expect(mountTopFace('Direct')).toBeNull();
+    expect(mountTopFace('EmbeddedHeatPipe')).toBeNull();
+
+    expect(partPrefix('FPGA-A TIM')).toBe('FPGA-A');
+    expect(partPrefix('PA-B 4 Contact')).toBe('PA-B 4');
+    expect(partPrefix('TIM')).toBe('TIM');
+  });
+
   it('marks every node and edge as owned by the port that made it', () => {
     const chain = chainFor({
       type: 'SmallBaseHeatPipe',

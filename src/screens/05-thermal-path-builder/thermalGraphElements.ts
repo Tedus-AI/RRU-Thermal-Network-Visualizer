@@ -2,6 +2,7 @@
 
 import type { ElementDefinition } from 'cytoscape';
 
+import { heatOutNodeId } from '@/thermal/graph/componentMount';
 import { activeRth } from '@/thermal/rth';
 import type { ThermalNetwork } from '@/thermal/types';
 import {
@@ -379,14 +380,26 @@ export function buildElements(
     busGroups.flatMap((group) => group.parallelSets.flatMap((set) => set.edgeIds)),
   );
 
+  // The HEAT_OUT tag goes where the heat leaves for the base — the bottom of a
+  // vapour chamber's joint, not its top — so a mounted part reads like one
+  // sitting on the base: "… → TIM HEAT_OUT → spreading".
+  const portsShownOn = new Map<string, string>();
+  for (const node of Object.values(network.nodes)) {
+    if ((node.ports ?? []).length === 0) continue;
+    portsShownOn.set(heatOutNodeId(network.nodes, node.id), node.id);
+  }
+
   for (const node of Object.values(network.nodes)) {
     if (hidden.has(node.id)) continue;
     const group = nodeGroup(node);
     const colors = GROUP_COLORS[group];
     const unconnected = (node.ports ?? []).filter((port) => !port.connected_to);
+    const shownPorts = portsShownOn.has(node.id)
+      ? (network.nodes[portsShownOn.get(node.id)!]?.ports ?? [])
+      : [];
     const portLine =
-      options.showPorts && (node.ports ?? []).length > 0
-        ? `\n${(node.ports ?? [])
+      options.showPorts && shownPorts.length > 0
+        ? `\n${shownPorts
             .map((port) => (port.connected_to ? `${port.kind} ✓` : port.kind))
             .join(' · ')}`
         : '';
