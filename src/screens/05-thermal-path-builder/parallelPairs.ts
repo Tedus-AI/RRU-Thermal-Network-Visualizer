@@ -49,11 +49,12 @@ const EDGE_SHORT: Record<string, string> = {
  * resistance — and read "Heat Pipe" on a chain that has no heat pipe in it. The
  * interface under a mount is a `tim` edge, and read "TIM" right after the
  * part's own TIM, as if the part had two; the field that sets it in Screen 04
- * is called the joint, so the graph calls it that too.
+ * is called the joint, so the graph calls it "Joint TIM" — or "Joint Contact"
+ * when nothing is between the metal faces.
  */
-const MOUNT_ROLE_SHORT: Record<string, string> = {
-  VAPOR_CHAMBER: 'Vapour Chamber',
-  BASE_JOINT: 'Joint',
+const MOUNT_ROLE_SHORT: Record<string, (edge: ThermalEdge) => string> = {
+  VAPOR_CHAMBER: () => 'Vapour Chamber',
+  BASE_JOINT: (edge) => (edge.type === 'tim' ? 'Joint TIM' : 'Joint Contact'),
 };
 
 /**
@@ -70,7 +71,7 @@ const MOUNT_ROLE_SHORT: Record<string, string> = {
  */
 export function branchShortName(edge: ThermalEdge): string {
   const role = edge.metadata?.[MOUNT_ROLE_KEY];
-  if (typeof role === 'string' && MOUNT_ROLE_SHORT[role]) return MOUNT_ROLE_SHORT[role];
+  if (typeof role === 'string' && MOUNT_ROLE_SHORT[role]) return MOUNT_ROLE_SHORT[role](edge);
   const base = EDGE_SHORT[edge.type] ?? edge.type;
   const pipes = edge.parameters?.pipes;
   return edge.type === 'heat_pipe' && typeof pipes === 'number' && pipes > 1

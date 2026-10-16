@@ -704,3 +704,43 @@ describe('scenario and ideal-link edge labels', () => {
     expect(edge.parameters?.ideal_link).toBe(true);
   });
 });
+
+/**
+ * Where the HEAT_OUT tag sits on a mounted part.
+ *
+ * The port is the far side of the part's own TIM; with a vapour chamber under
+ * it that face is the chamber's TOP, and the heat leaves for the base two
+ * steps later, through the joint. The tag goes there — on the node the base
+ * spreading starts from — so the chain reads like a coin's: "… → TIM HEAT_OUT
+ * → spreading". Display only: the port stays on the node that owns it.
+ */
+describe('the HEAT_OUT tag on a mounted part', () => {
+  it('sits on the node the base spreads from, not on the chamber’s top', () => {
+    const network = fanInNetwork(1);
+    const port = network.nodes.NODE_TIM_1;
+    port.name = 'FPGA-A VC Top';
+    // The seat a vapour chamber's joint lands on, under its mount-owned id.
+    const seatId = 'NODE_MOUNT_TIM_1_BASE_SEAT';
+    network.nodes[seatId] = { ...thermalNode(seatId, 'base_zone', { x: 300, y: 50 }), name: 'FPGA-A TIM' };
+
+    const labelOf = (id: string) =>
+      String(
+        buildElements(network, { showPorts: true, showLabels: true, layoutMode: 'Auto' }).find(
+          (element) => element.data.id === id,
+        )?.data.label,
+      );
+
+    expect(labelOf(seatId)).toBe('FPGA-A TIM\nHEAT_OUT ✓');
+    expect(labelOf('NODE_TIM_1')).toBe('FPGA-A VC Top');
+    expect(network.nodes.NODE_TIM_1.ports).toHaveLength(1);
+  });
+
+  it('stays on the port when nothing is mounted under the part', () => {
+    const network = fanInNetwork(1);
+    const label = buildElements(network, { showPorts: true, showLabels: true, layoutMode: 'Auto' }).find(
+      (element) => element.data.id === 'NODE_TIM_1',
+    )?.data.label;
+
+    expect(label).toBe('NODE_TIM_1\nHEAT_OUT ✓');
+  });
+});

@@ -142,8 +142,8 @@ describe('what a mount edge is called', () => {
 
   it('names the chamber and the joint, not their edge types', () => {
     expect(branchShortName(mountEdge('heat_pipe', 'VAPOR_CHAMBER'))).toBe('Vapour Chamber');
-    expect(branchShortName(mountEdge('tim', 'BASE_JOINT'))).toBe('Joint');
-    expect(branchShortName(mountEdge('contact', 'BASE_JOINT'))).toBe('Joint');
+    expect(branchShortName(mountEdge('tim', 'BASE_JOINT'))).toBe('Joint TIM');
+    expect(branchShortName(mountEdge('contact', 'BASE_JOINT'))).toBe('Joint Contact');
   });
 
   it('leaves a real heat pipe and the part’s own TIM as they were', () => {

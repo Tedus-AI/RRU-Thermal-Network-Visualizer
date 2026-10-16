@@ -15,6 +15,7 @@ import { loadNetwork, saveNetwork } from './persistence';
 import { createComponent, emptyMount, type MountSpec, type MountType } from '@/domain/component';
 import { sourced } from '@/domain/sourcedValue';
 import { buildComponentSubgraph } from '@/thermal/graph/networkBuilder';
+import { PORT_NAME_KEY, heatOutNodeId, mountOf } from '@/thermal/graph/componentMount';
 import { refreshHskBaseConnectionEdges } from '@/thermal/graph/hskBaseConnection';
 import { buildSharedStructure } from '@/thermal/graph/sharedStructure';
 import { createRth, setRthFromSource } from '@/thermal/rth';
@@ -932,6 +933,93 @@ describe('mounts between a component and the shared base', () => {
   });
 
   /** A mount is disposable: disconnecting must not strand its nodes. */
+  /**
+   * A vapour chamber's chain, face by face, the way a copper coin's reads:
+   * "… → TIM → VC Top → Vapour Chamber → VC Bottom → Joint TIM → TIM (HEAT_OUT)
+   * → spreading". It used to keep HEAT_OUT on the chamber's top and end on a
+   * "Base Seat", so the exit sat in the middle of the chain.
+   */
+  it('names a vapour chamber chain face by face, ending where heat leaves', () => {
+    const { portNodeId, hskId, network } = connected({
+      type: 'VaporChamber',
+      contact_L_mm: 60,
+      contact_W_mm: 60,
+      heat_pipe_R_C_per_W: 0.015,
+      joint_tim_id: 'TIM_GREASE',
+      joint_blt_mm: 0.1,
+    });
+    const nodes = network().nodes;
+    const port = nodes[portNodeId];
+    const own = port.metadata?.[PORT_NAME_KEY] as string;
+    expect(own).toMatch(/ TIM$/);
+    const part = own.replace(/ TIM$/, '');
+
+    expect(port.name).toBe(`${part} VC Top`);
+    const chamber = Object.values(nodes).find((node) => node.type === 'vapor_chamber')!;
+    expect(chamber.name).toBe(`${part} VC Bottom`);
+
+    // The base spreads from the seat, so that is the part's HEAT_OUT.
+    const exit = heatOutNodeId(nodes, portNodeId);
+    expect(nodes[exit].name).toBe(`${part} TIM`);
+    expect(spreadingEdge(network())!.from).toBe(exit);
+    expect(spreadingEdge(network())!.to).toBe(hskId);
+  });
+
+  it('names the exit after a dry joint when there is no TIM under the chamber', () => {
+    const { portNodeId, network } = connected({
+      type: 'VaporChamber',
+      contact_L_mm: 60,
+      contact_W_mm: 60,
+      heat_pipe_R_C_per_W: 0.015,
+    });
+    const nodes = network().nodes;
+    expect(nodes[heatOutNodeId(nodes, portNodeId)].name).toMatch(/ Contact$/);
+  });
+
+  it('gives the port its own name back when the mount goes', () => {
+    const { portNodeId, network } = connected({
+      type: 'VaporChamber',
+      contact_L_mm: 60,
+      contact_W_mm: 60,
+      heat_pipe_R_C_per_W: 0.015,
+    });
+    const own = network().nodes[portNodeId].metadata?.[PORT_NAME_KEY] as string;
+
+    useNetworkStore.getState().disconnectPort(portNodeId, 'HEAT_OUT');
+    const port = network().nodes[portNodeId];
+    expect(port.name).toBe(own);
+    expect(port.metadata?.[PORT_NAME_KEY]).toBeUndefined();
+    expect(heatOutNodeId(network().nodes, portNodeId)).toBe(portNodeId);
+  });
+
+  /**
+   * A chain built before the naming carries no stamp change for
+   * `refreshMounts` to notice — the mount is the same — so the missing name is
+   * what marks it, and the next visit to Screen 05 renames it.
+   */
+  it('renames a chamber chain built before it was named face by face', () => {
+    const { portNodeId, network } = connected({
+      type: 'VaporChamber',
+      contact_L_mm: 60,
+      contact_W_mm: 60,
+      heat_pipe_R_C_per_W: 0.015,
+    });
+    const own = network().nodes[portNodeId].metadata?.[PORT_NAME_KEY] as string;
+    // Exactly what the previous build left: the port's own name, no stamp.
+    useNetworkStore.getState().mutate((draft) => {
+      const port = draft.nodes[portNodeId];
+      port.name = own;
+      const metadata = { ...port.metadata };
+      delete metadata[PORT_NAME_KEY];
+      port.metadata = metadata;
+    });
+
+    const component = pa();
+    component.thermal_spec.mount = mountOf(network().nodes[portNodeId]);
+    expect(useNetworkStore.getState().refreshMounts([component], materials())).toBe(1);
+    expect(network().nodes[portNodeId].name).toMatch(/ VC Top$/);
+  });
+
   it('takes the whole mount away when the port is disconnected', () => {
     const { portNodeId, network } = connected({
       type: 'SmallBaseHeatPipe',

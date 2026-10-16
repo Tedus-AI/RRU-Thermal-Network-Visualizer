@@ -39,9 +39,12 @@ import { SPREADING_DOMAIN_KEY, spreadingDomainStamp } from '@/thermal/graph/spre
 import { mountSpec, spreadingDomainOf, type Component } from '@/domain/component';
 import {
   MOUNT_SPEC_KEY,
+  PORT_NAME_KEY,
   buildMountChain,
   isOwnedByMount,
   mountOf,
+  mountTopFace,
+  partPrefix,
 } from '@/thermal/graph/componentMount';
 import { reconcilePortConnections } from '@/thermal/graph/portConnectionReconciliation';
 import { repairLegacySharedFinLinks } from '@/thermal/graph/sharedStructure';
@@ -286,6 +289,8 @@ function materialisePortConnection(
   // nothing at all — becomes real nodes and edges between the port and the
   // structure. `Direct` adds nothing, which is what every project built before
   // mounts existed had.
+  // `clearMount` above gave the port its own name back, so this is the part's.
+  const part = partPrefix(node.name);
   const chain = materials
     ? buildMountChain({
         portNodeId: nodeId,
@@ -297,10 +302,18 @@ function materialisePortConnection(
         // never a leftover block edge from the mount being replaced.
         sourceAreaMm2: terminalArea(network, nodeId).area_mm2,
         psiVariant: defaultSpreadingVariant(network, nodeId),
+        partName: part,
       })
     : null;
   for (const mountNode of chain?.nodes ?? []) network.nodes[mountNode.id] = mountNode;
   for (const mountEdge of chain?.edges ?? []) network.edges[mountEdge.id] = mountEdge;
+
+  // A device under the part makes the port its top face; see `PORT_NAME_KEY`.
+  const topFace = mountTopFace(mountOf(node).type);
+  if (topFace && (chain?.nodes.length ?? 0) > 0) {
+    node.metadata = { ...node.metadata, [PORT_NAME_KEY]: node.name };
+    node.name = `${part} ${topFace}`;
+  }
 
   // A mount can leave no conduction branch at all — pipes covering the whole
   // contact face — and then there is nothing for a spreading edge to spread
@@ -320,6 +333,15 @@ function materialisePortConnection(
 }
 
 function clearMount(network: ThermalNetwork, portNodeId: string): void {
+  // The name a mount gave the port goes with the mount.
+  const port = network.nodes[portNodeId];
+  const ownName = port?.metadata?.[PORT_NAME_KEY];
+  if (port && typeof ownName === 'string') {
+    const metadata = { ...port.metadata };
+    delete metadata[PORT_NAME_KEY];
+    port.name = ownName;
+    port.metadata = metadata;
+  }
   for (const [id, edge] of Object.entries(network.edges)) {
     if (isOwnedByMount(edge, portNodeId)) delete network.edges[id];
   }
@@ -661,9 +683,15 @@ export const useNetworkStore = create<NetworkStoreState>((set, get) => ({
         restamp.push(node.id);
       }
       const wanted = mountSpec(component.thermal_spec);
+      // A device chain built before it was named face by face reads "TIM
+      // HEAT_OUT → … → Base Seat"; rebuilding it is the rename.
+      const unnamed =
+        mountTopFace(wanted.type) != null &&
+        (node.ports ?? []).some((port) => port.connected_to) &&
+        typeof node.metadata?.[PORT_NAME_KEY] !== 'string';
       // Only touch a port whose stamp is out of date; rebuilding every mount on
       // every visit would churn the graph and its undo history for nothing.
-      if (JSON.stringify(mountOf(node)) === JSON.stringify(wanted)) continue;
+      if (!unnamed && JSON.stringify(mountOf(node)) === JSON.stringify(wanted)) continue;
       for (const port of node.ports ?? []) {
         if (port.connected_to) {
           plan.push({ nodeId: node.id, portKind: port.kind, targetNodeId: port.connected_to });

@@ -126,6 +126,46 @@ export const MOUNT_ROLE_KEY = 'mount_role';
 export const MOUNT_SPEC_KEY = 'mount_spec';
 
 /**
+ * The port node's own name, kept while a mount has renamed it.
+ *
+ * WHY THE PORT IS RENAMED
+ * -----------------------
+ * A part's chain ends at its HEAT_OUT, the far side of its own TIM, and every
+ * mount hangs off that node. Where the TIM lands on the base itself that is
+ * exactly right. Where it lands on a vapour chamber, a boss or a local plate,
+ * it is not where heat leaves for the base at all — it is the TOP of the
+ * device — and a chain that read "TIM HEAT_OUT → Vapour Chamber → Base Seat →
+ * spreading" put the exit in the middle and ended on a name that meant nothing.
+ *
+ * So the chain is named face by face, as a copper coin's always was
+ * ("… → Copper Coin → TIM → TIM HEAT_OUT → spreading"): the port becomes the
+ * device's top face, the device ends on its bottom face, and the last node
+ * before the base — where Screen 05 now shows the HEAT_OUT tag — takes the
+ * name of the interface that reaches it. The original name comes back when the
+ * mount goes.
+ */
+export const PORT_NAME_KEY = 'port_name';
+
+/** The face a part's TIM lands on, for the mounts that put a device under it. */
+const MOUNT_TOP_FACE: Partial<Record<MountType, string>> = {
+  VaporChamber: 'VC Top',
+  Pedestal: 'Boss Top',
+  SmallBaseHeatPipe: 'Small Base Top',
+};
+
+/** Null for a mount whose TIM lands on the base itself: Direct, embedded pipes. */
+export function mountTopFace(type: MountType): string | null {
+  return MOUNT_TOP_FACE[type] ?? null;
+}
+
+/** "FPGA-A TIM" → "FPGA-A": the part, without the template's interface word. */
+export function partPrefix(portName: string): string {
+  return portName.replace(/\s+(TIM|Contact|Interface)$/, '').trim() || portName;
+}
+
+const named = (part: string | undefined, face: string) => (part ? `${part} ${face}` : face);
+
+/**
  * The two-phase device's transport limit, as an edge parameter.
  *
  * Carried on the heat-pipe edge so the solve can compare the heat it routed
@@ -252,6 +292,21 @@ export function belongsToSomeMount(item: { metadata?: Record<string, unknown> })
   return typeof item.metadata?.[MOUNT_OWNER_KEY] === 'string';
 }
 
+/**
+ * Where a port's heat actually leaves for the base: the node the base
+ * spreading starts from. The port itself unless a mount put a device between.
+ */
+export function heatOutNodeId(
+  nodes: Readonly<Record<string, unknown>>,
+  portNodeId: string,
+): string {
+  for (const role of ['BASE_SEAT', 'PEDESTAL'] as const) {
+    const id = mountNodeId(portNodeId, role);
+    if (nodes[id]) return id;
+  }
+  return portNodeId;
+}
+
 const footprintMm2 = mountFootprintMm2;
 
 /**
@@ -277,8 +332,11 @@ export function buildMountChain(input: {
    * gets for this port (see `spreadingVariant.ts`). Peak when not stated.
    */
   psiVariant?: SpreadingVariant;
+  /** The part's name, so the mount's faces read "FPGA-A VC Bottom", not "VC Bottom". */
+  partName?: string;
 }): MountChain {
-  const { portNodeId, targetNodeId, componentRef, mount, materials, sourceAreaMm2 } = input;
+  const { portNodeId, targetNodeId, componentRef, mount, materials, sourceAreaMm2, partName } =
+    input;
   const type: MountType = mount.type;
 
   if (type === 'Direct') {
@@ -360,7 +418,7 @@ export function buildMountChain(input: {
     const block = mountNode(
       portNodeId,
       isBoss ? 'PEDESTAL' : 'SMALL_BASE',
-      isBoss ? 'Mount Boss Root' : 'Small Base',
+      named(partName, isBoss ? 'Boss Root' : 'Small Base'),
       isBoss ? 'pedestal' : 'small_base',
       componentRef,
     );
@@ -426,9 +484,8 @@ export function buildMountChain(input: {
       portNodeId,
       'VAPOR_CHAMBER',
       // The chamber's underside: a node is a temperature at a face, and the
-      // edge into it is the chamber itself. Named "Vapour Chamber", the box
-      // read as the device and the TIM box before it as something else.
-      'VC Bottom',
+      // edge into it is the chamber itself.
+      named(partName, 'VC Bottom'),
       'vapor_chamber',
       componentRef,
     );
@@ -473,7 +530,15 @@ export function buildMountChain(input: {
    */
   const bolted = mount.attachment === 'Bolted';
   if (mountHasSeat(type) && (bolted || mountHasVendorResistance(type))) {
-    const seat = mountNode(portNodeId, 'BASE_SEAT', 'Base Seat', 'base_zone', componentRef);
+    // Named after the interface that reaches it, as the TIM HEAT_OUT of a part
+    // sitting straight on the base is: this is where the heat leaves for the base.
+    const seat = mountNode(
+      portNodeId,
+      'BASE_SEAT',
+      named(partName, mount.joint_tim_id != null ? 'TIM' : 'Contact'),
+      'base_zone',
+      componentRef,
+    );
     nodes.push(seat);
     edges.push(
       mountEdge(
