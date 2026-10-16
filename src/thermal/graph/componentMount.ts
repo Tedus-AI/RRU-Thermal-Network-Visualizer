@@ -425,7 +425,10 @@ export function buildMountChain(input: {
     const chamber = mountNode(
       portNodeId,
       'VAPOR_CHAMBER',
-      'Vapour Chamber',
+      // The chamber's underside: a node is a temperature at a face, and the
+      // edge into it is the chamber itself. Named "Vapour Chamber", the box
+      // read as the device and the TIM box before it as something else.
+      'VC Bottom',
       'vapor_chamber',
       componentRef,
     );

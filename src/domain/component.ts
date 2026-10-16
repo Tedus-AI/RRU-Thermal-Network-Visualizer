@@ -681,6 +681,21 @@ export interface ThermalSpec {
    * spread into the whole base, and `spreadingDomainOf` says so.
    */
   spreading_domain?: SpreadingDomainSpec;
+  /**
+   * What each OTHER mount type was last given, so trying one and going back
+   * costs nothing.
+   *
+   * The mount fields are shared by every type, and they do not mean the same
+   * thing in each: for an embedded pipe `contact_W_mm`, `heat_pipe_R_C_per_W`
+   * and `heat_pipe_qmax_W` are ONE pipe's, for a vapour chamber the whole
+   * chamber's. Switching a part from embedded pipes to a vapour chamber used to
+   * hand the chamber a 35 × 6.5 mm footprint and the pipe's 0.13 °C/W, and the
+   * chamber then read as worse than the pipes it was meant to beat — from
+   * numbers nobody had typed for it. See `switchMountType`.
+   *
+   * Never read by the solve: the network is built from `mount` alone.
+   */
+  mount_by_type?: Partial<Record<MountType, MountSpec>>;
 }
 
 /**
@@ -915,6 +930,28 @@ export function mountSpec(spec: ThermalSpec): MountSpec {
   const merged = { ...emptyMount(type), ...stored, type };
   // A vapour chamber is a separate part whatever an older record says.
   return mountAttachmentIsFixed(merged.type) ? { ...merged, attachment: 'Bolted' } : merged;
+}
+
+/**
+ * Switches a part to another mount type without carrying numbers across.
+ *
+ * What the current type was given is put away under its type, and the new type
+ * gets back what it had last time — or nothing, never the outgoing type's
+ * values. `Direct` has nothing worth keeping, so it is not stored.
+ */
+export function switchMountType(
+  spec: ThermalSpec,
+  type: MountType,
+): Pick<ThermalSpec, 'mount' | 'mount_by_type'> {
+  const current = mountSpec(spec);
+  if (current.type === type) return { mount: current, mount_by_type: spec.mount_by_type };
+  const { [type]: remembered, ...others } = spec.mount_by_type ?? {};
+  const kept: Partial<Record<MountType, MountSpec>> =
+    current.type === 'Direct' ? others : { ...others, [current.type]: current };
+  return {
+    mount: remembered ? mountSpec({ ...spec, mount: { ...remembered, type } }) : emptyMount(type),
+    mount_by_type: Object.keys(kept).length > 0 ? kept : undefined,
+  };
 }
 
 /**

@@ -215,6 +215,49 @@ describe('the mount axis', () => {
  * its old subgraph contained stayed in place forever. That is what kept a
  * duplicate heat source alive through three separate attempts to sweep it.
  */
+describe('what other mount types were last given', () => {
+  /**
+   * Same trap as the mount itself: a field the migrator does not name is gone
+   * after the next load, and with it the chamber the engineer was comparing
+   * the heat pipes against.
+   */
+  it('survives a load, each entry read like a mount of its own type', () => {
+    const stored = migrateComponent(
+      {
+        id: 'CMP_V',
+        name: 'V',
+        thermal_spec: {
+          mount: { type: 'EmbeddedHeatPipe', contact_L_mm: 35, contact_W_mm: 6.5 },
+          mount_by_type: {
+            VaporChamber: { type: 'Pedestal', contact_L_mm: 60, contact_W_mm: 60, heat_pipe_R_C_per_W: 0.015 },
+          },
+        },
+      },
+      0,
+    )!;
+
+    expect(stored.thermal_spec.mount_by_type?.VaporChamber).toMatchObject({
+      // Keyed by where it is stored, not by what the entry claims.
+      type: 'VaporChamber',
+      contact_L_mm: 60,
+      contact_W_mm: 60,
+      heat_pipe_R_C_per_W: 0.015,
+      attachment: 'Bolted',
+    });
+  });
+
+  it('drops unknown keys, and adds no key to a record that had none', () => {
+    const junk = migrateComponent(
+      { id: 'CMP_J', name: 'J', thermal_spec: { mount_by_type: { Rocket: { contact_L_mm: 1 }, Direct: {} } } },
+      0,
+    )!;
+    const plain = migrateComponent({ id: 'CMP_P', name: 'P', thermal_spec: {} }, 0)!;
+
+    expect('mount_by_type' in junk.thermal_spec).toBe(false);
+    expect('mount_by_type' in plain.thermal_spec).toBe(false);
+  });
+});
+
 describe('architecture template preference', () => {
   const prefOf = (raw: unknown) =>
     migrateComponent({ id: 'C', name: 'C', architecture_prep: { template_preference: raw } }, 0)!

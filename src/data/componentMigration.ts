@@ -39,6 +39,7 @@ import {
   type PackageType,
   type SpreadingDomainMode,
   type SpreadingDomainSpec,
+  type ThermalSpec,
   MOUNT_ATTACHMENTS,
   SPREADING_DOMAIN_MODES,
 } from '@/domain/component';
@@ -346,6 +347,24 @@ function migrateMount(spec: Raw, dissolved: MountType | undefined): MountSpec {
 }
 
 /**
+ * The numbers other mount types were last given (`mount_by_type`).
+ *
+ * Each entry goes through the same reading as the live mount, keyed by its own
+ * type whatever the entry says; an unknown key is dropped rather than guessed
+ * at, and a record without any keeps no key at all.
+ */
+function migrateMountMemory(spec: Raw): Pick<ThermalSpec, 'mount_by_type'> {
+  if (!isObject(spec.mount_by_type)) return {};
+  const memory: Partial<Record<MountType, MountSpec>> = {};
+  for (const [key, entry] of Object.entries(spec.mount_by_type)) {
+    const type = normalizeMountType(key);
+    if (type == null || type === 'Direct' || !isObject(entry)) continue;
+    memory[type] = migrateMount({ mount: { ...entry, type } }, undefined);
+  }
+  return Object.keys(memory).length > 0 ? { mount_by_type: memory } : {};
+}
+
+/**
  * How much of the base the part spreads into. Every record written before the
  * choice existed spread into the whole base, so that is what its silence means;
  * an unrecognised mode falls back the same way rather than dropping the record.
@@ -415,6 +434,7 @@ export function migrateComponent(raw: unknown, index: number): Component | null 
       geometry: migrateGeometry(specRaw),
       ...heat,
       mount: migrateMount(specRaw, dissolved),
+      ...migrateMountMemory(specRaw),
       spreading_domain: migrateSpreadingDomain(specRaw),
       // Built field by field rather than spread, so a dropped field (such as the
       // never-solved `compression_pct`) cannot ride back in from stored data.

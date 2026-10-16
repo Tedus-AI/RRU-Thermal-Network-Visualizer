@@ -23,6 +23,7 @@
 
 import type { ElementDefinition } from 'cytoscape';
 
+import { MOUNT_ROLE_KEY } from '@/thermal/graph/componentMount';
 import type { ThermalEdge, ThermalNetwork } from '@/thermal/types';
 
 const EDGE_SHORT: Record<string, string> = {
@@ -42,6 +43,20 @@ const EDGE_SHORT: Record<string, string> = {
 };
 
 /**
+ * Mount edges whose type alone names them wrongly.
+ *
+ * A vapour chamber is built as a `heat_pipe` edge — the same two-phase vendor
+ * resistance — and read "Heat Pipe" on a chain that has no heat pipe in it. The
+ * interface under a mount is a `tim` edge, and read "TIM" right after the
+ * part's own TIM, as if the part had two; the field that sets it in Screen 04
+ * is called the joint, so the graph calls it that too.
+ */
+const MOUNT_ROLE_SHORT: Record<string, string> = {
+  VAPOR_CHAMBER: 'Vapour Chamber',
+  BASE_JOINT: 'Joint',
+};
+
+/**
  * What a branch is called on the graph — "Spreading", "Heat Pipe ×2".
  *
  * Two lines converging on the same bar are indistinguishable without it: the
@@ -54,6 +69,8 @@ const EDGE_SHORT: Record<string, string> = {
  * Shared with Screen 07, which draws the same branches over the solved graph.
  */
 export function branchShortName(edge: ThermalEdge): string {
+  const role = edge.metadata?.[MOUNT_ROLE_KEY];
+  if (typeof role === 'string' && MOUNT_ROLE_SHORT[role]) return MOUNT_ROLE_SHORT[role];
   const base = EDGE_SHORT[edge.type] ?? edge.type;
   const pipes = edge.parameters?.pipes;
   return edge.type === 'heat_pipe' && typeof pipes === 'number' && pipes > 1
