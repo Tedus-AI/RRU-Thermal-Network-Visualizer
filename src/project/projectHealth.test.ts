@@ -145,7 +145,7 @@ describe('nextStepFor', () => {
   it('says so plainly when components are blocking', () => {
     const step = nextStepFor(health({ componentData: 'errors' }));
     expect(step.screenCode).toBe('04');
-    expect(step.description).toMatch(/errors/i);
+    expect(step.description).toMatch(/錯誤/);
   });
 
   // 04 §7 — a component missing Rjc is still worth carrying forward. Screen 01

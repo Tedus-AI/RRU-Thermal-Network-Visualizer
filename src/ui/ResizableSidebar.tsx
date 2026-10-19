@@ -80,9 +80,7 @@ export function ResizableSidebar({
   id,
   defaultWidth,
   side = 'left',
-  labelEn,
   labelZh,
-  shortEn,
   shortZh,
   children,
 }: {
@@ -97,9 +95,11 @@ export function ResizableSidebar({
    */
   side?: 'left' | 'right';
   /** What the panel holds, for the collapsed strip's tooltip. */
+  /** English name — no longer shown; kept for the existing call sites. */
   labelEn: string;
   labelZh: string;
   /** Two or three characters for the collapsed strip's vertical label. */
+  /** English short label — no longer shown; kept for the existing call sites. */
   shortEn: string;
   shortZh: string;
   children: ReactNode;
@@ -166,13 +166,13 @@ export function ResizableSidebar({
         type="button"
         onClick={expand}
         aria-expanded={false}
-        title={`Expand ${labelEn} / 展開${labelZh}`}
-        aria-label={`Expand ${labelEn} / 展開${labelZh}`}
+        title={`展開${labelZh}`}
+        aria-label={`展開${labelZh}`}
         className="flex h-9 w-full shrink-0 items-center justify-center gap-1 rounded-lg border border-line bg-surface text-[11px] font-semibold text-ink-500 hover:border-ink-400 hover:text-ink-900 lg:h-full lg:w-10 lg:flex-col"
       >
         {side === 'right' ? <ChevronLeft size={15} /> : <ChevronRight size={15} />}
         <span className="hidden [writing-mode:vertical-rl] lg:block">
-          {shortEn} / {shortZh}
+          {shortZh}
         </span>
       </button>
     );
@@ -199,7 +199,7 @@ export function ResizableSidebar({
       <div
         role="separator"
         aria-orientation="vertical"
-        aria-label={`Resize or collapse ${labelEn} / 調整或收合${labelZh}`}
+        aria-label={`調整或收合${labelZh}`}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={endGesture}

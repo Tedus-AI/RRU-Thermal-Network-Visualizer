@@ -6,13 +6,12 @@
 import { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Download, HelpCircle, Library, Lock, Settings, Trash2, Upload } from 'lucide-react';
-import { GROUP_LABELS_EN, SCREENS, projectPath } from './navigation';
+import { SCREENS, projectPath } from './navigation';
 import { useProjectStore } from '@/data/projectStore';
 import { useScenarioStore } from '@/data/scenarioStore';
 import { useSolverStore } from '@/data/solverStore';
 import { toast } from '@/ui/toast';
 import { Button, Modal } from '@/ui/primitives';
-import { biTitle } from '@/ui/FieldLabel';
 import { SaveIndicator } from './SaveIndicator';
 import { triggerDownload } from '@/export/download';
 import { BUILD_ID } from '@/data/bootstrapStorage';
@@ -41,49 +40,49 @@ import { ComponentLibraryManager } from '@/screens/04-component-manager/Componen
  *
  * `READY` means "never solved" — see `solverStore.invalidate`, where a
  * never-solved network deliberately stays READY. It is therefore shown as
- * `Not Solved` in neutral grey: a green "Ready" reads as "all good" when it
+ * 尚未求解 in neutral grey: a green "Ready" reads as "all good" when it
  * actually means there are no results at all, and it made the state
  * indistinguishable from a genuine `SOLVED`.
  */
 const SOLVER_TONE: Record<
   SolverState,
-  { dot: string; text: string; label: string; zh: string }
+  { dot: string; text: string; label: string; detail: string }
 > = {
   READY: {
     dot: 'bg-white/30',
     text: 'text-white/60',
-    label: 'Not Solved',
-    zh: '尚未求解：此網路與情境還沒有任何結果。',
+    label: '尚未求解',
+    detail: '此網路與情境還沒有任何結果。',
   },
   SOLVING: {
     dot: 'bg-accent-500',
     text: 'text-accent-500',
-    label: 'Solving…',
-    zh: '求解中。',
+    label: '求解中…',
+    detail: '求解中。',
   },
   SOLVED: {
     dot: 'bg-ok-500',
     text: 'text-ok-500',
-    label: 'Solved',
-    zh: '已求解：結果為最新且無警告。',
+    label: '已求解',
+    detail: '結果為最新且無警告。',
   },
   WARNING: {
     dot: 'bg-warn-500',
     text: 'text-warn-500',
-    label: 'Warning',
-    zh: '已求解，但能量平衡或驗證有警告，採用前請確認。',
+    label: '求解有警告',
+    detail: '已求解，但能量平衡或驗證有警告，採用前請確認。',
   },
   DIRTY: {
     dot: 'bg-warn-500',
     text: 'text-warn-500',
-    label: 'Stale Results',
-    zh: '結果已過期：求解後輸入被修改，請重新求解再讀取數值。',
+    label: '結果需更新',
+    detail: '求解後輸入被修改，請重新求解再讀取數值。',
   },
   FAILED: {
     dot: 'bg-danger-500',
     text: 'text-danger-500',
-    label: 'Solve Failed',
-    zh: '求解失敗：沒有可用結果。',
+    label: '求解失敗',
+    detail: '沒有可用結果。',
   },
 };
 
@@ -158,12 +157,12 @@ export function TopHeader() {
 
   const handleExport = () => {
     if (!draft || isNew) {
-      toast.error('Create the project before exporting a project file.');
+      toast.error('請先建立專案，再匯出專案檔。');
       return;
     }
     const file = collectProject(draft.project_id, BUILD_ID);
     if (!file) {
-      toast.error('This project could not be read from storage.');
+      toast.error('無法從儲存位置讀取此專案。');
       return;
     }
     const blob = new Blob([serializeProjectFile(file)], { type: 'application/json' });
@@ -171,7 +170,7 @@ export function TopHeader() {
     triggerDownload(url, projectFilename(draft.project_id));
     // The anchor click is synchronous; the URL can go on the next tick.
     setTimeout(() => URL.revokeObjectURL(url), 10_000);
-    toast.success(`Exported ${file.project_name || file.project_id}.`);
+    toast.success(`已匯出 ${file.project_name || file.project_id}。`);
   };
 
   /** Shared by the file picker and by loading from the bound folder. */
@@ -212,15 +211,12 @@ export function TopHeader() {
         <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-accent-600 text-[13px] font-black text-white">
           5G
         </div>
-        <div className="leading-tight whitespace-nowrap">
-          <div className="text-[14px] font-bold text-white">5G Thermal Network Explorer</div>
-          <div className="text-[11px] text-white/50">FR1 Base Station</div>
-        </div>
+        <div className="text-[14px] font-bold whitespace-nowrap text-white">5G 熱網路分析</div>
       </div>
 
-      <div className="w-40 shrink xl:w-56">
+      <div className="w-48 shrink xl:w-72">
         <label htmlFor="hdr-project" className="mb-0.5 block text-[11px] text-white/50">
-          Project
+          專案
         </label>
         <div className="flex items-center gap-1">
           <select
@@ -229,14 +225,14 @@ export function TopHeader() {
             value={isNew ? '__new__' : (draft?.project_id ?? '')}
             onChange={(event) => void handleProjectChange(event.target.value)}
           >
-            {isNew && <option value="__new__">New Project</option>}
+            {isNew && <option value="__new__">新專案（尚未建立）</option>}
             {projects.map((project) => (
               <option key={project.project_id} value={project.project_id}>
                 {project.project_name || project.project_id}
-                {project.status === 'archived' ? ' (archived)' : ''}
+                {project.status === 'archived' ? '（已封存）' : ''}
               </option>
             ))}
-            {!isNew && <option value="__new__">+ New Project…</option>}
+            {!isNew && <option value="__new__">＋ 新增專案…</option>}
           </select>
           {/*
             Deletes the project the selector is showing. Beside the selector
@@ -260,11 +256,8 @@ export function TopHeader() {
                 name: draft.project_name || draft.project_id,
               });
             }}
-            title={biTitle(
-              'Delete this project and everything in it',
-              '刪除目前專案及其所有資料',
-            )}
-            aria-label={biTitle('Delete this project', '刪除目前專案')}
+            title="刪除目前專案及其所有資料"
+            aria-label="刪除目前專案"
             className="flex size-9 shrink-0 items-center justify-center rounded-md border border-shell-600 bg-shell-700 text-white/60 transition-colors hover:border-danger-600 hover:bg-danger-600 hover:text-white disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-shell-600 disabled:hover:bg-shell-700 disabled:hover:text-white/60"
           >
             <Trash2 size={15} />
@@ -272,7 +265,7 @@ export function TopHeader() {
         </div>
       </div>
 
-      <div className="w-36 shrink xl:w-48">
+      <div className="w-40 shrink xl:w-56">
         {/*
           This selector sets the scenario every downstream screen computes
           against, so the label says which one is driving them rather than
@@ -281,21 +274,12 @@ export function TopHeader() {
         <label
           htmlFor="hdr-scenario"
           className="mb-0.5 flex items-center gap-1.5 text-[11px] text-white/50"
-          title={biTitle(
-            'Sets the scenario used by Screens 06–12.',
-            '設定 06–12 各畫面所使用的情境；切換後下游結果會依該情境重新判定。',
-          )}
+          title="06 之後各頁都依這個情境計算；切換後結果會依新情境重新判定。"
         >
-          <span className="truncate">Scenario / 情境</span>
-          {activeScenario && (
-            <span
-              className={`shrink-0 rounded px-1 text-[9.5px] font-bold ${
-                activeScenario.is_default
-                  ? 'bg-accent-600/30 text-accent-500'
-                  : 'bg-white/10 text-white/60'
-              }`}
-            >
-              {activeScenario.is_default ? 'DEFAULT' : 'VARIANT'}
+          <span className="truncate">情境</span>
+          {activeScenario?.is_default && (
+            <span className="shrink-0 rounded bg-accent-600/30 px-1 text-[10px] font-bold text-accent-500">
+              預設
             </span>
           )}
         </label>
@@ -306,7 +290,7 @@ export function TopHeader() {
           disabled={scenarios.length === 0}
           onChange={(event) => setActiveScenario(event.target.value)}
         >
-          {scenarios.length === 0 && <option value="">— None —</option>}
+          {scenarios.length === 0 && <option value="">— 無 —</option>}
           {scenarios.map((scenario) => (
             <option key={scenario.id} value={scenario.id}>
               {scenario.name}
@@ -320,13 +304,10 @@ export function TopHeader() {
       {readOnly && (
         <span
           className="flex items-center gap-1.5 rounded border border-accent-500/40 bg-accent-600/20 px-2 py-1 text-[11px] font-bold text-accent-500"
-          title={biTitle(
-            'This project is archived and cannot be edited. Restore it on Screen 01 to make changes.',
-            '此專案已封存，無法編輯。請至 Screen 01 還原後才能修改。',
-          )}
+          title="此專案已封存，無法編輯。請到 01 專案資訊還原後再修改。"
         >
           <Lock size={12} aria-hidden />
-          READ-ONLY / 唯讀
+          唯讀
         </span>
       )}
 
@@ -337,62 +318,51 @@ export function TopHeader() {
       <div className="flex shrink-0 items-center gap-1">
         <HeaderAction
           icon={Upload}
-          label="Import"
+          label="匯入"
           onClick={picker.open}
-          title={biTitle(
-            'Open a project file from disk',
-            '從磁碟開啟專案檔（.tnv.json），可選擇覆寫或匯入為副本。',
-          )}
+          title="開啟專案檔（.tnv.json），可覆寫或匯入為副本"
         />
         <HeaderAction
           icon={Download}
-          label="Export"
+          label="匯出"
           disabled={!canExport}
           onClick={handleExport}
-          title={biTitle(
-            'Save this project to disk as a project file',
-            '將目前專案存成專案檔（.tnv.json），包含元件、網路、邊界、求解結果與報告設定。',
-          )}
+          title="把目前專案存成專案檔（.tnv.json），含元件、熱網路、邊界、求解結果與報告設定"
         />
         <HeaderAction
           icon={Library}
-          label="Library"
+          label="元件庫"
           onClick={() => {
             setDialog('library');
             void useComponentLibraryStore.getState().loadWithFolder();
           }}
-          title={biTitle('Manage the component library', '管理元件庫')}
+          title="管理元件庫"
         />
         <HeaderAction
           icon={Settings}
-          label="Settings"
+          label="設定"
           onClick={() => setDialog('settings')}
-          title={biTitle('Application and data settings', '應用程式與資料設定')}
+          title="儲存位置與資料設定"
         />
         <HeaderAction
           icon={HelpCircle}
-          label="Help"
+          label="說明"
           onClick={() => setDialog('help')}
-          title={biTitle('What the screens and status words mean', '畫面導覽與狀態說明')}
+          title="畫面導覽與狀態說明"
         />
       </div>
       {picker.input}
 
-      <div className="ml-2 flex shrink-0 flex-col items-end gap-1 border-l border-shell-line pl-4 whitespace-nowrap">
-        <div className="text-[13px] font-bold text-accent-500">
-          {currentScreen.code} {currentScreen.labelEn}
-          <span className="hidden font-normal text-white/50 2xl:inline">
-            {' / '}
-            {GROUP_LABELS_EN[currentScreen.group] ?? currentScreen.group}
-          </span>
-        </div>
-        <div
-          className={`flex items-center gap-1.5 text-[12px] ${tone.text}`}
-          title={biTitle(`Solver: ${tone.label}`, tone.zh)}
-        >
-          <span aria-hidden className={`size-2 rounded-full ${tone.dot}`} />
-          {tone.label}
-        </div>
+      {/*
+        Only the solver state lives here. The screen name used to sit above it,
+        a third copy of what the sidebar and the page title already say.
+      */}
+      <div
+        className={`ml-2 flex shrink-0 items-center gap-1.5 border-l border-shell-line pl-4 text-[12.5px] font-semibold whitespace-nowrap ${tone.text}`}
+        title={tone.detail}
+      >
+        <span aria-hidden className={`size-2 rounded-full ${tone.dot}`} />
+        {tone.label}
       </div>
 
       {dialog === 'settings' && (
@@ -433,12 +403,12 @@ export function TopHeader() {
       */}
       {confirmDelete && (
         <Modal
-          title="Delete this project? / 刪除此專案？"
-          description={`“${confirmDelete.name}” and everything stored under it — components, thermal network, boundary conditions, solutions, analyses and report settings — will be removed from this browser. This cannot be undone. / 「${confirmDelete.name}」及其所有資料（元件、熱網路、邊界條件、求解結果、分析與報告設定）都會從這個瀏覽器移除，且無法復原。`}
+          title="刪除此專案？"
+          description={`「${confirmDelete.name}」及其所有資料（元件、熱網路、邊界條件、求解結果、分析與報告設定）都會刪除，無法復原。`}
           onClose={() => setConfirmDelete(null)}
           footer={
             <>
-              <Button onClick={() => setConfirmDelete(null)}>Cancel / 取消</Button>
+              <Button onClick={() => setConfirmDelete(null)}>取消</Button>
               <Button
                 variant="danger"
                 onClick={() => {
@@ -458,32 +428,25 @@ export function TopHeader() {
                     .getState()
                     .deleteProjectFile(id)
                     .then((removed) => {
-                      if (removed) toast.success(`Deleted ${name}. / 已刪除 ${name}。`);
+                      if (removed) toast.success(`已刪除 ${name}。`);
                       else
                         toast.error(
-                          `Deleted ${name} here, but a file of it is still in storage — see the storage lights. / 已刪除 ${name}，但儲存位置中仍有它的檔案，請查看右上角儲存狀態。`,
+                          `已刪除 ${name}，但儲存位置中仍有它的檔案，請查看上方儲存狀態。`,
                         );
                     });
                 }}
               >
-                Delete / 刪除
+                刪除
               </Button>
             </>
           }
         >
           <p className="text-[12px] text-ink-500">
             {onSharePoint && hasLocal
-              ? 'Its file is deleted from SharePoint (for everyone) and from the local folder. A SharePoint site owner can restore it from the site’s Recycle Bin until that is emptied.'
+              ? '專案檔會從 SharePoint（所有人）與本機資料夾刪除；網站資源回收筒清空前，可由網站管理者還原。'
               : onSharePoint
-                ? 'Its file is deleted from SharePoint for everyone. A SharePoint site owner can restore it from the site’s Recycle Bin until that is emptied.'
-                : 'Its file is deleted from the local folder. Export the project file first if you may need it again.'}
-            <span className="block text-ink-400">
-              {onSharePoint && hasLocal
-                ? '專案檔會從 SharePoint（所有人都看不到）與本機資料夾刪除；在網站資源回收筒清空之前，可由網站管理者還原。'
-                : onSharePoint
-                  ? '專案檔會從 SharePoint 刪除，所有人都看不到；在網站資源回收筒清空之前，可由網站管理者還原。'
-                  : '專案檔會從本機資料夾刪除；若日後可能還需要，請先匯出專案檔。'}
-            </span>
+                ? '專案檔會從 SharePoint 刪除（所有人）；網站資源回收筒清空前，可由網站管理者還原。'
+                : '專案檔會從本機資料夾刪除；日後可能還需要的話，請先匯出專案檔。'}
           </p>
         </Modal>
       )}
@@ -496,7 +459,7 @@ export function TopHeader() {
             setPending(null);
             useProjectStore.getState().refreshProjects();
             navigate(projectPath(projectId, 'info'));
-            toast.success(`Imported ${projectId}.`);
+            toast.success(`已匯入 ${projectId}。`);
           }}
         />
       )}

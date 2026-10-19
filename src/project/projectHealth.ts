@@ -135,6 +135,7 @@ export interface NextStep {
   description: string;
   screenCode: string;
   screenPath: string;
+  /** "05 熱路徑建立" — where the step is done, as the sidebar names it. */
   cta: string;
   /** True when the user cannot leave this screen yet. */
   blockedHere: boolean;
@@ -143,26 +144,25 @@ export interface NextStep {
 /** 01 §34. FloTHERM is deliberately absent — it must not gate the basic workflow. */
 export function nextStepFor(health: ProjectHealth): NextStep {
   const screen = (code: string) => SCREENS.find((s) => s.code === code)!;
+  const step = (
+    code: string,
+    label: string,
+    description: string,
+    blockedHere = false,
+  ): NextStep => ({
+    label,
+    description,
+    screenCode: code,
+    screenPath: screen(code).path,
+    cta: `${code} ${screen(code).label}`,
+    blockedHere,
+  });
 
   if (!health.projectIdentity) {
-    return {
-      label: 'Complete Project Information',
-      description: 'Project Name and a valid Project ID are required before anything else.',
-      screenCode: '01',
-      screenPath: screen('01').path,
-      cta: 'Complete Project Info',
-      blockedHere: true,
-    };
+    return step('01', '完成專案基本資料', '先填專案名稱與專案代號。', true);
   }
   if (!health.components) {
-    return {
-      label: 'Import Hardware Components',
-      description: 'Bring in the RF, digital and power components this thermal network describes.',
-      screenCode: '02',
-      screenPath: screen('02').path,
-      cta: 'Continue to Import Components',
-      blockedHere: false,
-    };
+    return step('02', '匯入硬體元件', '匯入這台產品的 RF、數位與電源元件。');
   }
   /**
    * Screen 04 used to be skipped entirely: the recommendation went from
@@ -170,59 +170,27 @@ export function nextStepFor(health: ProjectHealth): NextStep {
    * with a name, a qty and a power and nothing else — no Rjc, no confirmed heat
    * path, no base zone — so the step being recommended was building a network
    * out of components that could not yet be solved.
+   *
+   * Not a gate: 04 §7 says a component missing Rjc is still worth carrying
+   * forward, and this screen must not become a second place that blocks.
    */
   if (health.componentData !== 'ready') {
-    const blocking = health.componentData === 'errors';
-    return {
-      label: 'Complete Component Thermal Data',
-      description: blocking
-        ? 'Some components have errors that block the network build. Fix them in Component Manager.'
-        : 'Imported components still need Rjc, thermal limits, heat paths and base zones before a solve means anything.',
-      screenCode: '04',
-      screenPath: screen('04').path,
-      cta: 'Continue to Component Manager',
-      // Not a gate: 04 §7 says a component missing Rjc is still worth carrying
-      // forward, and this screen must not become a second place that blocks.
-      blockedHere: false,
-    };
+    return step(
+      '04',
+      '補齊元件熱資料',
+      health.componentData === 'errors'
+        ? '部分元件有錯誤，會擋下熱網路建立，請到元件管理修正。'
+        : '匯入的元件還缺 Rjc、溫度上限、熱路徑或基座，補齊後求解才有意義。',
+    );
   }
   if (!health.thermalNetwork) {
-    return {
-      label: 'Assign Thermal Architecture',
-      description:
-        'Define thermal architecture and start building thermal paths between components.',
-      screenCode: '05',
-      screenPath: screen('05').path,
-      cta: 'Continue to Thermal Path Builder',
-      blockedHere: false,
-    };
+    return step('05', '建立熱路徑', '指定熱架構，建立元件之間的熱路徑。');
   }
   if (!health.baselineScenario) {
-    return {
-      label: 'Define Boundary Conditions',
-      description: 'A scenario with ambient conditions is required before solving.',
-      screenCode: '06',
-      screenPath: screen('06').path,
-      cta: 'Continue to Boundary Conditions',
-      blockedHere: false,
-    };
+    return step('06', '設定邊界條件', '求解前需要一個有環境條件的情境。');
   }
   if (!health.solved) {
-    return {
-      label: 'Solve Thermal Network',
-      description: 'Run the nodal solver and review temperatures and heat flow.',
-      screenCode: '07',
-      screenPath: screen('07').path,
-      cta: 'Continue to Thermal Network',
-      blockedHere: false,
-    };
+    return step('07', '求解熱網路', '執行求解，檢查溫度與熱流。');
   }
-  return {
-    label: 'Review Results',
-    description: 'Inspect the worst component, the dominant path and the ranked bottlenecks.',
-    screenCode: '09',
-    screenPath: screen('09').path,
-    cta: 'Continue to Results Overview',
-    blockedHere: false,
-  };
+  return step('09', '查看結果', '檢查最熱的元件、主要熱路徑與瓶頸排名。');
 }

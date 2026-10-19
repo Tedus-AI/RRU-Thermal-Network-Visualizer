@@ -73,21 +73,21 @@ export const useSolverStore = create<SolverStoreState>((set, get) => ({
     set({ state: 'READY', result: null, issues: [], lastSolvedAt: null, dirtyReasons: [] }),
 }));
 
-/** Label used by the Project Overview "Last Solve" row (01 §10). */
+/** Label used by Screen 01's project progress "求解" row (01 §10). */
 export function lastSolveLabel(state: SolverState, lastSolvedAt: string | null): string {
-  if (!lastSolvedAt) return 'Not Solved';
+  if (!lastSolvedAt) return '尚未求解';
   switch (state) {
     case 'SOLVED':
-      return 'Solved';
+      return '已完成';
     case 'WARNING':
-      return 'Solved with warnings';
+      return '已完成，有警告';
     case 'DIRTY':
-      return 'Stale (inputs changed)';
+      return '結果需更新';
     case 'SOLVING':
-      return 'Solving…';
+      return '求解中…';
     case 'FAILED':
-      return 'Failed';
+      return '求解失敗';
     default:
-      return 'Not Solved';
+      return '尚未求解';
   }
 }

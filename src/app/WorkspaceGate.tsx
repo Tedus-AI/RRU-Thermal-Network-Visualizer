@@ -70,8 +70,8 @@ export function WorkspaceGate({ children }: { children: React.ReactNode }) {
           <Loader2 className="size-4 animate-spin" aria-hidden />
           {busyMessage ??
             (source === 'sharepoint'
-              ? 'Opening SharePoint… / 正在開啟 SharePoint…'
-              : 'Opening project folder… / 正在開啟專案資料夾…')}
+              ? '正在開啟 SharePoint…'
+              : '正在開啟專案資料夾…')}
         </span>
       </div>
     );
@@ -100,10 +100,10 @@ export function WorkspaceGate({ children }: { children: React.ReactNode }) {
 
   // SharePoint: what the button says depends on what is wrong.
   const spButton = !sp.enabled
-    ? { label: 'Open SharePoint / 開啟 SharePoint', icon: <Cloud className="size-4" aria-hidden /> }
+    ? { label: '開啟 SharePoint', icon: <Cloud className="size-4" aria-hidden /> }
     : sp.status === 'needs_permission'
-      ? { label: 'Sign in and continue / 登入並繼續', icon: <LogIn className="size-4" aria-hidden /> }
-      : { label: 'Try again / 重試', icon: <RefreshCw className="size-4" aria-hidden /> };
+      ? { label: '登入並繼續', icon: <LogIn className="size-4" aria-hidden /> }
+      : { label: '重試', icon: <RefreshCw className="size-4" aria-hidden /> };
 
   return (
     <div className="flex h-full items-center justify-center overflow-y-auto bg-canvas p-8">
@@ -112,18 +112,10 @@ export function WorkspaceGate({ children }: { children: React.ReactNode }) {
           <Cloud className="size-5" aria-hidden />
         </div>
         <h1 className="text-[19px] font-bold text-ink-900">
-          {remembered ? 'Continue where you left off' : 'Where are your projects?'}
+          {remembered ? '繼續上次的工作' : '專案要存在哪裡？'}
         </h1>
-        <p className="mt-0.5 text-[14px] font-semibold text-ink-500">
-          {remembered ? '繼續上次的工作' : '請選擇專案儲存位置'}
-        </p>
-        <p className="mt-3 text-[13px] leading-relaxed text-ink-500">
-          Use both: every save goes to SharePoint and to the local folder, and the local copy opens
-          when SharePoint cannot be reached. Either one is enough to start.
-          <span className="mt-1 block text-ink-400">
-            建議兩個都設定：每次存檔會同時寫入 SharePoint 與本機資料夾；SharePoint 連不上時可用本機副本開啟。
-            任一個即可開始使用，另一個之後可在右上角的儲存狀態中設定。
-          </span>
+        <p className="mt-2 text-[13px] leading-relaxed text-ink-500">
+          設定一個就能開始；建議兩個都設定，每次存檔會同時寫入，SharePoint 連不上時改用本機副本。
         </p>
 
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -135,30 +127,23 @@ export function WorkspaceGate({ children }: { children: React.ReactNode }) {
             <h2 className="flex items-center gap-1.5 text-[14px] font-bold text-ink-900">
               <Cloud className="size-4 text-accent-600" aria-hidden />
               SharePoint
-              <span className="text-[12px] font-semibold text-ink-500">/ 線上共用</span>
+              <span className="text-[12px] font-semibold text-ink-500">團隊共用</span>
             </h2>
             <p className="text-[12px] leading-relaxed text-ink-500">
               {sp.enabled && sp.status === 'needs_permission' ? (
                 <>
-                  The Microsoft sign-in has expired
+                  Microsoft 登入已過期
                   {sp.account ? (
                     <>
-                      {' '}
-                      (<span className="font-semibold text-ink-700">{sp.account.email}</span>)
+                      （<span className="font-semibold text-ink-700">{sp.account.email}</span>）
                     </>
                   ) : null}
-                  ; signing in opens a Microsoft window.
-                  <span className="mt-1 block text-ink-400">
-                    Microsoft 登入已過期，按下按鈕會開啟 Microsoft 登入視窗。
-                  </span>
+                  ，請重新登入。
                 </>
               ) : (
                 <>
-                  Sign in with your company Microsoft account. Projects are shared with the team in{' '}
-                  <span className="font-mono break-all text-ink-700">{sharePoint.location()}</span>.
-                  <span className="mt-1 block text-ink-400">
-                    以公司 Microsoft 帳號登入，專案存放在上列 SharePoint 資料夾，與團隊共用；任何瀏覽器皆可使用。
-                  </span>
+                  以公司 Microsoft 帳號登入，專案存在{' '}
+                  <span className="font-mono break-all text-ink-700">{sharePoint.location()}</span>。
                 </>
               )}
             </p>
@@ -180,7 +165,7 @@ export function WorkspaceGate({ children }: { children: React.ReactNode }) {
                   disabled={busy != null}
                   onClick={() => void openSharePoint(true)}
                 >
-                  Use another account / 改用其他帳號
+                  改用其他帳號
                 </button>
               )}
             </div>
@@ -189,30 +174,19 @@ export function WorkspaceGate({ children }: { children: React.ReactNode }) {
           <section className="flex flex-col gap-2.5 rounded-lg border border-line bg-surface-muted p-4">
             <h2 className="flex items-center gap-1.5 text-[14px] font-bold text-ink-900">
               <HardDrive className="size-4 text-ink-400" aria-hidden />
-              Local folder
-              <span className="text-[12px] font-semibold text-ink-500">/ 本機資料夾</span>
+              本機資料夾
             </h2>
             {!folderSupported ? (
               <p className="flex gap-2 text-[12px] leading-relaxed text-ink-500">
                 <MonitorX className="mt-0.5 size-4 shrink-0 text-ink-400" aria-hidden />
-                <span>
-                  This browser cannot open a local folder (it needs the File System Access API —
-                  Chrome or Edge). SharePoint works here.
-                  <span className="mt-1 block text-ink-400">
-                    此瀏覽器無法開啟本機資料夾（需要 Chrome 或 Edge）；SharePoint 可正常使用。
-                  </span>
-                </span>
+                <span>此瀏覽器無法開啟本機資料夾，請改用 Chrome 或 Edge；SharePoint 可正常使用。</span>
               </p>
             ) : handle && localStatus === 'needs_permission' ? (
               <>
                 <p className="text-[12px] leading-relaxed text-ink-500">
-                  Your folder{' '}
-                  <span className="font-mono font-semibold text-ink-900">{folderName ?? ''}</span> is
-                  remembered; the browser only needs access granted again — for security, only a
-                  click can do that.
-                  <span className="mt-1 block text-ink-400">
-                    已記住你的資料夾，只需重新授權；基於安全性，權限只能由使用者點擊恢復。
-                  </span>
+                  已記住資料夾{' '}
+                  <span className="font-mono font-semibold text-ink-900">{folderName ?? ''}</span>
+                  ，點一下重新授權即可。
                 </p>
                 <ErrorNote message={localError} />
                 <div className="mt-auto flex flex-col items-start gap-1.5">
@@ -222,7 +196,7 @@ export function WorkspaceGate({ children }: { children: React.ReactNode }) {
                     icon={<Spinning busy={busy === 'local'} icon={<FolderSync className="size-4" aria-hidden />} />}
                     onClick={() => void reconnectLocal()}
                   >
-                    Reconnect / 重新連結
+                    重新授權
                   </Button>
                   <button
                     type="button"
@@ -230,18 +204,14 @@ export function WorkspaceGate({ children }: { children: React.ReactNode }) {
                     disabled={busy != null}
                     onClick={() => void chooseFolder()}
                   >
-                    Choose a different folder / 改選其他資料夾
+                    改選其他資料夾
                   </button>
                 </div>
               </>
             ) : (
               <>
                 <p className="text-[12px] leading-relaxed text-ink-500">
-                  A copy of every project in a folder on this computer; every project file already in
-                  it is listed, and it opens without the network.
-                  <span className="mt-1 block text-ink-400">
-                    每個專案在這台電腦的資料夾保留一份副本；資料夾內既有的專案檔會全部列出，離線也能開啟。
-                  </span>
+                  在這台電腦保留每個專案的副本，離線也能開啟。
                 </p>
                 <ErrorNote message={localError} />
                 <div className="mt-auto">
@@ -251,7 +221,7 @@ export function WorkspaceGate({ children }: { children: React.ReactNode }) {
                     icon={<Spinning busy={busy === 'local-pick'} icon={<FolderOpen className="size-4" aria-hidden />} />}
                     onClick={() => void chooseFolder()}
                   >
-                    Choose Folder / 選擇資料夾
+                    選擇資料夾
                   </Button>
                 </div>
               </>

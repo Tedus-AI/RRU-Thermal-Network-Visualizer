@@ -42,7 +42,6 @@ export function ResizablePane({
   defaultHeight,
   header,
   actions,
-  labelEn,
   labelZh,
   children,
 }: {
@@ -59,6 +58,7 @@ export function ResizablePane({
    * takes the label and the seam, and this takes the controls.
    */
   actions?: ReactNode;
+  /** English name — no longer shown; kept for the existing call sites. */
   labelEn: string;
   labelZh: string;
   children: ReactNode;
@@ -124,7 +124,7 @@ export function ResizablePane({
         <div
           role="separator"
           aria-orientation="horizontal"
-          aria-label={`Resize or collapse ${labelEn} / 調整或收合${labelZh}`}
+          aria-label={`調整或收合${labelZh}`}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={endGesture}
@@ -157,8 +157,8 @@ export function ResizablePane({
           aria-expanded={!state.collapsed}
           title={
             state.collapsed
-              ? `Expand ${labelEn} / 展開${labelZh}`
-              : `Collapse ${labelEn} / 收合${labelZh}`
+              ? `展開${labelZh}`
+              : `收合${labelZh}`
           }
           className="flex min-w-0 flex-1 items-center gap-2 py-2.5 pl-3.5 text-left"
         >

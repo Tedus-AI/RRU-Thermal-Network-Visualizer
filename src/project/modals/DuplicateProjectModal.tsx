@@ -1,9 +1,13 @@
 /**
  * Duplicate Project (01 §16).
  *
- * FloTHERM mapping and solver results default to OFF because both are tied to a
- * specific geometry/scenario version — copying them would carry provenance that
- * no longer describes the new project (00 §16, Rule 3).
+ * What is copied: the project record (identity, product context, materials) and,
+ * when ticked, the scenarios. Components, the thermal network, FloTHERM mapping
+ * and solver results are NOT copied — this modal used to offer checkboxes for
+ * them, ticked, that changed nothing, so a duplicate came out empty while the
+ * dialog said otherwise. The dialog now says what it does; copying the rest
+ * would be a feature of its own (01 §16 says solver results and FloTHERM
+ * mapping stay off by default in any case: 00 §16, Rule 3).
  */
 
 import { useState } from 'react';
@@ -18,21 +22,6 @@ import { projectIdExists, saveProject, saveScenarios } from '@/data/persistence'
 import { createRevision } from '@/domain/revision';
 import { toast } from '@/ui/toast';
 
-export interface DuplicateOptions {
-  components: boolean;
-  network: boolean;
-  scenarios: boolean;
-  flothermMapping: boolean;
-  solverResults: boolean;
-}
-
-const COPY_ITEMS: Array<{ key: keyof DuplicateOptions; label: string; note?: string }> = [
-  { key: 'components', label: 'Components / 元件' },
-  { key: 'network', label: 'Thermal Network / 熱網路' },
-  { key: 'scenarios', label: 'Scenarios / 情境' },
-  { key: 'flothermMapping', label: 'FloTHERM Mapping / FloTHERM 映射', note: '與特定 CFD 分析綁定' },
-  { key: 'solverResults', label: 'Solver Results / 求解結果', note: '與特定幾何版本綁定' },
-];
 
 export function DuplicateProjectModal({
   source,
@@ -45,22 +34,16 @@ export function DuplicateProjectModal({
   onClose: () => void;
   onDuplicated: (projectId: string) => void;
 }) {
-  const [name, setName] = useState(`${source.project_name} (Copy)`);
+  const [name, setName] = useState(`${source.project_name}（副本）`);
   const [id, setId] = useState(`${source.project_id}_COPY`.slice(0, 64));
-  const [options, setOptions] = useState<DuplicateOptions>({
-    components: true,
-    network: true,
-    scenarios: true,
-    flothermMapping: false,
-    solverResults: false,
-  });
+  const [copyScenarios, setCopyScenarios] = useState(true);
 
   const error = !name.trim()
-    ? 'New Project Name is required.'
+    ? '請填新專案名稱。'
     : !PROJECT_ID_PATTERN.test(id.trim())
-      ? 'Project ID must be 3–64 characters using letters, digits, underscore or hyphen.'
+      ? '專案代號限 3–64 字元：英數字、底線或連字號。'
       : projectIdExists(id.trim())
-        ? `Project ID "${id.trim()}" is already in use.`
+        ? `專案代號「${id.trim()}」已被使用。`
         : null;
 
   const handleDuplicate = () => {
@@ -76,7 +59,7 @@ export function DuplicateProjectModal({
     };
     saveProject(copy);
 
-    if (options.scenarios && scenarios.length > 0) {
+    if (copyScenarios && scenarios.length > 0) {
       saveScenarios(
         copy.project_id,
         scenarios.map((s) => ({
@@ -89,20 +72,20 @@ export function DuplicateProjectModal({
       saveScenarios(copy.project_id, [createBaselineScenario(copy.project_id)]);
     }
 
-    toast.success(`Project duplicated as "${copy.project_name}"`);
+    toast.success(`已複製為「${copy.project_name}」`);
     onDuplicated(copy.project_id);
   };
 
   return (
     <Modal
-      title="Duplicate Project / 複製專案"
-      description="Creates an independent copy. The source project is left untouched. / 建立獨立副本，來源專案不受影響。"
+      title="複製專案"
+      description="複製專案資料（基本資料、材料與製程預設）；元件與熱網路不會複製。來源專案不受影響。"
       onClose={onClose}
       footer={
         <>
-          <Button onClick={onClose}>Cancel / 取消</Button>
+          <Button onClick={onClose}>取消</Button>
           <Button variant="primary" disabled={Boolean(error)} onClick={handleDuplicate}>
-            Duplicate Project / 複製
+            複製
           </Button>
         </>
       }
@@ -121,28 +104,15 @@ export function DuplicateProjectModal({
           />
         </Field>
 
-        <fieldset>
-          <legend className="mb-2 text-[12px] font-semibold text-ink-700">Copy / 複製項目</legend>
-          <div className="flex flex-col gap-1.5">
-            {COPY_ITEMS.map((item) => (
-              <label
-                key={item.key}
-                className="flex items-center gap-2.5 text-[13px] text-ink-700"
-              >
-                <input
-                  type="checkbox"
-                  checked={options[item.key]}
-                  className="size-4 accent-[var(--color-accent-600)]"
-                  onChange={(e) =>
-                    setOptions((prev) => ({ ...prev, [item.key]: e.target.checked }))
-                  }
-                />
-                {item.label}
-                {item.note && <span className="text-[12px] text-ink-400">— {item.note}</span>}
-              </label>
-            ))}
-          </div>
-        </fieldset>
+        <label className="flex items-center gap-2.5 text-[13px] text-ink-700">
+          <input
+            type="checkbox"
+            checked={copyScenarios}
+            className="size-4 accent-[var(--color-accent-600)]"
+            onChange={(e) => setCopyScenarios(e.target.checked)}
+          />
+          一併複製情境（{scenarios.length} 個）
+        </label>
       </div>
     </Modal>
   );

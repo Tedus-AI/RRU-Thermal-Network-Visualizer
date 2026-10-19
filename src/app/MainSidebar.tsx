@@ -14,6 +14,9 @@
  * Indentation alone was not enough: the previous version gave heading and item
  * the same padding and near-identical icon sizes, so all sixteen rows read as
  * one flat list.
+ *
+ * Labels are Chinese, one line each. A deferred screen (03 FloTHERM Import) is
+ * not listed at all until it exists; the numbers of the others do not move.
  */
 
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
@@ -35,18 +38,19 @@ export function MainSidebar({
     <nav
       aria-label="主要導覽"
       className={`flex shrink-0 flex-col border-r border-shell-line bg-shell-800 transition-[width] duration-200 ${
-        collapsed ? 'w-16' : 'w-72'
+        collapsed ? 'w-16' : 'w-56'
       }`}
     >
       <div className="scrollbar-thin flex-1 overflow-y-auto py-2">
         {SCREEN_GROUPS.map((group, groupIndex) => {
           const GroupIcon = GROUP_ICONS[group.label];
           const first = groupIndex === 0;
+          const screens = group.screens.filter((screen) => !screen.deferred);
 
           return (
             <section
               key={group.label}
-              aria-label={group.labelEn}
+              aria-label={group.label}
               className={
                 collapsed
                   ? first
@@ -60,25 +64,20 @@ export function MainSidebar({
               {/* Deliberately not a button: it is a caption, not a destination. */}
               {collapsed ? (
                 GroupIcon && (
-                  <div className="flex justify-center pb-1" title={group.labelEn}>
+                  <div className="flex justify-center pb-1" title={group.label}>
                     <GroupIcon size={13} className="text-white/30" />
                   </div>
                 )
               ) : (
-                <h2 className="flex items-center gap-1.5 px-3 pb-1.5 text-[10.5px] font-bold tracking-[0.09em] text-white/40 uppercase">
+                <h2 className="flex items-center gap-1.5 px-3 pb-1.5 text-[11px] font-bold tracking-[0.06em] text-white/40">
                   {GroupIcon && <GroupIcon size={12} className="shrink-0" />}
-                  <span className="truncate">
-                    {group.labelEn}
-                    <span className="ml-1.5 font-medium tracking-normal text-white/25 normal-case">
-                      {group.label}
-                    </span>
-                  </span>
+                  <span className="truncate">{group.label}</span>
                 </h2>
               )}
 
               {/* The rail is what carries the nesting; the indent alone did not. */}
               <ul className={collapsed ? '' : 'ml-[1.15rem] border-l border-white/10 pl-1.5'}>
-                {group.screens.map((screen) => {
+                {screens.map((screen) => {
                   const to = projectId ? projectPath(projectId, screen.path) : null;
                   const active = to != null && location.pathname === to;
                   const Icon = screen.icon;
@@ -94,9 +93,7 @@ export function MainSidebar({
                       <button
                         type="button"
                         disabled={!to}
-                        title={
-                          collapsed ? `${screen.code} ${screen.labelEn} / ${screen.label}` : undefined
-                        }
+                        title={collapsed ? `${screen.code} ${screen.label}` : undefined}
                         aria-current={active ? 'page' : undefined}
                         onClick={() => to && navigate(to)}
                         className={`flex w-full items-center gap-2.5 rounded-md text-left text-[13px] transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
@@ -109,35 +106,18 @@ export function MainSidebar({
                       >
                         <Icon size={15} className="shrink-0" />
                         {!collapsed && (
-                          /* English primary, Traditional Chinese beneath — 02 §3. */
-                          <span className="min-w-0 flex-1 leading-tight">
-                            <span className="block truncate">
-                              <span
-                                className={`tabular mr-1.5 ${active ? 'text-white/70' : 'text-white/40'}`}
-                              >
-                                {screen.code}
-                              </span>
-                              {screen.labelEn}
-                            </span>
+                          <span className="min-w-0 flex-1 truncate">
                             <span
-                              className={`block truncate text-[10.5px] ${
-                                active ? 'text-white/70' : 'text-white/40'
-                              }`}
+                              className={`tabular mr-1.5 ${active ? 'text-white/70' : 'text-white/40'}`}
                             >
-                              {screen.label}
+                              {screen.code}
                             </span>
+                            {screen.label}
                           </span>
                         )}
                         {!collapsed && !screen.implemented && (
-                          <span
-                            className="shrink-0 rounded bg-white/10 px-1.5 py-0.5 text-[10px] font-medium whitespace-nowrap text-white/40"
-                            title={
-                              screen.deferred
-                                ? 'Deferred until the FloTHERM export schema is validated'
-                                : undefined
-                            }
-                          >
-                            {screen.deferred ? 'Deferred' : '待開發'}
+                          <span className="shrink-0 rounded bg-white/10 px-1.5 py-0.5 text-[10px] font-medium whitespace-nowrap text-white/40">
+                            待開發
                           </span>
                         )}
                       </button>
@@ -154,10 +134,11 @@ export function MainSidebar({
         type="button"
         onClick={onToggle}
         aria-label={collapsed ? '展開選單' : '收合選單'}
+        title={collapsed ? '展開選單' : undefined}
         className="flex items-center justify-center gap-2 border-t border-shell-line py-3 text-[12px] text-white/55 hover:bg-shell-700 hover:text-white"
       >
         <ChevronsLeft size={15} className={collapsed ? 'rotate-180' : ''} />
-        {!collapsed && <span>Collapse / 收合選單</span>}
+        {!collapsed && <span>收合選單</span>}
       </button>
     </nav>
   );

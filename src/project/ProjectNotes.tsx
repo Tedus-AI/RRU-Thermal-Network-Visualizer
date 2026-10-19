@@ -1,4 +1,4 @@
-/** Section E — Project Notes / Thermal Assumptions (01 §9). Plain text in V1. */
+/** Section D — 備註 (01 §9 Project Notes / Thermal Assumptions). Plain text in V1. */
 
 import { SectionCard, TextArea } from '@/ui/primitives';
 import { useProjectStore } from '@/data/projectStore';
@@ -8,28 +8,23 @@ export function ProjectNotes({ readOnly }: { readOnly: boolean }) {
   const patchContext = useProjectStore((s) => s.patchContext);
   if (!draft) return null;
   const notes = draft.project_context.notes;
+  const length = notes.trim().length;
 
   return (
     <SectionCard
-      step={6}
-      title="Project Notes / Thermal Assumptions"
-      subtitle="專案備註與熱設計假設"
+      title="備註"
       collapsible
-      summary={
-        notes.trim()
-          ? `${notes.trim().length} characters / ${notes.trim().length} 個字`
-          : 'Empty / 尚未填寫'
-      }
+      // Folded while empty: an empty box is not worth the height, and the
+      // header still says it is there.
+      defaultOpen={length > 0}
+      summary={length > 0 ? `${length} 字` : '尚未填寫'}
     >
       <TextArea
-        aria-label="Project notes and thermal assumptions"
+        aria-label="備註與熱設計假設"
         rows={5}
         value={notes}
         disabled={readOnly}
-        placeholder={
-          'Customer thermal requirement, GR-487 assumptions, solar condition, ' +
-          'known hardware restrictions, special test conditions…'
-        }
+        placeholder="客戶熱需求、GR-487 假設、日照條件、已知硬體限制、特殊測試條件…"
         onChange={(event) => patchContext({ notes: event.target.value })}
       />
     </SectionCard>

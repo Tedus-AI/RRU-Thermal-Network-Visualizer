@@ -11,8 +11,6 @@
 import { useCallback, useMemo } from 'react';
 import { useProjectStore } from '@/data/projectStore';
 import { useScenarioStore } from '@/data/scenarioStore';
-import { useComponentStore } from '@/data/componentStore';
-import { useNetworkStore } from '@/data/networkStore';
 import { useBoundaryStore } from '@/data/boundaryStore';
 import { validateProjectForm } from './projectValidation';
 import { toast } from '@/ui/toast';
@@ -24,24 +22,16 @@ export function useProjectSave() {
 
   const scenarios = useScenarioStore((s) => s.scenarios);
   const activeScenarioId = useScenarioStore((s) => s.activeScenarioId);
-  const componentCount = useComponentStore((s) => s.componentCount());
-  const flothermMappingCount = useNetworkStore((s) => s.flothermMappingCount());
 
   const scenario = useMemo(
     () => scenarios.find((s) => s.id === activeScenarioId) ?? scenarios[0] ?? null,
     [scenarios, activeScenarioId],
   );
 
-  const { errors, warnings } = useMemo(() => {
-    if (!draft) return { errors: {}, warnings: [] as string[] };
-    return validateProjectForm({
-      project: draft,
-      scenario,
-      isProjectIdTaken,
-      componentCount,
-      flothermMappingCount,
-    });
-  }, [draft, scenario, isProjectIdTaken, componentCount, flothermMappingCount]);
+  const errors = useMemo<Record<string, string>>(() => {
+    if (!draft) return {};
+    return validateProjectForm({ project: draft, scenario, isProjectIdTaken }).errors;
+  }, [draft, scenario, isProjectIdTaken]);
 
   const canSave = !readOnly && Object.keys(errors).length === 0;
 
@@ -51,7 +41,7 @@ export function useProjectSave() {
     if (!current || store.isReadOnly()) return false;
 
     if (Object.keys(errors).length > 0) {
-      toast.error('Cannot save: please fix the highlighted fields.');
+      toast.error('無法建立：請先修正標示的欄位。');
       return false;
     }
 
@@ -71,7 +61,7 @@ export function useProjectSave() {
 
     const persisted = store.commit();
     if (!persisted) {
-      toast.error('Save failed.');
+      toast.error('建立失敗。');
       return false;
     }
 
@@ -80,9 +70,9 @@ export function useProjectSave() {
     if (boundaryStore.dirty && boundaryStore.current()?.project_id === projectId) {
       boundaryStore.save(projectId);
     }
-    toast.success('Project saved successfully');
+    toast.success('專案已建立');
     return true;
   }, [errors]);
 
-  return { save, canSave, errors, warnings, scenario };
+  return { save, canSave, errors, scenario };
 }

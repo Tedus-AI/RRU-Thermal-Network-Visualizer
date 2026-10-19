@@ -4,7 +4,6 @@
  *   AppShell
  *   ├─ TopHeader
  *   ├─ MainSidebar
- *   ├─ BreadcrumbBar
  *   └─ ScreenWorkspace   (rendered by each screen)
  *
  * Screens 01–12 may not replace, restyle or re-invent any part of this frame.
@@ -13,14 +12,17 @@
  * workspace back its height. 00 §13 still holds: solver state, project,
  * scenario and save state all read from the header, so no screen shows numbers
  * without their status. Only the component and node counts were lost, and
- * Screen 01's Project Overview already carries those.
+ * Screen 01's project progress already carries those.
+ *
+ * The breadcrumb bar went the same way: the project name is in the header's
+ * selector and the screen is in the sidebar and the page title, so the bar was
+ * a third copy of both.
  */
 
 import { useEffect, useRef, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { TopHeader } from './TopHeader';
 import { MainSidebar } from './MainSidebar';
-import { BreadcrumbBar } from './BreadcrumbBar';
 import { ToastViewport } from '@/ui/toast';
 import { ScreenErrorBoundary } from './ErrorBoundary';
 import { useProjectStore } from '@/data/projectStore';
@@ -132,7 +134,6 @@ export function AppShell() {
         <div className="flex min-h-0 flex-1">
           <MainSidebar collapsed={collapsed} onToggle={() => setCollapsed((v) => !v)} />
           <main className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-canvas">
-            <BreadcrumbBar />
             <div className="min-h-0 flex-1">
               {/* A screen crash must never blank the whole app. */}
               <ScreenErrorBoundary resetKey={location.pathname}>
@@ -144,7 +145,7 @@ export function AppShell() {
         <ToastViewport />
         {conflict && (
           <Modal
-            title="Saved as a conflict copy / 已另存為衝突副本"
+            title="已另存為衝突副本"
             width="max-w-lg"
             onClose={() => useFolderStore.getState().clearConflict()}
             footer={
@@ -156,39 +157,28 @@ export function AppShell() {
                     navigate(projectPath(conflict.projectId, route?.screen ?? 'info'));
                   }}
                 >
-                  Open SharePoint Version / 開啟 SharePoint 版本
+                  開啟 SharePoint 版本
                 </Button>
                 <Button
                   variant="primary"
                   onClick={() => useFolderStore.getState().clearConflict()}
                 >
-                  Continue in My Copy / 繼續編輯我的副本
+                  繼續編輯我的副本
                 </Button>
               </>
             }
           >
             <div className="flex flex-col gap-2 text-[12.5px] leading-relaxed text-ink-700">
               <p>
-                <span className="font-semibold">{conflict.projectName}</span> was saved on
-                SharePoint by{' '}
-                <span className="font-semibold">{conflict.remoteBy ?? 'someone else'}</span>
-                {conflict.remoteAt ? ` at ${new Date(conflict.remoteAt).toLocaleString()}` : ''}{' '}
-                while you were editing it. Nothing was overwritten: your version is now the
-                project <span className="font-semibold">{conflict.copyName}</span>, which is open
-                now, and {conflict.projectName} shows the SharePoint version.
-              </p>
-              <p className="text-ink-500">
                 「{conflict.projectName}」在你編輯期間已被
-                {conflict.remoteBy ?? '其他人'}
+                <span className="font-semibold">{conflict.remoteBy ?? '其他人'}</span>
                 {conflict.remoteAt ? `（${new Date(conflict.remoteAt).toLocaleString()}）` : ''}
-                存到 SharePoint。沒有任何資料被覆蓋：你的版本已另存為專案「{conflict.copyName}」並已開啟，
-                原專案顯示 SharePoint 上的版本。
+                存到 SharePoint。沒有資料被覆蓋：你的版本已另存為「
+                <span className="font-semibold">{conflict.copyName}</span>
+                」並已開啟，原專案顯示 SharePoint 上的版本。
               </p>
               <p className="rounded border border-line bg-surface-muted px-2.5 py-1.5 text-[11.5px] text-ink-500">
-                Compare the two, carry over what you need, then delete the one you no longer want.
-                <span className="block text-ink-400">
-                  請比對兩個版本、整合需要的內容後，刪除不再需要的那一個。
-                </span>
+                請比對兩個版本、整合需要的內容後，刪除不再需要的那一個。
               </p>
             </div>
           </Modal>

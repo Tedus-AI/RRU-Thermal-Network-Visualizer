@@ -182,7 +182,8 @@ describe('BoundaryInspector simplification', () => {
     expect(html).toContain('Required Inputs');
     expect(html).toContain('Calculated Preview');
     expect(html).toContain('0.1323 °C/W');
-    expect(html).toContain('No issues for this boundary port.');
+    // Rendered through the shared `Bi` helper, which shows the Chinese.
+    expect(html).toContain('此邊界端口沒有問題。');
     expect(html).toContain('Advanced Details');
     expect(html).toContain('由SCR04/05 邊界幾何同步');
     expect(html).not.toMatch(/<input[^>]+id="bc-param-area_m2"/);
@@ -453,7 +454,7 @@ describe('BoundaryInspector simplification', () => {
       suppressSsrLayoutWarning.mockRestore();
     }
 
-    expect(html).toContain('Reason (optional)');
+    expect(html).toContain('理由（選填）');
     expect(html).toContain('does not block the solver');
     expect(html).not.toContain('required=""');
   });

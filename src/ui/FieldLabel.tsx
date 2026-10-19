@@ -1,9 +1,11 @@
 /**
- * Bilingual labelling — 02 §3, docs/APP_SHELL_CONTRACT.md.
+ * UI labelling — docs/APP_SHELL_CONTRACT.md.
  *
- * English is primary. Traditional Chinese is shown inline when there is room and
- * through a keyboard-focusable tooltip when there is not. The browser's native
- * `title` attribute is deliberately not relied upon (02 §3.4, §32).
+ * Traditional Chinese is the UI language. Every helper here still takes the
+ * English name, because the call sites were written bilingual and some labels
+ * have no Chinese yet: the Chinese is shown when it exists, and the English is
+ * only the fallback. Industry terms engineers use in English (TIM, BLT, HSK,
+ * Rjc …) are written into the Chinese string itself, not appended here.
  */
 
 import {
@@ -95,48 +97,32 @@ function ViewportTooltip({
 }
 
 /**
- * Any piece of UI text, bilingual.
+ * Any piece of UI text: the Chinese, or the English when there is no Chinese.
  *
- * The project-wide rule: English and Traditional Chinese side by side wherever
- * they fit; where they do not, English stays and the Chinese moves onto hover /
- * keyboard focus. Nothing is ever dropped — it is only relocated.
+ *   <Bi en="Add Zone" zh="新增區域" />   → "新增區域"
  *
- *   <Bi en="Add Zone" zh="新增區域" inline />   → "Add Zone / 新增區域"
- *   <Bi en="Add Zone" zh="新增區域" />          → "Add Zone" + tooltip
+ * `inline` is kept so the bilingual call sites need no edit; it no longer
+ * changes anything, since there is only one language to place.
  */
 export function Bi({
   en,
   zh,
-  inline = false,
   className = '',
 }: {
   en: string;
   zh: string;
-  /** true when there is room for both languages on the same line. */
+  /** Unused since the UI went Chinese-only; kept for the existing call sites. */
   inline?: boolean;
   className?: string;
 }) {
-  if (inline) {
-    return (
-      <span className={className}>
-        {en} <span className="font-normal text-ink-400">/ {zh}</span>
-      </span>
-    );
-  }
-  return (
-    <BilingualTooltip zh={zh}>
-      <span className={className}>{en}</span>
-    </BilingualTooltip>
-  );
+  return <span className={className}>{zh || en}</span>;
 }
 
 /**
- * The same rule for interactive controls. A button already owns focus and a
- * click target, so nesting a focusable tooltip inside it would be wrong — the
- * Chinese rides on the native tooltip and the accessible name instead.
+ * The same rule for a control's native tooltip and accessible name.
  */
 export function biTitle(en: string, zh: string): string {
-  return `${en} / ${zh}`;
+  return zh || en;
 }
 
 /**
@@ -170,7 +156,7 @@ export function EngineeringInfo({
       <button
         type="button"
         aria-describedby={open ? tooltipId : undefined}
-        aria-label={label ? `${label} — engineering explanation / 工程說明` : '工程說明'}
+        aria-label={label ? `${label}：說明` : '說明'}
         className="inline-flex text-ink-400 transition-colors hover:text-accent-600 focus:text-accent-600 focus:outline-none"
         onMouseEnter={() => setOpen(true)}
         onMouseLeave={() => setOpen(false)}
@@ -221,15 +207,14 @@ export function BilingualTooltip({
 }
 
 /**
- * A label with an English name, an optional inline Chinese name, an optional unit
- * and an optional explanatory Chinese tooltip.
+ * A label: the Chinese name (English when there is none), an optional unit and
+ * an optional explanatory tooltip.
  */
 export function FieldLabel({
   label,
   zh,
   unit,
   tooltip,
-  inline = true,
   htmlFor,
   required,
 }: {
@@ -238,18 +223,17 @@ export function FieldLabel({
   unit?: string;
   /** Longer Traditional Chinese explanation, shown on hover/focus. */
   tooltip?: string;
-  /** false renders English only and moves the Chinese name into the tooltip. */
+  /** Unused since the UI went Chinese-only; kept for the existing call sites. */
   inline?: boolean;
   htmlFor?: string;
   required?: boolean;
 }) {
-  const zhTooltip = tooltip ?? (!inline && zh ? zh : undefined);
+  const zhTooltip = tooltip;
 
   const text = (
     <>
-      {label}
+      {zh || label}
       {unit && <span className="ml-1 font-normal text-ink-400">({unit})</span>}
-      {inline && zh && <span className="ml-1 font-normal text-ink-400">/ {zh}</span>}
       {required && (
         <span className="ml-0.5 text-danger-500" aria-hidden>
           *
@@ -273,8 +257,8 @@ export function FieldLabel({
 }
 
 /**
- * Table header cell. Column headers are tight, so the English name stacks over the
- * Chinese one, with the long explanation on the tooltip.
+ * Table header cell: the Chinese name and unit on one line, with the long
+ * explanation on the tooltip.
  */
 export function ColumnLabel({
   label,
@@ -288,12 +272,9 @@ export function ColumnLabel({
   tooltip?: string;
 }) {
   const content = (
-    <span className="block leading-tight">
-      <span className="block whitespace-nowrap">
-        {label}
-        {unit && <span className="ml-0.5 font-normal text-ink-400">({unit})</span>}
-      </span>
-      {zh && <span className="block text-[10px] font-normal whitespace-nowrap text-ink-400">{zh}</span>}
+    <span className="block leading-tight whitespace-nowrap">
+      {zh || label}
+      {unit && <span className="ml-0.5 font-normal text-ink-400">({unit})</span>}
     </span>
   );
 

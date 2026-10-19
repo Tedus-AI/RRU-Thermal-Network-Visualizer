@@ -5,8 +5,8 @@
  * Every save goes to both places, so each gets its own line, in the space the
  * old one-line "Saved to JSON" chip took — the header keeps its height:
  *
- *   ☁ SharePoint   ✓ Saved / 已儲存   10:09
- *   🖴 Local        ✓ Saved / 已儲存   10:09
+ *   ☁ SharePoint   ✓ 已儲存   10:09
+ *   🖴 本機         ✓ 已儲存   10:09
  *
  * Each line reports its own write pipeline (saving, saved with the time, or
  * what is wrong) and is actionable rather than decorative: an expired sign-in
@@ -35,7 +35,6 @@ import {
 import { useFolderStore, type SyncTarget } from '@/data/folderStore';
 import { useSaveStatus } from '@/data/saveStatus';
 import { sharePoint } from '@/data/sharepoint';
-import { biTitle } from '@/ui/FieldLabel';
 import { toast } from '@/ui/toast';
 import { longTime, useStorageView, type LightTone, type TargetView } from './storageView';
 
@@ -74,8 +73,8 @@ async function runAction(target: SyncTarget): Promise<boolean> {
     toast.error(
       error ??
         (target === 'sharepoint'
-          ? 'Not signed in. / 尚未登入 Microsoft。'
-          : 'Permission was not granted. / 未取得資料夾權限。'),
+          ? '尚未登入 Microsoft。'
+          : '未取得資料夾權限。'),
     );
   }
   return ok;
@@ -99,11 +98,8 @@ function Light({
       type="button"
       onClick={fix ? onAction : onPanel}
       disabled={working}
-      aria-label={biTitle(`${view.label}: ${view.stateEn}`, `${view.zh}：${view.stateZh}`)}
-      title={biTitle(
-        `${view.label}${view.isSource ? ' (projects are read from here)' : ''}: ${view.where || '—'}\n${view.stateEn}${view.time ? ` ${view.time}` : ''} — ${view.explain[0]}`,
-        `${view.zh}${view.isSource ? '（目前從這裡讀取專案）' : ''}：${view.where || '—'}\n${view.stateZh}${view.time ? ` ${view.time}` : ''} — ${view.explain[1]}`,
-      )}
+      aria-label={`${view.zh}：${view.stateZh}`}
+      title={`${view.zh}${view.isSource ? '（目前從這裡讀取專案）' : ''}：${view.where || '—'}\n${view.stateZh}${view.time ? ` ${view.time}` : ''} — ${view.explain[1]}`}
       className={`flex h-[22px] w-full min-w-0 items-center gap-1.5 rounded px-1.5 text-left text-[11px] leading-4 transition-colors disabled:cursor-wait ${TONE_HOVER[view.tone]}`}
     >
       <Icon
@@ -113,28 +109,21 @@ function Light({
       <span
         className={`w-[3.9rem] shrink-0 font-semibold ${view.configured ? 'text-white/90' : 'text-white/45'}`}
       >
-        {view.label}
+        {view.target === 'sharepoint' ? 'SharePoint' : '本機'}
       </span>
       <span
         className={`flex min-w-0 flex-1 items-center gap-1 font-semibold ${TONE_TEXT[view.tone]}`}
       >
         <StateIcon tone={view.tone} busy={working} />
-        {/* Narrow screens keep the English; the Chinese and the time move to
-            the tooltip (docs/APP_SHELL_CONTRACT.md, language rule). */}
-        <span className="truncate">
-          {view.stateEn}
-          <span className="hidden min-[1500px]:inline"> / {view.stateZh}</span>
-        </span>
+        <span className="truncate">{view.stateZh}</span>
       </span>
       {view.time && (
-        <span className="hidden shrink-0 font-normal text-ok-500/70 min-[1500px]:inline">
-          {view.time}
-        </span>
+        <span className="shrink-0 font-normal text-ok-500/70">{view.time}</span>
       )}
       {view.pending > 0 && view.tone !== 'busy' && (
         <span
           className="shrink-0 rounded bg-warn-500/20 px-1 text-[10px] font-bold text-warn-400"
-          aria-label={biTitle(`${view.pending} waiting`, `${view.pending} 筆待寫入`)}
+          aria-label={`${view.pending} 筆待寫入`}
         >
           {view.pending}
         </span>
@@ -184,7 +173,7 @@ export function SaveIndicator({ onOpenSettings }: { onOpenSettings?: () => void 
 
   return (
     <div ref={rootRef} className="relative min-w-0">
-      <div className="flex h-12 w-[13.75rem] items-stretch rounded-md border border-shell-600 bg-shell-900/40 min-[1500px]:w-[17rem]">
+      <div className="flex h-12 w-[13.75rem] items-stretch rounded-md border border-shell-600 bg-shell-900/40">
         <div className="flex min-w-0 flex-1 flex-col justify-center gap-px py-0.5 pl-0.5">
           <Light
             view={sharepoint}
@@ -204,8 +193,8 @@ export function SaveIndicator({ onOpenSettings }: { onOpenSettings?: () => void 
           onClick={() => setOpen((v) => !v)}
           aria-expanded={open}
           aria-haspopup="dialog"
-          aria-label={biTitle('Storage details', '儲存位置詳細資訊')}
-          title={biTitle('Storage details', '儲存位置詳細資訊')}
+          aria-label="儲存位置詳細資訊"
+          title="儲存位置詳細資訊"
           className="relative flex w-6 shrink-0 items-center justify-center rounded-r-md border-l border-shell-600 text-white/50 transition-colors hover:bg-shell-700 hover:text-white"
         >
           <ChevronDown className={`size-3.5 transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden />
@@ -318,7 +307,7 @@ function StoragePanel({
       } else {
         tab?.close();
         toast.error(
-          'The folder is not on SharePoint yet — it is created with the first project. / SharePoint 上還沒有這個資料夾，建立第一個專案時會自動建立。',
+          'SharePoint 上還沒有這個資料夾，建立第一個專案時會自動建立。',
         );
       }
     } catch (error) {
@@ -333,8 +322,8 @@ function StoragePanel({
       if (ok) {
         toast.success(
           select
-            ? `Signed in as ${sharePoint.account()?.email ?? ''}. / 已切換 Microsoft 帳號。`
-            : 'SharePoint connected — every save now goes there too. / 已連線 SharePoint，之後每次存檔也會寫入。',
+            ? `已切換為 ${sharePoint.account()?.email ?? ''}。`
+            : '已連線 SharePoint，之後每次存檔也會寫入。',
         );
         onClose();
       } else {
@@ -348,7 +337,7 @@ function StoragePanel({
       const ok = await useFolderStore.getState().bind();
       if (ok) {
         toast.success(
-          'Local folder set — every save now goes there too. / 已設定本機資料夾，之後每次存檔也會寫入。',
+          '已設定本機資料夾，之後每次存檔也會寫入。',
         );
       }
     });
@@ -360,13 +349,10 @@ function StoragePanel({
   return (
     <div
       role="dialog"
-      aria-label={biTitle('Storage', '儲存位置')}
+      aria-label="儲存位置"
       className="absolute top-full right-0 z-50 mt-2 flex w-[24rem] flex-col gap-3 rounded-lg border border-line bg-surface p-3.5 text-ink-700 shadow-2xl"
     >
-      <p className="text-[11px] leading-relaxed text-ink-500">
-        Every save is written to both places that are set up.
-        <span className="block text-ink-400">每次存檔都會同時寫入已設定的兩個位置。</span>
-      </p>
+      <p className="text-[11px] leading-relaxed text-ink-500">每次存檔會同時寫入已設定的兩個位置。</p>
 
       {views.map((view) => (
         <section key={view.target} className="flex flex-col gap-1.5 rounded-md border border-line p-2.5">
@@ -376,16 +362,13 @@ function StoragePanel({
             ) : (
               <HardDrive className="size-4 text-ink-400" aria-hidden />
             )}
-            {view.target === 'sharepoint' ? 'SharePoint' : 'Local folder'}
-            <span className="font-normal text-ink-400">
-              / {view.target === 'sharepoint' ? '線上共用' : '本機資料夾'}
-            </span>
+            {view.target === 'sharepoint' ? 'SharePoint（團隊共用）' : '本機資料夾'}
             {view.isSource && (
               <span
                 className="ml-auto rounded bg-accent-100 px-1.5 py-0.5 text-[10px] font-bold text-accent-700"
-                title={biTitle('Projects are read from here', '目前從這裡讀取專案')}
+                title="目前從這裡讀取專案"
               >
-                READING / 讀取中
+                讀取來源
               </span>
             )}
           </h3>
@@ -404,23 +387,20 @@ function StoragePanel({
                     )}
                   </>
                 ) : (
-                  'Not signed in / 尚未登入'
+                  '尚未登入'
                 )}
               </span>
             </p>
           )}
           <p className={`rounded border px-2 py-1 text-[11px] leading-relaxed ${PANEL_TONE[view.tone]}`}>
-            <span className="font-semibold">
-              {view.stateEn} / {view.stateZh}
-            </span>
+            <span className="font-semibold">{view.stateZh}</span>
             {view.lastSyncAt && (
               <span className="opacity-80">
                 {' · '}
                 {longTime(view.lastSyncAt)}
               </span>
             )}
-            <span className="block">{view.explain[0]}</span>
-            <span className="block opacity-80">{view.explain[1]}</span>
+            <span className="block">{view.explain[1]}</span>
           </p>
           <div className="flex flex-wrap gap-1.5">
             {view.target === 'sharepoint' ? (
@@ -433,16 +413,16 @@ function StoragePanel({
                       icon={<LogIn className="size-3.5" aria-hidden />}
                       onClick={() => onAction('sharepoint')}
                     >
-                      {view.stateEn === 'Sign in' ? 'Sign in / 登入' : 'Retry / 重試'}
+                      {view.stateEn === 'Sign in' ? '登入' : '重試'}
                     </PanelButton>
                   )}
                   <PanelButton
                     icon={<ExternalLink className="size-3.5" aria-hidden />}
                     onClick={() => void openInSharePoint()}
                     disabled={view.tone === 'warn' && view.action !== 'panel'}
-                    title={biTitle('Open the project folder in SharePoint', '在 SharePoint 開啟專案資料夾')}
+                    title="在 SharePoint 開啟專案資料夾"
                   >
-                    Open / 開啟資料夾
+                    開啟資料夾
                   </PanelButton>
                   <PanelButton
                     icon={
@@ -454,9 +434,9 @@ function StoragePanel({
                     }
                     disabled={busy}
                     onClick={() => void connectSharePoint(true)}
-                    title={biTitle('Sign in with another Microsoft account', '改用其他 Microsoft 帳號登入')}
+                    title="改用其他 Microsoft 帳號登入"
                   >
-                    Switch account / 切換帳號
+                    切換帳號
                   </PanelButton>
                 </>
               ) : (
@@ -471,12 +451,9 @@ function StoragePanel({
                     )
                   }
                   onClick={() => void connectSharePoint(false)}
-                  title={biTitle(
-                    'Sign in with the company Microsoft account; the projects here are added to SharePoint, nothing is overwritten',
-                    '以公司 Microsoft 帳號登入；這裡的專案會加入 SharePoint，不會覆蓋任何檔案',
-                  )}
+                  title="以公司 Microsoft 帳號登入；這裡的專案會加入 SharePoint，不會覆蓋任何檔案"
                 >
-                  Connect SharePoint / 連線 SharePoint
+                  連線 SharePoint
                 </PanelButton>
               )
             ) : view.configured ? (
@@ -488,7 +465,7 @@ function StoragePanel({
                     icon={<RefreshCw className="size-3.5" aria-hidden />}
                     onClick={() => onAction('local')}
                   >
-                    {view.stateEn === 'Reconnect' ? 'Reconnect / 重新授權' : 'Retry / 重試'}
+                    {view.stateEn === 'Reconnect' ? '重新授權' : '重試'}
                   </PanelButton>
                 )}
                 <PanelButton
@@ -496,7 +473,7 @@ function StoragePanel({
                   disabled={busy}
                   onClick={() => void chooseFolder()}
                 >
-                  Change folder / 變更資料夾
+                  變更資料夾
                 </PanelButton>
               </>
             ) : (
@@ -507,7 +484,7 @@ function StoragePanel({
                   icon={<FolderOpen className="size-3.5" aria-hidden />}
                   onClick={() => void chooseFolder()}
                 >
-                  Choose folder / 選擇資料夾
+                  選擇資料夾
                 </PanelButton>
               )
             )}
@@ -517,11 +494,7 @@ function StoragePanel({
 
       {cacheFull && (
         <p className="rounded border border-warn-500/40 bg-warn-100/70 px-2 py-1 text-[11px] leading-relaxed text-warn-600">
-          Browser storage is full. Edits are held in memory and still written to both places; do
-          not close the tab while a write is pending.
-          <span className="block opacity-80">
-            瀏覽器儲存空間已滿。修改暫存在記憶體並照常寫入；寫入中請勿關閉分頁。
-          </span>
+          瀏覽器儲存空間已滿。修改暫存在記憶體並照常寫入；寫入中請勿關閉分頁。
         </p>
       )}
 
@@ -530,12 +503,9 @@ function StoragePanel({
           primary={remoteChange}
           icon={<RefreshCw className="size-3.5" aria-hidden />}
           onClick={reload}
-          title={biTitle(
-            'Read every project again (edits not yet written are written first)',
-            '重新讀取所有專案（未寫入的修改會先寫入）',
-          )}
+          title="重新讀取所有專案（未寫入的修改會先寫入）"
         >
-          Reload / 重新載入
+          重新載入
         </PanelButton>
         {onOpenSettings && (
           <PanelButton
@@ -545,7 +515,7 @@ function StoragePanel({
               onOpenSettings();
             }}
           >
-            Storage settings / 儲存設定
+            儲存設定
           </PanelButton>
         )}
       </div>
