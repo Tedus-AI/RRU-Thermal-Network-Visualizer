@@ -50,5 +50,5 @@ export function useSectionAlert(errors: Record<string, string>, fields: readonly
     (field) => errors[field] && (touched[field] || submitAttempted),
   ).length;
   if (count === 0) return undefined;
-  return `${count} ${count === 1 ? 'field needs' : 'fields need'} attention / ${count} 個欄位待處理`;
+  return `${count} 個欄位待處理`;
 }

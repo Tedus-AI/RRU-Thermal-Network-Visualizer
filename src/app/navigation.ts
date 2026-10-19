@@ -47,7 +47,7 @@ export interface ScreenGroup {
   screens: ScreenDef[];
 }
 
-/** English name for each sidebar group — English primary per 02 §3. */
+/** English name for each sidebar group — kept for exports and accessible names. */
 export const GROUP_LABELS_EN: Record<string, string> = {
   專案與匯入: 'Project & Import',
   熱網路建立: 'Network Setup',

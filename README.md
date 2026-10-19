@@ -38,6 +38,8 @@ Cytoscape 只是 view / interaction layer：Graph 的唯一真實來源是 `netw
 
 ## Screen 03 為何延後
 
+側欄目前不列出 03（等實作後再出現，其他頁編號不變）。
+
 `03_FloTHERM_Import` 目前**刻意延後，不是取消**：FloTHERM 實際 export schema 尚未用真實輸出檔
 驗證，猜格式的成本遠高於等待。因此 04 起的資料模型已預留完整整合介面：
 
@@ -83,9 +85,10 @@ Cytoscape 只是 view / interaction layer：Graph 的唯一真實來源是 `netw
 
 ## App Shell 規則
 
-Header / Sidebar / Breadcrumb / Status Bar 為全專案共用且集中維護，個別 Screen 不得自行
-更改或重新設計。完整規則見 [`docs/APP_SHELL_CONTRACT.md`](docs/APP_SHELL_CONTRACT.md)。
-自 Screen 02 起 UI 以英文為主、中英並列，空間不足時以繁體中文 tooltip 補足。
+Header / Sidebar 為全專案共用且集中維護，個別 Screen 不得自行更改或重新設計。
+完整規則見 [`docs/APP_SHELL_CONTRACT.md`](docs/APP_SHELL_CONTRACT.md)。
+UI 以繁體中文為主，只保留業界慣用的英文術語（TIM、BLT、HSK、Rjc、PA、Die-casting、Embedded…）；
+畫面之間以「05 熱路徑建立」這樣的編號＋名稱互相引用。
 
 ## 線上版本
 
@@ -134,7 +137,7 @@ Thermal-Spec-DB（網站）
 - 元件庫是共用檔：兩人同時存檔時依項目合併（每個零件以較新的 `saved_at` 為準）；
   代價是剛刪除的零件若同時有人存檔元件庫，會被合併回來。
 - 切換專案前會先比對 SharePoint，有較新版本（且本機沒有未寫入的修改）就先讀入；
-  切回分頁時也會檢查目前專案，Header 顯示「Newer online / 雲端有新版」可重新載入。
+  切回分頁時也會檢查目前專案，Header 顯示「雲端有新版」可重新載入。
 
 **部署前提**：Azure 應用程式（clientId `17fc1ab4-…`）的「單頁應用程式（SPA）」重新導向 URI 必須加入
 `https://tedus-ai.github.io/RRU-Thermal-Network-Visualizer/auth.html`
@@ -153,18 +156,17 @@ Thermal-Spec-DB（網站）
 
 ### Header 儲存狀態
 
-Header 中間的兩行區塊，高度與原本相同：
+Header 中間的兩行區塊：
 
 ```text
-☁ SharePoint  ✓ Saved / 已儲存   10:09
-🖴 Local       ✓ Saved / 已儲存   10:09
+☁ SharePoint  ✓ 已儲存   10:09
+🖴 本機        ✓ 已儲存   10:09
 ```
 
-每一行顯示該位置的寫入狀態：Saved / Saving… / Sign in（需重新登入）/ Reconnect（需重新授權）/
-Offline（離線，改用本機副本）/ Not saved / Newer online / Not set up，右側數字是待補寫的專案數。
+每一行顯示該位置的寫入狀態：已儲存／寫入中／需重新登入／需重新授權／離線（改用本機副本）／
+未寫入／儲存失敗／雲端有新版／未設定，右側數字是待補寫的專案數。
 登入過期或權限失效時**點該行即可修復**；其他情況點擊展開面板，可看完整位置、帳號、上次寫入，
 以及「連線 SharePoint」「選擇資料夾」「開啟資料夾」「切換帳號」「重新載入」「儲存設定」。
-螢幕寬度不足 1500 px 時只顯示英文狀態，中文與時間在滑鼠提示中。
 
 ## 開發指令
 

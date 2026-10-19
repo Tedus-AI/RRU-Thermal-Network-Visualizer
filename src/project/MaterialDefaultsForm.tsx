@@ -9,14 +9,20 @@
  *
  * 01 §45 / 00 §53 still hold: nothing here creates a node or an edge. These are
  * inputs the Screen 05 templates read when they resolve an edge.
+ *
+ * The section explains itself only where something is missing. It used to
+ * carry four standing paragraphs (what the section is, what BLT means, how the
+ * base spreading works, what the coin is), which read the same every visit; the
+ * BLT definition is now the column's tooltip, and the base and coin say one
+ * line each, in amber, while the numbers a calculation needs are not there.
  */
 
 import { useState } from 'react';
 
-import { Plus, Trash2 } from 'lucide-react';
+import { Info, Plus, Trash2 } from 'lucide-react';
 
 import { Button, NumberInput, SectionCard, Select, TextInput } from '@/ui/primitives';
-import { FieldLabel } from '@/ui/FieldLabel';
+import { BilingualTooltip, FieldLabel } from '@/ui/FieldLabel';
 import {
   PROCESS_FIELDS,
   HSK_BASE_MATERIAL_OPTIONS,
@@ -73,6 +79,7 @@ function MaterialNumber({
   readOnly,
   placeholder = '—',
   allowEmpty = false,
+  showLabel = true,
   onChange,
 }: {
   id: string;
@@ -84,6 +91,8 @@ function MaterialNumber({
   readOnly: boolean;
   placeholder?: string;
   allowEmpty?: boolean;
+  /** false inside a table, where the column header already names the value. */
+  showLabel?: boolean;
   onChange: (next: SourcedValue<number> | null) => void;
 }) {
   /** Text being edited. null means "show whatever is stored". */
@@ -107,9 +116,10 @@ function MaterialNumber({
 
   return (
     <div className="flex flex-col gap-1.5">
-      <FieldLabel label={label} zh={zh} unit={unit} tooltip={tooltip} htmlFor={id} />
+      {showLabel && <FieldLabel label={label} zh={zh} unit={unit} tooltip={tooltip} htmlFor={id} />}
       <NumberInput
         id={id}
+        aria-label={showLabel ? undefined : `${label}：${zh}`}
         step="any"
         className={isAssumed && text == null ? 'text-ink-500' : undefined}
         value={text ?? value?.value ?? ''}
@@ -129,11 +139,10 @@ function MaterialNumber({
 
 export function MaterialDefaultsForm({
   readOnly,
-  step,
-  defaultOpen = true,
+  defaultOpen,
 }: {
   readOnly: boolean;
-  step?: number;
+  /** Left out, the section opens only while something a calculation needs is missing. */
   defaultOpen?: boolean;
 }) {
   const draft = useProjectStore((s) => s.draft);
@@ -178,7 +187,7 @@ export function MaterialDefaultsForm({
       ...materials.tim,
       {
         id: nextTimId(materials),
-        name: 'New material',
+        name: '新材料',
         k_W_mK: sourced(3, 'Assumed', { confidence: 'low' }),
         blt_mm: sourced(0.1, 'Assumed', { confidence: 'low' }),
       },
@@ -196,44 +205,56 @@ export function MaterialDefaultsForm({
     patchMaterials({ [field]: next } as Partial<MaterialDefaults>);
   };
 
+  const material = HSK_BASE_MATERIAL_OPTIONS.find(
+    (option) => option.value === materials.hsk_base_material,
+  );
+  const dims = (...values: Array<SourcedValue<number> | null | undefined>) =>
+    values.map((value) => (value?.value == null ? '?' : String(value.value))).join('×');
+
   return (
     <SectionCard
-      step={step}
-      title="Materials & Process Defaults"
-      subtitle="材料與製程預設"
+      title="材料與製程預設"
       collapsible
-      defaultOpen={defaultOpen}
-      // Folded, this still has to show the one thing that needs a decision.
+      defaultOpen={defaultOpen ?? (coinArea == null || !hskConfigured)}
+      // Folded, this still has to show what is set and the one thing that needs a decision.
       summary={
         <>
-          {materials.tim.length} TIM materials · {assumed} shipped defaults in use
-          {coinArea == null ? ' · ⚠ coin size not set / 銅塊尺寸未設定' : ''}
-          {!hskConfigured ? ' · ⚠ HSK base not fully set / HSK 底座資料未齊' : ''}
+          {materials.tim.length} 種 TIM · 底座 {material?.zh ?? materials.hsk_base_material}{' '}
+          {dims(materials.hsk_base_L_mm, materials.hsk_base_W_mm, materials.hsk_base_thickness_mm)}{' '}
+          mm · 銅塊 {dims(materials.coin_L_mm, materials.coin_W_mm, materials.coin_thickness_mm)} mm
+          {assumed > 0 ? ` · ${assumed} 項出廠預設` : ''}
+          {coinArea == null ? ' · ⚠ 銅塊尺寸未填' : ''}
+          {!hskConfigured ? ' · ⚠ 底座資料未齊' : ''}
         </>
       }
     >
       <div className="flex flex-col gap-5">
-        <p className="text-[12px] leading-relaxed text-ink-500">
-          Shared by every component. A component inherits these unless it overrides them, and
-          nothing here creates a thermal node or edge.
-          <span className="block">
-            所有元件共用。元件層可個別覆寫；本區不建立任何 Node/Edge。
-          </span>
+        <p className="text-[12px] text-ink-400">
+          所有元件共用，元件可個別覆寫。<span className="text-ink-500">灰字</span>
+          ＝出廠預設值，尚未確認。
         </p>
 
         {/* --- TIM library --- */}
         <fieldset>
-          <legend className="mb-2 text-[12px] font-semibold text-ink-700">
-            Thermal Interface Materials / 熱介面材料
-          </legend>
+          <legend className="mb-2 text-[12px] font-semibold text-ink-700">熱介面材料（TIM）</legend>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[520px] text-[13px]">
+            <table className="w-full min-w-[480px] text-[13px]">
               <thead>
                 <tr className="border-b border-line text-left text-[12px] text-ink-500">
-                  <th className="py-1.5 pr-3 font-semibold">Material / 材料</th>
-                  <th className="py-1.5 pr-3 font-semibold">k (W/m·K)</th>
-                  <th className="py-1.5 pr-3 font-semibold">BLT (mm)</th>
-                  <th className="py-1.5 font-semibold">Used / 使用中</th>
+                  <th className="py-1.5 pr-3 font-semibold">材料</th>
+                  <th className="w-36 py-1.5 pr-3 font-semibold">
+                    k <span className="font-normal text-ink-400">(W/m·K)</span>
+                  </th>
+                  <th className="w-36 py-1.5 pr-3 font-semibold">
+                    <BilingualTooltip
+                      align="left"
+                      zh="壓合後的實際厚度，不是材料原始片厚。元件可個別覆寫 BLT，k 一律取自這張表。"
+                    >
+                      BLT <span className="font-normal text-ink-400">(mm)</span>
+                      <Info size={12} className="text-ink-400" aria-hidden />
+                    </BilingualTooltip>
+                  </th>
+                  <th className="w-20 py-1.5 pr-3 text-right font-semibold">使用中</th>
                   <th className="w-8 py-1.5" />
                 </tr>
               </thead>
@@ -242,42 +263,44 @@ export function MaterialDefaultsForm({
                   const used = timUsageCount(components, material.id);
                   return (
                     <tr key={material.id} className="border-b border-line/60">
-                      <td className="py-1.5 pr-3">
+                      <td className="py-1 pr-3">
                         <TextInput
-                          aria-label={`Name for ${material.name}`}
-                          className="h-9"
+                          aria-label={`${material.name} 名稱`}
+                          className="h-8"
                           value={material.name}
                           disabled={readOnly}
                           onChange={(event) => renameTim(material.id, event.target.value)}
                         />
                       </td>
-                      <td className="py-1.5 pr-3">
+                      <td className="py-1 pr-3">
                         <MaterialNumber
                           id={`tim-${material.id}-k`}
-                          label={`${material.name} k`}
-                          zh="導熱係數"
+                          label={material.name}
+                          zh="k"
+                          showLabel={false}
                           value={material.k_W_mK}
                           readOnly={readOnly}
                           onChange={setTim(material.id, 'k_W_mK')}
                         />
                       </td>
-                      <td className="py-1.5 pr-3">
+                      <td className="py-1 pr-3">
                         <MaterialNumber
                           id={`tim-${material.id}-blt`}
-                          label={`${material.name} BLT`}
-                          zh="壓合厚度"
+                          label={material.name}
+                          zh="BLT"
+                          showLabel={false}
                           value={material.blt_mm}
                           readOnly={readOnly}
                           onChange={setTim(material.id, 'blt_mm')}
                         />
                       </td>
-                      <td className="tabular py-1.5 text-[12px] text-ink-500">
-                        {used === 0 ? '—' : used}
+                      <td className="tabular py-1 pr-3 text-right text-[12px] text-ink-500">
+                        {used === 0 ? '—' : `${used} 顆`}
                       </td>
-                      <td className="py-1.5">
+                      <td className="py-1">
                         <button
                           type="button"
-                          aria-label={`Delete ${material.name}`}
+                          aria-label={`刪除 ${material.name}`}
                           className="rounded p-1 text-ink-400 hover:text-danger-600 disabled:cursor-not-allowed disabled:opacity-40"
                           disabled={readOnly || used > 0}
                           // A material in use is never deletable: the components
@@ -285,9 +308,7 @@ export function MaterialDefaultsForm({
                           // reference and their TIM edges would go unresolved
                           // without anybody being told.
                           title={
-                            used > 0
-                              ? `${used} 顆元件正在使用，請先改指定到其他材料`
-                              : 'Delete / 刪除'
+                            used > 0 ? `${used} 顆元件正在使用，請先改用其他材料` : '刪除'
                           }
                           onClick={() => removeTim(material.id)}
                         >
@@ -300,40 +321,28 @@ export function MaterialDefaultsForm({
                 {materials.tim.length === 0 && (
                   <tr>
                     <td colSpan={5} className="py-3 text-[12px] text-ink-400">
-                      No materials yet — add the ones this project uses.
-                      <span className="block">尚未建立材料，請新增本專案會用到的項目。</span>
+                      尚未建立材料，請新增本專案會用到的項目。
                     </td>
                   </tr>
                 )}
               </tbody>
             </table>
           </div>
-          <div className="mt-2 flex items-center gap-3">
-            <Button icon={<Plus size={14} />} disabled={readOnly} onClick={addTim}>
-              Add material / 新增材料
-            </Button>
-            <p className="text-[11px] text-ink-400">
-              BLT is what the material compresses to in the build, not its as-supplied thickness. A
-              component may override it; k always comes from here.
-              <span className="block">
-                BLT 為鎖附壓合後的實際厚度，非供應狀態厚度。元件可覆寫 BLT，k 一律取自本表。
-              </span>
-            </p>
-          </div>
+          <Button className="mt-2 h-8" icon={<Plus size={14} />} disabled={readOnly} onClick={addTim}>
+            新增材料
+          </Button>
         </fieldset>
 
         {/* --- Shared HSK base ------------------------------------------------ */}
         <fieldset>
-          <legend className="mb-2 text-[12px] font-semibold text-ink-700">
-            HSK Base / 散熱器底座
-          </legend>
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
+          <legend className="mb-2 text-[12px] font-semibold text-ink-700">散熱器底座</legend>
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 2xl:grid-cols-6">
             <div className="flex flex-col gap-1.5">
               <FieldLabel
                 label="Base Material"
-                zh="底座材料"
+                zh="材料"
                 htmlFor="mat-hsk-material"
-                tooltip="選擇共用 HSK Base 的材料；k 會帶入建議值，但仍可依材料證明或實測值修改。"
+                tooltip="選材料會帶入建議的 k；有材料證明或實測值時可再修改 k。"
               />
               <Select
                 id="mat-hsk-material"
@@ -341,7 +350,7 @@ export function MaterialDefaultsForm({
                 disabled={readOnly}
                 items={HSK_BASE_MATERIAL_OPTIONS.map((option) => ({
                   value: option.value,
-                  label: `${option.label} / ${option.zh}`,
+                  label: option.zh,
                 }))}
                 onChange={(event) => {
                   const material = event.target.value as HskBaseMaterial;
@@ -357,7 +366,7 @@ export function MaterialDefaultsForm({
             <MaterialNumber
               id="mat-hsk-k"
               label="Base k"
-              zh="底座導熱係數"
+              zh="k"
               unit="W/m·K"
               value={materials.hsk_base_k_W_mK}
               readOnly={readOnly}
@@ -368,65 +377,54 @@ export function MaterialDefaultsForm({
             <MaterialNumber
               id="mat-hsk-thickness"
               label="Base Thickness"
-              zh="底座厚度"
+              zh="厚度"
               unit="mm"
               value={materials.hsk_base_thickness_mm}
               readOnly={readOnly}
               allowEmpty
-              placeholder="e.g. 5"
+              placeholder="例：5"
               onChange={(next) => patchMaterials({ hsk_base_thickness_mm: next })}
             />
             <MaterialNumber
               id="mat-hsk-l"
               label="Base L"
-              zh="底座長"
+              zh="長 L"
               unit="mm"
               value={materials.hsk_base_L_mm}
               readOnly={readOnly}
               allowEmpty
-              placeholder="e.g. 300"
+              placeholder="例：300"
               onChange={(next) => patchMaterials({ hsk_base_L_mm: next })}
             />
             <MaterialNumber
               id="mat-hsk-w"
               label="Base W"
-              zh="底座寬"
+              zh="寬 W"
               unit="mm"
               value={materials.hsk_base_W_mm}
               readOnly={readOnly}
               allowEmpty
-              placeholder="e.g. 220"
+              placeholder="例：220"
               onChange={(next) => patchMaterials({ hsk_base_W_mm: next })}
             />
             <div className="flex flex-col justify-end">
-              <span className="text-[12px] text-ink-500">Base area / 底座面積</span>
-              <span className="tabular text-[13px] font-bold">
+              <span className="text-[12px] text-ink-500">面積</span>
+              <span className="tabular text-[13px] leading-9 font-bold">
                 {hskArea == null ? '—' : `${hskArea.toFixed(0)} mm²`}
               </span>
             </div>
           </div>
-          <p
-            className={`mt-2 text-[11px] leading-relaxed ${
-              hskConfigured ? 'text-ink-400' : 'text-warn-600'
-            }`}
-          >
-            {hskConfigured
-              ? 'Screen 05 spreads each component’s TIM exit area into this base — L × W, thickness and k — to resolve TIM HEAT_OUT → HSK Base (Lee et al. disc spreading).'
-              : 'Base thickness, k and the full L × W envelope are all required before Screen 05 can resolve TIM HEAT_OUT → HSK Base. Heat fans out inside the base, so how much base there is changes the answer.'}
-            <span className="block">
-              {hskConfigured
-                ? 'Screen 05 會以此底座的 L × W、厚度與 k，搭配各元件的 TIM 出口面積計算擴散熱阻，得到至 HSK Base 的熱阻。'
-                : '必須先設定底座厚度、k 與完整的 L × W，Screen 05 才能解析 TIM HEAT_OUT → HSK Base；熱在底座內會擴散，底座多大會影響結果。'}
-            </span>
-          </p>
+          {!hskConfigured && (
+            <p className="mt-2 text-[12px] text-warn-600">
+              ⚠ 厚度、k、長 × 寬未填齊 → 05 無法算出到散熱器底座的擴散熱阻。
+            </p>
+          )}
         </fieldset>
 
         {/* --- Process constants --- */}
         <fieldset>
-          <legend className="mb-2 text-[12px] font-semibold text-ink-700">
-            Conduction & Process / 導熱與製程
-          </legend>
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
+          <legend className="mb-2 text-[12px] font-semibold text-ink-700">導熱與製程</legend>
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             {PROCESS_FIELDS.map(([field, label, zh, unit]) => (
               <MaterialNumber
                 key={field}
@@ -446,63 +444,54 @@ export function MaterialDefaultsForm({
         {/* --- Copper coin --- */}
         <fieldset>
           <legend className="mb-2 text-[12px] font-semibold text-ink-700">
-            Copper Coin / 銅塊
+            <span title="銅塊貼合散熱器那一面的尺寸與厚度；整個設計共用同一種銅塊。">銅塊</span>
           </legend>
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             <MaterialNumber
               id="mat-coin-l"
               label="Coin L"
-              zh="銅塊長"
+              zh="長 L"
               unit="mm"
               value={materials.coin_L_mm}
               readOnly={readOnly}
               allowEmpty
-              placeholder="e.g. 55"
+              placeholder="例：55"
               onChange={(next) => patchMaterials({ coin_L_mm: next })}
             />
             <MaterialNumber
               id="mat-coin-w"
               label="Coin W"
-              zh="銅塊寬"
+              zh="寬 W"
               unit="mm"
               value={materials.coin_W_mm}
               readOnly={readOnly}
               allowEmpty
-              placeholder="e.g. 35"
+              placeholder="例：35"
               onChange={(next) => patchMaterials({ coin_W_mm: next })}
             />
             <MaterialNumber
               id="mat-coin-t"
               label="Coin Thickness"
-              zh="銅塊厚度"
+              zh="厚度"
               unit="mm"
               value={materials.coin_thickness_mm}
               readOnly={readOnly}
               allowEmpty
-              placeholder="e.g. 2.0"
+              placeholder="例：2.0"
               onChange={(next) => patchMaterials({ coin_thickness_mm: next })}
             />
             <div className="flex flex-col justify-end">
-              <span className="text-[12px] text-ink-500">Coin area / 銅塊面積</span>
-              <span className="tabular text-[13px] font-bold">
+              <span className="text-[12px] text-ink-500">面積</span>
+              <span className="tabular text-[13px] leading-9 font-bold">
                 {coinArea == null ? '—' : `${coinArea.toFixed(0)} mm²`}
               </span>
             </div>
           </div>
-          <p
-            className={`mt-2 text-[11px] leading-relaxed ${
-              coinArea == null ? 'text-warn-600' : 'text-ink-400'
-            }`}
-          >
-            {coinArea == null
-              ? 'Not set — copper-coin components cannot resolve their spreading area until this is stated. It is a mechanical decision with no safe default: a guessed size would move every PA’s margin without saying so.'
-              : 'The coin face that meets the heatsink, and how thick it is. One coin serves the whole design, so components read these rather than restating them; the face soldered to the part is that part’s own package outline.'}
-            <span className="block">
-              {coinArea == null
-                ? '未設定 — 銅塊類元件的擴散面積將無法解出。此為機構決策，沒有安全的預設值：亂猜會無聲改變每顆 PA 的溫度餘裕。'
-                : '銅塊貼合散熱器那一面的尺寸與厚度。整個設計共用同一種銅塊，因此元件直接讀取此處；與元件焊接的那一面即該元件的封裝外形。'}
-            </span>
-          </p>
+          {coinArea == null && (
+            <p className="mt-2 text-[12px] text-warn-600">
+              ⚠ 銅塊尺寸未填 → 銅塊類元件無法計算擴散面積。這是機構決策，沒有安全的預設值。
+            </p>
+          )}
         </fieldset>
       </div>
     </SectionCard>

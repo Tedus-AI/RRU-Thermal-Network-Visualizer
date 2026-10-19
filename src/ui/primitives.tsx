@@ -120,15 +120,15 @@ export function SectionCard({
           {collapsible && (
             <button
               type="button"
-              className="flex items-center gap-1 rounded border border-line px-2 py-1 text-[12px] font-semibold text-ink-500 hover:text-ink-900 disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex size-7 items-center justify-center rounded text-ink-400 hover:bg-surface-muted hover:text-ink-900 disabled:cursor-not-allowed disabled:opacity-50"
               aria-expanded={expanded}
               aria-controls={bodyId}
+              aria-label={expanded ? '收合' : '展開'}
               disabled={locked}
-              title={locked ? 'Resolve the errors in this section first. / 請先處理本區的錯誤。' : undefined}
+              title={locked ? '請先處理本區的錯誤' : expanded ? '收合' : '展開'}
               onClick={() => setOpen((value) => !value)}
             >
-              {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-              {expanded ? 'Collapse / 收合' : 'Expand / 展開'}
+              {expanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
             </button>
           )}
         </div>
@@ -207,9 +207,9 @@ export function Field({
   suffix,
   children,
 }: {
-  /** English label — always primary (02 §3, docs/APP_SHELL_CONTRACT.md). */
+  /** English name — shown only when there is no Chinese one. */
   label: string;
-  /** Traditional Chinese name, shown inline beside the English one. */
+  /** Traditional Chinese name — what the UI shows (docs/APP_SHELL_CONTRACT.md). */
   zh?: string;
   htmlFor?: string;
   required?: boolean;
@@ -226,8 +226,7 @@ export function Field({
         htmlFor={htmlFor}
         className="flex items-center gap-1 text-[12px] font-semibold text-ink-700"
       >
-        {label}
-        {zh && <span className="font-normal text-ink-400">/ {zh}</span>}
+        {zh || label}
         {required && (
           <span className="text-danger-500" aria-hidden>
             *
@@ -249,11 +248,8 @@ export function Field({
           <span aria-hidden>⚠</span>
           <span>{error}</span>
         </p>
-      ) : hint ? (
-        <p className="text-[12px] text-ink-400">
-          {hint}
-          {hintZh && <span className="block">{hintZh}</span>}
-        </p>
+      ) : hint || hintZh ? (
+        <p className="text-[12px] text-ink-400">{hintZh || hint}</p>
       ) : null}
     </div>
   );
@@ -343,15 +339,18 @@ export function TextArea({
   );
 }
 
-/** Multi-select rendered as toggle chips — 01 §7.5 Main Heat Rejection. */
+/** Multi-select rendered as toggle chips — 01 §7.3 Cooling Architecture. */
 export function ChipMultiSelect({
   options,
+  labels,
   value,
   onChange,
   disabled,
   label,
 }: {
   options: readonly string[];
+  /** What each option shows, when the stored value is not what the reader should see. */
+  labels?: Partial<Record<string, string>>;
   value: string[];
   onChange: (next: string[]) => void;
   disabled?: boolean;
@@ -380,7 +379,7 @@ export function ChipMultiSelect({
             }`}
           >
             {selected && <span aria-hidden>✓ </span>}
-            {option}
+            {labels?.[option] ?? option}
           </button>
         );
       })}

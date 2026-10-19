@@ -69,7 +69,9 @@ describe('Screen 07 component visibility', () => {
       />,
     );
 
-    expect(html).toContain('Component Visibility / 元件顯示');
+    // The toolbar button's name is the shared `biTitle` helper's, which shows
+    // the Chinese since the UI went Chinese-first.
+    expect(html).toContain('aria-label="元件顯示"');
     expect(html).toContain('>2</span>');
   });
 

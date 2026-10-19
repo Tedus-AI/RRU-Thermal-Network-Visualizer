@@ -22,14 +22,11 @@ import { useSolutionStore } from '@/data/solutionStore';
 import { projectPath } from '@/app/navigation';
 import { toast } from '@/ui/toast';
 
-import { ProjectIdentityForm } from './ProjectIdentityForm';
-import { ProductThermalContextForm } from './ProductThermalContextForm';
-import { BaselineScenarioForm } from './BaselineScenarioForm';
+import { ProjectBasicsForm } from './ProjectBasicsForm';
+import { ProjectScenarios } from './ProjectScenarios';
 import { MaterialDefaultsForm } from './MaterialDefaultsForm';
 import { ProjectNotes } from './ProjectNotes';
-import { ProjectOverviewPanel } from './ProjectOverviewPanel';
-import { ProjectHealthPanel } from './ProjectHealthPanel';
-import { RecommendedNextStep } from './RecommendedNextStep';
+import { ProjectProgressPanel } from './ProjectProgressPanel';
 import { ProjectActionBar } from './ProjectActionBar';
 import { DuplicateProjectModal } from './modals/DuplicateProjectModal';
 import { ArchiveProjectModal } from './modals/ArchiveProjectModal';
@@ -39,13 +36,12 @@ import { useFormTouch } from './formTouch';
 import { seedDemoProject } from '@/mock/seed';
 import { useFolderStore } from '@/data/folderStore';
 import { createScenario } from '@/domain/project';
-import { ProjectScenarioManagement } from './ProjectScenarioManagement';
 
 function PageHeader({ subtitle }: { subtitle?: string }) {
   return (
     <div className="flex items-baseline gap-3 px-6 pt-5 pb-4">
       <h1 className="text-[21px] font-bold text-ink-900">
-        Project Info <span className="font-semibold text-ink-500">/ 專案資訊</span>
+        <span className="tabular mr-2 font-semibold text-ink-400">01</span>專案資訊
       </h1>
       {subtitle && <span className="text-[13px] text-ink-400">{subtitle}</span>}
     </div>
@@ -56,7 +52,7 @@ function PageHeader({ subtitle }: { subtitle?: string }) {
 function LoadingState() {
   return (
     <div className="flex h-full flex-col">
-      <PageHeader subtitle="Loading…" />
+      <PageHeader subtitle="載入中…" />
       <div className="flex min-h-0 flex-1 gap-4 px-6 pb-6">
         <div className="flex flex-1 flex-col gap-4">
           {Array.from({ length: 3 }).map((_, index) => (
@@ -82,22 +78,19 @@ function ErrorState({ message, onRetry }: { message: string; onRetry: () => void
         <div className="mx-auto mb-4 flex size-11 items-center justify-center rounded-lg bg-danger-100 text-danger-600">
           <AlertTriangle size={20} />
         </div>
-        <h1 className="text-[16px] font-bold text-ink-900">
-          Unable to load project.
-          <span className="mt-0.5 block text-[13px] font-normal text-ink-500">無法載入專案。</span>
-        </h1>
+        <h1 className="text-[16px] font-bold text-ink-900">無法載入專案</h1>
         <div className="mt-5 flex justify-center gap-2">
           <Button variant="primary" icon={<RefreshCw size={15} />} onClick={onRetry}>
-            Retry / 重試
+            重試
           </Button>
-          <Button onClick={() => navigate('/')}>Return to Project List / 回專案清單</Button>
+          <Button onClick={() => navigate('/')}>回專案清單</Button>
         </div>
         <button
           type="button"
           className="mt-4 text-[12px] text-ink-400 underline"
           onClick={() => setShowDetail((v) => !v)}
         >
-          {showDetail ? 'Hide technical details / 隱藏技術細節' : 'Show technical details / 顯示技術細節'}
+          {showDetail ? '隱藏技術細節' : '技術細節'}
         </button>
         {showDetail && (
           <pre className="mt-2 overflow-x-auto rounded bg-surface-muted p-3 text-left font-mono text-[11px] text-ink-700">
@@ -123,9 +116,9 @@ export function EmptyProjectState() {
       // one, so write them both out before the folder is read again.
       await useFolderStore.getState().mirrorAll();
       navigate(projectPath(id, 'info'));
-      toast.success('Golden Demo loaded with current analytical results.');
+      toast.success('已載入示範專案。');
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Unable to build the Golden Demo.');
+      toast.error(error instanceof Error ? error.message : '無法建立示範專案。');
     } finally {
       setLoadingDemo(false);
     }
@@ -137,18 +130,9 @@ export function EmptyProjectState() {
         <div className="mx-auto mb-4 flex size-12 items-center justify-center rounded-lg border border-line bg-surface text-accent-600">
           <FilePlus2 size={22} />
         </div>
-        <h1 className="text-[18px] font-bold text-ink-900">
-          Create your first thermal network project
-          <span className="mt-1 block text-[14px] font-semibold text-ink-500">
-            建立你的第一個熱網路專案
-          </span>
-        </h1>
+        <h1 className="text-[18px] font-bold text-ink-900">建立第一個專案</h1>
         <p className="mx-auto mt-2 max-w-sm text-[13px] leading-relaxed text-ink-500">
-          A project holds the product context, scenarios and the thermal network for one
-          5G FR1 radio.
-          <span className="mt-1 block">
-            一個專案包含單一 5G FR1 無線電的產品背景、情境設定與熱網路。
-          </span>
+          一個專案＝一台產品的元件、熱路徑與情境。
         </p>
         <div className="mt-5 flex justify-center gap-2">
           <Button
@@ -156,13 +140,10 @@ export function EmptyProjectState() {
             icon={<FilePlus2 size={15} />}
             onClick={() => navigate('/project/new/info')}
           >
-            + New Project / 新增專案
+            新增專案
           </Button>
-          <Button
-            disabled={loadingDemo}
-            onClick={handleLoadDemo}
-          >
-            {loadingDemo ? 'Building Golden Demo…' : 'Load Golden Demo Project'}
+          <Button disabled={loadingDemo} onClick={handleLoadDemo}>
+            {loadingDemo ? '示範專案建立中…' : '載入示範專案'}
           </Button>
         </div>
       </div>
@@ -187,7 +168,7 @@ export function ProjectInfoView() {
   const scenarios = useScenarioStore((s) => s.scenarios);
   const activeScenarioId = useScenarioStore((s) => s.activeScenarioId);
   const health = useProjectHealth();
-  const { save, canSave, errors, warnings, scenario } = useProjectSave();
+  const { save, canSave, errors, scenario } = useProjectSave();
 
   useEffect(() => {
     if (location.hash !== '#scenario-settings' || !draft) return;
@@ -270,11 +251,11 @@ export function ProjectInfoView() {
   const createProjectScenario = () => {
     const storageProjectId = draft?.project_id.trim() || (projectId === 'new' ? '' : projectId!);
     const source = scenarios.find((entry) => entry.id === activeScenarioId) ?? scenarios[0];
-    const scenario = createScenario(storageProjectId, `Scenario ${scenarios.length + 1}`, source);
+    const scenario = createScenario(storageProjectId, `情境 ${scenarios.length + 1}`, source);
     useScenarioStore.getState().replaceAll([...scenarios, scenario]);
     if (storageProjectId) useScenarioStore.getState().persist(storageProjectId);
     selectScenario(scenario.id);
-    toast.success('Scenario created / 已建立情境');
+    toast.success('已新增情境');
   };
 
   if (!projectId) return <EmptyProjectState />;
@@ -282,12 +263,17 @@ export function ProjectInfoView() {
   if (status === 'error') {
     return (
       <ErrorState
-        message={error ?? 'Unknown error'}
+        message={error ?? '未知錯誤'}
         onRetry={() => useProjectStore.getState().openProject(projectId)}
       />
     );
   }
   if (!draft) return <EmptyProjectState />;
+
+  // Where Continue goes: a new project to Import Components (01 §15), an
+  // existing one to the next step its progress points at.
+  const next = nextStepFor(health);
+  const continueTo = isNew || next.screenCode === '01' ? '' : next.cta;
 
   return (
     <ScreenWorkspace
@@ -295,26 +281,19 @@ export function ProjectInfoView() {
       titleZh="專案資訊"
       badge={
         readOnly ? (
-          <Badge tone="accent">READ ONLY / 唯讀</Badge>
+          <Badge tone="accent">唯讀</Badge>
         ) : isNew ? (
-          <Badge tone="warn">New project — not yet saved / 尚未儲存</Badge>
+          <Badge tone="warn">尚未建立</Badge>
         ) : undefined
       }
-      rightPanel={
-        <>
-          <ProjectOverviewPanel />
-          <ProjectHealthPanel />
-          <RecommendedNextStep />
-        </>
-      }
+      rightPanel={<ProjectProgressPanel />}
       actionBar={
         <ProjectActionBar
           isNew={isNew}
-          readOnly={readOnly}
           canSave={canSave}
           canContinue={canSave}
           archived={draft.status === 'archived'}
-          warningCount={warnings.length}
+          continueTo={continueTo}
           onDuplicate={() => setShowDuplicate(true)}
           onArchive={() => setShowArchive(true)}
           onCreate={handleCreate}
@@ -322,23 +301,18 @@ export function ProjectInfoView() {
         />
       }
     >
-      <ProjectIdentityForm errors={errors} readOnly={readOnly} />
-      <ProductThermalContextForm readOnly={readOnly} />
-      <div id="scenario-settings" className="scroll-mt-4">
-        <BaselineScenarioForm scenario={scenario} errors={errors} readOnly={readOnly} />
-      </div>
-      <ProjectScenarioManagement
+      <ProjectBasicsForm errors={errors} readOnly={readOnly} />
+      <ProjectScenarios
         scenarios={scenarios}
-        activeScenarioId={activeScenarioId}
+        scenario={scenario}
+        errors={errors}
         readOnly={readOnly}
         onSelect={selectScenario}
         onCreate={createProjectScenario}
         onCopyFrom={(scenarioId) => {
           const copied = useBoundaryStore.getState().copyFromScenario(scenarioId);
           toast[copied ? 'success' : 'warning'](
-            copied
-              ? 'Boundary conditions copied — review them / 已複製，請檢查'
-              : 'That scenario has no saved boundary set / 該情境尚無邊界條件',
+            copied ? '已複製邊界條件，請檢查' : '該情境還沒有邊界條件',
           );
         }}
         onDelete={(scenarioId) => {
@@ -346,10 +320,10 @@ export function ProjectInfoView() {
           useScenarioStore.getState().replaceAll(next);
           const storageProjectId = draft.project_id.trim();
           if (storageProjectId) useScenarioStore.getState().persist(storageProjectId);
-          toast.success('Scenario deleted / 已刪除情境');
+          toast.success('已刪除情境');
         }}
       />
-      <MaterialDefaultsForm step={5} readOnly={readOnly} />
+      <MaterialDefaultsForm readOnly={readOnly} />
       <ProjectNotes readOnly={readOnly} />
 
       {showDuplicate && (
@@ -372,13 +346,13 @@ export function ProjectInfoView() {
           onConfirm={() => {
             const nextStatus = draft.status === 'archived' ? 'active' : 'archived';
             if (isNew) {
-              toast.error('Save the project before archiving it.');
+              toast.error('請先建立專案再封存。');
               setShowArchive(false);
               return;
             }
             useProjectStore.getState().setStatus(nextStatus);
             setShowArchive(false);
-            toast.success(nextStatus === 'archived' ? 'Project archived' : 'Project restored');
+            toast.success(nextStatus === 'archived' ? '專案已封存' : '專案已還原');
           }}
         />
       )}
