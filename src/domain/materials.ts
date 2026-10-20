@@ -46,6 +46,11 @@ export interface TimMaterial {
   k_W_mK: SourcedValue<number>;
   /** Default bond line thickness — what it compresses to, not as supplied. */
   blt_mm: SourcedValue<number>;
+  /**
+   * Linked to the TIM Management Tool's material library (its material id, see `timCatalog.ts`):
+   * the name and k follow it, the BLT stays the project's. Absent for a material this project defines.
+   */
+  catalog?: { id: string };
 }
 
 /** Ids of the materials a new project starts with. */
@@ -238,11 +243,16 @@ function normalizeTimLibrary(raw: unknown, fallback: TimMaterial[]): TimMaterial
       // A duplicate id would make one of the two unreachable from a component.
       if (seen.has(id)) return;
       seen.add(id);
+      const catalogId =
+        isObject(entry.catalog) && typeof entry.catalog.id === 'string' && entry.catalog.id.trim()
+          ? entry.catalog.id.trim()
+          : null;
       list.push({
         id,
         name: name ?? id,
         k_W_mK: readSourced(entry.k_W_mK, sourced(1, 'Assumed', { confidence: 'low' })),
         blt_mm: readSourced(entry.blt_mm, sourced(0.1, 'Assumed', { confidence: 'low' })),
+        ...(catalogId ? { catalog: { id: catalogId } } : {}),
       });
     });
     return list;

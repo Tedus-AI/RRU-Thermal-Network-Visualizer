@@ -17,9 +17,9 @@
  * line each, in amber, while the numbers a calculation needs are not there.
  */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
-import { Info, Plus, Trash2 } from 'lucide-react';
+import { Info, Link2, Plus, Scissors, Trash2 } from 'lucide-react';
 
 import { Button, NumberInput, SectionCard, Select, TextInput } from '@/ui/primitives';
 import { BilingualTooltip, FieldLabel } from '@/ui/FieldLabel';
@@ -40,6 +40,17 @@ import {
 import { sourced, withValue, type SourcedValue } from '@/domain/sourcedValue';
 import { useProjectStore } from '@/data/projectStore';
 import { useComponentStore } from '@/data/componentStore';
+import { timCatalogStateText, useTimCatalogStore } from '@/data/timCatalogStore';
+import {
+  catalogReference,
+  followCatalog,
+  linkToCatalog,
+  sameName,
+  timFromCatalog,
+  type CatalogChange,
+  type TimCatalogMaterial,
+} from '@/domain/timCatalog';
+import { TimCatalogPicker } from './TimCatalogPicker';
 
 const PROCESS_TOOLTIPS: Partial<Record<ProcessField, string>> = {
   contact_conductance_W_m2K:
@@ -150,6 +161,29 @@ export function MaterialDefaultsForm({
   // Deleting a material has to know who is using it, so the components are read
   // here rather than the guard being left to the caller.
   const components = useComponentStore((s) => s.components);
+  // TIM 管理工具's catalog: linked materials take its name and k (read once per session).
+  const catalog = useTimCatalogStore((s) => s.catalog);
+  const catalogState = useTimCatalogStore((s) => s.state);
+  const catalogError = useTimCatalogStore((s) => s.error);
+  const loadCatalog = useTimCatalogStore((s) => s.load);
+  const [picking, setPicking] = useState(false);
+  const [followed, setFollowed] = useState<CatalogChange[]>([]);
+  const linkedCount = draft?.materials.tim.filter((m) => m.catalog).length ?? 0;
+
+  useEffect(() => {
+    if (linkedCount > 0) void loadCatalog();
+  }, [linkedCount, loadCatalog]);
+
+  // Linked materials follow the TIM manager. A read-only project shows what would change instead.
+  const library = draft?.materials.tim;
+  useEffect(() => {
+    if (!catalog || !library || readOnly) return;
+    const result = followCatalog(library, catalog);
+    if (result.tim !== library) {
+      patchMaterials({ tim: result.tim });
+      setFollowed(result.changed);
+    }
+  }, [catalog, library, readOnly, patchMaterials]);
 
   if (!draft) return null;
   const materials = draft.materials;
@@ -192,6 +226,35 @@ export function MaterialDefaultsForm({
         blt_mm: sourced(0.1, 'Assumed', { confidence: 'low' }),
       },
     ]);
+
+  /** Picked in 「從 TIM 管理工具帶入」: a same-name material is linked, the rest are added. */
+  const addFromCatalog = (picked: TimCatalogMaterial[]) => {
+    let next = materials.tim;
+    for (const source of picked) {
+      if (next.some((m) => m.catalog?.id === source.id)) continue;
+      const same = next.find((m) => !m.catalog && sameName(m, source));
+      if (same) {
+        next = next.map((m) => (m.id === same.id ? linkToCatalog(m, source) : m));
+        continue;
+      }
+      next = [...next, timFromCatalog(source, nextTimId({ ...materials, tim: next }))];
+    }
+    const result = catalog ? followCatalog(next, catalog) : { tim: next, changed: [] };
+    patchLibrary(result.tim);
+    setFollowed(result.changed);
+    setPicking(false);
+  };
+
+  /** ✂ Back to a material this project defines; the name and k it has now stay. */
+  const unlinkTim = (id: string) =>
+    patchLibrary(
+      materials.tim.map((m) => {
+        if (m.id !== id) return m;
+        const { catalog: _drop, ...rest } = m;
+        void _drop;
+        return rest;
+      }),
+    );
 
   const removeTim = (id: string) => {
     // Belt and braces: the button is disabled while a material is in use, but
@@ -261,27 +324,75 @@ export function MaterialDefaultsForm({
               <tbody>
                 {materials.tim.map((material) => {
                   const used = timUsageCount(components, material.id);
+                  const source = material.catalog
+                    ? catalog?.materials.find((m) => m.id === material.catalog?.id)
+                    : undefined;
+                  // A linked material whose catalog entry is gone keeps what it has (only said when the catalog was read).
+                  const gone = Boolean(material.catalog && catalog && !source);
                   return (
                     <tr key={material.id} className="border-b border-line/60">
                       <td className="py-1 pr-3">
-                        <TextInput
-                          aria-label={`${material.name} 名稱`}
-                          className="h-8"
-                          value={material.name}
-                          disabled={readOnly}
-                          onChange={(event) => renameTim(material.id, event.target.value)}
-                        />
+                        {material.catalog ? (
+                          // Linked: the name comes from the TIM manager — plain text, not a box.
+                          <div className="flex min-h-8 items-center gap-2">
+                            <span className="truncate font-semibold text-ink-900" title={material.name}>
+                              {material.name}
+                            </span>
+                            <span
+                              className="inline-flex shrink-0 items-center gap-1 rounded bg-accent-100 px-1.5 py-0.5 text-[11px] font-bold text-accent-600"
+                              title={
+                                source
+                                  ? `${catalogReference(source)}\n名稱與 k 跟著 TIM 管理工具；BLT 在這裡填`
+                                  : `連結 TIM 管理工具的材料（${material.catalog.id}）\n${timCatalogStateText(catalogState, catalogError) || '名稱與 k 跟著 TIM 管理工具'}`
+                              }
+                            >
+                              <Link2 size={11} aria-hidden />
+                              TIM 管理工具
+                            </span>
+                            {!readOnly && (
+                              <button
+                                type="button"
+                                aria-label={`解除 ${material.name} 與 TIM 管理工具的連結`}
+                                title="解除連結：改回本專案自行維護（保留目前的名稱與 k）"
+                                className="shrink-0 rounded p-1 text-ink-400 hover:text-ink-900"
+                                onClick={() => unlinkTim(material.id)}
+                              >
+                                <Scissors size={13} />
+                              </button>
+                            )}
+                          </div>
+                        ) : (
+                          <TextInput
+                            aria-label={`${material.name} 名稱`}
+                            className="h-8"
+                            value={material.name}
+                            disabled={readOnly}
+                            onChange={(event) => renameTim(material.id, event.target.value)}
+                          />
+                        )}
+                        {gone && (
+                          <p className="mt-0.5 text-[11px] text-warn-600">TIM 管理工具已刪除這種材料，保留目前的值</p>
+                        )}
                       </td>
                       <td className="py-1 pr-3">
-                        <MaterialNumber
-                          id={`tim-${material.id}-k`}
-                          label={material.name}
-                          zh="k"
-                          showLabel={false}
-                          value={material.k_W_mK}
-                          readOnly={readOnly}
-                          onChange={setTim(material.id, 'k_W_mK')}
-                        />
+                        {material.catalog ? (
+                          <span
+                            className="tabular inline-flex min-h-8 items-center px-1 text-[13px] text-ink-900"
+                            title={material.k_W_mK.reference ?? '依 TIM 管理工具'}
+                          >
+                            {material.k_W_mK.value ?? '—'}
+                          </span>
+                        ) : (
+                          <MaterialNumber
+                            id={`tim-${material.id}-k`}
+                            label={material.name}
+                            zh="k"
+                            showLabel={false}
+                            value={material.k_W_mK}
+                            readOnly={readOnly}
+                            onChange={setTim(material.id, 'k_W_mK')}
+                          />
+                        )}
                       </td>
                       <td className="py-1 pr-3">
                         <MaterialNumber
@@ -328,9 +439,43 @@ export function MaterialDefaultsForm({
               </tbody>
             </table>
           </div>
+          {followed.length > 0 && (
+            <p className="mt-2 text-[12px] text-ok-600">
+              已依 TIM 管理工具更新：
+              {followed.map((change) => `${change.name}（${change.what.join('、')}）`).join('；')}
+            </p>
+          )}
+          {readOnly && catalog && followCatalog(materials.tim, catalog).changed.length > 0 && (
+            <p className="mt-2 text-[12px] text-warn-600">
+              TIM 管理工具有更新的名稱或 k，取得編輯權後會自動套用。
+            </p>
+          )}
+          <Button
+            className="mt-2 mr-2 h-8"
+            icon={<Link2 size={14} />}
+            disabled={readOnly}
+            title="從 TIM 管理工具的材料庫（TIM 型號目錄）選材料加入；名稱與 k 之後跟著 TIM 管理工具"
+            onClick={() => {
+              // Opening the picker is a reason to look again: someone may have just added the material.
+              void loadCatalog(catalogState !== 'ok');
+              setPicking(true);
+            }}
+          >
+            從 TIM 管理工具帶入
+          </Button>
           <Button className="mt-2 h-8" icon={<Plus size={14} />} disabled={readOnly} onClick={addTim}>
             新增材料
           </Button>
+          {picking && (
+            <TimCatalogPicker
+              library={materials.tim}
+              catalog={catalog}
+              state={catalogState}
+              error={catalogError}
+              onPick={addFromCatalog}
+              onClose={() => setPicking(false)}
+            />
+          )}
         </fieldset>
 
         {/* --- Shared HSK base ------------------------------------------------ */}

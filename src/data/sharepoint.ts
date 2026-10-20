@@ -23,6 +23,8 @@
  * Manager's.
  */
 
+import { TIM_CATALOG_PATH } from '@/domain/timCatalog';
+
 export const SHAREPOINT_CONFIG = {
   clientId: '17fc1ab4-0ab0-4520-9315-6faa86d9e8ec',
   authority: 'https://login.microsoftonline.com/19f25823-17ff-421f-ad4e-8fed035aedda',
@@ -329,6 +331,17 @@ export function drivePath(): string {
 export function itemByPath(path: string): string {
   const encoded = path.split('/').filter(Boolean).map(encodeURIComponent).join('/');
   return `${drivePath()}/root:/${encoded}`;
+}
+
+/**
+ * The TIM Management Tool's TIM 型號目錄 (read only, `domain/timCatalog.ts`): the parsed JSON, or null
+ * when the file does not exist yet. Never opens a sign-in popup.
+ */
+export async function readTimCatalog(): Promise<unknown> {
+  await resolveSite(false);
+  const res = await graph(`${itemByPath(TIM_CATALOG_PATH)}:/content`, { ok: (status) => status === 404 });
+  if (res.status === 404) return null;
+  return (await res.json()) as unknown;
 }
 
 // --- session -----------------------------------------------------------------
