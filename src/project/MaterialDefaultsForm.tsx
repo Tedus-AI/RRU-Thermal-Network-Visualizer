@@ -150,10 +150,10 @@ function MaterialNumber({
 
 export function MaterialDefaultsForm({
   readOnly,
-  defaultOpen,
+  defaultOpen = true,
 }: {
   readOnly: boolean;
-  /** Left out, the section opens only while something a calculation needs is missing. */
+  /** Open on Screen 01; Screen 02, where it is a side trip from the import, passes false. */
   defaultOpen?: boolean;
 }) {
   const draft = useProjectStore((s) => s.draft);
@@ -278,7 +278,7 @@ export function MaterialDefaultsForm({
     <SectionCard
       title="材料與製程預設"
       collapsible
-      defaultOpen={defaultOpen ?? (coinArea == null || !hskConfigured)}
+      defaultOpen={defaultOpen}
       // Folded, this still has to show what is set and the one thing that needs a decision.
       summary={
         <>

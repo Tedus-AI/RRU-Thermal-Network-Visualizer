@@ -558,6 +558,12 @@ export function useThermalPathBuilder() {
       );
       return;
     }
+    // Every enabled component was just rebuilt from its current data, which is
+    // exactly what the review flag was asking for. It used to clear only on
+    // Save & Continue — and since the network saves itself, nobody pressed it,
+    // so "Linked parameters changed" on 05 and "Network review required" on 04
+    // stayed up after the network had already been regenerated.
+    useNetworkStore.getState().setRequiresReview(false);
     if (dropped > 0) {
       toast.warning(
         `Network generated — ${dropped} hand-made object(s) removed, their nodes are not in the current templates. / 已產生網路，${dropped} 個手繪物件因目前模板已無對應節點而移除。`,

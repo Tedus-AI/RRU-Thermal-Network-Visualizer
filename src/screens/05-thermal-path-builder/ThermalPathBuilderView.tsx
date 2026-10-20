@@ -152,7 +152,11 @@ export function ThermalPathBuilderView() {
             {network.status}
           </Badge>
           <Badge tone={solverState === 'DIRTY' ? 'warn' : 'neutral'}>Solver {solverState}</Badge>
-          {requiresReview && <Badge tone="warn">Linked parameters changed / 連動參數已變更</Badge>}
+          {requiresReview && (
+            <span title="04 改了會影響熱路徑的欄位（數量、TIM、熱路徑、幾何、啟用、新增或刪除元件）。到 05 按「依偏好產生」重建，或檢查後按「儲存並繼續」，這個提醒就會消失。">
+              <Badge tone="warn">Linked parameters changed / 連動參數已變更</Badge>
+            </span>
+          )}
         </div>
       }
       metrics={
