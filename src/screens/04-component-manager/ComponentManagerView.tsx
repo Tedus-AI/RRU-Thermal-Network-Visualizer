@@ -293,6 +293,7 @@ export function ComponentManagerView() {
             <button
               type="button"
               onClick={goToScreen05}
+              title="04 改了會影響熱路徑的欄位（數量、TIM、熱路徑、幾何、啟用、新增或刪除元件）。到 05 按「依偏好產生」重建，或檢查後按「儲存並繼續」，這個提醒就會消失。"
               className="flex items-center gap-1 rounded-full border border-warn-500/40 bg-warn-100/60 px-2.5 py-0.5 text-[11px] font-semibold text-warn-600 hover:border-warn-500"
             >
               Network review required / 需重新檢視網路

@@ -14,9 +14,6 @@ export function ProjectNotes({ readOnly }: { readOnly: boolean }) {
     <SectionCard
       title="備註"
       collapsible
-      // Folded while empty: an empty box is not worth the height, and the
-      // header still says it is there.
-      defaultOpen={length > 0}
       summary={length > 0 ? `${length} 字` : '尚未填寫'}
     >
       <TextArea

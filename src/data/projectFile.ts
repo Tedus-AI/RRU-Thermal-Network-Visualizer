@@ -15,7 +15,7 @@
  * and merge behaviour as any other read or write.
  */
 
-import type { Project, Scenario } from '@/domain/project';
+import { createBaselineScenario, type Project, type Scenario } from '@/domain/project';
 import type { ComponentRevisionSet } from '@/domain/revision';
 import type { Component } from '@/domain/component';
 import type { ThermalNetwork } from '@/thermal/types';
@@ -372,22 +372,134 @@ export function availableProjectId(base: string): string {
  * over the good file.
  */
 export function applyProjectFile(file: ProjectFile, mode: ImportMode): ImportOutcome {
-  return withPersistenceTransaction(() => writeProjectFile(file, mode));
+  return withPersistenceTransaction(() => {
+    const targetId = mode === 'copy' ? availableProjectId(file.project_id) : file.project_id;
+    if (mode === 'overwrite') clearProjectData(targetId);
+    // A copy that keeps the original's name leaves two indistinguishable rows in
+    // the project selector, since the id is not shown there.
+    const projectName =
+      mode === 'copy'
+        ? `${file.data.project.project_name} (copy)`.trim()
+        : file.data.project.project_name;
+    return { ...writeBundle(file.data, targetId, projectName), mode };
+  });
 }
 
-function writeProjectFile(file: ProjectFile, mode: ImportMode): ImportOutcome {
-  const targetId = mode === 'copy' ? availableProjectId(file.project_id) : file.project_id;
-  if (mode === 'overwrite') clearProjectData(targetId);
-  const { data } = file;
+/** What Screen 01's Duplicate Project carries over, beyond the project record itself. */
+export interface DuplicateOptions {
+  components: boolean;
+  network: boolean;
+  scenarios: boolean;
+  /** Solutions and everything read from them: analyses, studies, snapshots, report and export state. */
+  results: boolean;
+}
+
+/**
+ * The options a copy can actually stand on.
+ *
+ * A network is built out of components, so it cannot come without them; a
+ * solution belongs to one network and one scenario, so results bring both.
+ * The dialog shows these as ticked and locked rather than letting a copy come
+ * out with nodes that point at parts it does not have.
+ */
+export function resolveDuplicateOptions(options: DuplicateOptions): DuplicateOptions {
+  const results = options.results;
+  const network = options.network || results;
+  const scenarios = options.scenarios || results;
+  const components = options.components || network;
+  return { components, network, scenarios, results };
+}
+
+/**
+ * Screen 01's Duplicate Project: a new project with its own id and name, holding
+ * what was ticked.
+ *
+ * Records are copied as they are, revisions included, exactly as importing a
+ * project file as a copy does: a solution is only valid against the revisions
+ * it was solved on, so a fresh revision anywhere would turn copied results
+ * stale the moment they arrived. Boundary sets go along when both the network
+ * they attach to and the scenarios they belong to do; without either they would
+ * be orphans. Without the scenarios the copy starts from a Baseline, as a new
+ * project does.
+ *
+ * One transaction: all of it lands, or none of it.
+ */
+export function duplicateProject(
+  sourceId: string,
+  target: { id: string; name: string },
+  options: DuplicateOptions,
+  appBuild: string,
+): ImportOutcome | null {
+  const file = collectProject(sourceId, appBuild);
+  if (!file) return null;
+  const take = resolveDuplicateOptions(options);
+  const source = file.data;
+  const now = new Date().toISOString();
+
+  const keepScenarios = take.scenarios && source.scenarios.length > 0;
+  const baseline = keepScenarios ? null : createBaselineScenario(target.id);
+  const results = take.results;
+
+  const data: ProjectBundle = {
+    ...source,
+    project: {
+      ...source.project,
+      status: 'active',
+      active_scenario_id: baseline ? baseline.id : source.project.active_scenario_id,
+      meta: { ...source.project.meta, created_at: now, updated_at: now },
+    },
+    scenarios: baseline ? [baseline] : source.scenarios,
+    components: take.components ? source.components : [],
+    network: take.network ? source.network : null,
+    boundary_sets: take.network && keepScenarios ? source.boundary_sets : [],
+    network_review: take.network
+      ? source.network_review
+      : { requires_review: false, reasons: [], updated_at: now },
+    solutions: results ? source.solutions : [],
+    analyses: results ? source.analyses : [],
+    distributions: [],
+    proposals: results ? source.proposals : [],
+    snapshots: results ? source.snapshots : [],
+    report_configs: results ? source.report_configs : [],
+    // The template library belongs to the browser, not to either project.
+    report_templates: [],
+    export_payloads: results ? source.export_payloads : [],
+    export_stamp: results ? source.export_stamp : null,
+    export_preferences: results ? source.export_preferences : null,
+  };
+
+  return withPersistenceTransaction(() => ({
+    ...writeBundle(data, target.id, target.name, take.components),
+    mode: 'copy' as const,
+  }));
+}
+
+/**
+ * Re-points a record at the project it is being written into.
+ *
+ * Boundary sets, analyses, snapshots and report configs carry the project id
+ * on the row as well as in the storage key; a copy that rewrote only the key
+ * left them naming the project they came from.
+ */
+function repoint<T>(record: T, projectId: string): T {
+  if (record && typeof record === 'object' && 'project_id' in record) {
+    return { ...record, project_id: projectId };
+  }
+  return record;
+}
+
+function writeBundle(
+  data: ProjectBundle,
+  targetId: string,
+  projectName: string,
+  /** False leaves the component revision record out, for a copy without components. */
+  withComponentRevisions = true,
+): Omit<ImportOutcome, 'mode'> {
   const written: string[] = [];
   const note = (label: string, count: number) => {
     if (count > 0) written.push(`${label} (${count})`);
   };
 
-  // A copy that keeps the original's name leaves two indistinguishable rows in
-  // the project selector, since the id is not shown there.
-  const projectName =
-    mode === 'copy' ? `${data.project.project_name} (copy)`.trim() : data.project.project_name;
   saveProject({ ...data.project, project_id: targetId, project_name: projectName });
 
   const scenarios = (data.scenarios ?? []).map((scenario) => ({
@@ -401,14 +513,16 @@ function writeProjectFile(file: ProjectFile, mode: ImportMode): ImportOutcome {
   saveComponents(targetId, components);
   note('components', components.length);
 
-  if (data.component_revisions) saveComponentRevisions(targetId, data.component_revisions);
+  if (withComponentRevisions && data.component_revisions) {
+    saveComponentRevisions(targetId, data.component_revisions);
+  }
 
   if (data.network) {
     saveNetwork(targetId, { ...data.network, project_id: targetId });
     note('network nodes', Object.keys(data.network.nodes ?? {}).length);
   }
 
-  for (const set of data.boundary_sets ?? []) saveBoundarySet(targetId, set);
+  for (const set of data.boundary_sets ?? []) saveBoundarySet(targetId, repoint(set, targetId));
   note('boundary sets', (data.boundary_sets ?? []).length);
 
   for (const solution of data.solutions ?? []) {
@@ -423,19 +537,21 @@ function writeProjectFile(file: ProjectFile, mode: ImportMode): ImportOutcome {
     });
   }
 
-  for (const analysis of data.analyses ?? []) saveAnalysis(targetId, analysis);
+  for (const analysis of data.analyses ?? []) saveAnalysis(targetId, repoint(analysis, targetId));
   note('analyses', (data.analyses ?? []).length);
 
   // `data.distributions` in an older file is read past: the rows are a
   // projection of the solution, and the solution is imported above.
 
-  for (const proposal of data.proposals ?? []) saveProposal(targetId, proposal);
+  for (const proposal of data.proposals ?? []) saveProposal(targetId, repoint(proposal, targetId));
   note('proposals', (data.proposals ?? []).length);
 
-  for (const snapshot of data.snapshots ?? []) saveSnapshot(targetId, snapshot);
+  for (const snapshot of data.snapshots ?? []) saveSnapshot(targetId, repoint(snapshot, targetId));
   note('snapshots', (data.snapshots ?? []).length);
 
-  for (const config of data.report_configs ?? []) saveReportConfig(targetId, config);
+  for (const config of data.report_configs ?? []) {
+    saveReportConfig(targetId, repoint(config, targetId));
+  }
   note('report configs', (data.report_configs ?? []).length);
   // Merged, not replaced: the library belongs to the browser and may already
   // hold templates this file has never heard of.
@@ -445,7 +561,9 @@ function writeProjectFile(file: ProjectFile, mode: ImportMode): ImportOutcome {
   }
   note('report templates', (data.report_templates ?? []).length);
 
-  for (const payload of data.export_payloads ?? []) saveExportPayload(targetId, payload);
+  for (const payload of data.export_payloads ?? []) {
+    saveExportPayload(targetId, repoint(payload, targetId));
+  }
   note('report payloads', (data.export_payloads ?? []).length);
 
   if (data.export_stamp) saveExportStamp(targetId, data.export_stamp);
@@ -455,5 +573,5 @@ function writeProjectFile(file: ProjectFile, mode: ImportMode): ImportOutcome {
   const exportPreferences = normalizeExportPreferences(data.export_preferences);
   if (exportPreferences) saveExportPreferences(targetId, exportPreferences);
 
-  return { project_id: targetId, mode, written };
+  return { project_id: targetId, written };
 }

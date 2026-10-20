@@ -3,8 +3,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { seedDemoProject } from '@/mock/seed';
 import { DEMO_PROJECT_ID } from '@/mock/demoProject';
 import {
+  loadAnalyses,
+  loadBoundarySets,
   loadComponents,
   loadExportPreferences,
+  loadNetwork,
   loadProject,
   loadScenarios,
   loadSolutions,
@@ -19,7 +22,9 @@ import {
   applyProjectFile,
   availableProjectId,
   collectProject,
+  duplicateProject,
   parseProjectFile,
+  resolveDuplicateOptions,
   projectFilename,
   serializeProjectFile,
 } from './projectFile';
@@ -344,5 +349,107 @@ describe('material defaults survive the folder round trip', () => {
     const reopened = loadProject('MAT_B')!;
     expect(reopened.materials.tim[0].k_W_mK.value).toBe(3.0);
     expect(reopened.materials.coin_L_mm).toBeNull();
+  });
+});
+
+/**
+ * Screen 01's Duplicate Project. Its dialog used to offer Components, Thermal
+ * Network, FloTHERM and Solver Results boxes that changed nothing: only the
+ * project record and the scenarios were ever written, so every duplicate came
+ * out empty whatever was ticked.
+ */
+describe('duplicateProject', () => {
+  const ALL = { components: true, network: true, scenarios: true, results: true };
+  const NONE = { components: false, network: false, scenarios: false, results: false };
+
+  it('copies everything that is ticked, under the id and name given', async () => {
+    await seedDemoProject();
+    const outcome = duplicateProject(DEMO_PROJECT_ID, { id: 'DUP_ALL', name: 'Dup all' }, ALL, 'test');
+
+    expect(outcome?.project_id).toBe('DUP_ALL');
+    expect(loadProject('DUP_ALL')?.project_name).toBe('Dup all');
+    expect(loadComponents('DUP_ALL')).toHaveLength(loadComponents(DEMO_PROJECT_ID).length);
+    expect(Object.keys(loadNetwork('DUP_ALL')?.nodes ?? {})).toHaveLength(
+      Object.keys(loadNetwork(DEMO_PROJECT_ID)?.nodes ?? {}).length,
+    );
+    expect(loadScenarios('DUP_ALL')).toHaveLength(loadScenarios(DEMO_PROJECT_ID).length);
+    expect(loadSolutions(DEMO_PROJECT_ID).length).toBeGreaterThan(0);
+    expect(loadSolutions('DUP_ALL')).toHaveLength(loadSolutions(DEMO_PROJECT_ID).length);
+    expect(loadBoundarySets('DUP_ALL')).toHaveLength(loadBoundarySets(DEMO_PROJECT_ID).length);
+  });
+
+  it('keeps revisions, so copied results are still valid against the copy', async () => {
+    await seedDemoProject();
+    duplicateProject(DEMO_PROJECT_ID, { id: 'DUP_REV', name: 'Dup rev' }, ALL, 'test');
+
+    expect(loadProject('DUP_REV')?.revision).toEqual(loadProject(DEMO_PROJECT_ID)?.revision);
+    expect(loadNetwork('DUP_REV')?.revision).toEqual(loadNetwork(DEMO_PROJECT_ID)?.revision);
+  });
+
+  it('re-points every copied row at the new project', async () => {
+    await seedDemoProject();
+    duplicateProject(DEMO_PROJECT_ID, { id: 'DUP_IDS', name: 'Dup ids' }, ALL, 'test');
+
+    expect(loadNetwork('DUP_IDS')?.project_id).toBe('DUP_IDS');
+    for (const scenario of loadScenarios('DUP_IDS')) expect(scenario.project_id).toBe('DUP_IDS');
+    for (const set of loadBoundarySets('DUP_IDS')) expect(set.project_id).toBe('DUP_IDS');
+    for (const solution of loadSolutions('DUP_IDS')) expect(solution.project_id).toBe('DUP_IDS');
+  });
+
+  it('leaves results out by default and copies the rest', async () => {
+    await seedDemoProject();
+    duplicateProject(
+      DEMO_PROJECT_ID,
+      { id: 'DUP_DEFAULT', name: 'Dup default' },
+      { components: true, network: true, scenarios: true, results: false },
+      'test',
+    );
+
+    expect(loadComponents('DUP_DEFAULT').length).toBeGreaterThan(0);
+    expect(loadNetwork('DUP_DEFAULT')).not.toBeNull();
+    expect(loadSolutions('DUP_DEFAULT')).toHaveLength(0);
+    expect(loadAnalyses('DUP_DEFAULT')).toHaveLength(0);
+  });
+
+  it('with nothing ticked, is the project record and a Baseline', async () => {
+    await seedDemoProject();
+    duplicateProject(DEMO_PROJECT_ID, { id: 'DUP_NONE', name: 'Dup none' }, NONE, 'test');
+
+    const copy = loadProject('DUP_NONE')!;
+    const scenarios = loadScenarios('DUP_NONE');
+    expect(loadComponents('DUP_NONE')).toHaveLength(0);
+    expect(loadNetwork('DUP_NONE')).toBeNull();
+    expect(loadBoundarySets('DUP_NONE')).toHaveLength(0);
+    expect(scenarios).toHaveLength(1);
+    expect(copy.active_scenario_id).toBe(scenarios[0].id);
+    // The materials are part of the project record and always come along.
+    expect(copy.materials).toEqual(loadProject(DEMO_PROJECT_ID)?.materials);
+  });
+
+  it('never leaves the source changed', async () => {
+    await seedDemoProject();
+    const before = collectProject(DEMO_PROJECT_ID, 'test')!.data;
+    duplicateProject(DEMO_PROJECT_ID, { id: 'DUP_SRC', name: 'Dup src' }, ALL, 'test');
+    const after = collectProject(DEMO_PROJECT_ID, 'test')!.data;
+
+    expect(after.project.project_name).toBe(before.project.project_name);
+    expect(after.components).toHaveLength(before.components.length);
+    expect(after.solutions).toHaveLength(before.solutions.length);
+  });
+
+  it('returns null for a source that is not in storage', () => {
+    expect(duplicateProject('NOPE', { id: 'X_COPY', name: 'x' }, ALL, 'test')).toBeNull();
+    expect(loadProject('X_COPY')).toBeNull();
+  });
+});
+
+describe('resolveDuplicateOptions', () => {
+  it('brings a network and scenarios with results, and components with a network', () => {
+    expect(
+      resolveDuplicateOptions({ components: false, network: false, scenarios: false, results: true }),
+    ).toEqual({ components: true, network: true, scenarios: true, results: true });
+    expect(
+      resolveDuplicateOptions({ components: false, network: true, scenarios: false, results: false }),
+    ).toEqual({ components: true, network: true, scenarios: false, results: false });
   });
 });
