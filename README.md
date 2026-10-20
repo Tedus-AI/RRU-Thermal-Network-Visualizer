@@ -139,6 +139,19 @@ Thermal-Spec-DB（網站）
 - 切換專案前會先比對 SharePoint，有較新版本（且本機沒有未寫入的修改）就先讀入；
   切回分頁時也會檢查目前專案，Header 顯示「雲端有新版」可重新載入。
 
+### TIM 材料參照 TIM 管理工具
+
+TIM 材料由 **TIM 管理工具**（Project-TIM-management-tool）建立；它在同一個網站自動產生
+`TIM_Manager/Database/tim_catalog.json`（TIM 型號目錄，只有材料屬性：Vendor、Model、Pad / Putty / Grease、k 與量測標準…）。
+01「材料與製程預設」的 TIM 表格按「**從 TIM 管理工具帶入**」勾選材料：
+
+- 加入的材料標「TIM 管理工具」：**名稱與 k 跟著 TIM 管理工具**（每次開工具第一次讀目錄時自動更新並顯示「已依 TIM 管理工具更新」；
+  k 的來源記為規格書、參照「TIM 管理工具 · Vendor Model · 量測標準」）。元件以材料 id 參照，所以名稱改了也不會斷。
+- **BLT 仍在本專案填**（壓合後的厚度依設計而定，不屬於材料）；新加入的 BLT 先帶各類型的典型值，標為推定值（灰字）。
+- 本專案已有同名的材料會改為連結它（元件不受影響）；✂ 解除連結＝保留目前的名稱與 k、改回本專案自行維護。
+- 讀取目錄需要能不跳視窗取得 SharePoint 權杖；讀不到（本機資料夾、離線）時，已連結的材料照用存下來的值。唯讀時只提示有更新、不改專案。
+- 程式：`src/domain/timCatalog.ts`（格式、跟隨規則）、`src/data/timCatalogStore.ts`、`src/project/TimCatalogPicker.tsx`。
+
 **部署前提**：Azure 應用程式（clientId `17fc1ab4-…`）的「單頁應用程式（SPA）」重新導向 URI 必須加入
 `https://tedus-ai.github.io/RRU-Thermal-Network-Visualizer/auth.html`
 （本機開發另加 `http://localhost:5173/auth.html`），否則登入會出現 AADSTS50011。
