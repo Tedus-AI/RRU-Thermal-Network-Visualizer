@@ -1,9 +1,9 @@
 /**
- * Section A/B — Import Source and Source Detail (02 §5, §6, §7).
+ * Step 1 — the source and its detail (02 §5, §6, §7).
  */
 
 import { useRef, useState } from 'react';
-import { ClipboardPaste, Database, FileSpreadsheet, FileText, FolderOpen } from 'lucide-react';
+import { ClipboardPaste, Database, FileSpreadsheet, FolderOpen } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 import { Button, SectionCard, Select, TextArea } from '@/ui/primitives';
@@ -17,67 +17,29 @@ import {
   parseExistingProject,
   summarizeSourceProject,
 } from '@/importers/component/parseExistingProject';
-import { tip } from '@/i18n/componentImportCopy';
 import { AiThermalSourcePanel } from './AiThermalSourcePanel';
 
-type SourceKind = 'aithermal' | 'project' | 'csv' | 'excel' | 'paste';
+type SourceKind = 'aithermal' | 'project' | 'file' | 'paste';
 
-const SOURCES: Array<{
-  kind: SourceKind;
-  icon: LucideIcon;
-  title: string;
-  zh: string;
-  description: string;
-  descriptionZh: string;
-  cta: string;
-}> = [
-  {
-    // First: the usual start is a project AI-Thermal already holds.
-    kind: 'aithermal',
-    icon: Database,
-    title: 'AI-Thermal 專案',
-    zh: '',
-    description: '直接讀 AI-Thermal 建好的專案（SharePoint 共用資料庫或本機備份檔）。',
-    descriptionZh: '',
-    cta: '選擇專案',
-  },
-  {
-    kind: 'project',
-    icon: FolderOpen,
-    title: 'Existing Project',
-    zh: '從現有專案匯入',
-    description: 'Import components from another project in this tool.',
-    descriptionZh: '從本工具的其他專案匯入元件。',
-    cta: 'Select Project',
-  },
-  {
-    kind: 'csv',
-    icon: FileText,
-    title: 'CSV File',
-    zh: 'CSV 檔案',
-    description: 'Import from a .csv file.',
-    descriptionZh: '從 CSV 檔案匯入。',
-    cta: 'Choose File',
-  },
-  {
-    kind: 'excel',
-    icon: FileSpreadsheet,
-    title: 'Excel File',
-    zh: 'Excel 檔案',
-    description: 'Import from an .xlsx workbook.',
-    descriptionZh: '從 Excel 檔案匯入。',
-    cta: 'Choose File',
-  },
-  {
-    kind: 'paste',
-    icon: ClipboardPaste,
-    title: 'Paste Table',
-    zh: '貼上表格資料',
-    description: 'Paste data from Excel or the clipboard.',
-    descriptionZh: '從 Excel 或剪貼簿貼上資料。',
-    cta: 'Paste Data',
-  },
+/**
+ * Four sources, one line each. CSV and Excel are one card: both are a file the
+ * engineer already has, and the extension says which reader to use.
+ */
+const SOURCES: Array<{ kind: SourceKind; icon: LucideIcon; title: string; description: string }> = [
+  // First: the usual start is a project AI-Thermal already holds.
+  { kind: 'aithermal', icon: Database, title: 'AI-Thermal 專案', description: '讀 AI-Thermal 建好的專案（SharePoint 或本機備份檔）' },
+  { kind: 'project', icon: FolderOpen, title: '本工具其他專案', description: '從這個工具的另一個專案複製元件' },
+  { kind: 'file', icon: FileSpreadsheet, title: 'Excel 或 CSV 檔', description: '.xlsx 或 .csv，第一列是欄位標題' },
+  { kind: 'paste', icon: ClipboardPaste, title: '貼上表格', description: '從 Excel 複製後貼上' },
 ];
+
+const CATEGORY_LABEL: Record<ComponentCategory, string> = {
+  RF: 'RF',
+  Digital: 'Digital',
+  Power: 'Power',
+  Filter: 'Filter',
+  Other: 'Other',
+};
 
 export function ImportSourceCards() {
   const [kind, setKind] = useState<SourceKind | null>(null);
@@ -95,8 +57,7 @@ export function ImportSourceCards() {
   ]);
   const [includeHidden, setIncludeHidden] = useState(false);
 
-  const csvInput = useRef<HTMLInputElement>(null);
-  const excelInput = useRef<HTMLInputElement>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
 
   const store = useComponentImportStore();
   const projects = useProjectStore((s) => s.projects);
@@ -107,10 +68,10 @@ export function ImportSourceCards() {
   );
 
   const handleCsv = async (file: File) => {
-    store.setLoading(`Reading ${file.name}…`);
+    store.setLoading(`讀取 ${file.name}…`);
     try {
       const table = await parseCsvFile(file);
-      if (table.headers.length === 0) throw new Error('The file contains no rows.');
+      if (table.headers.length === 0) throw new Error('檔案裡沒有資料。');
       store.loadTable(table, {
         source_type: 'CSV',
         source_project_id: null,
@@ -118,25 +79,22 @@ export function ImportSourceCards() {
         source_file: file.name,
       });
     } catch (error) {
-      store.setError(`Unable to read file: ${(error as Error).message}`);
+      store.setError(`讀不到檔案：${(error as Error).message}`);
     }
   };
 
   const handleExcel = async (file: File, sheet?: string) => {
     if (isLegacyXls(file)) {
-      store.setError(
-        'Legacy .xls workbooks are not supported. Save the file as .xlsx and try again. / ' +
-          '不支援舊版 .xls 格式，請另存為 .xlsx 後再匯入。',
-      );
+      store.setError('不支援舊版 .xls 格式，請另存為 .xlsx 後再匯入。');
       return;
     }
-    store.setLoading(`Reading ${file.name}…`);
+    store.setLoading(`讀取 ${file.name}…`);
     try {
       const table = await parseExcelFile(file, sheet);
       const names = table.sheets ?? [];
       setSheets(names);
       setActiveSheet(table.activeSheet ?? '');
-      if (table.headers.length === 0) throw new Error('The selected sheet is empty.');
+      if (table.headers.length === 0) throw new Error('這個工作表是空的。');
       store.loadTable(table, {
         source_type: 'Excel',
         source_project_id: null,
@@ -144,19 +102,31 @@ export function ImportSourceCards() {
         source_file: `${file.name}${names.length > 1 ? ` — ${table.activeSheet}` : ''}`,
       });
     } catch (error) {
-      store.setError(`Unable to read file: ${(error as Error).message}`);
+      store.setError(`讀不到檔案：${(error as Error).message}`);
     }
+  };
+
+  /** One picker for both: the extension decides the reader. */
+  const handleFile = (file: File) => {
+    if (/\.csv$/i.test(file.name) || file.type === 'text/csv') {
+      setExcelFile(null);
+      setSheets([]);
+      void handleCsv(file);
+      return;
+    }
+    setExcelFile(file);
+    void handleExcel(file);
   };
 
   const handlePaste = () => {
     if (!pasteText.trim()) {
-      store.setError('Nothing to parse. Paste tab-separated or CSV-style data first.');
+      store.setError('沒有可解析的內容，請先貼上 tab 或逗號分隔的資料。');
       return;
     }
-    store.setLoading('Analyzing columns…');
+    store.setLoading('分析欄位中…');
     try {
       const table = parsePastedTable(pasteText);
-      if (table.headers.length === 0) throw new Error('No header row detected.');
+      if (table.headers.length === 0) throw new Error('找不到欄位標題列。');
       store.loadTable(table, {
         source_type: 'Paste',
         source_project_id: null,
@@ -164,24 +134,24 @@ export function ImportSourceCards() {
         source_file: null,
       });
     } catch (error) {
-      store.setError(`Unable to parse table: ${(error as Error).message}`);
+      store.setError(`無法解析表格：${(error as Error).message}`);
     }
   };
 
   const handleProject = () => {
     const project = candidates.find((p) => p.project_id === sourceProjectId);
     if (!project) {
-      store.setError('Select a source project first.');
+      store.setError('請先選擇來源專案。');
       return;
     }
-    store.setLoading('Loading source project…');
+    store.setLoading('讀取來源專案…');
     try {
       const table = parseExistingProject(project.project_id, {
         categories: scopeCategories,
         includeHidden,
       });
       if (table.rows.length === 0) {
-        throw new Error('The selected project has no components in the chosen scope.');
+        throw new Error('這個專案在所選範圍內沒有元件。');
       }
       store.loadTable(table, {
         source_type: 'ExistingProject',
@@ -190,7 +160,7 @@ export function ImportSourceCards() {
         source_file: null,
       });
     } catch (error) {
-      store.setError(`Unable to load source project: ${(error as Error).message}`);
+      store.setError(`無法讀取來源專案：${(error as Error).message}`);
     }
   };
 
@@ -204,8 +174,8 @@ export function ImportSourceCards() {
       : null;
 
   return (
-    <SectionCard step={1} title="Import Source" subtitle="匯入來源">
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+    <SectionCard title="選擇來源">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {SOURCES.map((source) => {
           const Icon = source.icon;
           const selected = kind === source.kind;
@@ -215,29 +185,23 @@ export function ImportSourceCards() {
               type="button"
               aria-pressed={selected}
               onClick={() => setKind(source.kind)}
-              className={`flex flex-col items-start gap-2 rounded-lg border p-3.5 text-left transition-colors ${
+              className={`flex items-start gap-2.5 rounded-lg border p-3 text-left transition-colors ${
                 selected
                   ? 'border-accent-600 bg-accent-50 ring-1 ring-accent-600/30'
                   : 'border-line bg-surface hover:border-ink-400'
               }`}
             >
-              <span className="flex items-center gap-2">
-                <Icon size={18} className={selected ? 'text-accent-600' : 'text-ink-400'} />
-                <span className="leading-tight">
-                  <span className="block text-[13px] font-bold text-ink-900">{source.title}</span>
-                  {source.zh && <span className="block text-[11px] text-ink-400">{source.zh}</span>}
-                </span>
-              </span>
-              <span className="text-[12px] leading-relaxed text-ink-500">
-                {source.description}
-                {source.descriptionZh && <span className="block text-ink-400">{source.descriptionZh}</span>}
+              <Icon size={18} className={`mt-px shrink-0 ${selected ? 'text-accent-600' : 'text-ink-400'}`} />
+              <span className="leading-snug">
+                <span className="block text-[13px] font-bold text-ink-900">{source.title}</span>
+                <span className="block text-[12px] text-ink-500">{source.description}</span>
               </span>
             </button>
           );
         })}
       </div>
 
-      {/* Section B — Source Detail */}
+      {/* Source detail */}
       {kind && (
         <div className="mt-4 rounded-lg border border-line bg-surface-muted p-4">
           {kind === 'aithermal' && <AiThermalSourcePanel />}
@@ -245,19 +209,14 @@ export function ImportSourceCards() {
           {kind === 'project' && (
             <div className="flex flex-col gap-3">
               <div className="max-w-md">
-                <FieldLabel
-                  label="Source Project"
-                  zh="來源專案"
-                  htmlFor="src-project"
-                  tooltip={tip('Import Source')}
-                />
+                <FieldLabel label="Source Project" zh="來源專案" htmlFor="src-project" />
                 <select
                   id="src-project"
                   value={sourceProjectId}
                   onChange={(event) => setSourceProjectId(event.target.value)}
                   className="mt-1.5 h-9 w-full rounded-md border border-line-strong bg-surface px-3 text-[13px]"
                 >
-                  <option value="">— Select a project —</option>
+                  <option value="">— 選擇專案 —</option>
                   {candidates.map((project) => (
                     <option key={project.project_id} value={project.project_id}>
                       {project.project_name}
@@ -265,45 +224,22 @@ export function ImportSourceCards() {
                   ))}
                 </select>
                 {candidates.length === 0 && (
-                  <p className="mt-1.5 text-[12px] text-warn-600">
-                    No other projects available to import from. / 沒有其他可匯入的專案。
-                  </p>
+                  <p className="mt-1.5 text-[12px] text-warn-600">沒有其他可匯入的專案。</p>
                 )}
               </div>
 
               {summary && (
-                <dl className="tabular flex flex-wrap gap-x-6 gap-y-1 text-[12px] text-ink-500">
-                  <span>
-                    <dt className="inline">Last Updated / 最後更新: </dt>
-                    <dd className="inline font-semibold text-ink-700">
-                      {summary.last_updated.slice(0, 10)}
-                    </dd>
-                  </span>
-                  <span>
-                    <dt className="inline">RF: </dt>
-                    <dd className="inline font-semibold text-ink-700">{summary.rf_count}</dd>
-                  </span>
-                  <span>
-                    <dt className="inline">Digital: </dt>
-                    <dd className="inline font-semibold text-ink-700">{summary.digital_count}</dd>
-                  </span>
-                  <span>
-                    <dt className="inline">Power: </dt>
-                    <dd className="inline font-semibold text-ink-700">{summary.power_count}</dd>
-                  </span>
-                </dl>
+                <p className="tabular text-[12px] text-ink-500">
+                  RF {summary.rf_count}・Digital {summary.digital_count}・Power {summary.power_count}
+                  {summary.last_updated && <> ・最後更新 {summary.last_updated.slice(0, 10)}</>}
+                </p>
               )}
 
               <fieldset>
-                <legend className="mb-1.5 text-[12px] font-semibold text-ink-700">
-                  Import Scope / 匯入範圍
-                </legend>
+                <legend className="mb-1.5 text-[12px] font-semibold text-ink-700">匯入範圍</legend>
                 <div className="flex flex-wrap gap-3">
                   {COMPONENT_CATEGORIES.map((category) => (
-                    <label
-                      key={category}
-                      className="flex items-center gap-1.5 text-[13px] text-ink-700"
-                    >
+                    <label key={category} className="flex items-center gap-1.5 text-[13px] text-ink-700">
                       <input
                         type="checkbox"
                         className="size-4 accent-[var(--color-accent-600)]"
@@ -316,7 +252,7 @@ export function ImportSourceCards() {
                           )
                         }
                       />
-                      {category}
+                      {CATEGORY_LABEL[category]}
                     </label>
                   ))}
                   <label className="flex items-center gap-1.5 text-[13px] text-ink-500">
@@ -326,64 +262,38 @@ export function ImportSourceCards() {
                       checked={includeHidden}
                       onChange={(event) => setIncludeHidden(event.target.checked)}
                     />
-                    Hidden / Excluded
+                    包含停用的元件
                   </label>
                 </div>
               </fieldset>
 
               <div>
                 <Button variant="primary" disabled={!sourceProjectId} onClick={handleProject}>
-                  Load Components / 載入元件
+                  載入元件
                 </Button>
               </div>
             </div>
           )}
 
-          {kind === 'csv' && (
+          {kind === 'file' && (
             <div className="flex flex-col gap-3">
               <p className="text-[12px] text-ink-500">
-                Supported: .csv — comma, semicolon or tab separated. Max 500 rows recommended.
-                <span className="block text-ink-400">支援 .csv，建議 500 列以內。</span>
+                .xlsx 或 .csv（逗號、分號或 tab 分隔），建議 500 列以內；舊版 .xls 請先另存為 .xlsx。
               </p>
               <input
-                ref={csvInput}
+                ref={fileInput}
                 type="file"
-                accept=".csv,text/csv"
+                accept=".xlsx,.xls,.csv,text/csv"
                 className="hidden"
                 onChange={(event) => {
                   const file = event.target.files?.[0];
-                  if (file) void handleCsv(file);
-                }}
-              />
-              <div>
-                <Button variant="primary" onClick={() => csvInput.current?.click()}>
-                  Choose File / 選擇檔案
-                </Button>
-              </div>
-            </div>
-          )}
-
-          {kind === 'excel' && (
-            <div className="flex flex-col gap-3">
-              <p className="text-[12px] text-ink-500">
-                Supported: .xlsx. Legacy .xls must be re-saved as .xlsx.
-                <span className="block text-ink-400">支援 .xlsx；舊版 .xls 請另存新檔。</span>
-              </p>
-              <input
-                ref={excelInput}
-                type="file"
-                accept=".xlsx,.xls"
-                className="hidden"
-                onChange={(event) => {
-                  const file = event.target.files?.[0];
-                  if (!file) return;
-                  setExcelFile(file);
-                  void handleExcel(file);
+                  event.target.value = '';
+                  if (file) handleFile(file);
                 }}
               />
               <div className="flex flex-wrap items-end gap-3">
-                <Button variant="primary" onClick={() => excelInput.current?.click()}>
-                  Choose File / 選擇檔案
+                <Button variant="primary" onClick={() => fileInput.current?.click()}>
+                  選擇檔案
                 </Button>
                 {sheets.length > 1 && excelFile && (
                   <div className="w-56">
@@ -422,7 +332,7 @@ export function ImportSourceCards() {
               />
               <div>
                 <Button variant="primary" onClick={handlePaste}>
-                  Parse Table / 解析表格
+                  解析表格
                 </Button>
               </div>
             </div>

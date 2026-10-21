@@ -5,7 +5,7 @@
  * componentStore until `applyImport()` is called, and Cancel drops it all.
  */
 
-import { normalizeMaterials } from '@/domain/materials';
+import { normalizeMaterials, type MaterialDefaults } from '@/domain/materials';
 import { loadProject } from './persistence';
 import { create } from 'zustand';
 import type { Component, ComponentCategory } from '@/domain/component';
@@ -27,8 +27,31 @@ import { useComponentStore } from './componentStore';
 import { useSolverStore } from './solverStore';
 import { useNetworkStore } from './networkStore';
 
-export type ImportStep = 'source' | 'mapping' | 'validate' | 'duplicates' | 'apply';
+/**
+ * Three steps: pick a source, settle the columns, check and apply. Duplicate
+ * handling lives on the check step (it only appears when there are duplicates),
+ * and applying is an action rather than a step of its own.
+ */
+export type ImportStep = 'source' | 'mapping' | 'review';
 export type ImportPhase = 'idle' | 'loading' | 'ready' | 'error' | 'applied';
+
+/** Sources whose columns are this tool's own, so the mapping is always complete. */
+const SELF_MAPPED_SOURCES = new Set<ImportSourceDescriptor['source_type']>(['AIThermal', 'ExistingProject']);
+
+/**
+ * What a source can do after it has been read, beyond the table itself.
+ *
+ * `reparse` rebuilds the table against the project's materials as they are now:
+ * an AI-Thermal TIM is matched by name and its bond line is only stated where it
+ * differs from the material's, so a material changed after loading (from the
+ * 5G-RRU offer, or typed into the materials card) has to be read again — a part
+ * that inherited 0.5 mm would otherwise silently inherit the new value.
+ */
+export interface ImportSourceContext {
+  /** The AI-Thermal project document, for its 5G-RRU parameter console. */
+  aiThermalProject?: Record<string, unknown>;
+  reparse?: (materials: MaterialDefaults) => ParsedTable;
+}
 
 interface ImportState {
   step: ImportStep;
@@ -37,8 +60,11 @@ interface ImportState {
   loadingMessage: string | null;
 
   source: ImportSourceDescriptor | null;
+  sourceContext: ImportSourceContext | null;
   table: ParsedTable | null;
   mapping: MappingTarget[];
+  /** The mapping was complete on its own, so the mapping step was passed over. */
+  mappingAuto: boolean;
   rows: StagingRow[];
   sessionPolicy: DuplicatePolicy;
   applyResult: ApplyResult | null;
@@ -49,7 +75,9 @@ interface ImportState {
   statusFilter: StagingRow['status'] | 'ALL';
   includedOnly: boolean;
 
-  loadTable: (table: ParsedTable, source: ImportSourceDescriptor) => void;
+  loadTable: (table: ParsedTable, source: ImportSourceDescriptor, context?: ImportSourceContext) => void;
+  /** Re-read the source against the project's current materials (see ImportSourceContext). */
+  reparse: (materials: MaterialDefaults) => void;
   setLoading: (message: string) => void;
   setError: (message: string) => void;
   setStep: (step: ImportStep) => void;
@@ -67,6 +95,7 @@ interface ImportState {
   includeAllValid: () => void;
   excludeErrors: () => void;
   setCategoryForAll: (category: ComponentCategory) => void;
+  setCategoryFor: (rowIds: string[], category: ComponentCategory) => void;
 
   setSearch: (value: string) => void;
   setCategoryFilter: (value: ComponentCategory | 'ALL') => void;
@@ -90,8 +119,10 @@ const EMPTY = {
   error: null,
   loadingMessage: null,
   source: null,
+  sourceContext: null,
   table: null,
   mapping: [] as MappingTarget[],
+  mappingAuto: false,
   rows: [] as StagingRow[],
   sessionPolicy: 'MERGE_NON_EMPTY' as DuplicatePolicy,
   applyResult: null,
@@ -117,20 +148,34 @@ export const useComponentImportStore = create<ImportState>((set, get) => ({
 
   setStep: (step) => set({ step }),
 
-  loadTable: (table, source) => {
+  loadTable: (table, source, context) => {
     const mapping = autoMapColumns(table.headers);
     const rows = buildStagingRows({ table, mapping, existingComponents: existingComponents() });
+    const mappingAuto =
+      SELF_MAPPED_SOURCES.has(source.source_type) && REQUIRED_FIELDS.every((field) => mapping.includes(field));
     set({
       table,
       source,
+      sourceContext: context ?? null,
       mapping,
+      mappingAuto,
       rows,
       phase: 'ready',
       error: null,
       loadingMessage: null,
       applyResult: null,
-      step: 'mapping',
+      step: mappingAuto ? 'review' : 'mapping',
     });
+  },
+
+  reparse: (materials) => {
+    const { sourceContext, table, phase } = get();
+    if (!sourceContext?.reparse || !table || phase !== 'ready') return;
+    const next = sourceContext.reparse(materials);
+    // Same source, same columns: the mapping and the row decisions carry over.
+    if (next.headers.join('\u0000') !== table.headers.join('\u0000')) return;
+    set({ table: next });
+    get().rebuildRows();
   },
 
   setMappingFor: (columnIndex, target) => {
@@ -233,6 +278,16 @@ export const useComponentImportStore = create<ImportState>((set, get) => ({
     });
   },
 
+  setCategoryFor: (rowIds, category) => {
+    const { rows, mapping } = get();
+    const ids = new Set(rowIds);
+    set({
+      rows: rows.map((row) =>
+        ids.has(row.row_id) ? revalidateRow({ ...row, category }, existingComponents(), mapping) : row,
+      ),
+    });
+  },
+
   setSearch: (search) => set({ search }),
   setCategoryFilter: (categoryFilter) => set({ categoryFilter }),
   setStatusFilter: (statusFilter) => set({ statusFilter }),
@@ -264,7 +319,7 @@ export const useComponentImportStore = create<ImportState>((set, get) => ({
       useNetworkStore.getState().setRequiresReview(true, 'component_import_applied');
     }
 
-    set({ applyResult: result, phase: 'applied', step: 'apply' });
+    set({ applyResult: result, phase: 'applied' });
     return result;
   },
 

@@ -1,396 +1,261 @@
 /**
- * Right panel — Import Summary, Validation, Project Impact (02 §20, §21, §22).
+ * The check step's summary — 02 §19–§22, on one line instead of three cards.
+ *
+ * The counts, the total power and the project impact used to be five stat cards,
+ * a validation card that restated "10 rows ready" and a project-impact card,
+ * all saying the same handful of numbers. They are now one line above the
+ * table: the status counts filter it, and what the project will look like after
+ * the import sits at its right end. What still needs a decision before applying
+ * (an unmapped required column, a row with an error) gets its own panel, and
+ * only then; duplicates get their bar only when there are duplicates.
  */
 
 import { useMemo } from 'react';
-import { AlertTriangle, BarChart3, CheckCircle2, CircleAlert, ShieldCheck, TrendingUp } from 'lucide-react';
-import { PanelCard } from '@/ui/primitives';
-import { BilingualTooltip } from '@/ui/FieldLabel';
+import { CircleAlert, Copy } from 'lucide-react';
+import { InfoTip } from '@/ui/primitives';
 import { useComponentImportStore } from '@/data/componentImportStore';
 import { useComponentStore } from '@/data/componentStore';
 import { projectImpact, summarizeImport } from '@/importers/component/summarize';
-import { REQUIRED_FIELDS } from '@/importers/component/types';
-import { tip } from '@/i18n/componentImportCopy';
-import type { StagingRow } from '@/importers/component/types';
+import {
+  DUPLICATE_POLICIES,
+  REQUIRED_FIELDS,
+  type DuplicatePolicy,
+  type ImportSourceDescriptor,
+  type RowIssue,
+  type StagingRow,
+} from '@/importers/component/types';
 
-function Row({
-  label,
-  zh,
-  value,
-  tone = 'text-ink-900',
-  onClick,
-}: {
-  label: string;
-  zh: string;
-  value: string;
-  tone?: string;
-  onClick?: () => void;
-}) {
-  const content = (
-    <>
-      <dt className="text-[12px] text-ink-500">
-        {label}
-        <span className="ml-1 text-ink-400">/ {zh}</span>
-      </dt>
-      <dd className={`tabular text-[13px] font-semibold ${tone}`}>{value}</dd>
-    </>
-  );
+const SOURCE_LABEL: Record<ImportSourceDescriptor['source_type'], string> = {
+  AIThermal: 'AI-Thermal',
+  ExistingProject: '本工具專案',
+  CSV: 'CSV 檔',
+  Excel: 'Excel 檔',
+  Paste: '貼上的表格',
+  Manual: '手動',
+  Library: '元件庫',
+};
 
-  if (onClick) {
-    return (
-      <button
-        type="button"
-        onClick={onClick}
-        className="-mx-1.5 flex w-[calc(100%+0.75rem)] items-baseline justify-between gap-3 rounded px-1.5 py-[5px] text-left hover:bg-surface-muted"
-      >
-        {content}
-      </button>
-    );
-  }
-  return <div className="flex items-baseline justify-between gap-3 py-[5px]">{content}</div>;
+/** Where the staged rows came from, as one line. */
+export function sourceLine(source: ImportSourceDescriptor | null): string {
+  if (!source) return '';
+  const kind = SOURCE_LABEL[source.source_type];
+  const name = source.source_project_name ?? '';
+  const file = source.source_file ? `（${source.source_file}）` : '';
+  return `${kind}${name ? ` ${name}` : ''}${file}`;
 }
 
-/**
- * The import counts as one horizontal row above the table, rather than a card
- * docked down the right-hand side.
- *
- * Same reasoning as Screen 04's status band: the preview table is the widest
- * thing on this screen and every column of it is data an engineer reads across,
- * so a 24rem rail was taken out of the one place that needed the width. These
- * are six numbers; they fit on a line.
- */
-export function ImportStatusBand() {
+/** A warning's short name, for the breakdown under the 警告 count. */
+const ISSUE_SHORT: Partial<Record<RowIssue['field'], string>> = {
+  R_jc: '缺 Rjc',
+  'Limit(C)': '缺限溫',
+  TIM_Type: '未指定 TIM',
+  Heat_Path: '散熱路徑推定',
+  Source_L: '缺熱源面尺寸',
+  Source_W: '缺熱源面尺寸',
+  Package_L: '缺熱源面尺寸',
+  Package_W: '缺熱源面尺寸',
+  'Power(W)': '功耗 0 W',
+  Category: '未指定類別',
+  Package: '封裝無法辨識',
+};
+
+/** "缺熱源面尺寸 2・散熱路徑推定 1" — counted per row, from the rows' own warnings. */
+export function warningBreakdown(rows: StagingRow[]): string {
+  const counts = new Map<string, number>();
+  for (const row of rows) {
+    if (!row.include || row.status === 'ERROR') continue;
+    const seen = new Set<string>();
+    for (const issue of row.issues) {
+      if (issue.severity !== 'warning') continue;
+      const label = ISSUE_SHORT[issue.field] ?? issue.message_zh ?? issue.message;
+      if (seen.has(label)) continue;
+      seen.add(label);
+      counts.set(label, (counts.get(label) ?? 0) + 1);
+    }
+  }
+  return [...counts.entries()].map(([label, count]) => `${label} ${count}`).join('・');
+}
+
+export function ReviewStatsLine() {
   const rows = useComponentImportStore((s) => s.rows);
+  const source = useComponentImportStore((s) => s.source);
   const statusFilter = useComponentImportStore((s) => s.statusFilter);
   const setStatusFilter = useComponentImportStore((s) => s.setStatusFilter);
+  const sessionPolicy = useComponentImportStore((s) => s.sessionPolicy);
+  const existing = useComponentStore((s) => s.components);
   const summary = useMemo(() => summarizeImport(rows), [rows]);
+  const impact = useMemo(() => projectImpact(rows, existing, sessionPolicy), [rows, existing, sessionPolicy]);
+  const pieces = rows.reduce((sum, row) => sum + (row.include && row.status !== 'ERROR' ? (row.qty ?? 0) : 0), 0);
+  const warnings = warningBreakdown(rows);
 
-  const counts: Array<{
-    status: StagingRow['status'] | null;
-    label: string;
-    zh: string;
-    value: number;
-    tone: string;
-  }> = [
-    { status: null, label: 'Detected', zh: '偵測', value: summary.detected_rows, tone: 'text-ink-900' },
-    { status: 'VALID', label: 'Valid', zh: '有效', value: summary.valid_rows, tone: 'text-ok-600' },
+  const counts: Array<{ status: StagingRow['status']; label: string; value: number; tone: string; title?: string }> = [
+    { status: 'VALID', label: '有效', value: summary.valid_rows, tone: 'text-ok-600' },
     {
       status: 'WARNING',
-      label: 'Warnings',
-      zh: '警告',
+      label: '警告',
       value: summary.warning_rows,
       tone: summary.warning_rows > 0 ? 'text-warn-600' : 'text-ink-400',
+      title: warnings ? `${warnings}（不會擋下匯入，可在 04 補齊）` : undefined,
     },
     {
       status: 'ERROR',
-      label: 'Errors',
-      zh: '錯誤',
+      label: '錯誤',
       value: summary.error_rows,
       tone: summary.error_rows > 0 ? 'text-danger-600' : 'text-ink-400',
     },
     {
       status: 'DUPLICATE',
-      label: 'Duplicates',
-      zh: '重複',
+      label: '重複',
       value: summary.duplicate_rows,
       tone: summary.duplicate_rows > 0 ? 'text-accent-700' : 'text-ink-400',
     },
   ];
 
   return (
-    <div className="flex flex-wrap items-stretch gap-2">
-      {counts.map((entry) => {
-        const active = entry.status != null && statusFilter === entry.status;
-        const body = (
-          <>
-            <span className={`tabular text-[17px] leading-none font-bold ${entry.tone}`}>
-              {entry.value}
-            </span>
-            <span className="mt-1 block text-[11px] leading-tight text-ink-500">
-              {entry.label}
-              <span className="block text-[10px] text-ink-400">{entry.zh}</span>
-            </span>
-          </>
-        );
-
-        // "Detected" is a total, not a subset, so it filters nothing.
-        if (entry.status == null) {
+    <div className="flex flex-col gap-1.5">
+      {source && (
+        <p className="text-[12px] text-ink-500">
+          來源：<span className="font-semibold text-ink-700">{sourceLine(source)}</span>
+        </p>
+      )}
+      <div className="tabular flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[13px] text-ink-700">
+        <span className="font-semibold">
+          {summary.detected_rows} 種・{pieces} 顆：
+        </span>
+        {counts.map((entry) => {
+          const active = statusFilter === entry.status;
           return (
-            <div
-              key={entry.label}
-              className="min-w-[5.5rem] rounded-lg border border-line bg-surface px-3 py-2"
+            <button
+              key={entry.status}
+              type="button"
+              aria-pressed={active}
+              title={entry.title ?? (active ? '取消篩選' : `只看${entry.label}`)}
+              onClick={() => setStatusFilter(active ? 'ALL' : entry.status)}
+              className={`rounded-full border px-2 py-0.5 transition-colors ${
+                active ? 'border-accent-600 bg-accent-50' : 'border-line bg-surface hover:border-line-strong'
+              }`}
             >
-              {body}
-            </div>
+              {entry.label} <span className={`font-bold ${entry.tone}`}>{entry.value}</span>
+            </button>
           );
-        }
-        return (
-          <button
-            key={entry.label}
-            type="button"
-            aria-pressed={active}
-            onClick={() => setStatusFilter(active ? 'ALL' : entry.status!)}
-            className={`min-w-[5.5rem] rounded-lg border px-3 py-2 text-left transition-colors ${
-              active
-                ? 'border-accent-600 bg-accent-50/70'
-                : 'border-line bg-surface hover:border-line-strong'
-            }`}
-          >
-            {body}
-          </button>
-        );
-      })}
-
-      {/* 02 §19 / §34 — a component dissipation summary, never edge heat flow. */}
-      <div className="ml-auto flex items-center gap-3 rounded-lg border border-line bg-surface px-3.5 py-2">
-        <div>
-          <span className="tabular text-[17px] leading-none font-bold text-ink-900">
-            {summary.total_power_W.toFixed(1)} W
-          </span>
-          <span className="mt-1 block text-[11px] leading-tight text-ink-500">
-            <BilingualTooltip zh={tip('Total Power') ?? ''} align="left">
-              Total Power
-            </BilingualTooltip>
-            <span className="block text-[10px] text-ink-400">總功耗（非邊熱流 Q）</span>
-          </span>
-        </div>
+        })}
+        <span className="text-ink-300" aria-hidden>
+          ｜
+        </span>
+        {/* 02 §19 / §34 — a component dissipation summary, never edge heat flow. */}
+        <span title="Σ 數量 × 單顆功耗（勾選、沒有錯誤的列）。元件功耗加總，不是熱網路邊的熱流 Q。">
+          <span className="font-bold text-ink-900">{summary.total_power_W.toFixed(1)} W</span>
+        </span>
+        <span className="text-ink-300" aria-hidden>
+          ｜
+        </span>
+        <span className="text-ink-500">
+          匯入後 <span className="font-semibold text-ink-700">{impact.projected_total} 種</span>・
+          <span className="font-semibold text-ink-700">{impact.projected_power_W.toFixed(1)} W</span>
+          {(impact.replaced > 0 || impact.skipped > 0) && (
+            <span className="ml-1 text-ink-400">
+              （{impact.replaced > 0 ? `取代 ${impact.replaced}` : ''}
+              {impact.replaced > 0 && impact.skipped > 0 ? '・' : ''}
+              {impact.skipped > 0 ? `略過 ${impact.skipped}` : ''}）
+            </span>
+          )}
+        </span>
       </div>
     </div>
   );
 }
 
-export function ImportSummaryPanel() {
-  const rows = useComponentImportStore((s) => s.rows);
-  const summary = useMemo(() => summarizeImport(rows), [rows]);
-  const setStatusFilter = useComponentImportStore((s) => s.setStatusFilter);
-
-  const focus = (status: StagingRow['status']) => {
-    setStatusFilter(status);
-    document.getElementById('staging-preview')?.scrollIntoView({ behavior: 'smooth' });
-  };
-
-  return (
-    <PanelCard title="Import Summary / 匯入摘要" icon={<BarChart3 size={15} />}>
-      <dl>
-        <Row label="Detected Rows" zh="偵測列數" value={String(summary.detected_rows)} />
-        <Row label="Included Rows" zh="納入列數" value={String(summary.included_rows)} />
-        <Row
-          label="Valid"
-          zh="有效"
-          value={String(summary.valid_rows)}
-          tone="text-ok-600"
-          onClick={() => focus('VALID')}
-        />
-        <Row
-          label="Warnings"
-          zh="警告"
-          value={String(summary.warning_rows)}
-          tone={summary.warning_rows > 0 ? 'text-warn-600' : 'text-ink-900'}
-          onClick={() => focus('WARNING')}
-        />
-        <Row
-          label="Errors"
-          zh="錯誤"
-          value={String(summary.error_rows)}
-          tone={summary.error_rows > 0 ? 'text-danger-600' : 'text-ink-900'}
-          onClick={() => focus('ERROR')}
-        />
-        <Row
-          label="Duplicates"
-          zh="重複"
-          value={String(summary.duplicate_rows)}
-          tone={summary.duplicate_rows > 0 ? 'text-accent-700' : 'text-ink-900'}
-          onClick={() => focus('DUPLICATE')}
-        />
-        <div className="mt-1.5 flex items-baseline justify-between gap-3 border-t border-line pt-2">
-          <dt className="text-[12px] text-ink-500">
-            <BilingualTooltip zh={tip('Total Power') ?? ''} align="left">
-              Total Power <span className="text-ink-400">/ 總功耗</span>
-            </BilingualTooltip>
-          </dt>
-          <dd className="tabular text-[14px] font-bold text-ink-900">
-            {summary.total_power_W.toFixed(1)} W
-          </dd>
-        </div>
-      </dl>
-
-      {summary.category_breakdown.length > 0 && (
-        <div className="mt-3 border-t border-line pt-2.5">
-          <h4 className="mb-1.5 text-[11px] font-bold text-ink-700">
-            Category Breakdown / 類別分佈
-          </h4>
-          <dl>
-            {summary.category_breakdown.map((entry) => (
-              <div
-                key={entry.category}
-                className="flex items-baseline justify-between gap-3 py-[3px] text-[12px]"
-              >
-                <dt className="text-ink-500">{entry.category}</dt>
-                <dd className="tabular text-ink-700">
-                  {entry.types} type{entry.types === 1 ? '' : 's'} /{' '}
-                  <span className="font-semibold">{entry.power_W.toFixed(1)} W</span>
-                </dd>
-              </div>
-            ))}
-          </dl>
-        </div>
-      )}
-
-      {/* 02 §19 / §34 — the number above is a component dissipation summary. */}
-      <p className="mt-3 rounded-md border border-warn-500/30 bg-warn-100/60 p-2.5 text-[11px] leading-relaxed text-warn-600">
-        <AlertTriangle size={12} className="mr-1 inline" aria-hidden />
-        Total Power is a component dissipation summary. It is <strong>not</strong> thermal edge
-        heat flow (Q).
-        <span className="mt-0.5 block">
-          此為元件功耗摘要，非熱網路邊 (Edge) 的熱流 Q，不可作為熱流依據。
-        </span>
-      </p>
-    </PanelCard>
-  );
-}
-
-export function ValidationPanel() {
+/**
+ * What blocks the import — an unmapped required column, rows with an error.
+ * Nothing to act on renders nothing: the per-row reasons are on the rows.
+ */
+export function BlockingIssuesPanel() {
   const rows = useComponentImportStore((s) => s.rows);
   const mapping = useComponentImportStore((s) => s.mapping);
+  const setStep = useComponentImportStore((s) => s.setStep);
   const setStatusFilter = useComponentImportStore((s) => s.setStatusFilter);
   const setSearch = useComponentImportStore((s) => s.setSearch);
-
-  const unmappedRequired = useMemo(
-    () => REQUIRED_FIELDS.filter((field) => !mapping.includes(field)),
-    [mapping],
-  );
-
-  const importable = rows.filter((row) => row.include && row.status !== 'ERROR').length;
-  const missingRjc = rows.filter((row) => row.r_jc_C_per_W == null && row.status !== 'ERROR').length;
-  const missingLimit = rows.filter((row) => row.limit_C == null && row.status !== 'ERROR').length;
-  const invalidRows = rows.filter((row) => row.status === 'ERROR');
-
-  const jumpTo = (status: StagingRow['status'], name?: string) => {
-    setStatusFilter(status);
-    if (name) setSearch(name);
-    document.getElementById('staging-preview')?.scrollIntoView({ behavior: 'smooth' });
-  };
+  const unmapped = useMemo(() => REQUIRED_FIELDS.filter((field) => !mapping.includes(field)), [mapping]);
+  const errors = rows.filter((row) => row.include && row.status === 'ERROR');
+  if (unmapped.length === 0 && errors.length === 0) return null;
 
   return (
-    <PanelCard title="Validation / 驗證結果" icon={<ShieldCheck size={15} />}>
+    <div className="rounded-lg border border-danger-500/40 bg-surface px-4 py-3 text-[12.5px]">
+      <p className="mb-1.5 flex items-center gap-1.5 font-semibold text-danger-600">
+        <CircleAlert size={15} aria-hidden />
+        要先處理才能套用
+      </p>
       <ul className="flex flex-col gap-1">
-        <li className="flex items-start gap-2 py-1 text-[12px]">
-          {unmappedRequired.length === 0 ? (
-            <CheckCircle2 size={15} className="mt-px shrink-0 text-ok-600" aria-hidden />
-          ) : (
-            <CircleAlert size={15} className="mt-px shrink-0 text-danger-600" aria-hidden />
-          )}
-          <span className={unmappedRequired.length === 0 ? 'text-ink-700' : 'text-danger-600'}>
-            {unmappedRequired.length === 0
-              ? 'Required fields mapped / 必要欄位已對應'
-              : `Unmapped required: ${unmappedRequired.join(', ')} / 必要欄位未對應`}
-          </span>
-        </li>
-
-        <li className="flex items-start gap-2 py-1 text-[12px]">
-          <CheckCircle2 size={15} className="mt-px shrink-0 text-ok-600" aria-hidden />
-          <span className="text-ink-700">{importable} rows ready / {importable} 列可匯入</span>
-        </li>
-
-        {missingRjc > 0 && (
+        {unmapped.length > 0 && (
           <li>
-            <button
-              type="button"
-              onClick={() => jumpTo('WARNING')}
-              className="-mx-1.5 flex w-[calc(100%+0.75rem)] items-start gap-2 rounded px-1.5 py-1 text-left text-[12px] hover:bg-surface-muted"
-            >
-              <AlertTriangle size={15} className="mt-px shrink-0 text-warn-600" aria-hidden />
-              <span className="text-warn-600">
-                {missingRjc} rows missing Rjc / {missingRjc} 列缺少 Rjc
-              </span>
+            <button type="button" className="text-left text-danger-600 hover:underline" onClick={() => setStep('mapping')}>
+              必要欄位還沒對應：{unmapped.join('、')} →
             </button>
           </li>
         )}
-
-        {missingLimit > 0 && (
-          <li>
-            <button
-              type="button"
-              onClick={() => jumpTo('WARNING')}
-              className="-mx-1.5 flex w-[calc(100%+0.75rem)] items-start gap-2 rounded px-1.5 py-1 text-left text-[12px] hover:bg-surface-muted"
-            >
-              <AlertTriangle size={15} className="mt-px shrink-0 text-warn-600" aria-hidden />
-              <span className="text-warn-600">
-                {missingLimit} rows missing thermal limit / {missingLimit} 列缺少溫度上限
-              </span>
-            </button>
-          </li>
-        )}
-
-        {invalidRows.map((row) => (
+        {errors.map((row) => (
           <li key={row.row_id}>
             <button
               type="button"
-              onClick={() => jumpTo('ERROR', row.name)}
-              className="-mx-1.5 flex w-[calc(100%+0.75rem)] items-start gap-2 rounded px-1.5 py-1 text-left text-[12px] hover:bg-surface-muted"
+              className="text-left text-danger-600 hover:underline"
+              onClick={() => {
+                setStatusFilter('ERROR');
+                setSearch(row.name);
+              }}
             >
-              <CircleAlert size={15} className="mt-px shrink-0 text-danger-600" aria-hidden />
-              <span className="text-danger-600">
-                {row.row_id}: {row.issues.find((issue) => issue.severity === 'error')?.message}
-              </span>
+              {row.name || row.row_id}：{row.issues.find((issue) => issue.severity === 'error')?.message_zh ??
+                row.issues.find((issue) => issue.severity === 'error')?.message}
             </button>
           </li>
         ))}
       </ul>
-
-      {(missingRjc > 0 || missingLimit > 0) && (
-        <p className="mt-2.5 border-t border-line pt-2 text-[11px] leading-relaxed text-ink-400">
-          Missing thermal fields do not block the import — complete them in Component Manager.
-          <span className="block">缺少熱參數不會阻擋匯入，可於「元件管理」補齊。</span>
-        </p>
+      {errors.length > 0 && (
+        <p className="mt-1.5 text-ink-400">有錯誤的列不會匯入；改好或取消勾選即可套用其他列。</p>
       )}
-    </PanelCard>
+    </div>
   );
 }
 
-export function ProjectImpactPanel() {
+export const DUPLICATE_COPY: Record<DuplicatePolicy, { label: string; detail: string }> = {
+  MERGE_NON_EMPTY: { label: '合併非空欄位', detail: '匯入有值的欄位覆蓋現有的，匯入空白的欄位保留現有的。' },
+  REPLACE: { label: '取代現有資料', detail: '以匯入的值覆蓋元件欄位；不認得的附加資料保留。' },
+  SKIP: { label: '跳過（保留現有）', detail: '現有元件不動，這一列不匯入。' },
+  NEW_VARIANT: { label: '另建一顆', detail: '匯入成另一顆元件，名稱加上「(Imported)」。' },
+};
+
+/** Only when there are duplicates: how the rows that match an existing component are handled. */
+export function DuplicateBar() {
   const rows = useComponentImportStore((s) => s.rows);
   const sessionPolicy = useComponentImportStore((s) => s.sessionPolicy);
-  const existing = useComponentStore((s) => s.components);
-  const impact = useMemo(
-    () => projectImpact(rows, existing, sessionPolicy),
-    [rows, existing, sessionPolicy],
-  );
+  const setSessionPolicy = useComponentImportStore((s) => s.setSessionPolicy);
+  const duplicates = rows.filter((row) => row.duplicate_of != null && row.include).length;
+  const overrides = rows.filter((row) => row.duplicate_of != null && row.duplicate_action != null).length;
+  if (duplicates === 0) return null;
 
   return (
-    <PanelCard title="Project Impact / 專案影響預覽" icon={<TrendingUp size={15} />}>
-      <dl>
-        <Row
-          label="Current Components"
-          zh="目前元件數"
-          value={String(impact.current_components)}
-        />
-        <Row
-          label="New Components"
-          zh="新增元件"
-          value={`+${impact.new_components}`}
-          tone="text-ok-600"
-        />
-        <Row
-          label="Replaced"
-          zh="將取代"
-          value={String(impact.replaced)}
-          tone={impact.replaced > 0 ? 'text-accent-700' : 'text-ink-900'}
-        />
-        <Row label="Skipped" zh="略過" value={String(impact.skipped)} tone="text-ink-500" />
-        <div className="mt-1.5 border-t border-line pt-2">
-          <Row
-            label="Projected Total"
-            zh="匯入後預計總數"
-            value={String(impact.projected_total)}
-          />
-          <Row
-            label="Projected Power"
-            zh="匯入後總功耗"
-            value={`${impact.projected_power_W.toFixed(1)} W`}
-          />
-        </div>
-      </dl>
-    </PanelCard>
+    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-accent-600/30 bg-accent-50/60 px-4 py-2.5 text-[12.5px] text-ink-700">
+      <Copy size={14} className="text-accent-600" aria-hidden />
+      <span>
+        重複 <strong>{duplicates}</strong> 顆（名稱＋類別與專案裡的元件相同）：處理方式
+      </span>
+      <label htmlFor="dup-policy" className="sr-only">
+        重複的處理方式
+      </label>
+      <select
+        id="dup-policy"
+        value={sessionPolicy}
+        onChange={(event) => setSessionPolicy(event.target.value as DuplicatePolicy)}
+        className="h-8 rounded-md border border-line-strong bg-surface px-2 text-[12.5px]"
+      >
+        {DUPLICATE_POLICIES.map((policy) => (
+          <option key={policy} value={policy}>
+            {DUPLICATE_COPY[policy].label}
+          </option>
+        ))}
+      </select>
+      <InfoTip text={DUPLICATE_POLICIES.map((policy) => `${DUPLICATE_COPY[policy].label}：${DUPLICATE_COPY[policy].detail}`).join('\n')} />
+      <span className="text-ink-500">{DUPLICATE_COPY[sessionPolicy].detail}</span>
+      {overrides > 0 && <span className="text-accent-700">（{overrides} 列另外指定）</span>}
+    </div>
   );
 }

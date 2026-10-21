@@ -184,7 +184,7 @@ export function InfoTip({ text }: { text: string }) {
       {open && (
         <span
           role="tooltip"
-          className="absolute bottom-full left-1/2 z-30 mb-1.5 w-64 -translate-x-1/2 rounded-md bg-shell-800 px-2.5 py-2 text-[12px] leading-snug font-normal text-white shadow-lg"
+          className="absolute bottom-full left-1/2 z-30 mb-1.5 w-64 -translate-x-1/2 rounded-md bg-shell-800 px-2.5 py-2 text-[12px] leading-snug font-normal whitespace-pre-line text-white shadow-lg"
         >
           {text}
         </span>
