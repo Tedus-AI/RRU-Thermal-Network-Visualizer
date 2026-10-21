@@ -11,14 +11,20 @@
  * an edit lock this tool does not take part in.
  */
 
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Cloud, FileJson, RefreshCw } from 'lucide-react';
 
 import { Button, Select } from '@/ui/primitives';
+import { toast } from '@/ui/toast';
 import { useComponentImportStore } from '@/data/componentImportStore';
 import { useProjectStore } from '@/data/projectStore';
 import { readAiThermalDb, sharePoint } from '@/data/sharepoint';
-import { defaultMaterials } from '@/domain/materials';
+import { defaultMaterials, type MaterialDefaults } from '@/domain/materials';
+import {
+  rruMaterialDefaultPick,
+  rruMaterialPatch,
+  rruMaterialRows,
+} from '@/importers/component/aiThermalMaterials';
 import {
   AI_THERMAL_DB_PATH,
   AI_THERMAL_LISTS,
@@ -42,14 +48,16 @@ const LIST_LABEL: Record<AiThermalList, string> = { RF: 'RF', Digital: 'Digital'
 
 /** What arrives and what Screen 04 still asks for — kept in step with `parseAiThermal.ts`. */
 const CARRIES = [
-  '名稱、分類、數量、功耗、限溫與限溫對象',
+  '名稱、分類、數量、功耗、限溫',
+  '限溫對象 Tj／Tc（當作已確認；要改請回 AI-Thermal 改，再重新匯入）',
   'Rjc（Rjc = 0 的元件改為本體型熱源）',
   '散熱路徑、元件大小與高度、E-PAD',
   'PCB 板厚（板級導熱孔）',
+  'Thermal Via 計算的等效 k（該元件自訂；沒有 via 設計的用 01 通用值）',
   'TIM 材料與壓合厚度、備註',
   '凸台大小（在 04 選「凸台」時自動帶入）',
 ];
-const STILL_04 = '封裝型式、接合方式、擴散範圍、本體型元件的量測位置，以及 AI-Thermal 沒有指定的限溫對象與散熱路徑。';
+const STILL_04 = '封裝型式、接合方式、擴散範圍、本體型元件的量測位置，以及 AI-Thermal 沒有指定的散熱路徑。';
 
 export function AiThermalSourcePanel() {
   const [origin, setOrigin] = useState<Origin>('sharepoint');
@@ -62,7 +70,8 @@ export function AiThermalSourcePanel() {
   const fileInput = useRef<HTMLInputElement>(null);
 
   const store = useComponentImportStore();
-  const materials = useProjectStore((s) => s.draft?.materials) ?? defaultMaterials();
+  const draftMaterials = useProjectStore((s) => s.draft?.materials);
+  const materials = draftMaterials ?? defaultMaterials();
 
   const adopt = (raw: unknown, label: string) => {
     const db = parseAiThermalDb(raw);
@@ -296,6 +305,15 @@ export function AiThermalSourcePanel() {
             </div>
           </fieldset>
 
+          {summary && draftMaterials && (
+            <RruMaterialsOffer
+              key={summary.id}
+              project={loaded.db.projects[summary.id]}
+              projectName={summary.name}
+              materials={draftMaterials}
+            />
+          )}
+
           <div className="grid gap-3 rounded-md border border-line bg-surface p-3 text-[12px] leading-relaxed sm:grid-cols-2">
             <div>
               <p className="font-semibold text-ink-700">會帶入</p>
@@ -309,7 +327,7 @@ export function AiThermalSourcePanel() {
               <p className="font-semibold text-ink-700">還要在 04 補</p>
               <p className="mt-1 text-ink-500">{STILL_04}</p>
               <p className="mt-2 text-ink-400">
-                AI-Thermal 的元件類型、常溫功耗、TIM 型號、Thermal Via 孔徑與數量保留在元件的「來源」分頁。
+                AI-Thermal 的元件類型、限溫對象的判定、常溫功耗、TIM 型號、Thermal Via 孔徑、數量與等效 k 的說明保留在元件的「來源」分頁。
               </p>
             </div>
           </div>
@@ -322,5 +340,108 @@ export function AiThermalSourcePanel() {
         </>
       )}
     </div>
+  );
+}
+
+const fmt = (value: number | null) => (value == null ? '—' : String(+value.toFixed(4)));
+
+/**
+ * 5G-RRU's parameter console for this project, offered to 01 (`aiThermalMaterials.ts`).
+ * Each row shows 01's value next to 5G-RRU's; nothing changes until 帶入 01.
+ */
+function RruMaterialsOffer({
+  project,
+  projectName,
+  materials,
+}: {
+  project: Record<string, unknown>;
+  projectName: string;
+  materials: MaterialDefaults;
+}) {
+  const readOnly = useProjectStore((s) => s.isReadOnly());
+  const patchMaterials = useProjectStore((s) => s.patchMaterials);
+  const rows = useMemo(() => rruMaterialRows(project, materials), [project, materials]);
+  const differ = rows.filter((r) => !r.same);
+  const [ticked, setPicked] = useState<string[]>(() => rruMaterialDefaultPick(rows));
+  // A row that became equal (applied, or typed in 01) drops out of the pick.
+  const picked = ticked.filter((id) => differ.some((r) => r.id === id));
+
+  if (rows.length === 0) return null;
+  const sameCount = rows.length - differ.length;
+  const apply = () => {
+    const chosen = differ.filter((r) => picked.includes(r.id));
+    if (chosen.length === 0) return;
+    patchMaterials(rruMaterialPatch(materials, rows, picked, `5G-RRU 參數控制台（${projectName}）`));
+    toast.success(`已把 5G-RRU 的 ${chosen.length} 項材料設定帶入 01。`);
+  };
+
+  return (
+    <section className="rounded-md border border-line bg-surface p-3 text-[12px]" aria-labelledby="ait-mat-title">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <p id="ait-mat-title" className="font-semibold text-ink-700">
+          5G-RRU 參數控制台 → 01 材料與製程
+        </p>
+        <p className="text-ink-400">
+          {differ.length === 0 ? `${rows.length} 項都與 01 相同` : `${differ.length} 項不同${sameCount ? `・${sameCount} 項相同` : ''}`}
+        </p>
+      </div>
+      {differ.length > 0 && (
+        <>
+          <table className="tabular mt-2 w-full border-collapse text-left">
+            <thead>
+              <tr className="border-b border-line text-[11.5px] text-ink-500">
+                <th className="w-7 py-1 font-normal" aria-label="帶入" />
+                <th className="py-1 font-normal">項目</th>
+                <th className="py-1 text-right font-normal">01 目前</th>
+                <th className="py-1 text-right font-normal">5G-RRU</th>
+              </tr>
+            </thead>
+            <tbody>
+              {differ.map((r) => (
+                <tr key={r.id} className="border-b border-line/60 last:border-0">
+                  <td className="py-1">
+                    <input
+                      type="checkbox"
+                      className="size-4 accent-[var(--color-accent-600)]"
+                      aria-label={`帶入 ${r.group} ${r.label}`}
+                      checked={picked.includes(r.id)}
+                      disabled={readOnly}
+                      onChange={(event) =>
+                        setPicked((current) =>
+                          event.target.checked ? [...current, r.id] : current.filter((id) => id !== r.id),
+                        )
+                      }
+                    />
+                  </td>
+                  <td className="py-1 text-ink-700" title={`5G-RRU：${r.from}`}>
+                    {r.group}・{r.label}
+                    {r.unit !== '—' && <span className="text-ink-400">（{r.unit}）</span>}
+                  </td>
+                  <td className="py-1 text-right text-ink-500">
+                    {fmt(r.current)}
+                    {r.current != null && (
+                      <span className="ml-1 text-[11px] text-ink-400">{r.currentStated ? '已設定' : '預設'}</span>
+                    )}
+                  </td>
+                  <td className="py-1 text-right font-semibold text-ink-900">{fmt(r.incoming)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div className="mt-2 flex flex-wrap items-center gap-3">
+            <Button
+              variant="secondary"
+              disabled={readOnly || picked.length === 0}
+              onClick={apply}
+            >
+              帶入 01（{picked.length} 項）
+            </Button>
+            <span className="text-ink-400">
+              {readOnly ? '專案唯讀，不能帶入。' : '01 已設定的值預設不勾；只帶入 5G-RRU 有存的值。'}
+            </span>
+          </div>
+        </>
+      )}
+    </section>
   );
 }

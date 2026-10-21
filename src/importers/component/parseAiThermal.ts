@@ -17,8 +17,9 @@
  *   Component                       → name
  *   rf / digital / pwr list         → category (Type `filter` → Filter)
  *   Qty, Power(W), Limit(C)         → qty, power, limit
- *   Limit_Ref (or the shared auto   → limit type; a stated one arrives confirmed,
- *   rule, `CompMerge.limitRef`)       an auto one is left for Screen 04 to confirm
+ *   Limit_Ref (or the shared auto   → limit type, confirmed either way: AI-Thermal
+ *   rule, `CompMerge.limitRef`)       owns it, so a change is made there and
+ *                                     re-imported, not re-confirmed here
  *   R_jc (else θJC from `Rth`)      → Rjc. R_jc = 0 is how both tools say "no
  *                                     junction", and in this tool that is the
  *                                     surface/body source model, never an Rjc of 0
@@ -29,6 +30,11 @@
  *   epadSize (or Pad_L/W from it)   → E-PAD, the source face of a board path
  *   pcb_thickness[RF|Digital|PWR]   → board thickness of a board path; else the
  *                                     5G-RRU row's Thick(mm), else its t_PCB
+ *   thermal_specs[…].via (the        → the part's own via k (K_eff) with a process
+ *   Thermal Via page's design)        efficiency of 1, through the shared
+ *                                     `viaCalc.js`; no complete design → nothing
+ *                                     stated, 01's generic via k applies. A round
+ *                                     pad with no epadSize → the equal-area square
  *   TIM_Model / TIM_Type            → TIM, by NAME against this project's library
  *                                     (model first); None → dry metal contact
  *   icToHSK (the compressed gap)    → BLT, only where it differs from the material
@@ -60,6 +66,7 @@ import {
   type ThermalSpec,
 } from '@/domain/component';
 import { DIRECT_CONTACT_TIM_ID, type MaterialDefaults } from '@/domain/materials';
+import { aiThermalViaKeff, aiThermalViaReason, equalAreaSide } from './aiThermalVia';
 import { CARRIED_SPEC_COLUMN, type CarriedSpec } from './carriedSpec';
 import { CANONICAL_FIELDS, type CanonicalField, type ParsedTable } from './types';
 
@@ -190,9 +197,11 @@ function rjcFromRth(comp: Raw, heatPath: HeatPathType): number | null {
 const EXTRA_COLUMNS = [
   'AI-Thermal 元件類型',
   '常溫功耗 Pd@25°C(W)',
+  '限溫對象',
   'TIM 型號',
   'Thermal Via 內徑(mil)',
   'Thermal Via 數量',
+  'Thermal Via 等效 k',
   '凸台大小(mm)',
   '板厚來源',
 ] as const;
@@ -292,7 +301,14 @@ export function mapAiThermalComponent(
   const ref = aiThermalLimitRef(comp, list.key);
   // A body source has no junction to hold a Tj, and Screen 04 rejects the pair.
   const limitType: LimitType = body && ref.ref === 'Tj' ? 'Tc' : ref.ref;
-  const limitConfirmed = !ref.auto && !(body && ref.ref === 'Tj');
+  // Confirmed even when AI-Thermal decided it automatically (the user's call): the
+  // reference belongs to AI-Thermal, which both tools read it from, so it is
+  // changed there and imported again rather than re-confirmed part by part here.
+  const limitConfirmed = true;
+  const limitNote =
+    `${limitType}（AI-Thermal ${ref.auto ? '自動判定' : '指定'}` +
+    (limitType !== ref.ref ? `為 ${ref.ref}；Rjc 為 0 → 本體型熱源，改用 Tc` : '') +
+    '）';
 
   // Geometry: the TH/ME page's sizes, else the shared pad when it says it came from them.
   const padL = positive(comp.Pad_L);
@@ -301,9 +317,18 @@ export function mapAiThermalComponent(
   const pkg =
     parseAiThermalSize(spec.heatSourceSize) ?? (comp._pad_from === 'heatSourceSize' ? pad : null);
   const pkgH = positive(spec.heatSourceHeight);
-  const epad =
+  const globals: Raw = isObj(project.global_params) ? project.global_params : {};
+  // The Thermal Via page's design, read by the same code as AI-Thermal and 5G-RRU.
+  const via = heatPath === 'Board' ? aiThermalViaKeff(comp, specs, globals) : null;
+  const viaK = via?.ok && via.keff != null ? Math.round(via.keff * 1000) / 1000 : null;
+  const roundPad = via?.shape === 'circle' && via.D != null && via.D > 0 ? via.D : null;
+  const statedEpad =
     parseAiThermalSize(spec.epadSize) ??
     (comp._pad_from === 'epadSize' || text(comp.Board_Type) === 'Thermal Via' ? pad : null);
+  // The Thermal Via page may describe a round pad the TH/ME page never sized.
+  const roundEpad =
+    !statedEpad && roundPad != null ? { L: equalAreaSide(roundPad), W: equalAreaSide(roundPad) } : null;
+  const epad = statedEpad ?? roundEpad;
 
   // Board thickness, only where a path conducts through the board.
   let boardT: number | null = null;
@@ -311,7 +336,6 @@ export function mapAiThermalComponent(
   if (heatPath === 'Board') {
     const fromPcb = isObj(project.pcb_thickness) ? positive(project.pcb_thickness[list.key]) : null;
     const fromRow = text(comp.Board_Type) === 'Thermal Via' ? positive(comp['Thick(mm)']) : null;
-    const globals = isObj(project.global_params) ? project.global_params : {};
     const fromGlobal = positive(globals.t_PCB);
     if (fromPcb != null) [boardT, boardFrom] = [fromPcb, `AI-Thermal ${list.key} PCB 板厚`];
     else if (fromRow != null) [boardT, boardFrom] = [fromRow, '5G-RRU 元件板厚'];
@@ -353,6 +377,17 @@ export function mapAiThermalComponent(
       : body
         ? { source_model: 'SurfaceBodyBased' }
         : {};
+  // K_eff already holds the copper, fill and FR4 fractions → no further derate.
+  if (viaK != null) Object.assign(parameters, { via_effective_k_W_mK: viaK, via_efficiency: 1 });
+  const viaNote = !via
+    ? ''
+    : viaK != null
+      ? [
+          `${viaK} W/m·K（AI-Thermal via 設計，製程係數 1）`,
+          ...(roundEpad ? [`圓形焊盤 Ø${roundPad} mm → E-PAD 用等面積方形 ${roundEpad.L} × ${roundEpad.W} mm`] : []),
+          ...via.issues.map((issue) => `⚠ ${issue.text}`),
+        ].join('；')
+      : `用 01 的通用值：${aiThermalViaReason(via)}`;
   const thermal: ThermalSpec = {
     ...emptyThermalSpec(limitType, heatPath),
     limit_type_confirmed: limitConfirmed,
@@ -401,9 +436,11 @@ export function mapAiThermalComponent(
   const extra: Record<ExtraColumn, string> = {
     'AI-Thermal 元件類型': type,
     '常溫功耗 Pd@25°C(W)': cell(num(comp['Power_RT(W)'])),
+    限溫對象: limitNote,
     'TIM 型號': timModel,
     'Thermal Via 內徑(mil)': cell(positive(comp.TV_ID_mil)),
     'Thermal Via 數量': cell(positive(comp.TV_Qty)),
+    'Thermal Via 等效 k': viaNote,
     '凸台大小(mm)': boss ? `${boss.L} × ${boss.W}` : '',
     板厚來源: boardFrom,
   };
