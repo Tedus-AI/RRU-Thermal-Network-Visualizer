@@ -13,6 +13,7 @@ import { describe, expect, it } from 'vitest';
 import { metalBaseSourceModel, type Component } from '@/domain/component';
 import { defaultMaterials, DIRECT_CONTACT_TIM_ID, type MaterialDefaults } from '@/domain/materials';
 import { sourced } from '@/domain/sourcedValue';
+import { readLinkedInput } from '@/thermal/graph/networkBuilder';
 
 import fixture from './__fixtures__/aiThermalStarkcore.json';
 import { applyImport } from './applyImport';
@@ -143,9 +144,11 @@ describe('each part, as an engineer would have entered it', () => {
     expect(s.heat_path_confirmed).toBe(true);
     expect(s.r_jc_C_per_W?.value).toBe(1.5);
     expect(s.limit_C?.value).toBe(225);
-    // Type "Final PA" → Tj by the shared rule, but nobody stated it.
+    // Type "Final PA" → Tj by the shared rule. Nobody stated it, and it still
+    // arrives confirmed: AI-Thermal owns the reference, a change is made there.
     expect(s.limit_type).toBe('Tj');
-    expect(s.limit_type_confirmed).toBe(false);
+    expect(s.limit_type_confirmed).toBe(true);
+    expect(pa.metadata?.['限溫對象']).toBe('Tj（AI-Thermal 自動判定）');
     expect(s.geometry).toMatchObject({ package_L_mm: 20.57, package_W_mm: 9.78, package_H_mm: 3.78 });
     expect(s.geometry.needs_review).toBeFalsy();
     expect(s.tim.tim_id).toBe('TIM_GREASE');
@@ -181,6 +184,7 @@ describe('each part, as an engineer would have entered it', () => {
     expect(metalBaseSourceModel(s)).toBe('SurfaceBodyBased');
     expect(s.r_jc_C_per_W).toBeNull();
     expect(s.limit_type).toBe('Tc');
+    expect(s.limit_type_confirmed).toBe(true);
     expect(s.geometry).toMatchObject({ source_L_mm: 10, source_W_mm: 10, board_thickness_mm: 2.2 });
     expect(rowOf(rows, 'Circulators(SC12L)').issues.map((i) => i.field)).not.toContain('R_jc');
   });
@@ -266,6 +270,19 @@ describe('choices that depend on the target project', () => {
     expect(by(onlyGlobal, 'B11G3338N81D-Driver').thermal_spec.geometry.board_thickness_mm).toBe(1.6);
   });
 
+  it('a body source AI-Thermal judged Tj arrives as a confirmed Tc, and says why', () => {
+    const { components } = run(
+      db((raw) => {
+        // Circulators: Rjc 0 (a body), and AI-Thermal now says Tj.
+        (raw.projects['StarKcore-12L'].rf_data[2] as Record<string, unknown>).Limit_Ref = 'Tj';
+      }),
+    );
+    const cr = by(components, 'Circulators(SC12L)');
+    expect(cr.thermal_spec.limit_type).toBe('Tc');
+    expect(cr.thermal_spec.limit_type_confirmed).toBe(true);
+    expect(cr.metadata?.['限溫對象']).toBe('Tc（AI-Thermal 指定為 Tj；Rjc 為 0 → 本體型熱源，改用 Tc）');
+  });
+
   it('a stated limit reference arrives confirmed', () => {
     const { components } = run(
       db((raw) => {
@@ -288,5 +305,109 @@ describe('choices that depend on the target project', () => {
     // Digital infers Board; nothing confirmed it.
     expect(s.heat_path.type).toBe('Board');
     expect(s.heat_path_confirmed).toBe(false);
+  });
+});
+
+describe('the Thermal Via page design → the part\'s own via k', () => {
+  type Spec = Record<string, unknown>;
+  const withVia = (via: Spec | null, edit?: (p: Record<string, unknown>, spec: Spec) => void) =>
+    db((raw) => {
+      const p = raw.projects['StarKcore-12L'] as Record<string, unknown>;
+      const spec = (p.thermal_specs as Record<string, Spec>)['U850-Si5518'];
+      if (via) spec.via = via;
+      edit?.(p, spec);
+    });
+  // Independent of viaCalc.js: N vias of copper barrel + fill, FR4 between, over the pad.
+  const keff = (A: number, n: number, mil: number, kFill: number) => {
+    const ri = (mil * 0.0254) / 2;
+    const ro = ri + 0.0254;
+    const fill = Math.PI * ri * ri;
+    const foot = Math.PI * ro * ro;
+    return (n * (foot - fill) * 385 + n * fill * kFill + (A - n * foot) * 0.3) / A;
+  };
+  const clk = (source: AiThermalDb) => by(run(source).components, 'U850-Si5518');
+
+  it('no design yet → nothing stated, 01\'s generic via k applies, and the reason is kept', () => {
+    const part = clk(db());
+    expect(part.thermal_spec.heat_path.parameters).not.toHaveProperty('via_effective_k_W_mK');
+    expect(part.thermal_spec.heat_path.parameters).not.toHaveProperty('via_efficiency');
+    expect(readLinkedInput(part, 'materials.via_effective_k_W_mK', defaultMaterials())).toBe(30);
+    expect(part.metadata?.['Thermal Via 等效 k']).toBe(
+      '用 01 的通用值：AI-Thermal「Thermal Via 計算」還沒有這顆的 via 設計',
+    );
+  });
+
+  it('a complete design → its K_eff as the part\'s via k, with a process efficiency of 1', () => {
+    // 134 vias of 8 mil (the EE list), copper filled, over the 8.6 × 8.6 E-PAD.
+    const part = clk(withVia({ fill: 'copper', pitchMil: 25 }));
+    const want = keff(8.6 * 8.6, 134, 8, 385);
+    const params = part.thermal_spec.heat_path.parameters;
+    expect(params.via_effective_k_W_mK).toBeCloseTo(want, 3);
+    expect(params.via_efficiency).toBe(1);
+    // That is what the network's via edge now reads, instead of 01's 30 × 0.9.
+    expect(readLinkedInput(part, 'materials.via_effective_k_W_mK', defaultMaterials())).toBeCloseTo(want, 3);
+    expect(readLinkedInput(part, 'materials.via_efficiency', defaultMaterials())).toBe(1);
+    expect(part.metadata?.['Thermal Via 等效 k']).toBe(
+      `${params.via_effective_k_W_mK} W/m·K（AI-Thermal via 設計，製程係數 1）`,
+    );
+    // The E-PAD and board thickness are as before.
+    expect(part.thermal_spec.geometry).toMatchObject({ source_L_mm: 8.6, source_W_mm: 8.6, board_thickness_mm: 2 });
+  });
+
+  it('the Via page\'s own trial count and diameter are used, as AI-Thermal and 5G-RRU use them', () => {
+    const part = clk(withVia({ fill: 'epoxy', qty: 64, diaMil: 10, pitchMil: 35 }));
+    expect(part.thermal_spec.heat_path.parameters.via_effective_k_W_mK).toBeCloseTo(keff(8.6 * 8.6, 64, 10, 2), 3);
+  });
+
+  it('an incomplete, set-aside or overfull design falls back to 01, saying why', () => {
+    const cases: [Spec, string][] = [
+      [{ pitchMil: 25 }, '用 01 的通用值：via 設計還缺：塞孔材料'],
+      [{ fill: 'copper', skip: true, skipNote: '規格溫度很高' }, '用 01 的通用值：AI-Thermal 標為「暫不納入熱流評估」（規格溫度很高）'],
+      [{ fill: 'copper', qty: 4000 }, ''],
+    ];
+    for (const [via, note] of cases) {
+      const part = clk(withVia(via));
+      expect(part.thermal_spec.heat_path.parameters).not.toHaveProperty('via_effective_k_W_mK');
+      if (note) expect(part.metadata?.['Thermal Via 等效 k']).toBe(note);
+      else expect(part.metadata?.['Thermal Via 等效 k']).toMatch(/^用 01 的通用值：via 佔用面積是焊盤的 \d+%（超過焊盤），K_eff 不成立$/);
+    }
+  });
+
+  it('a layout AI-Thermal flags is still used, with the warning kept', () => {
+    // A 5 mil pitch puts the barrels on top of each other.
+    const part = clk(withVia({ fill: 'copper', pitchMil: 5 }));
+    expect(part.thermal_spec.heat_path.parameters.via_effective_k_W_mK).toBeCloseTo(keff(8.6 * 8.6, 134, 8, 385), 3);
+    expect(part.metadata?.['Thermal Via 等效 k']).toMatch(/製程係數 1）；⚠ \d+ 顆 via 的孔壁/);
+  });
+
+  it('a round pad the TH/ME page never sized → the equal-area square, so K_eff\'s area is kept', () => {
+    const part = clk(
+      withVia({ shape: 'circle', padD: 9, fill: 'copper', pitchMil: 25 }, (p, spec) => {
+        delete spec.epadSize;
+        const comp = (p.digital_data as Record<string, unknown>[]).find((c) => c.Component === 'U850-Si5518')!;
+        delete comp.Pad_L;
+        delete comp.Pad_W;
+      }),
+    );
+    const side = (9 * Math.sqrt(Math.PI)) / 2;
+    expect(part.thermal_spec.geometry.source_L_mm).toBeCloseTo(side, 3);
+    expect(part.thermal_spec.geometry.source_W_mm).toBeCloseTo(side, 3);
+    expect(part.thermal_spec.heat_path.parameters.via_effective_k_W_mK).toBeCloseTo(keff((Math.PI * 81) / 4, 134, 8, 385), 3);
+    expect(part.metadata?.['Thermal Via 等效 k']).toContain('圓形焊盤 Ø9 mm → E-PAD 用等面積方形 7.976 × 7.976 mm');
+  });
+
+  it('only a board path reads it: a top-surface part with a via design ignores it', () => {
+    const part = by(
+      run(
+        db((raw) => {
+          const specs = raw.projects['StarKcore-12L'].thermal_specs as Record<string, Spec>;
+          specs['XCZU67DR-FFVE1156'].via = { fill: 'copper', qty: 100, diaMil: 8 };
+        }),
+      ).components,
+      'XCZU67DR-FFVE1156',
+    );
+    expect(part.thermal_spec.heat_path.type).toBe('TopSurface');
+    expect(part.thermal_spec.heat_path.parameters).not.toHaveProperty('via_effective_k_W_mK');
+    expect(part.metadata?.['Thermal Via 等效 k'] ?? '').toBe('');
   });
 });

@@ -160,7 +160,8 @@ Mapping → Validation → Duplicate → Apply）、`AiThermalSourcePanel.tsx`�
 （那份資料庫由 AI-Thermal 與 5G-RRU 共用一把編輯鎖，本工具不參與）。
 
 畫面：資料庫來源（SharePoint／本機檔案）→ 專案（RF／Digital／PWR 顆數）→ PCB 板厚、5G-RRU 已排除顆數、最後儲存 →
-匯入範圍（RF／Digital／PWR、包含 5G-RRU 已排除的元件）→「會帶入／還要在 04 補」說明 →「載入元件（N 顆）」。
+匯入範圍（RF／Digital／PWR、包含 5G-RRU 已排除的元件）→「5G-RRU 參數控制台 → 01 材料與製程」（見下）→
+「會帶入／還要在 04 補」說明 →「載入元件（N 顆）」。
 
 欄位對照（元件 ＝ `rf_data`／`digital_data`／`pwr_data` 的一筆；TH/ME ＝ `thermal_specs[specKey(名稱)]`，兩邊都有時 TH/ME 優先，
 因為元件上的 `Board_Type`／`Pad_*` 只在 AI-Thermal 存檔時才由 TH/ME 推導）：
@@ -169,23 +170,40 @@ Mapping → Validation → Duplicate → Apply）、`AiThermalSourcePanel.tsx`�
 |---|---|
 | `Component`、`Qty`、`Power(W)`、`Limit(C)` | 名稱、數量、單顆功耗、溫度上限 |
 | 所在清單（Type `filter` → Filter）| 分類 RF／Digital／Power／Filter |
-| `Limit_Ref`（沒填 → 兩工具共用的自動規則 `CompMerge.limitRef`）| 限溫類型；有填＝已確認，自動＝待 04 確認 |
+| `Limit_Ref`（沒填 → 兩工具共用的自動規則 `CompMerge.limitRef`）| 限溫類型，**一律已確認**（使用者決定：限溫對象屬於 AI-Thermal，要改回 AI-Thermal 改、再重新匯入）。Rjc = 0 的本體型元件 Tj → Tc。判定依據寫在「來源」分頁的「限溫對象」 |
 | `R_jc`（沒有 → `Rth` 的 θJC，依散熱路徑取 top／bottom）| Rjc。**`R_jc = 0` → 表面／本體型熱源、Rjc 留空**（Rjc 0 會被 07 拒絕）|
 | TH/ME `heatDirection`（→ 元件 `Board_Type`）| 散熱路徑：Copper Coin → 銅塊、Thermal Via → 板級導熱孔、IC top → 元件表面；None／舊值 → 依分類推定（未確認）|
 | TH/ME `heatSourceSize`／`heatSourceHeight` | 本體 L × W × H |
 | TH/ME `epadSize`（→ `Pad_L/W`）| E-PAD（板級導熱孔的熱源面）|
 | `projects[id].pcb_thickness[RF／Digital／PWR]` → 5G-RRU 元件 `Thick(mm)` → `global_params.t_PCB` | 板厚（只有板級導熱孔）|
+| TH/ME `via`（AI-Thermal「Thermal Via 計算」的設計）＋元件 `TV_Qty`／`TV_ID_mil` | 板級導熱孔：設計完整 → 該元件**自訂**導熱孔等效 k ＝ K_eff、製程係數 1（K_eff 已含銅壁／塞孔／FR4 的比例，不再折減；與 5G-RRU 相同）；沒有設計／暫不納入／缺輸入／via 超過焊盤 → 不寫，沿用 01 的通用值。圓形焊盤且 TH/ME 沒填 `epadSize` → E-PAD 用等面積方形 |
 | TH/ME `timModel`／`timType`（→ `TIM_Model`／`TIM_Type`）| TIM：本專案有同名材料就用型號，否則用類型；None → 乾式金屬接觸 |
 | TH/ME `icToHSK`（壓縮後縫隙）→ 型號 `gapThickness` | 壓合厚度 BLT（與材料預設相同就不寫，沿用材料）|
 | TH/ME `bossSize`（元件表面路徑）| 記在凸台的「上次設定」（`mount_by_type.Pedestal`）：04 選「凸台」時帶入；接合方式仍是直接貼合 |
 | 元件 `note`＋TH/ME `note` | 備註 |
 | `_excluded`（5G-RRU 👁）| 預設不匯入；勾「包含已排除」→ 匯入為停用 |
-| `Type`、`Power_RT(W)`、`TIM_Model`、`TV_ID_mil`、`TV_Qty`、`bossSize`、板厚來源 | 元件「來源」分頁的保留欄位 |
+| `Type`、限溫對象的判定、`Power_RT(W)`、`TIM_Model`、`TV_ID_mil`、`TV_Qty`、Thermal Via 等效 k（或用通用值的原因）、`bossSize`、板厚來源 | 元件「來源」分頁的保留欄位 |
 
 - TH/ME 的 `hidden_components` **不是**排除（那是機構規格清單的隱藏，Driver／環形器／濾波器都在裡面，是真的熱源）。
 - 封裝型式只認得 `filter` → Cavity Filter、`Power Modules` → Module，其餘留給 04。
 - 本體型元件不報「缺 Rjc」、乾式金屬接觸不報「未指定 TIM」（`_ref_spec` 已經說明，既有專案匯入也一併修正）。
-- 測試：`aiThermalImport.test.ts`（StarKcore-12L 真實備份資料，parse → map → stage → apply）。
+- **K_eff 的算法與 AI-Thermal、5G-RRU 共用同一份 `viaCalc.js`**（`src/importers/component/viaCalc.js`，三個 repo 逐字相同；
+  `aiThermalVia.ts` 載入它）。**不要在這裡改**：在 AI-Thermal 改、複製到三個 repo，並更新 `aiThermalVia.test.ts` 釘住的 SHA-256。
+  ⚠ 本工具的導熱孔熱阻用擴散面積（`spreading_area`），AI-Thermal／5G-RRU 用焊盤面積 → 同一個 K_eff，本工具的導熱孔熱阻較小
+  （StarKcore-12L 的 Si5518：本工具 0.616、5G-RRU 0.759 °C/W）。計算方式未改。
+- **5G-RRU 參數控制台 → 01 材料與製程**（`aiThermalMaterials.ts`、`RruMaterialsOffer`）：專案的 `global_params` 裡 5G-RRU **有存**的值
+  （沒存的在 5G-RRU 是出廠預設，不帶）逐項列出「01 目前／5G-RRU」，勾選後按「帶入 01」才寫入（`patchMaterials`，來源 Imported、
+  reference「5G-RRU 參數控制台（專案名）」）。01 沒有值或還是出廠預設 → 預設勾；01 已設定 → 預設不勾；相同的不列（只寫筆數）。
+
+  | 5G-RRU | 01 |
+  |---|---|
+  | `Coin_L_Setting`／`Coin_W_Setting`／`Coin_T_Setting`、`K_Coin` | 銅塊長／寬／厚度、銅導熱係數 |
+  | `K_Solder`／`t_Solder`／`Voiding` | 焊料導熱係數／厚度／有效面積率 |
+  | `K_Via`／`Via_Eff` | 導熱孔等效 k／製程係數（通用值）|
+  | `t_base`；`L_pcb + Top + Btm`、`W_pcb + Left + Right`（5G-RRU 的 `rruFootprint`）| 散熱器基座厚度；長 L、寬 W |
+  | `K_Pad`／`t_Pad`、`K_Putty`／`t_Putty`、`K_Grease`／`t_Grease`（5G-RRU 沒選型號時用）| 內建 TIM「Pad」「Putty」「Grease」的 k／BLT（連結 TIM 管理工具的材料不改 k）|
+- 測試：`aiThermalImport.test.ts`（StarKcore-12L 真實備份資料，parse → map → stage → apply；含 via 設計各種情況）、
+  `aiThermalVia.test.ts`（共用 `viaCalc.js` 的 SHA-256 與載入）、`aiThermalMaterials.test.ts`（參數控制台 → 01）。
 
 ---
 
