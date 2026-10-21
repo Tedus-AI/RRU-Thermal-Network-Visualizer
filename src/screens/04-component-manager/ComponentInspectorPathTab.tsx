@@ -57,7 +57,9 @@ import {
   DIRECT_CONTACT_TIM_ID,
   MEASURED_INTERFACE_TIM_ID,
 } from '@/domain/materials';
+import { aiValueOf, formatAiValue, isAiLocked } from '@/domain/aiThermalLink';
 import { tip } from '@/i18n/componentManagerCopy';
+import { AiLockLine, AiOwned, AiUnlockedNote, timNameOf } from './AiLocked';
 import {
   DerivedField,
   GeometryField,
@@ -257,6 +259,18 @@ export function PathTab({ component, readOnly, onPatch, derived, view, hotCard }
   } = derived;
   const domainArea = spreadingDomain.area_mm2;
   const hot = (id: PathCardId) => hotCard === id;
+  // AI-Thermal's values (aiThermalLink.ts): shown as references with a ✂.
+  const aiLocked = {
+    heatPath: isAiLocked(component, 'heat_path'),
+    rjc: isAiLocked(component, 'rjc'),
+    pkg: isAiLocked(component, 'package'),
+    face: isAiLocked(component, 'source_face'),
+    boardT: isAiLocked(component, 'board_thickness'),
+    via: isAiLocked(component, 'via'),
+    tim: isAiLocked(component, 'tim'),
+  };
+  const timName = timNameOf(materials);
+  const ai = { component, readOnly, onPatch };
 
   const selectHeatPath = (nextType: HeatPathType) => {
     if (nextType === heatPath) {
@@ -318,12 +332,12 @@ export function PathTab({ component, readOnly, onPatch, derived, view, hotCard }
                 type="button"
                 role="radio"
                 aria-checked={active}
-                disabled={readOnly}
+                disabled={readOnly || aiLocked.heatPath}
                 onClick={() => selectHeatPath(type)}
                 className={`flex min-w-0 flex-col items-center gap-1 rounded-lg px-1.5 text-center disabled:cursor-default ${
                   active
                     ? 'border-2 border-accent-600 bg-accent-50 pt-[7px] pb-[6px]'
-                    : 'border border-line-strong bg-surface pt-2 pb-[7px] hover:border-ink-400'
+                    : `border border-line-strong bg-surface pt-2 pb-[7px] hover:border-ink-400 ${aiLocked.heatPath ? 'opacity-50' : ''}`
                 }`}
               >
                 <StackIcon kind={type} className="h-[38px] w-full max-w-16" />
@@ -339,6 +353,15 @@ export function PathTab({ component, readOnly, onPatch, derived, view, hotCard }
           <p className="mt-1.5 text-[11px] text-warn-600">
             依類別推定，它決定整條熱阻鏈；請確認（再點一次目前的路徑即確認）。
           </p>
+        )}
+        {aiLocked.heatPath ? (
+          <AiLockLine {...ai} field="heat_path">
+            取自 AI-Thermal 的主散熱路徑（{HEAT_PATH_SHORT[heatPath].name}）
+          </AiLockLine>
+        ) : (
+          <div className="mt-1.5">
+            <AiUnlockedNote {...ai} field="heat_path" />
+          </div>
         )}
       </section>
 
@@ -375,7 +398,7 @@ export function PathTab({ component, readOnly, onPatch, derived, view, hotCard }
                     key={model}
                     className={`cursor-pointer rounded-md border p-2 text-[11px] leading-relaxed ${
                       active ? 'border-accent-500 bg-accent-100 text-accent-700' : 'border-line bg-surface text-ink-600'
-                    } ${readOnly ? 'cursor-default opacity-60' : ''}`}
+                    } ${readOnly ? 'cursor-default opacity-60' : aiLocked.rjc ? `cursor-default ${active ? '' : 'opacity-50'}` : ''}`}
                   >
                     <span className="flex items-center gap-1.5 font-bold">
                       <input
@@ -383,7 +406,7 @@ export function PathTab({ component, readOnly, onPatch, derived, view, hotCard }
                         name={`metal-base-source-${component.id}`}
                         value={model}
                         checked={active}
-                        disabled={readOnly}
+                        disabled={readOnly || aiLocked.rjc}
                         onChange={() =>
                           patchSpecPrefillingCavityFilter(
                             {
@@ -403,41 +426,65 @@ export function PathTab({ component, readOnly, onPatch, derived, view, hotCard }
                 );
               })}
             </div>
+            {aiLocked.rjc && (
+              <p className="mt-1.5 text-[11px] text-ink-400">依 AI-Thermal 的 Rjc 決定；要改請解開下方的 Rjc。</p>
+            )}
           </Fld>
 
           <div className="grid grid-cols-2 gap-3">
-            <Fld layer="probe" className="flex flex-col gap-1.5">
-              <FieldLabel label="Limit Type" zh="限制類型" htmlFor="ins-limit-type" tooltip={tip('Limit Type')} />
-              <Select
+            <Fld layer="probe">
+              <AiOwned
+                {...ai}
+                field="limit_type"
+                label="Limit Type"
+                zh="限制類型"
+                tooltip={tip('Limit Type')}
                 id="ins-limit-type"
-                items={LIMIT_TYPES.map((type) => ({ value: type, label: `${type} — ${LIMIT_TYPE_LABELS[type].zh}` }))}
-                value={spec.limit_type}
-                disabled={readOnly}
-                onChange={(event) =>
-                  patchSpec(
-                    // Picking it IS the confirmation.
-                    { limit_type: event.target.value as LimitType, limit_type_confirmed: true },
-                    ['limit_type'],
-                  )
-                }
-              />
-              {!spec.limit_type_confirmed && (
-                <p className="text-[11px] text-warn-600">依類別推定，請對照規格書確認。</p>
-              )}
+                text={`${spec.limit_type} — ${LIMIT_TYPE_LABELS[spec.limit_type].zh}`}
+              >
+                <FieldLabel label="Limit Type" zh="限制類型" htmlFor="ins-limit-type" tooltip={tip('Limit Type')} />
+                <Select
+                  id="ins-limit-type"
+                  items={LIMIT_TYPES.map((type) => ({ value: type, label: `${type} — ${LIMIT_TYPE_LABELS[type].zh}` }))}
+                  value={spec.limit_type}
+                  disabled={readOnly}
+                  onChange={(event) =>
+                    patchSpec(
+                      // Picking it IS the confirmation.
+                      { limit_type: event.target.value as LimitType, limit_type_confirmed: true },
+                      ['limit_type'],
+                    )
+                  }
+                />
+                {!spec.limit_type_confirmed && (
+                  <p className="text-[11px] text-warn-600">依類別推定，請對照規格書確認。</p>
+                )}
+              </AiOwned>
             </Fld>
 
             <Fld layer="probe">
-              <SourcedNumberField
-                id="ins-limit"
+              <AiOwned
+                {...ai}
+                field="limit"
                 label="Thermal Limit"
                 zh="溫度上限"
                 unit="°C"
                 tooltip={tip('Limit')}
-                value={spec.limit_C}
-                readOnly={readOnly}
-                required
-                onChange={(next) => patchSpec({ limit_C: next }, ['limit_C'])}
-              />
+                id="ins-limit"
+                text={spec.limit_C?.value ?? '—'}
+              >
+                <SourcedNumberField
+                  id="ins-limit"
+                  label="Thermal Limit"
+                  zh="溫度上限"
+                  unit="°C"
+                  tooltip={tip('Limit')}
+                  value={spec.limit_C}
+                  readOnly={readOnly}
+                  required
+                  onChange={(next) => patchSpec({ limit_C: next }, ['limit_C'])}
+                />
+              </AiOwned>
             </Fld>
 
             {surfaceReferenced && (
@@ -472,11 +519,25 @@ export function PathTab({ component, readOnly, onPatch, derived, view, hotCard }
               </Fld>
             )}
 
-            {surfaceReferenced ? (
+            {aiLocked.rjc ? (
+              <Fld layer="die" dim={surfaceReferenced ? undefined : 'rjc'}>
+                <AiOwned
+                  {...ai}
+                  field="rjc"
+                  label="Rjc"
+                  zh="接面-外殼熱阻"
+                  tooltip={tip('Rjc')}
+                  id="ins-rjc"
+                >
+                  {null}
+                </AiOwned>
+              </Fld>
+            ) : surfaceReferenced ? (
               <Fld layer="die" className="flex flex-col gap-1.5">
                 <FieldLabel label="Rjc" zh="接面-外殼熱阻" unit="°C/W" htmlFor="ins-rjc" tooltip={tip('Rjc')} />
                 <TextInput id="ins-rjc" value="不適用（表面／本體型）" disabled />
                 <p className="text-[11px] leading-relaxed text-ink-400">不建立接面節點或 Rjc 熱阻邊。</p>
+                <AiUnlockedNote {...ai} field="rjc" />
               </Fld>
             ) : (
               <Fld layer="die" dim="rjc">
@@ -493,6 +554,9 @@ export function PathTab({ component, readOnly, onPatch, derived, view, hotCard }
                   required
                   onChange={(next) => patchSpec({ r_jc_C_per_W: next }, ['r_jc_C_per_W'])}
                 />
+                <div className="mt-1.5">
+                  <AiUnlockedNote {...ai} field="rjc" />
+                </div>
               </Fld>
             )}
           </div>
@@ -532,28 +596,39 @@ export function PathTab({ component, readOnly, onPatch, derived, view, hotCard }
           </Fld>
           {/* The envelope is the one thing every path needs, and two of the
               four take their heat-leaving face straight from it. */}
-          <div className="grid grid-cols-3 gap-2.5">
-            {(
-              [
-                ['package_L_mm', envelopeLabels.L, 'pkgL'],
-                ['package_W_mm', envelopeLabels.W, 'pkgW'],
-                ['package_H_mm', envelopeLabels.H, 'pkgH'],
-              ] as const
-            ).map(([field, label, dim]) => (
-              <Fld key={field} layer="pkg" dim={dim}>
-                <GeometryField
-                  label={label.en}
-                  zh={label.zh}
-                  unit="mm"
-                  field={field}
-                  geometry={geometry}
-                  readOnly={readOnly}
-                  required={field !== 'package_H_mm'}
-                  onChange={patchGeometry}
-                />
-              </Fld>
-            ))}
-          </div>
+          {aiLocked.pkg ? (
+            <Fld layer="pkg" dim="pkgL">
+              <AiOwned {...ai} field="package" label="Size" zh={metalBase ? '本體大小' : '封裝大小'} id="geo-package_L_mm">
+                {null}
+              </AiOwned>
+            </Fld>
+          ) : (
+            <>
+              <div className="grid grid-cols-3 gap-2.5">
+                {(
+                  [
+                    ['package_L_mm', envelopeLabels.L, 'pkgL'],
+                    ['package_W_mm', envelopeLabels.W, 'pkgW'],
+                    ['package_H_mm', envelopeLabels.H, 'pkgH'],
+                  ] as const
+                ).map(([field, label, dim]) => (
+                  <Fld key={field} layer="pkg" dim={dim}>
+                    <GeometryField
+                      label={label.en}
+                      zh={label.zh}
+                      unit="mm"
+                      field={field}
+                      geometry={geometry}
+                      readOnly={readOnly}
+                      required={field !== 'package_H_mm'}
+                      onChange={patchGeometry}
+                    />
+                  </Fld>
+                ))}
+              </div>
+              <AiUnlockedNote {...ai} field="package" />
+            </>
+          )}
           {spec.package_type === 'Cavity Filter' && surfaceReferenced && (
             <p className="rounded-md border border-accent-500/20 bg-accent-100/40 p-2.5 text-[11px] leading-relaxed text-ink-500">
               腔體濾波器幾乎橫跨整片散熱器，本體長寬留空時會以 01 的散熱器底座外框預填；兩欄仍可修改（濾波器通常比底座略小）。
@@ -600,35 +675,50 @@ export function PathTab({ component, readOnly, onPatch, derived, view, hotCard }
                   </Fld>
                 </>
               ) : (
-                <>
-                  <Fld layer="face" dim="eL">
-                    <GeometryField
-                      label={`${SOURCE_FACE_LABELS[heatPath].en} L`}
-                      zh={`${SOURCE_FACE_LABELS[heatPath].zh}長`}
-                      unit="mm"
-                      field="source_L_mm"
-                      geometry={geometry}
-                      readOnly={readOnly}
-                      required
-                      onChange={patchGeometry}
-                    />
+                aiLocked.face ? (
+                  <Fld layer="face" dim="eL" className="col-span-2">
+                    <AiOwned
+                      {...ai}
+                      field="source_face"
+                      label={SOURCE_FACE_LABELS[heatPath].en}
+                      zh={SOURCE_FACE_LABELS[heatPath].zh}
+                      id="geo-source_L_mm"
+                    >
+                      {null}
+                    </AiOwned>
                   </Fld>
-                  <Fld layer="face" dim="eW">
-                    <GeometryField
-                      label={`${SOURCE_FACE_LABELS[heatPath].en} W`}
-                      zh={`${SOURCE_FACE_LABELS[heatPath].zh}寬`}
-                      unit="mm"
-                      field="source_W_mm"
-                      geometry={geometry}
-                      readOnly={readOnly}
-                      required
-                      onChange={patchGeometry}
-                    />
-                  </Fld>
-                </>
+                ) : (
+                  <>
+                    <Fld layer="face" dim="eL">
+                      <GeometryField
+                        label={`${SOURCE_FACE_LABELS[heatPath].en} L`}
+                        zh={`${SOURCE_FACE_LABELS[heatPath].zh}長`}
+                        unit="mm"
+                        field="source_L_mm"
+                        geometry={geometry}
+                        readOnly={readOnly}
+                        required
+                        onChange={patchGeometry}
+                      />
+                    </Fld>
+                    <Fld layer="face" dim="eW">
+                      <GeometryField
+                        label={`${SOURCE_FACE_LABELS[heatPath].en} W`}
+                        zh={`${SOURCE_FACE_LABELS[heatPath].zh}寬`}
+                        unit="mm"
+                        field="source_W_mm"
+                        geometry={geometry}
+                        readOnly={readOnly}
+                        required
+                        onChange={patchGeometry}
+                      />
+                    </Fld>
+                  </>
+                )
               )}
             </div>
           )}
+          {!metalBase && rule.source !== 'package' && <AiUnlockedNote {...ai} field="source_face" />}
 
           {metalBase && (
             <>
@@ -825,16 +915,26 @@ export function PathTab({ component, readOnly, onPatch, derived, view, hotCard }
           >
             {rule.thickness === 'board' && (
               <Fld layer="pcb" dim="boardT">
-                <GeometryField
+                <AiOwned
+                  {...ai}
+                  field="board_thickness"
                   label="Board Thickness"
                   zh="板厚"
                   unit="mm"
-                  field="board_thickness_mm"
-                  geometry={geometry}
-                  readOnly={readOnly}
-                  required
-                  onChange={patchGeometry}
-                />
+                  id="geo-board_thickness_mm"
+                  text={geometry.board_thickness_mm ?? '—'}
+                >
+                  <GeometryField
+                    label="Board Thickness"
+                    zh="板厚"
+                    unit="mm"
+                    field="board_thickness_mm"
+                    geometry={geometry}
+                    readOnly={readOnly}
+                    required
+                    onChange={patchGeometry}
+                  />
+                </AiOwned>
               </Fld>
             )}
             {/* The via k and process derate are the PROJECT's (01 §4) and
@@ -842,56 +942,74 @@ export function PathTab({ component, readOnly, onPatch, derived, view, hotCard }
                 may override either. Switching to 自訂 seeds the field with the
                 inherited number so it never blanks a value being read. Count
                 and inner diameter are absent: they are not in the formula. */}
-            <div className="grid grid-cols-2 gap-2.5">
-              {VIA_OVERRIDES.map((field) => {
-                const inherited = materials[field.key].value;
-                const stated = spec.heat_path.parameters?.[field.key];
-                const custom = typeof stated === 'number' && Number.isFinite(stated);
-                return (
-                  <Fld key={field.key} layer="via" dim="via" className="flex flex-col gap-1.5">
-                    <FieldLabel label={field.label} zh={field.zh} unit={field.unit} htmlFor={`hp-${field.key}`} />
-                    <div role="radiogroup" aria-label={`${field.label} source`} className="flex flex-wrap gap-3 text-[12px]">
-                      <label className="flex items-center gap-1.5">
-                        <input
-                          type="radio"
-                          name={`${field.key}-mode-${component.id}`}
-                          className="size-3.5 accent-[var(--color-accent-600)]"
-                          checked={!custom}
-                          disabled={readOnly}
-                          onChange={() => patchHeatPathParameters({ [field.key]: null }, ['heat_path'])}
+            {aiLocked.via ? (
+              <Fld layer="via" dim="via">
+                <AiOwned
+                  {...ai}
+                  field="via"
+                  label="Via effective k"
+                  zh="導熱孔等效 k"
+                  id="hp-via_effective_k_W_mK"
+                  text={`${formatAiValue('via', aiValueOf(component, 'via'))}（AI-Thermal 的導熱孔設計）`}
+                >
+                  {null}
+                </AiOwned>
+              </Fld>
+            ) : (
+              <>
+                <div className="grid grid-cols-2 gap-2.5">
+                  {VIA_OVERRIDES.map((field) => {
+                    const inherited = materials[field.key].value;
+                    const stated = spec.heat_path.parameters?.[field.key];
+                    const custom = typeof stated === 'number' && Number.isFinite(stated);
+                    return (
+                      <Fld key={field.key} layer="via" dim="via" className="flex flex-col gap-1.5">
+                        <FieldLabel label={field.label} zh={field.zh} unit={field.unit} htmlFor={`hp-${field.key}`} />
+                        <div role="radiogroup" aria-label={`${field.label} source`} className="flex flex-wrap gap-3 text-[12px]">
+                          <label className="flex items-center gap-1.5">
+                            <input
+                              type="radio"
+                              name={`${field.key}-mode-${component.id}`}
+                              className="size-3.5 accent-[var(--color-accent-600)]"
+                              checked={!custom}
+                              disabled={readOnly}
+                              onChange={() => patchHeatPathParameters({ [field.key]: null }, ['heat_path'])}
+                            />
+                            取自 01
+                          </label>
+                          <label className="flex items-center gap-1.5">
+                            <input
+                              type="radio"
+                              name={`${field.key}-mode-${component.id}`}
+                              className="size-3.5 accent-[var(--color-accent-600)]"
+                              checked={custom}
+                              disabled={readOnly}
+                              onChange={() => patchHeatPathParameters({ [field.key]: inherited }, ['heat_path'])}
+                            />
+                            自訂
+                          </label>
+                        </div>
+                        <NumberInput
+                          id={`hp-${field.key}`}
+                          step={field.step}
+                          value={custom ? stated : (inherited ?? '')}
+                          placeholder="—"
+                          disabled={readOnly || !custom}
+                          readOnly={!custom}
+                          onChange={(event) =>
+                            patchHeatPathParameters({ [field.key]: numberOrNull(event.target.value) }, ['heat_path'])
+                          }
                         />
-                        取自 01
-                      </label>
-                      <label className="flex items-center gap-1.5">
-                        <input
-                          type="radio"
-                          name={`${field.key}-mode-${component.id}`}
-                          className="size-3.5 accent-[var(--color-accent-600)]"
-                          checked={custom}
-                          disabled={readOnly}
-                          onChange={() => patchHeatPathParameters({ [field.key]: inherited }, ['heat_path'])}
-                        />
-                        自訂
-                      </label>
-                    </div>
-                    <NumberInput
-                      id={`hp-${field.key}`}
-                      step={field.step}
-                      value={custom ? stated : (inherited ?? '')}
-                      placeholder="—"
-                      disabled={readOnly || !custom}
-                      readOnly={!custom}
-                      onChange={(event) =>
-                        patchHeatPathParameters({ [field.key]: numberOrNull(event.target.value) }, ['heat_path'])
-                      }
-                    />
-                    <p className="text-[11px] leading-relaxed text-ink-400">
-                      {custom ? field.customNote : field.inheritNote}
-                    </p>
-                  </Fld>
-                );
-              })}
-            </div>
+                        <p className="text-[11px] leading-relaxed text-ink-400">
+                          {custom ? field.customNote : field.inheritNote}
+                        </p>
+                      </Fld>
+                    );
+                  })}
+                </div>
+                <AiUnlockedNote {...ai} field="via" />
+              </>
+            )}
             <div className="grid grid-cols-2 gap-2.5">
               <Fld layer="via" dim="via">
                 <DerivedField id="geo-spread_L_mm" label="Spread L" zh="擴散面長" unit="mm" value={spreadFace.L} from={spreadOrigin} />
@@ -917,31 +1035,46 @@ export function PathTab({ component, readOnly, onPatch, derived, view, hotCard }
           r={cardR(view, ['tim'])}
           hot={hot('tim')}
         >
-          <Fld layer="tim" className="flex flex-col gap-1.5">
-            <FieldLabel label="Material" zh="材料" htmlFor="ins-tim" tooltip={tip('TIM')} />
-            <Select
+          <Fld layer="tim">
+            <AiOwned
+              {...ai}
+              field="tim"
+              label="Material"
+              zh="材料"
+              tooltip={tip('TIM')}
               id="ins-tim"
-              invalid={spec.tim.tim_id == null || resolvedTim.missing}
-              items={[
-                { value: '', label: '未指定' },
-                // Not a material — a bolted joint with nothing in it, which
-                // resolves through the project's contact conductance.
-                {
-                  value: DIRECT_CONTACT_TIM_ID,
-                  label: `乾式金屬接觸 — h ${materials.contact_conductance_W_m2K.value ?? '?'} W/m²·K`,
-                },
-                ...(metalBase ? [{ value: MEASURED_INTERFACE_TIM_ID, label: '實測整體介面熱阻' }] : []),
-                ...materials.tim.map((material) => ({
-                  value: material.id,
-                  label: `${material.name} — k ${material.k_W_mK.value ?? '?'} W/m·K`,
-                })),
-              ]}
-              value={spec.tim.tim_id ?? ''}
-              disabled={readOnly}
-              onChange={(event) =>
-                patchSpec({ tim: { ...spec.tim, tim_id: event.target.value || null } }, ['tim.tim_id'])
-              }
-            />
+              text={`${spec.tim.tim_id ? timName(spec.tim.tim_id) : '—'}${
+                resolvedTim.directContact || resolvedTim.measuredInterface
+                  ? ''
+                  : `・BLT ${spec.tim.blt_mm?.value ?? resolvedTim.thickness_mm ?? '—'} mm${spec.tim.blt_mm?.value == null ? '（材料預設）' : ''}`
+              }`}
+              timName={timName}
+            >
+              <FieldLabel label="Material" zh="材料" htmlFor="ins-tim" tooltip={tip('TIM')} />
+              <Select
+                id="ins-tim"
+                invalid={spec.tim.tim_id == null || resolvedTim.missing}
+                items={[
+                  { value: '', label: '未指定' },
+                  // Not a material — a bolted joint with nothing in it, which
+                  // resolves through the project's contact conductance.
+                  {
+                    value: DIRECT_CONTACT_TIM_ID,
+                    label: `乾式金屬接觸 — h ${materials.contact_conductance_W_m2K.value ?? '?'} W/m²·K`,
+                  },
+                  ...(metalBase ? [{ value: MEASURED_INTERFACE_TIM_ID, label: '實測整體介面熱阻' }] : []),
+                  ...materials.tim.map((material) => ({
+                    value: material.id,
+                    label: `${material.name} — k ${material.k_W_mK.value ?? '?'} W/m·K`,
+                  })),
+                ]}
+                value={spec.tim.tim_id ?? ''}
+                disabled={readOnly}
+                onChange={(event) =>
+                  patchSpec({ tim: { ...spec.tim, tim_id: event.target.value || null } }, ['tim.tim_id'])
+                }
+              />
+            </AiOwned>
           </Fld>
 
           {/* A dangling reference is not the same as "no TIM", so it says so. */}
@@ -972,7 +1105,7 @@ export function PathTab({ component, readOnly, onPatch, derived, view, hotCard }
             </Fld>
           )}
 
-          {!resolvedTim.directContact && !resolvedTim.measuredInterface && (
+          {!resolvedTim.directContact && !resolvedTim.measuredInterface && !aiLocked.tim && (
             <Fld layer="tim" dim="blt" className="flex flex-col gap-1.5">
               <FieldLabel label="Bond Line (BLT)" zh="壓合厚度" unit="mm" htmlFor="ins-blt" />
               <div role="radiogroup" aria-label="Bond line source" className="flex flex-wrap gap-3 text-[12px]">

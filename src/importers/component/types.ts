@@ -153,6 +153,8 @@ export interface ImportSourceDescriptor {
   source_project_id: string | null;
   source_project_name: string | null;
   source_file: string | null;
+  /** AI-Thermal's last-save stamp for the project (`meta.timestamp`), recorded on the link. */
+  source_saved_at?: string | null;
 }
 
 export interface CategorySummary {

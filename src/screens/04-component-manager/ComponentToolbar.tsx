@@ -14,7 +14,7 @@
  */
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { ChevronDown, Layers, Library, Plus, RotateCcw, SlidersHorizontal, Upload } from 'lucide-react';
+import { ChevronDown, Layers, Library, Plus, RefreshCw, RotateCcw, SlidersHorizontal, Upload } from 'lucide-react';
 import { Button } from '@/ui/primitives';
 import { dataSourceLabelZh } from '@/ui/dataSourceLabels';
 import { COMPONENT_CATEGORIES, type Component, type ComponentCategory } from '@/domain/component';
@@ -302,6 +302,7 @@ export function ComponentActions({
   onAddFromLibrary,
   onSaveAllToLibrary,
   onBulkEdit,
+  aiUpdate,
 }: {
   visibleCount: number;
   readOnly: boolean;
@@ -309,11 +310,24 @@ export function ComponentActions({
   onAddFromLibrary: () => void;
   onSaveAllToLibrary: () => void;
   onBulkEdit: () => void;
+  /** Present when components are linked to AI-Thermal: 「從 AI-Thermal 更新」. */
+  aiUpdate?: { pending: number; onOpen: () => void };
 }) {
   const item =
     'flex w-full items-center gap-2 rounded px-2.5 py-2 text-left text-[13px] text-ink-700 hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-50';
   return (
     <>
+      {aiUpdate && (
+        <Button
+          className={`h-8 ${aiUpdate.pending > 0 ? 'border-warn-500/50 text-warn-600' : ''}`}
+          icon={<RefreshCw size={13} />}
+          title="讀 AI-Thermal 的資料庫，把它改過的欄位逐欄確認後更新到本工具"
+          onClick={aiUpdate.onOpen}
+        >
+          從 AI-Thermal 更新
+          {aiUpdate.pending > 0 && <span className="tabular font-normal">（{aiUpdate.pending}）</span>}
+        </Button>
+      )}
       <Button
         className="h-8"
         icon={<Layers size={13} />}

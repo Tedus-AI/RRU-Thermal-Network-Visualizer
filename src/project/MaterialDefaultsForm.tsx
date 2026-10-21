@@ -17,7 +17,7 @@
  * line each, in amber, while the numbers a calculation needs are not there.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 
 import { Info, Link2, Plus, Scissors, Trash2 } from 'lucide-react';
 
@@ -151,10 +151,16 @@ function MaterialNumber({
 export function MaterialDefaultsForm({
   readOnly,
   defaultOpen = true,
+  summaryExtra,
+  lead,
 }: {
   readOnly: boolean;
   /** Open on Screen 01; Screen 02, where it is a side trip from the import, passes false. */
   defaultOpen?: boolean;
+  /** Appended to the folded summary (Screen 02: how many 5G-RRU values differ). */
+  summaryExtra?: string;
+  /** Shown first inside the card (Screen 02: the 5G-RRU parameter console offer). */
+  lead?: ReactNode;
 }) {
   const draft = useProjectStore((s) => s.draft);
   const patchMaterials = useProjectStore((s) => s.patchMaterials);
@@ -288,10 +294,12 @@ export function MaterialDefaultsForm({
           {assumed > 0 ? ` · ${assumed} 項出廠預設` : ''}
           {coinArea == null ? ' · ⚠ 銅塊尺寸未填' : ''}
           {!hskConfigured ? ' · ⚠ 底座資料未齊' : ''}
+          {summaryExtra ?? ''}
         </>
       }
     >
       <div className="flex flex-col gap-5">
+        {lead}
         <p className="text-[12px] text-ink-400">
           所有元件共用，元件可個別覆寫。<span className="text-ink-500">灰字</span>
           ＝出廠預設值，尚未確認。

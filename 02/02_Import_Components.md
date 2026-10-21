@@ -29,17 +29,19 @@ Thermal topology 由 `05_Thermal_Path_Builder` 負責。
 
 # 2. User Flow
 
+三步（`WorkflowStepper`，原本五步：預覽、驗證、重複處理併入第 3 步，套用是動作不是一步）：
+
 ```text
-Select Source
-→ Load Data
-→ Preview Rows
-→ Map Columns
-→ Validate
-→ Resolve Duplicates
-→ Review Import Summary
-→ Apply Import
-→ Continue to Component Manager
+① 來源          選來源 → 讀取 → 載入元件
+② 對應欄位      欄位對應（必填欄位都對到才能下一步）
+③ 檢查並套用    統計一行 → 擋下的問題 → 重複處理（有重複才出現）→ 預覽表 → 套用
+→ 套用 N 顆並前往 04（主要）／▾ 套用並留在 02
 ```
+
+- **AI-Thermal 專案、本工具其他專案**的欄位是本工具自己的（`SELF_MAPPED_SOURCES`），必填欄位一定對得到 →
+  載入後直接到 ③，步驟列的 ② 標「全部自動對應 ✓」，仍可點回去看。檔案與貼上一律經過 ②。
+- 套用後停在 ③（`phase = 'applied'`）：結果一行「已匯入（新增 N・更新 M…）」＋「再匯入其他來源」「前往 04 元件管理」。
+- 底部列左邊：上一步／取消匯入／唯讀；右邊依步驟：「下一步：檢查並套用」、分割按鈕「套用 N 顆並前往 04 ▾」。
 
 ---
 
@@ -69,6 +71,11 @@ Example:
 ---
 
 # 4. Layout
+
+> 下面是原始規格的版面。實際版面（2026-10 精簡）：單欄、沒有右側面板；③ 的統計、驗證、專案影響合成
+> 一行（`ReviewStatsLine`：「N 種・M 顆：」＋可篩選的狀態膠囊＋總功耗＋「匯入後 X 種・Y W」），
+> 擋下的問題（必填欄位沒對到、錯誤列）才另外出現（`BlockingIssuesPanel`），重複處理只在有重複時出現
+> （`DuplicateBar`）。AI-Thermal 來源在 ③ 多一張收合的「01 材料與製程」卡（含 5G-RRU 參數帶入）。
 
 ```text
 Top Header
@@ -107,7 +114,7 @@ Main 70–75%，Right 25–30%。
 
 # 5. Import Source / 匯入來源
 
-五個 source cards：
+四張來源卡（CSV 與 Excel 合成一張「Excel 或 CSV 檔」，依副檔名決定讀法；每張一行中文說明）：
 
 ## AI-Thermal 專案
 直接讀 AI-Thermal（pad & stud 工具）與 5G-RRU 共用的 `thermal_db.json`：SharePoint `ToolDatabase/thermal_db.json`
@@ -116,11 +123,8 @@ Main 70–75%，Right 25–30%。
 ## Existing Project / 既有專案
 從 existing `5G-RRU-Quick-Volume-Evaluation-Tool` 或 shared DB Project 匯入。
 
-## CSV File / CSV 檔案
-支援 `.csv`。
-
-## Excel File / Excel 檔案
-支援 `.xlsx` / `.xls`；多 sheet 時顯示 Sheet selector。
+## Excel 或 CSV 檔
+`.xlsx` 或 `.csv`（逗號、分號或 tab 分隔）；多 sheet 時顯示工作表選單。舊版 `.xls` 請先另存為 `.xlsx`。
 
 ## Paste Table / 貼上表格
 可貼 Excel tab-separated data 或 CSV-style text。
@@ -204,6 +208,21 @@ Mapping → Validation → Duplicate → Apply）、`AiThermalSourcePanel.tsx`�
   | `K_Pad`／`t_Pad`、`K_Putty`／`t_Putty`、`K_Grease`／`t_Grease`（5G-RRU 沒選型號時用）| 內建 TIM「Pad」「Putty」「Grease」的 k／BLT（連結 TIM 管理工具的材料不改 k）|
 - 測試：`aiThermalImport.test.ts`（StarKcore-12L 真實備份資料，parse → map → stage → apply；含 via 設計各種情況）、
   `aiThermalVia.test.ts`（共用 `viaCalc.js` 的 SHA-256 與載入）、`aiThermalMaterials.test.ts`（參數控制台 → 01）。
+
+
+# 6c. 與 AI-Thermal 的連結（04 鎖定與「從 AI-Thermal 更新」）
+
+使用者決定（2026-10）：AI-Thermal 匯入的欄位在 04 **鎖定＋✂ 解開**；AI-Thermal 改了**只提醒**，由 04 的
+「從 AI-Thermal 更新」逐欄確認；AI-Thermal 刪掉的元件**預設保留**。實作 `src/domain/aiThermalLink.ts`（純函式）。
+
+- 匯入時（`applyImport` → `withAiLink`）在元件的 `provenance.ai_link` 記下：AI-Thermal 專案 id、元件 id（`_cid`）、
+  帶入時間、AI-Thermal 的最後儲存時間（`meta.timestamp`），以及 **AI-Thermal 有給的每個欄位的值**（`values`）。
+  合併／取代既有元件時，連結記的是 AI-Thermal 自己的值（同一列當新元件來建），不是合併後的值；
+  同一個專案重新匯入會保留已解開的欄位（`unlocked`）。其他來源不建連結。
+- 欄位（`AI_FIELDS`）：名稱、數量、單顆功耗、限溫、限溫對象、Rjc（含本體型）、散熱路徑、本體大小、E-PAD、板厚、TIM（含 BLT）、
+  導熱孔等效 k。**AI-Thermal 沒給的不鎖**（本工具要填的）；尺寸要長寬都有才算有給。名稱不鎖（只在更新時同步）。
+- 「複製元件」的複本不帶連結（是新的一顆，不能讓兩顆對到 AI-Thermal 同一筆）。04 的行為見 04 規格 §AI-Thermal。
+- 測試：`src/importers/component/aiThermalSync.test.ts`（真實 StarKcore-12L 資料）、`src/data/componentImportStore.test.ts`。
 
 ---
 
@@ -679,11 +698,8 @@ Import completed successfully
 0 errors
 ```
 
-CTA：
-- `Review Components →`
-- `Import More`
-
-`Apply & Continue` → Screen 04 Component Manager。
+實作：③ 上方一行結果「已匯入（新增 N・更新 M・略過 K）」＋按鈕「再匯入其他來源」「前往 04 元件管理」。
+主要按鈕「套用 N 顆並前往 04」直接到 04；▾ 選「套用並留在 02」才停在這裡。
 
 ---
 

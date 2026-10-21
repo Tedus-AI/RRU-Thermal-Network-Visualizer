@@ -13,6 +13,7 @@
  * and the casing stays consistent with the rest of the project.
  */
 
+import type { AiThermalLink } from './aiThermalLink';
 import { sourced, unknownValue, valueOf, type SourcedValue } from './sourcedValue';
 import type { ExternalMappings } from '@/thermal/resultValue';
 
@@ -1170,6 +1171,8 @@ export interface ComponentProvenance {
   ref_origin_project?: string | null;
   ref_origin_id?: string | null;
   ref_locked?: boolean | null;
+  /** Imported from AI-Thermal: which fields it owns and their values there (`aiThermalLink.ts`). */
+  ai_link?: AiThermalLink;
 }
 
 export interface Component {

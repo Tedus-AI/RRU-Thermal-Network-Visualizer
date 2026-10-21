@@ -7,7 +7,7 @@
  * hooks are reserved but nothing parses a FloTHERM file (04 §0, §28, §33).
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ArrowRight, Boxes, PanelRightClose, PanelRightOpen, XCircle } from 'lucide-react';
 
@@ -52,12 +52,17 @@ import {
   summarizeReadiness,
   validateComponent,
 } from '@/domain/componentReadiness';
+import { AI_FIELD_LABEL, aiLockedChanges, isAiLocked, type applyAiPlan } from '@/domain/aiThermalLink';
+import { combineEffects, effectOfChange } from '@/domain/componentInvalidation';
+import { normalizeMaterials } from '@/domain/materials';
 
 import { ComponentReadinessCards } from './ComponentReadinessCards';
 import { ComponentTable } from './ComponentTable';
 import { ComponentInspector, type FocusRequest } from './ComponentInspector';
 import { AddFromLibraryModal } from './AddFromLibraryModal';
 import { IssueList } from './IssueList';
+import { AiThermalUpdateDialog } from './AiThermalUpdateDialog';
+import { useAiThermalUpdate } from './useAiThermalUpdate';
 import type { InspectorTab } from './issueTargets';
 import {
   CategoryTabs,
@@ -71,6 +76,7 @@ import {
 import {
   AddComponentModal,
   BulkEditModal,
+  bulkAiSkips,
   bulkFieldsFor,
   bulkPatchFor,
   draftPower,
@@ -101,7 +107,26 @@ export function ComponentManagerView() {
 
   const components = useComponentStore((s) => s.components);
   const dirty = useComponentStore((s) => s.dirty);
-  const patchComponent = useComponentStore((s) => s.patchComponent);
+  const storePatch = useComponentStore((s) => s.patchComponent);
+  /**
+   * Every 04 edit passes here. A field AI-Thermal owns is a reference in the
+   * table and the inspector already, so this only catches a path that missed
+   * it — and says how to take the field over instead of writing it.
+   */
+  const patchComponent = useCallback(
+    (id: string, patch: Partial<Component>, fields: string[]) => {
+      const target = useComponentStore.getState().components.find((entry) => entry.id === id);
+      const blocked = target ? aiLockedChanges(target, patch) : [];
+      if (blocked.length > 0) {
+        toast.warning(
+          `${blocked.map((field) => AI_FIELD_LABEL[field]).join('、')}取自 AI-Thermal，已鎖定；要改請在檢視面板按 ✂ 解開。`,
+        );
+        return;
+      }
+      storePatch(id, patch, fields);
+    },
+    [storePatch],
+  );
   const requiresReview = useNetworkStore((s) => s.requiresReview);
 
   const [tab, setTab] = useState<CategoryTab>('All');
@@ -163,6 +188,29 @@ export function ComponentManagerView() {
   const [deleteTarget, setDeleteTarget] = useState<Component | null>(null);
   const [libraryOverwriteConfirm, setLibraryOverwriteConfirm] = useState<string[] | null>(null);
   const [warningConfirm, setWarningConfirm] = useState<number | null>(null);
+
+  /** AI-Thermal's news for the linked components, checked in the background when it can be. */
+  const projectMaterials = useMemo(() => normalizeMaterials(draft?.materials), [draft?.materials]);
+  const aiUpdate = useAiThermalUpdate(components, projectMaterials);
+  const [showAiUpdate, setShowAiUpdate] = useState(false);
+  const applyAiUpdate = (result: ReturnType<typeof applyAiPlan>) => {
+    if (!projectId) return;
+    useComponentStore.getState().setComponents(projectId, result.components);
+    const effect = combineEffects(result.fields.map((field) => effectOfChange(field, true)));
+    if (effect.networkReview || result.added > 0) {
+      useNetworkStore.getState().setRequiresReview(true, 'ai_thermal_update');
+    }
+    setShowAiUpdate(false);
+    toast.success(
+      [
+        `已從 AI-Thermal 更新 ${result.updated} 顆`,
+        result.added > 0 ? `加入 ${result.added} 顆` : null,
+        result.removed > 0 ? `${result.removed} 顆改由本工具維護` : null,
+      ]
+        .filter(Boolean)
+        .join('・'),
+    );
+  };
 
   useEffect(() => {
     if (!projectId) return;
@@ -294,6 +342,17 @@ export function ComponentManagerView() {
       badge={
         <div className="flex flex-wrap items-center gap-2">
           {readOnly && <Badge tone="accent">唯讀</Badge>}
+          {aiUpdate.pending > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowAiUpdate(true)}
+              title="AI-Thermal 改過連到它的元件（或刪掉了幾顆）。點開逐欄確認後更新到本工具。"
+              className="flex items-center gap-1 rounded-full border border-warn-500/40 bg-warn-100/60 px-2.5 py-0.5 text-[11px] font-semibold text-warn-600 hover:border-warn-500"
+            >
+              AI-Thermal 有更新（{aiUpdate.pending} 顆）
+              <ArrowRight size={12} aria-hidden />
+            </button>
+          )}
           {/* A warning you cannot act on is just noise, so it goes where it is
               resolved: Screen 05 is the only place the network is reviewed. */}
           {requiresReview && (
@@ -381,6 +440,11 @@ export function ComponentManagerView() {
                   setLibraryOverwriteConfirm(overwrites);
                 }}
                 onBulkEdit={() => setShowBulk(true)}
+                aiUpdate={
+                  aiUpdate.linked.length > 0
+                    ? { pending: aiUpdate.pending, onOpen: () => setShowAiUpdate(true) }
+                    : undefined
+                }
               />
             }
           />
@@ -581,17 +645,35 @@ export function ComponentManagerView() {
         />
       )}
 
+      {showAiUpdate && (
+        <AiThermalUpdateDialog
+          update={aiUpdate}
+          components={components}
+          materials={projectMaterials}
+          readOnly={readOnly}
+          onClose={() => setShowAiUpdate(false)}
+          onApply={applyAiUpdate}
+        />
+      )}
+
       {showBulk && (
         <BulkEditModal
           count={visible.length}
           onClose={() => setShowBulk(false)}
           onApply={(values: BulkEditValues) => {
             const ids = visible.map((component) => component.id);
+            const skipped = visible.filter(
+              (component) => bulkAiSkips(values, component, isAiLocked).length > 0,
+            ).length;
             useComponentStore
               .getState()
-              .bulkPatch(ids, bulkPatchFor(values), bulkFieldsFor(values));
+              .bulkPatch(ids, bulkPatchFor(values, isAiLocked), bulkFieldsFor(values));
             setShowBulk(false);
-            toast.success(`已更新 ${ids.length} 筆`);
+            toast.success(
+              skipped > 0
+                ? `已更新 ${ids.length} 筆；其中 ${skipped} 筆的限溫對象／散熱路徑／TIM 取自 AI-Thermal，沒有改。`
+                : `已更新 ${ids.length} 筆`,
+            );
           }}
         />
       )}

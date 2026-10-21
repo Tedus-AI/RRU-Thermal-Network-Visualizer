@@ -266,7 +266,31 @@ export function BulkEditModal({
 }
 
 /** Turns the bulk selections into a component patch. */
-export function bulkPatchFor(values: BulkEditValues) {
+/** The bulk-edit fields AI-Thermal may own (`aiThermalLink.ts`). */
+export type BulkAiField = 'limit_type' | 'heat_path' | 'tim';
+
+/** Which of the requested AI-Thermal fields a bulk edit leaves alone on this component. */
+export function bulkAiSkips(
+  values: BulkEditValues,
+  component: Component,
+  locked: (component: Component, field: BulkAiField) => boolean,
+): BulkAiField[] {
+  const asked: BulkAiField[] = [];
+  if (values.limit_type) asked.push('limit_type');
+  if (values.heat_path) asked.push('heat_path');
+  if (values.tim_id) asked.push('tim');
+  return asked.filter((field) => locked(component, field));
+}
+
+/**
+ * The bulk edit for one component. A field AI-Thermal owns and nobody took over
+ * is left as it is (`locked`): a bulk edit is not the place to override
+ * AI-Thermal, the inspector's ✂ is.
+ */
+export function bulkPatchFor(
+  values: BulkEditValues,
+  locked: (component: Component, field: BulkAiField) => boolean = () => false,
+) {
   return (component: Component): Partial<Component> => {
     const spec = component.thermal_spec;
     const patch: Partial<Component> = {};
@@ -274,18 +298,19 @@ export function bulkPatchFor(values: BulkEditValues) {
     if (values.category) patch.category = values.category;
     if (values.enabled != null) patch.enabled = values.enabled;
 
-    if (values.limit_type || values.heat_path || values.tim_id) {
+    const limitType = values.limit_type && !locked(component, 'limit_type') ? values.limit_type : null;
+    const heatPath = values.heat_path && !locked(component, 'heat_path') ? values.heat_path : null;
+    const timId = values.tim_id && !locked(component, 'tim') ? values.tim_id : null;
+    if (limitType || heatPath || timId) {
       patch.thermal_spec = {
         ...spec,
-        limit_type: values.limit_type ?? spec.limit_type,
+        limit_type: limitType ?? spec.limit_type,
         // Choosing a type in bulk edit is a decision, so it counts as confirmed.
-        limit_type_confirmed: values.limit_type ? true : spec.limit_type_confirmed,
-        heat_path: values.heat_path
-          ? { ...spec.heat_path, type: values.heat_path }
-          : spec.heat_path,
+        limit_type_confirmed: limitType ? true : spec.limit_type_confirmed,
+        heat_path: heatPath ? { ...spec.heat_path, type: heatPath } : spec.heat_path,
         // Choosing a path in bulk edit is a decision, so it counts as confirmed.
-        heat_path_confirmed: values.heat_path ? true : spec.heat_path_confirmed,
-        tim: values.tim_id ? { ...spec.tim, tim_id: values.tim_id } : spec.tim,
+        heat_path_confirmed: heatPath ? true : spec.heat_path_confirmed,
+        tim: timId ? { ...spec.tim, tim_id: timId } : spec.tim,
       };
     }
 

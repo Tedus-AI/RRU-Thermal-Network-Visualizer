@@ -33,7 +33,9 @@ import { withValue } from '@/domain/sourcedValue';
 import { DIRECT_CONTACT_TIM_ID, defaultMaterials } from '@/domain/materials';
 import { useProjectStore } from '@/data/projectStore';
 import { statusOf, type ComponentStatus } from '@/domain/componentReadiness';
+import { isAiLocked, type AiField } from '@/domain/aiThermalLink';
 import { tip, ZH } from '@/i18n/componentManagerCopy';
+import { AiCellRef, aiLockTitle, timNameOf } from './AiLocked';
 
 const STATUS_META: Record<
   ComponentStatus,
@@ -178,6 +180,7 @@ export function ComponentTable({
 }) {
   // The TIM column offers the project's own materials, so it has to read them.
   const materials = useProjectStore((s) => s.draft?.materials) ?? defaultMaterials();
+  const timName = timNameOf(materials);
   const patchSpec = (
     component: Component,
     spec: Partial<Component['thermal_spec']>,
@@ -243,6 +246,8 @@ export function ComponentTable({
             // face itself rather than to a junction behind it — on any heat path.
             const surfaceReferenced = isBodySourced(spec);
             const selected = component.id === selectedId;
+            // AI-Thermal's values are references here; the ✂ is in the inspector.
+            const locked = (field: AiField) => isAiLocked(component, field);
 
             return (
               <tr
@@ -333,41 +338,49 @@ export function ComponentTable({
                   </button>
                 </td>
                 <td className="px-2 py-1.5">
-                  <input
-                    type="number"
-                    aria-label={`${component.name} 數量`}
-                    onClick={(event) => event.stopPropagation()}
-                    className={NUMBER_CELL}
-                    value={component.qty}
-                    disabled={readOnly}
-                    onChange={(event) =>
-                      onPatch(component.id, { qty: Number(event.target.value) }, ['qty'])
-                    }
-                  />
+                  {locked('qty') ? (
+                    <AiCellRef component={component} field="qty" text={component.qty} />
+                  ) : (
+                    <input
+                      type="number"
+                      aria-label={`${component.name} 數量`}
+                      onClick={(event) => event.stopPropagation()}
+                      className={NUMBER_CELL}
+                      value={component.qty}
+                      disabled={readOnly}
+                      onChange={(event) =>
+                        onPatch(component.id, { qty: Number(event.target.value) }, ['qty'])
+                      }
+                    />
+                  )}
                 </td>
                 <td className="px-2 py-1.5">
-                  <input
-                    type="number"
-                    step="0.01"
-                    aria-label={`${component.name} 單顆功耗`}
-                    onClick={(event) => event.stopPropagation()}
-                    className={NUMBER_CELL}
-                    value={component.power_W.value ?? ''}
-                    placeholder="—"
-                    disabled={readOnly}
-                    onChange={(event) =>
-                      onPatch(
-                        component.id,
-                        {
-                          power_W: withValue(
-                            component.power_W,
-                            event.target.value === '' ? null : Number(event.target.value),
-                          ),
-                        },
-                        ['power_W'],
-                      )
-                    }
-                  />
+                  {locked('power') ? (
+                    <AiCellRef component={component} field="power" text={component.power_W.value ?? '—'} />
+                  ) : (
+                    <input
+                      type="number"
+                      step="0.01"
+                      aria-label={`${component.name} 單顆功耗`}
+                      onClick={(event) => event.stopPropagation()}
+                      className={NUMBER_CELL}
+                      value={component.power_W.value ?? ''}
+                      placeholder="—"
+                      disabled={readOnly}
+                      onChange={(event) =>
+                        onPatch(
+                          component.id,
+                          {
+                            power_W: withValue(
+                              component.power_W,
+                              event.target.value === '' ? null : Number(event.target.value),
+                            ),
+                          },
+                          ['power_W'],
+                        )
+                      }
+                    />
+                  )}
                 </td>
                 {/* Qty × Power — a dissipation summary, never edge heat flow Q. */}
                 <td className="tabular bg-accent-50/60 px-2 py-1.5 font-semibold">
@@ -376,150 +389,192 @@ export function ComponentTable({
                 {/* Limit type and limit read as one value — "Tj 150" — so they
                     share a cell; each half is still its own editor. */}
                 <td className="px-2 py-1.5">
-                  <div className="flex items-center gap-1">
-                    <div className="w-14 shrink-0">
-                      <select
-                        aria-label={`${component.name} 限制類型`}
-                        onClick={(event) => event.stopPropagation()}
-                        // Amber while the type is still this tool's guess.
-                        className={`${SELECT_CELL} ${spec.limit_type_confirmed ? '' : 'text-warn-600'}`}
-                        title={
-                          spec.limit_type_confirmed
-                            ? undefined
-                            : `推定值（${spec.limit_type}），請對照規格書確認。`
-                        }
-                        value={spec.limit_type}
-                        disabled={readOnly}
-                        onChange={(event) =>
-                          patchSpec(
-                            component,
-                            {
-                              limit_type: event.target.value as LimitType,
-                              // Picking it IS the confirmation.
-                              limit_type_confirmed: true,
-                            },
-                            ['limit_type'],
-                          )
-                        }
-                      >
-                        {LIMIT_TYPES.map((type) => (
-                          <option key={type} value={type}>
-                            {type}
-                          </option>
-                        ))}
-                      </select>
+                  {locked('limit_type') && locked('limit') ? (
+                    <AiCellRef
+                      component={component}
+                      field="limit"
+                      text={`${spec.limit_type} ${spec.limit_C?.value ?? '—'}`}
+                    />
+                  ) : (
+                    <div className="flex items-center gap-1">
+                      <div className="w-14 shrink-0">
+                        {locked('limit_type') ? (
+                          <span
+                            title={aiLockTitle(component, 'limit_type', true)}
+                            className="block text-center text-ink-900"
+                          >
+                            {spec.limit_type}
+                          </span>
+                        ) : (
+                          <select
+                            aria-label={`${component.name} 限制類型`}
+                            onClick={(event) => event.stopPropagation()}
+                            // Amber while the type is still this tool's guess.
+                            className={`${SELECT_CELL} ${spec.limit_type_confirmed ? '' : 'text-warn-600'}`}
+                            title={
+                              spec.limit_type_confirmed
+                                ? undefined
+                                : `推定值（${spec.limit_type}），請對照規格書確認。`
+                            }
+                            value={spec.limit_type}
+                            disabled={readOnly}
+                            onChange={(event) =>
+                              patchSpec(
+                                component,
+                                {
+                                  limit_type: event.target.value as LimitType,
+                                  // Picking it IS the confirmation.
+                                  limit_type_confirmed: true,
+                                },
+                                ['limit_type'],
+                              )
+                            }
+                          >
+                            {LIMIT_TYPES.map((type) => (
+                              <option key={type} value={type}>
+                                {type}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                      </div>
+                      {locked('limit') ? (
+                        <span
+                          title={aiLockTitle(component, 'limit', true)}
+                          className="tabular flex-1 text-center text-ink-900"
+                        >
+                          {spec.limit_C?.value ?? '—'}
+                        </span>
+                      ) : (
+                        <input
+                          type="number"
+                          aria-label={`${component.name} 溫度上限`}
+                          onClick={(event) => event.stopPropagation()}
+                          className={NUMBER_CELL}
+                          value={spec.limit_C?.value ?? ''}
+                          placeholder="—"
+                          disabled={readOnly}
+                          onChange={(event) =>
+                            patchSpec(
+                              component,
+                              {
+                                limit_C: withValue(
+                                  spec.limit_C,
+                                  event.target.value === '' ? null : Number(event.target.value),
+                                ),
+                              },
+                              ['limit_C'],
+                            )
+                          }
+                        />
+                      )}
                     </div>
+                  )}
+                </td>
+                {/* Unknown Rjc shows N/A, never 0 (04 §11, AC-04-06). */}
+                <td className="px-2 py-1.5">
+                  {locked('rjc') ? (
+                    <AiCellRef
+                      component={component}
+                      field="rjc"
+                      text={surfaceReferenced ? '本體' : (spec.r_jc_C_per_W?.value ?? '—')}
+                    />
+                  ) : (
                     <input
                       type="number"
-                      aria-label={`${component.name} 溫度上限`}
+                      step="0.01"
+                      aria-label={`${component.name} Rjc`}
                       onClick={(event) => event.stopPropagation()}
                       className={NUMBER_CELL}
-                      value={spec.limit_C?.value ?? ''}
-                      placeholder="—"
-                      disabled={readOnly}
+                      value={surfaceReferenced ? '' : (spec.r_jc_C_per_W?.value ?? '')}
+                      placeholder="N/A"
+                      disabled={readOnly || surfaceReferenced}
+                      title={
+                        surfaceReferenced
+                          ? '表面／本體型熱源不使用 Rjc。'
+                          : undefined
+                      }
                       onChange={(event) =>
                         patchSpec(
                           component,
                           {
-                            limit_C: withValue(
-                              spec.limit_C,
+                            r_jc_C_per_W: withValue(
+                              spec.r_jc_C_per_W,
                               event.target.value === '' ? null : Number(event.target.value),
                             ),
                           },
-                          ['limit_C'],
+                          ['r_jc_C_per_W'],
                         )
                       }
                     />
-                  </div>
-                </td>
-                {/* Unknown Rjc shows N/A, never 0 (04 §11, AC-04-06). */}
-                <td className="px-2 py-1.5">
-                  <input
-                    type="number"
-                    step="0.01"
-                    aria-label={`${component.name} Rjc`}
-                    onClick={(event) => event.stopPropagation()}
-                    className={NUMBER_CELL}
-                    value={surfaceReferenced ? '' : (spec.r_jc_C_per_W?.value ?? '')}
-                    placeholder="N/A"
-                    disabled={readOnly || surfaceReferenced}
-                    title={
-                      surfaceReferenced
-                        ? '表面／本體型熱源不使用 Rjc。'
-                        : undefined
-                    }
-                    onChange={(event) =>
-                      patchSpec(
-                        component,
-                        {
-                          r_jc_C_per_W: withValue(
-                            spec.r_jc_C_per_W,
-                            event.target.value === '' ? null : Number(event.target.value),
-                          ),
-                        },
-                        ['r_jc_C_per_W'],
-                      )
-                    }
-                  />
+                  )}
                 </td>
                 <td className="tabular px-2 py-1.5 whitespace-nowrap">
                   {packageLabel(spec.package_type) ?? <span className="text-warn-600">—</span>}
                 </td>
                 <td className="px-2 py-1.5">
-                  <select
-                    aria-label={`${component.name} 散熱路徑`}
-                    onClick={(event) => event.stopPropagation()}
-                    // Amber while the path is still this tool's guess.
-                    className={`${SELECT_CELL} ${spec.heat_path_confirmed ? '' : 'text-warn-600'}`}
-                    // The longest path label is sixteen characters wide and no
-                    // sane column fits it, so hovering spells it out.
-                    title={
-                      spec.heat_path_confirmed
-                        ? HEAT_PATH_LABELS[spec.heat_path.type].zh
-                        : `推定值（${HEAT_PATH_LABELS[spec.heat_path.type].zh}），它決定整條熱阻鏈，請確認。`
-                    }
-                    value={spec.heat_path.type}
-                    disabled={readOnly}
-                    onChange={(event) =>
-                      // Also rewrites the architecture template the path implies,
-                      // so the two can never disagree.
-                      onPatch(
-                        component.id,
-                        heatPathPatch(component, event.target.value as HeatPathType),
-                        HEAT_PATH_PATCH_FIELDS,
-                      )
-                    }
-                  >
-                    {HEAT_PATH_TYPES.map((type) => (
-                      <option key={type} value={type}>
-                        {HEAT_PATH_LABELS[type].zh}
-                      </option>
-                    ))}
-                  </select>
+                  {locked('heat_path') ? (
+                    <AiCellRef component={component} field="heat_path" text={HEAT_PATH_LABELS[spec.heat_path.type].zh} />
+                  ) : (
+                    <select
+                      aria-label={`${component.name} 散熱路徑`}
+                      onClick={(event) => event.stopPropagation()}
+                      // Amber while the path is still this tool's guess.
+                      className={`${SELECT_CELL} ${spec.heat_path_confirmed ? '' : 'text-warn-600'}`}
+                      // The longest path label is sixteen characters wide and no
+                      // sane column fits it, so hovering spells it out.
+                      title={
+                        spec.heat_path_confirmed
+                          ? HEAT_PATH_LABELS[spec.heat_path.type].zh
+                          : `推定值（${HEAT_PATH_LABELS[spec.heat_path.type].zh}），它決定整條熱阻鏈，請確認。`
+                      }
+                      value={spec.heat_path.type}
+                      disabled={readOnly}
+                      onChange={(event) =>
+                        // Also rewrites the architecture template the path implies,
+                        // so the two can never disagree.
+                        onPatch(
+                          component.id,
+                          heatPathPatch(component, event.target.value as HeatPathType),
+                          HEAT_PATH_PATCH_FIELDS,
+                        )
+                      }
+                    >
+                      {HEAT_PATH_TYPES.map((type) => (
+                        <option key={type} value={type}>
+                          {HEAT_PATH_LABELS[type].zh}
+                        </option>
+                      ))}
+                    </select>
+                  )}
                 </td>
                 <td className="px-2 py-1.5">
-                  <select
-                    aria-label={`${component.name} TIM`}
-                    onClick={(event) => event.stopPropagation()}
-                    className={SELECT_CELL}
-                    value={spec.tim.tim_id ?? ''}
-                    disabled={readOnly}
-                    onChange={(event) =>
-                      patchSpec(
-                        component,
-                        { tim: { ...spec.tim, tim_id: event.target.value || null } },
-                        ['tim.tim_id'],
-                      )
-                    }
-                  >
-                    <option value="">—</option>
-                    <option value={DIRECT_CONTACT_TIM_ID}>直接接觸</option>
-                    {materials.tim.map((material) => (
-                      <option key={material.id} value={material.id}>
-                        {material.name}
-                      </option>
-                    ))}
-                  </select>
+                  {locked('tim') ? (
+                    <AiCellRef component={component} field="tim" text={spec.tim.tim_id ? timName(spec.tim.tim_id) : '—'} />
+                  ) : (
+                    <select
+                      aria-label={`${component.name} TIM`}
+                      onClick={(event) => event.stopPropagation()}
+                      className={SELECT_CELL}
+                      value={spec.tim.tim_id ?? ''}
+                      disabled={readOnly}
+                      onChange={(event) =>
+                        patchSpec(
+                          component,
+                          { tim: { ...spec.tim, tim_id: event.target.value || null } },
+                          ['tim.tim_id'],
+                        )
+                      }
+                    >
+                      <option value="">—</option>
+                      <option value={DIRECT_CONTACT_TIM_ID}>直接接觸</option>
+                      {materials.tim.map((material) => (
+                        <option key={material.id} value={material.id}>
+                          {material.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
                 </td>
               </tr>
             );
