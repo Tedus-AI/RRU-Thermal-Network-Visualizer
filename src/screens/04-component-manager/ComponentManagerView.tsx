@@ -52,13 +52,17 @@ import {
   summarizeReadiness,
   validateComponent,
 } from '@/domain/componentReadiness';
-import { AI_FIELD_LABEL, aiLockedChanges, isAiLocked } from '@/domain/aiThermalLink';
+import { AI_FIELD_LABEL, aiLockedChanges, isAiLocked, type applyAiPlan } from '@/domain/aiThermalLink';
+import { combineEffects, effectOfChange } from '@/domain/componentInvalidation';
+import { normalizeMaterials } from '@/domain/materials';
 
 import { ComponentReadinessCards } from './ComponentReadinessCards';
 import { ComponentTable } from './ComponentTable';
 import { ComponentInspector, type FocusRequest } from './ComponentInspector';
 import { AddFromLibraryModal } from './AddFromLibraryModal';
 import { IssueList } from './IssueList';
+import { AiThermalUpdateDialog } from './AiThermalUpdateDialog';
+import { useAiThermalUpdate } from './useAiThermalUpdate';
 import type { InspectorTab } from './issueTargets';
 import {
   CategoryTabs,
@@ -184,6 +188,29 @@ export function ComponentManagerView() {
   const [deleteTarget, setDeleteTarget] = useState<Component | null>(null);
   const [libraryOverwriteConfirm, setLibraryOverwriteConfirm] = useState<string[] | null>(null);
   const [warningConfirm, setWarningConfirm] = useState<number | null>(null);
+
+  /** AI-Thermal's news for the linked components, checked in the background when it can be. */
+  const projectMaterials = useMemo(() => normalizeMaterials(draft?.materials), [draft?.materials]);
+  const aiUpdate = useAiThermalUpdate(components, projectMaterials);
+  const [showAiUpdate, setShowAiUpdate] = useState(false);
+  const applyAiUpdate = (result: ReturnType<typeof applyAiPlan>) => {
+    if (!projectId) return;
+    useComponentStore.getState().setComponents(projectId, result.components);
+    const effect = combineEffects(result.fields.map((field) => effectOfChange(field, true)));
+    if (effect.networkReview || result.added > 0) {
+      useNetworkStore.getState().setRequiresReview(true, 'ai_thermal_update');
+    }
+    setShowAiUpdate(false);
+    toast.success(
+      [
+        `已從 AI-Thermal 更新 ${result.updated} 顆`,
+        result.added > 0 ? `加入 ${result.added} 顆` : null,
+        result.removed > 0 ? `${result.removed} 顆改由本工具維護` : null,
+      ]
+        .filter(Boolean)
+        .join('・'),
+    );
+  };
 
   useEffect(() => {
     if (!projectId) return;
@@ -315,6 +342,17 @@ export function ComponentManagerView() {
       badge={
         <div className="flex flex-wrap items-center gap-2">
           {readOnly && <Badge tone="accent">唯讀</Badge>}
+          {aiUpdate.pending > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowAiUpdate(true)}
+              title="AI-Thermal 改過連到它的元件（或刪掉了幾顆）。點開逐欄確認後更新到本工具。"
+              className="flex items-center gap-1 rounded-full border border-warn-500/40 bg-warn-100/60 px-2.5 py-0.5 text-[11px] font-semibold text-warn-600 hover:border-warn-500"
+            >
+              AI-Thermal 有更新（{aiUpdate.pending} 顆）
+              <ArrowRight size={12} aria-hidden />
+            </button>
+          )}
           {/* A warning you cannot act on is just noise, so it goes where it is
               resolved: Screen 05 is the only place the network is reviewed. */}
           {requiresReview && (
@@ -402,6 +440,11 @@ export function ComponentManagerView() {
                   setLibraryOverwriteConfirm(overwrites);
                 }}
                 onBulkEdit={() => setShowBulk(true)}
+                aiUpdate={
+                  aiUpdate.linked.length > 0
+                    ? { pending: aiUpdate.pending, onOpen: () => setShowAiUpdate(true) }
+                    : undefined
+                }
               />
             }
           />
@@ -599,6 +642,17 @@ export function ComponentManagerView() {
             setShowLibrary(false);
             toast.success(`已從元件庫加入「${created.name}」`);
           }}
+        />
+      )}
+
+      {showAiUpdate && (
+        <AiThermalUpdateDialog
+          update={aiUpdate}
+          components={components}
+          materials={projectMaterials}
+          readOnly={readOnly}
+          onClose={() => setShowAiUpdate(false)}
+          onApply={applyAiUpdate}
         />
       )}
 

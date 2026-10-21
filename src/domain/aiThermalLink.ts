@@ -28,7 +28,7 @@
  * Pure functions only; the screens and the importer call them.
  */
 
-import { heatPathPatch, type Component, type HeatPathType, type LimitType } from './component';
+import { HEAT_PATH_LABELS, heatPathPatch, type Component, type HeatPathType, type LimitType } from './component';
 import { withValue } from './sourcedValue';
 
 /** The fields AI-Thermal owns, in the order the update dialog lists them. */
@@ -351,7 +351,7 @@ export function formatAiValue(field: AiField, value: AiValue | undefined, timNam
       return v.body ? '本體型（無 Rjc）' : v.rjc == null ? '—' : `${n(v.rjc)} °C/W`;
     }
     case 'heat_path':
-      return String(value);
+      return HEAT_PATH_LABELS[value as HeatPathType]?.zh ?? String(value);
     case 'package': {
       const v = value as { L: number | null; W: number | null; H?: number | null };
       return `${n(v.L)} × ${n(v.W)}${v.H != null ? ` × ${n(v.H)}` : ''} mm`;
@@ -416,10 +416,16 @@ export function aiChangesFor(current: Component, fresh: Component): AiFieldChang
     const changedHere = had && !sameAiValue(now, link?.values[field]);
     let pick = true;
     let note: string | undefined;
-    if (unlocked && changedHere) {
+    if (field === 'name') {
+      // A name is never locked, so a local rename is simply a value that moved.
+      if (changedHere) {
+        pick = false;
+        note = '本工具改過名稱';
+      }
+    } else if (unlocked && changedHere) {
       pick = false;
       note = '本工具已解開並改過';
-    } else if (!had && supplied(current, field) && field !== 'name') {
+    } else if (!had && supplied(current, field)) {
       pick = false;
       note = '本工具填過（AI-Thermal 原本沒有）';
     }
@@ -428,7 +434,11 @@ export function aiChangesFor(current: Component, fresh: Component): AiFieldChang
   return changes;
 }
 
-/** Applies the picked changes and records AI-Thermal's current values as the new reference. */
+/**
+ * Applies the picked changes and records AI-Thermal's current values as the
+ * new reference. A field left unticked keeps this tool's value and is no
+ * longer locked: the engineer chose that value over AI-Thermal's.
+ */
 export function applyAiChanges(
   current: Component,
   fresh: Component,
@@ -443,9 +453,175 @@ export function applyAiChanges(
   for (const field of order) next = writeAiValue(next, field, aiValueOf(fresh, field));
   const previous = aiLinkOf(current);
   const link = buildAiLink(fresh, projectId, savedAt, previous);
-  // A field brought back from AI-Thermal is AI-Thermal's again.
-  const unlocked = (previous?.unlocked ?? []).filter((f) => !picked.includes(f));
+  // A field brought back from AI-Thermal is AI-Thermal's again; one kept is ours.
+  const unlocked = new Set((previous?.unlocked ?? []).filter((f) => !picked.includes(f)));
+  for (const field of AI_FIELDS) {
+    if (!AI_LOCKABLE.has(field) || picked.includes(field) || !(field in link.values)) continue;
+    if (!sameAiValue(aiValueOf(next, field), link.values[field])) unlocked.add(field);
+  }
   const { unlocked: _drop, ...rest } = link;
   void _drop;
-  return withLink(next, unlocked.length ? { ...rest, unlocked } : rest);
+  return withLink(next, unlocked.size ? { ...rest, unlocked: [...unlocked] } : rest);
+}
+
+/** Drops the link: the component is this tool's from now on. */
+export function unlinkAi(component: Component): Component {
+  const { ai_link: _link, ...provenance } = component.provenance;
+  void _link;
+  return { ...component, provenance };
+}
+
+// --- planning an update over a whole project ---------------------------------
+
+/** The AI-Thermal projects a project's components are linked to, most components first. */
+export function linkedAiProjects(components: readonly Component[]): Array<{ id: string; count: number }> {
+  const counts = new Map<string, number>();
+  for (const component of components) {
+    const id = aiLinkOf(component)?.project_id;
+    if (id) counts.set(id, (counts.get(id) ?? 0) + 1);
+  }
+  return [...counts].map(([id, count]) => ({ id, count })).sort((a, b) => b.count - a.count);
+}
+
+export interface AiUpdatePlan {
+  /** Linked components AI-Thermal now describes differently. */
+  updates: AiComponentUpdate[];
+  /** In AI-Thermal, not in this project (offered, unticked). */
+  added: Component[];
+  /** In AI-Thermal under a name a component here already uses, unlinked: left alone. */
+  sameName: string[];
+  /** Linked components AI-Thermal no longer has. */
+  removed: Component[];
+  /** Linked components with nothing new. */
+  same: number;
+}
+
+const nameKey = (name: string) => name.trim().toLowerCase();
+
+/**
+ * Matches the project's linked components to AI-Thermal's current ones — by
+ * AI-Thermal's component id first (a part renamed there still matches), then
+ * by the name it had at the last sync — and lists what would change.
+ */
+export function planAiUpdate(
+  components: readonly Component[],
+  fresh: readonly Component[],
+  projectId: string,
+): AiUpdatePlan {
+  const linked = components.filter((component) => aiLinkOf(component)?.project_id === projectId);
+  const taken = new Set<number>();
+  const match = new Map<string, Component>();
+
+  for (const component of linked) {
+    const cid = aiLinkOf(component)?.cid;
+    if (!cid) continue;
+    const index = fresh.findIndex((f, i) => !taken.has(i) && f.provenance.ref_origin_id === cid);
+    if (index >= 0) {
+      taken.add(index);
+      match.set(component.id, fresh[index]);
+    }
+  }
+  for (const component of linked) {
+    if (match.has(component.id)) continue;
+    const link = aiLinkOf(component);
+    const key = nameKey(String(link?.values.name ?? component.name));
+    const index = fresh.findIndex((f, i) => !taken.has(i) && nameKey(f.name) === key);
+    if (index >= 0) {
+      taken.add(index);
+      match.set(component.id, fresh[index]);
+    }
+  }
+
+  const updates: AiComponentUpdate[] = [];
+  const removed: Component[] = [];
+  let same = 0;
+  for (const component of linked) {
+    const incoming = match.get(component.id);
+    if (!incoming) {
+      removed.push(component);
+      continue;
+    }
+    const changes = aiChangesFor(component, incoming);
+    if (changes.length === 0) same++;
+    else updates.push({ componentId: component.id, name: component.name, changes, fresh: incoming });
+  }
+
+  const here = new Set(components.map((component) => nameKey(component.name)));
+  const added: Component[] = [];
+  const sameName: string[] = [];
+  fresh.forEach((component, index) => {
+    if (taken.has(index)) return;
+    if (here.has(nameKey(component.name))) sameName.push(component.name);
+    else added.push(component);
+  });
+  return { updates, added, sameName, removed, same };
+}
+
+/** How many changes an update would make as offered (the ticked ones) — what the reminder counts. */
+export function aiPlanPending(plan: AiUpdatePlan): { components: number; fields: number } {
+  let components = 0;
+  let fields = 0;
+  for (const update of plan.updates) {
+    const ticked = update.changes.filter((change) => change.pick).length;
+    if (ticked > 0) components++;
+    fields += ticked;
+  }
+  return { components, fields };
+}
+
+export interface AiUpdateChoice {
+  /** Per linked component: the fields to take from AI-Thermal. */
+  fields: Record<string, AiField[]>;
+  /** Ids (in `plan.added`) of the AI-Thermal components to add. */
+  add: string[];
+  /** Ids of the removed components to switch off as well (all are kept, unlinked). */
+  disable: string[];
+}
+
+/** The project after an update, and the patch field names it touched (for the invalidation matrix). */
+export function applyAiPlan(
+  components: readonly Component[],
+  plan: AiUpdatePlan,
+  choice: AiUpdateChoice,
+  projectId: string,
+  savedAt: string | null,
+): { components: Component[]; fields: string[]; updated: number; added: number; removed: number } {
+  const byId = new Map(plan.updates.map((update) => [update.componentId, update]));
+  const removedIds = new Set(plan.removed.map((component) => component.id));
+  const touched = new Set<string>();
+  let updated = 0;
+  const next = components.map((component) => {
+    const update = byId.get(component.id);
+    if (update) {
+      const picked = choice.fields[component.id] ?? [];
+      if (picked.length > 0) updated++;
+      for (const field of picked) for (const f of AI_PATCH_FIELDS[field]) touched.add(f);
+      return applyAiChanges(component, update.fresh, picked, projectId, savedAt);
+    }
+    if (removedIds.has(component.id)) {
+      const kept = unlinkAi(component);
+      if (!choice.disable.includes(component.id)) return kept;
+      touched.add('enabled');
+      return { ...kept, enabled: false };
+    }
+    return component;
+  });
+  // Ids were taken when AI-Thermal was read; the project may have grown since.
+  const taken = new Set(next.map((component) => component.id));
+  const adding = plan.added
+    .filter((component) => choice.add.includes(component.id))
+    .map((component) => {
+      let id = component.id;
+      for (let n = 2; taken.has(id); n++) id = `${component.id}_${n}`;
+      taken.add(id);
+      return id === component.id ? component : { ...component, id };
+    });
+  if (adding.length > 0) touched.add('component_added');
+  return {
+    components: [...next, ...adding],
+    fields: [...touched],
+    updated,
+    added: adding.length,
+    removed: plan.removed.length,
+  };
 }

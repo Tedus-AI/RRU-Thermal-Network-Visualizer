@@ -20,13 +20,11 @@ import { Cloud, FileJson, RefreshCw } from 'lucide-react';
 import { Button, Select } from '@/ui/primitives';
 import { useComponentImportStore } from '@/data/componentImportStore';
 import { useProjectStore } from '@/data/projectStore';
-import { readAiThermalDb, sharePoint } from '@/data/sharepoint';
+import { readAiThermalFromFile, readAiThermalFromSharePoint, type AiDbRead } from '@/data/aiThermalDb';
 import { defaultMaterials } from '@/domain/materials';
 import {
-  AI_THERMAL_DB_PATH,
   AI_THERMAL_LISTS,
   listAiThermalProjects,
-  parseAiThermalDb,
   parseAiThermalProject,
   type AiThermalDb,
   type AiThermalList,
@@ -69,65 +67,29 @@ export function AiThermalSourcePanel() {
   const store = useComponentImportStore();
   const materials = useProjectStore((s) => s.draft?.materials) ?? defaultMaterials();
 
-  const adopt = (raw: unknown, label: string) => {
-    const db = parseAiThermalDb(raw);
-    if (!db) throw new Error('這不是 AI-Thermal 的資料庫檔（找不到 projects）。');
-    const projects = listAiThermalProjects(db);
-    setLoaded({ db, label, at: new Date().toLocaleString('zh-TW', { hour12: false }) });
+  const adopt = (read: AiDbRead) => {
+    if (!read.ok) {
+      setMessage({ tone: 'error', text: read.message });
+      return;
+    }
+    const projects = listAiThermalProjects(read.db);
+    setLoaded({ db: read.db, label: read.label, at: new Date().toLocaleString('zh-TW', { hour12: false }) });
     setProjectId((current) => (projects.some((p) => p.id === current) ? current : ''));
     setMessage(projects.length === 0 ? { tone: 'info', text: '資料庫裡還沒有任何專案。' } : null);
   };
 
-  const readSharePoint = async () => {
+  const read = async (reading: Promise<AiDbRead>) => {
     setBusy(true);
     setMessage(null);
     try {
-      // A popup only from this click, never on its own.
-      if (!(await sharePoint.canUseSilently())) {
-        const signed = await sharePoint.signIn();
-        if (!signed.ok) {
-          setMessage({
-            tone: 'error',
-            text:
-              signed.reason === 'cancelled'
-                ? '已取消登入。'
-                : signed.reason === 'popup'
-                  ? '瀏覽器擋下了登入視窗，請允許此網站的彈出視窗後再試一次。'
-                  : `無法登入 Microsoft：${signed.error ?? ''}`,
-          });
-          return;
-        }
-      }
-      const raw = await readAiThermalDb(AI_THERMAL_DB_PATH);
-      if (raw == null) {
-        setMessage({ tone: 'error', text: `SharePoint 上找不到 AI-Thermal 的資料庫（${AI_THERMAL_DB_PATH}）。` });
-        return;
-      }
-      adopt(raw, `SharePoint：${AI_THERMAL_DB_PATH}`);
-    } catch (error) {
-      setMessage({ tone: 'error', text: `讀不到 AI-Thermal 的資料庫：${(error as Error).message}` });
+      adopt(await reading);
     } finally {
       setBusy(false);
     }
   };
-
-  const readFile = async (file: File) => {
-    setBusy(true);
-    setMessage(null);
-    try {
-      adopt(JSON.parse(await file.text()) as unknown, `本機檔案：${file.name}`);
-    } catch (error) {
-      setMessage({
-        tone: 'error',
-        text:
-          error instanceof SyntaxError
-            ? `「${file.name}」不是有效的 JSON 檔。`
-            : (error as Error).message,
-      });
-    } finally {
-      setBusy(false);
-    }
-  };
+  // A popup only from this click, never on its own.
+  const readSharePoint = () => read(readAiThermalFromSharePoint(true));
+  const readFile = (file: File) => read(readAiThermalFromFile(file));
 
   const projects = loaded ? listAiThermalProjects(loaded.db) : [];
   const summary = projects.find((p) => p.id === projectId) ?? null;

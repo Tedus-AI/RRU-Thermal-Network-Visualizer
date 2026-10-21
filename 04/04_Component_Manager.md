@@ -586,6 +586,8 @@ Enable / Disable
 
 禁止 bulk Component Name。
 
+AI-Thermal 鎖定的限溫對象／散熱路徑／TIM 不改（`bulkPatchFor(values, isAiLocked)`），完成訊息寫出有幾筆沒改。
+
 ---
 
 # 25. Add / Duplicate / Delete / Disable
@@ -594,13 +596,50 @@ Enable / Disable
 最小：Name、Category、Qty、Power、Limit Type、Limit。
 
 ## Duplicate
-複製 thermal spec / geometry；不複製 future FloTHERM mapping、graph mapping、solver result。
+複製 thermal spec / geometry；不複製 future FloTHERM mapping、graph mapping、solver result，也不複製與 AI-Thermal 的連結
+（`provenance.ai_link`：複本是新的一顆，不能讓兩顆對到 AI-Thermal 同一筆）。
 
 ## Delete
 若已被 network 引用：刪 component 後將 mapping 標 orphaned，`network review required`，不在 04 自動重寫 topology。
 
 ## Disable
 資料保留；既有 mapping 需 review，solver DIRTY。
+
+---
+
+# 25b. AI-Thermal 帶入的欄位：鎖定＋✂、「從 AI-Thermal 更新」
+
+使用者決定（2026-10）。連結本身（`provenance.ai_link`、哪些欄位、怎麼建）見 02 規格 §6c；邏輯在 `src/domain/aiThermalLink.ts`。
+
+**鎖定（UX 慣例 2：鎖定＋✂ 解鎖逃生口）**
+- AI-Thermal 有給、沒被解開的欄位（`isAiLocked`）是**參照值**，不是輸入框：
+  - 表格（`AiCellRef`）：白底黑字＋小「AI」標籤；tooltip 寫取自 AI-Thermal（帶入日期）與兩個改法。表格裡不放 ✂（一列維持一行）。
+    數量、單顆功耗、限溫（`Tj 225`）、Rjc（本體型顯示「本體」）、散熱路徑、TIM。
+  - 檢視面板（`AiOwned`／`AiLockedBox`）：同一格放白底文字＋藍色左邊線＋「AI-Thermal」＋ ✂。概要：數量、單顆功耗；散熱路徑分頁：
+    主散熱路徑（四張卡停用、下面一行「取自 AI-Thermal 的主散熱路徑」＋ ✂）、熱源基準（跟著 Rjc 一起鎖）、限制類型、溫度上限、Rjc、
+    封裝大小（長×寬×高一格）、E-PAD（長×寬一格）、板厚、導熱孔等效 k、TIM（含 BLT；鎖定時不顯示 BLT 編輯）。
+    鎖定框保留原本欄位的 id（`ins-limit`、`geo-package_L_mm`…），待處理清單的連結照樣跳得到。
+- ✂（`unlockAiField`）：這一欄改由本工具維護 → 變回原本的輸入框，底下一行「已解開・AI-Thermal 是 X ↺ 改回 AI-Thermal」
+  （值相同時寫「已解開，目前與 AI-Thermal 相同 ↺ 鎖回」，`relockAiField` 把 AI-Thermal 的值寫回並重新鎖定）。
+- 封裝型式、接合方式、擴散範圍、量測位置、建模偏好、備註是本工具的，不鎖。
+- 防呆：04 所有寫入都經過 `ComponentManagerView` 的 `patchComponent`，以**值**比對（`aiLockedChanges`）擋下改到鎖定欄位的修改並提示按 ✂。
+
+**從 AI-Thermal 更新**（有連到 AI-Thermal 的元件時才出現）
+- 工具列按鈕「從 AI-Thermal 更新」；有更新時按鈕與頁首都變琥珀色（「AI-Thermal 有更新（N 顆）」）。
+- 背景檢查（`useAiThermalUpdate`）：進 04 時若 SharePoint **不必跳登入視窗**就讀得到，讀一次資料庫比對；讀不到就不做事
+  （登入視窗只在按鈕之後才會跳）。對話框裡可選「從 SharePoint 讀取」或本機的 `thermal_db.json`。**只讀，不寫回 AI-Thermal。**
+- AI-Thermal 目前的元件用 02 同一條路建（`freshAiThermalComponents`：全部清單、含 5G-RRU 已排除的），比對（`planAiUpdate`）：
+  先用 AI-Thermal 元件 id（`_cid`，AI-Thermal 改名也對得到），再用上次同步時的名稱。
+- 對話框（`AiThermalUpdateDialog`）逐欄列「本工具 → AI-Thermal」：
+  - 預設**勾**：AI-Thermal 擁有、沒被解開的欄位，以及名稱。
+  - 預設**不勾**並寫原因：解開後改過的（「本工具已解開並改過」）、本工具改過的名稱、AI-Thermal 原本沒有而本工具填過的。
+  - **沒勾的欄位保留本工具的值，並改為不鎖定**（使用者選了自己的值）。
+  - AI-Thermal 新增的元件：預設不勾（勾選即加入）；5G-RRU 已排除的收在「展開」裡，加入後為停用。
+  - AI-Thermal 已沒有的元件：**保留**，解除連結改由本工具維護；可勾「同時停用」。
+  - 與本工具既有元件同名、沒有連結的不列入（寫一行說明）。
+- 套用（`applyAiPlan`）：寫進元件、連結換成 AI-Thermal 現在的值；依改到的欄位走 §32 的失效矩陣（新增元件 → 熱網路需要更新）。
+  頁首提醒只算「有預設勾選的變更」與「已刪除」的元件，所以都看過、決定保留本工具的值之後就不再提醒。
+- 測試：`src/importers/component/aiThermalSync.test.ts`。
 
 ---
 

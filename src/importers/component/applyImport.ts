@@ -272,6 +272,27 @@ function slugId(name: string, taken: Set<string>): string {
   return `${base}_${suffix}`;
 }
 
+/**
+ * Every row as a component on its own: no merge with the project, and no row
+ * left out for its status. What a source says about each part, for comparing
+ * with what the project holds (04's 「從 AI-Thermal 更新」). Ids are taken
+ * around `existingIds` so a part added from here does not collide.
+ */
+export function componentsFromRows(
+  rows: StagingRow[],
+  source: ImportSourceDescriptor,
+  materials: MaterialDefaults,
+  existingIds: Iterable<string> = [],
+): Component[] {
+  const taken = new Set(existingIds);
+  return rows.map((row) => {
+    const id = slugId(row.name, taken);
+    taken.add(id);
+    const built = componentFromRow(row, { id, name: row.name, category: row.category ?? 'Other' }, source, materials);
+    return withAiLink(built, built, source, null);
+  });
+}
+
 export function applyImport({ existing, rows, sessionPolicy, source, materials }: ApplyOptions): {
   components: Component[];
   result: ApplyResult;
