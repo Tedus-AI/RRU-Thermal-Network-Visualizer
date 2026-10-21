@@ -23,6 +23,7 @@ import type { DataSource } from '@/thermal/types';
 import { dataSourceLabelZh } from '@/ui/dataSourceLabels';
 import { tip } from '@/i18n/componentManagerCopy';
 import { SourcedNumberField, sourceOptions } from './ComponentInspectorFields';
+import { AiOwned } from './AiLocked';
 import type { InspectorTabProps } from './componentInspectorModel';
 
 interface SourceTabProps extends InspectorTabProps {
@@ -60,7 +61,17 @@ export function OverviewTab({ component, readOnly, onPatch }: InspectorTabProps)
             }
           />
         </div>
-        <div className="flex flex-col gap-1.5">
+        <AiOwned
+          component={component}
+          field="qty"
+          readOnly={readOnly}
+          onPatch={onPatch}
+          label="Qty"
+          zh="數量"
+          tooltip={tip('Qty')}
+          id="ins-qty"
+          text={component.qty}
+        >
           <FieldLabel label="Qty" zh="數量" htmlFor="ins-qty" tooltip={tip('Qty')} />
           <NumberInput
             id="ins-qty"
@@ -70,20 +81,33 @@ export function OverviewTab({ component, readOnly, onPatch }: InspectorTabProps)
               onPatch(component.id, { qty: Number(event.target.value) }, ['qty'])
             }
           />
-        </div>
-        <SourcedNumberField
-          id="ins-power"
+        </AiOwned>
+        <AiOwned
+          component={component}
+          field="power"
+          readOnly={readOnly}
+          onPatch={onPatch}
           label="Power"
           zh="單顆功耗"
           unit="W"
           tooltip={tip('Power')}
-          value={component.power_W}
-          step="0.01"
-          readOnly={readOnly}
-          onChange={(next) =>
-            onPatch(component.id, { power_W: next ?? component.power_W }, ['power_W'])
-          }
-        />
+          id="ins-power"
+          text={component.power_W.value ?? '—'}
+        >
+          <SourcedNumberField
+            id="ins-power"
+            label="Power"
+            zh="單顆功耗"
+            unit="W"
+            tooltip={tip('Power')}
+            value={component.power_W}
+            step="0.01"
+            readOnly={readOnly}
+            onChange={(next) =>
+              onPatch(component.id, { power_W: next ?? component.power_W }, ['power_W'])
+            }
+          />
+        </AiOwned>
       </div>
 
       <div className="rounded-md border border-line bg-surface-muted px-3 py-2">

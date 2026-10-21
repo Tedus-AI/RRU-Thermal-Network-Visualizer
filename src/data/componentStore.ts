@@ -183,7 +183,11 @@ export const useComponentStore = create<ComponentStoreState>((set, get) => ({
     while (taken.has(copyId)) copyId = `${source.id}_COPY_${suffix++}`;
 
     // 04 §25 — thermal spec and geometry are copied; graph mapping, external
-    // mapping and any solver result are deliberately NOT.
+    // mapping and any solver result are deliberately NOT. Nor is the link to
+    // AI-Thermal: the copy is a new part, not that record's second home, and
+    // 「從 AI-Thermal 更新」 must not match two components to one record.
+    const { ai_link: _link, ...provenance } = source.provenance;
+    void _link;
     const copy: Component = {
       ...source,
       id: copyId,
@@ -191,7 +195,7 @@ export const useComponentStore = create<ComponentStoreState>((set, get) => ({
       architecture_prep: { ...source.architecture_prep, thermal_profile_status: 'Not Assigned' },
       external_mappings: { flotherm: { mapping_status: 'unmapped' }, measurement: { mapping_status: 'unmapped' } },
       provenance: {
-        ...source.provenance,
+        ...provenance,
         source_type: 'Manual',
         imported_at: new Date().toISOString(),
         last_modified_at: new Date().toISOString(),

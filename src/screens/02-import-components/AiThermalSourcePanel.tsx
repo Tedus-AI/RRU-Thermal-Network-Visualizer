@@ -150,6 +150,7 @@ export function AiThermalSourcePanel() {
           source_project_id: summary.id,
           source_project_name: summary.name,
           source_file: loaded.label,
+          source_saved_at: summary.updated || null,
         },
         {
           aiThermalProject: db.projects[summary.id],

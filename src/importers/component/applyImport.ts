@@ -18,6 +18,7 @@ import {
   type HeatPathType,
   type ThermalSpec,
 } from '@/domain/component';
+import { aiLinkOf, buildAiLink } from '@/domain/aiThermalLink';
 import { sourced, unknownValue, type SourcedValue } from '@/domain/sourcedValue';
 import type { MaterialDefaults } from '@/domain/materials';
 import {
@@ -171,6 +172,54 @@ function provenanceFor(source: ImportSourceDescriptor, row: StagingRow): Compone
     ref_origin_id: (row.extra._ref_origin_id as string) ?? null,
     ref_locked: row.extra._ref_locked === 'true' ? true : null,
   };
+}
+
+/** The component a row describes on its own, as a new import builds it. */
+function componentFromRow(
+  row: StagingRow,
+  identity: Pick<Component, 'id' | 'name' | 'category'>,
+  source: ImportSourceDescriptor,
+  materials: MaterialDefaults,
+): Component {
+  const carried = decodeCarriedSpec(row.extra[CARRIED_SPEC_COLUMN]);
+  return {
+    ...identity,
+    // A part the source had switched off arrives switched off. It is in the
+    // table because the engineer ticked "Hidden / Excluded" in Import Scope,
+    // and silently re-enabling it would put power back into the design.
+    enabled: carried ? carried.enabled : true,
+    qty: row.qty ?? 0,
+    power_W:
+      row.power_W == null ? unknownValue<number>('Imported') : sourced(row.power_W, 'Imported'),
+    thermal_spec: specFromRow(row, materials),
+    // 02 §34 / 04 §40 — importing still never creates graph topology. What
+    // carries is the PREFERENCES: which template, which base zone, how
+    // quantity is modelled. Copying a project within the same product is
+    // exactly when those hold, and Screen 05 readiness is reset regardless.
+    architecture_prep: carried
+      ? carriedArchitecturePrep(emptyArchitecturePrep(), carried)
+      : emptyArchitecturePrep(),
+    provenance: provenanceFor(source, row),
+    external_mappings: emptyExternalMappings(),
+    metadata: buildMetadata(row, materials),
+    ...(carried?.notes ? { notes: carried.notes } : {}),
+  };
+}
+
+/**
+ * An AI-Thermal import links the component to its record there (`aiThermalLink.ts`):
+ * the fields AI-Thermal supplied are locked in 04 and kept up to date by
+ * 「從 AI-Thermal 更新」. Any other source leaves the component as it is.
+ */
+function withAiLink(
+  component: Component,
+  fresh: Component,
+  source: ImportSourceDescriptor,
+  previous: ReturnType<typeof aiLinkOf>,
+): Component {
+  if (source.source_type !== 'AIThermal' || !source.source_project_id) return component;
+  const link = buildAiLink(fresh, source.source_project_id, source.source_saved_at ?? null, previous);
+  return { ...component, provenance: { ...component.provenance, ai_link: link } };
 }
 
 /** Imported non-empty replaces; imported empty keeps the existing value (02 §17). */
@@ -345,7 +394,7 @@ export function applyImport({ existing, rows, sessionPolicy, source, materials }
         }
       }
 
-      components[existingIndex] = {
+      const merged: Component = {
         ...target,
         qty: nextQty,
         power_W: nextPower,
@@ -358,6 +407,14 @@ export function applyImport({ existing, rows, sessionPolicy, source, materials }
         architecture_prep: target.architecture_prep,
         external_mappings: target.external_mappings,
       };
+      // The link records AI-Thermal's own values, so it is built from the row as
+      // a fresh import would read it, not from the merge.
+      components[existingIndex] = withAiLink(
+        merged,
+        componentFromRow(row, { id: target.id, name: row.name, category }, source, materials),
+        source,
+        aiLinkOf(target),
+      );
       updated++;
       continue;
     }
@@ -368,31 +425,8 @@ export function applyImport({ existing, rows, sessionPolicy, source, materials }
     const id = slugId(name, takenIds);
     takenIds.add(id);
 
-    const carried = decodeCarriedSpec(row.extra[CARRIED_SPEC_COLUMN]);
-    const component: Component = {
-      id,
-      name,
-      category,
-      // A part the source had switched off arrives switched off. It is in the
-      // table because the engineer ticked "Hidden / Excluded" in Import Scope,
-      // and silently re-enabling it would put power back into the design.
-      enabled: carried ? carried.enabled : true,
-      qty: row.qty ?? 0,
-      power_W:
-        row.power_W == null ? unknownValue<number>('Imported') : sourced(row.power_W, 'Imported'),
-      thermal_spec: specFromRow(row, materials),
-      // 02 §34 / 04 §40 — importing still never creates graph topology. What
-      // carries is the PREFERENCES: which template, which base zone, how
-      // quantity is modelled. Copying a project within the same product is
-      // exactly when those hold, and Screen 05 readiness is reset regardless.
-      architecture_prep: carried
-        ? carriedArchitecturePrep(emptyArchitecturePrep(), carried)
-        : emptyArchitecturePrep(),
-      provenance: provenanceFor(source, row),
-      external_mappings: emptyExternalMappings(),
-      metadata: buildMetadata(row, materials),
-      ...(carried?.notes ? { notes: carried.notes } : {}),
-    };
+    const built = componentFromRow(row, { id, name, category }, source, materials);
+    const component = withAiLink(built, built, source, null);
 
     components.push(component);
     byKey.set(duplicateKey(component.name, component.category), components.length - 1);
