@@ -1,8 +1,13 @@
 /**
  * Component inspector — 04 §13–§21, §27, §33.
  *
- * Six tabs: Overview, Thermal Spec, Geometry, Architecture Prep, Source and
- * External Mapping. Nothing here creates a node or an edge (04 §19, §40).
+ * Five tabs: 概要, 熱規格, 幾何, 建模偏好, 來源. External Mapping (FloTHERM
+ * aliases) is not offered while Screen 03 is deferred. Nothing here creates a
+ * node or an edge (04 §19, §40).
+ *
+ * The nine-item completeness checklist used to sit under every tab, the same
+ * block whichever tab was open. The panel's title bar now carries the score,
+ * and this panel lists only what is missing and what to fix, each a link.
  * Each tab is its own component (`ComponentInspectorTabs.tsx` and the Thermal
  * Spec and Geometry files beside it); what they read is derived once per
  * render by `deriveInspector` (`componentInspectorModel.ts`).
@@ -19,38 +24,30 @@
  */
 
 import { useEffect, useState } from 'react';
-import { CircleCheck, CircleDashed, Info, Link2, Ruler, Share2, Thermometer } from 'lucide-react';
+import { CircleDashed, Info, Ruler, Share2, Thermometer } from 'lucide-react';
 
 import { Button } from '@/ui/primitives';
-import { BilingualTooltip } from '@/ui/FieldLabel';
 import type { Component } from '@/domain/component';
 import { useProjectStore } from '@/data/projectStore';
 import { COMPLETENESS_ITEMS, COMPLETENESS_ITEMS_ZH } from '@/domain/componentReadiness';
-import { tip } from '@/i18n/componentManagerCopy';
 import { confirmAction, issueTarget, type InspectorTab } from './issueTargets';
 import {
   deriveInspector,
   type InspectorTabProps,
   type PatchComponent,
 } from './componentInspectorModel';
-import {
-  ArchitectureTab,
-  ExternalMappingTab,
-  OverviewTab,
-  SourceTab,
-} from './ComponentInspectorTabs';
+import { ArchitectureTab, OverviewTab, SourceTab } from './ComponentInspectorTabs';
 import { ThermalSpecTab } from './ComponentInspectorThermalTab';
 import { GeometryTab } from './ComponentInspectorGeometryTab';
 
 type Tab = InspectorTab;
 
-const TABS: Array<{ id: Tab; label: string; zh: string; icon: typeof Info }> = [
-  { id: 'overview', label: 'Overview', zh: '概要', icon: Info },
-  { id: 'thermal', label: 'Thermal Spec', zh: '熱規格', icon: Thermometer },
-  { id: 'geometry', label: 'Geometry', zh: '幾何', icon: Ruler },
-  { id: 'architecture', label: 'Architecture Prep', zh: '架構準備', icon: Share2 },
-  { id: 'source', label: 'Source', zh: '來源', icon: CircleDashed },
-  { id: 'external', label: 'External Mapping', zh: '外部映射', icon: Link2 },
+const TABS: Array<{ id: Tab; label: string; icon: typeof Info }> = [
+  { id: 'overview', label: '概要', icon: Info },
+  { id: 'thermal', label: '熱規格', icon: Thermometer },
+  { id: 'geometry', label: '幾何', icon: Ruler },
+  { id: 'architecture', label: '建模偏好', icon: Share2 },
+  { id: 'source', label: '來源', icon: CircleDashed },
 ];
 
 /** A request to put the caret in one field; `nonce` lets the same field repeat. */
@@ -121,8 +118,7 @@ export function ComponentInspector({
   if (!component) {
     return (
       <div className="rounded-lg border border-line bg-surface p-6 text-center">
-        <p className="text-[13px] text-ink-500">Select a component to inspect it.</p>
-        <p className="mt-1 text-[12px] text-ink-400">請於左側選擇一個元件。</p>
+        <p className="text-[13px] text-ink-500">請在表格中選擇一個元件。</p>
       </div>
     );
   }
@@ -130,16 +126,19 @@ export function ComponentInspector({
   const derived = deriveInspector(component, onPatch, projectMaterials, projectContext);
   const { issues, completeness, score, surfaceReferenced } = derived;
   const tabProps: InspectorTabProps = { component, readOnly, onPatch, derived };
+  // A stale 'external' (the hidden FloTHERM tab) falls back to the first tab.
+  const shown: Tab = TABS.some((item) => item.id === tab) ? tab : 'overview';
+  const missing = COMPLETENESS_ITEMS.filter((item) => !completeness[item]);
 
   return (
     <div className="flex flex-col gap-3">
       <section className="rounded-lg border border-line bg-surface">
         <header className="border-b border-line px-3.5 py-2.5">
           {/* The floating panel's own title bar carries the name and badge. */}
-          <nav className="flex flex-wrap gap-1" aria-label="Component inspector sections">
+          <nav className="flex flex-wrap gap-1" aria-label="元件檢視分頁">
             {TABS.map((item) => {
               const Icon = item.icon;
-              const active = tab === item.id;
+              const active = shown === item.id;
               return (
                 <button
                   key={item.id}
@@ -151,8 +150,7 @@ export function ComponentInspector({
                       ? 'bg-accent-600 text-white'
                       : 'text-ink-500 hover:bg-surface-muted hover:text-ink-900'
                   }`}
-                  title={`${item.label} / ${item.zh}`}
-                >
+>
                   <Icon size={12} />
                   {item.label}
                 </button>
@@ -162,11 +160,11 @@ export function ComponentInspector({
         </header>
 
         <div className="flex flex-col gap-3.5 p-3.5">
-          {tab === 'overview' && <OverviewTab {...tabProps} />}
-          {tab === 'thermal' && <ThermalSpecTab {...tabProps} />}
-          {tab === 'geometry' && <GeometryTab {...tabProps} />}
-          {tab === 'architecture' && <ArchitectureTab {...tabProps} />}
-          {tab === 'source' && (
+          {shown === 'overview' && <OverviewTab {...tabProps} />}
+          {shown === 'thermal' && <ThermalSpecTab {...tabProps} />}
+          {shown === 'geometry' && <GeometryTab {...tabProps} />}
+          {shown === 'architecture' && <ArchitectureTab {...tabProps} />}
+          {shown === 'source' && (
             <SourceTab
               {...tabProps}
               librarySavedAt={librarySavedAt}
@@ -174,80 +172,68 @@ export function ComponentInspector({
               onSaveToLibrary={onSaveToLibrary}
             />
           )}
-          {tab === 'external' && <ExternalMappingTab {...tabProps} />}
         </div>
       </section>
 
-      {/* --- Thermal completeness checklist (04 §23) --- */}
-      <section className="rounded-lg border border-line bg-surface">
-        <header className="flex items-center justify-between border-b border-line px-3.5 py-2.5">
-          <BilingualTooltip zh={tip('Completeness') ?? ''} align="left">
-            <h3 className="text-[13px] font-bold text-ink-700">Thermal Completeness</h3>
-          </BilingualTooltip>
-          <span className="tabular text-[13px] font-bold">
-            {score.done} / {score.total}
-          </span>
-        </header>
-        <ul className="grid grid-cols-2 gap-x-3 p-3.5">
-          {COMPLETENESS_ITEMS.map((item) => (
-            <li key={item} className="flex items-center gap-2 py-[3px] text-[12px]">
-              {completeness[item] ? (
-                <CircleCheck size={14} className="shrink-0 text-ok-600" aria-hidden />
-              ) : (
-                <CircleDashed size={14} className="shrink-0 text-ink-400" aria-hidden />
-              )}
-              <span className={completeness[item] ? 'text-ink-700' : 'text-ink-400'}>
-                {item === 'Rjc' && surfaceReferenced ? 'Rjc (N/A)' : item}
-                <span className="ml-1 text-ink-400">/ {COMPLETENESS_ITEMS_ZH[item]}</span>
-              </span>
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      {issues.length > 0 && (
+      {(missing.length > 0 || issues.length > 0) && (
         <section className="rounded-lg border border-line bg-surface">
-          <header className="border-b border-line px-3.5 py-2.5">
-            <h3 className="text-[13px] font-bold text-ink-700">Issues / 待處理項目</h3>
+          <header className="flex items-center justify-between border-b border-line px-3.5 py-2.5">
+            <h3 className="text-[13px] font-bold text-ink-700">待處理</h3>
+            <span className="tabular text-[12px] text-ink-500">
+              完整度 {score.done} / {score.total}
+            </span>
           </header>
-          <ul className="flex flex-col gap-1.5 p-3.5">
-            {issues.map((issue, index) => {
-              const target = issueTarget(issue.field);
-              const confirm = target?.confirm ? confirmAction(component, target.confirm) : null;
-              return (
-                <li key={`${issue.field}-${index}`} className="flex items-start gap-1.5">
-                  <span
-                    aria-hidden
-                    className={issue.severity === 'error' ? 'text-danger-600' : 'text-warn-600'}
-                  >
-                    {issue.severity === 'error' ? '✕' : '⚠'}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    {/* Every issue is a link to the control that fixes it. */}
-                    <button
-                      type="button"
-                      disabled={!target}
-                      onClick={() => target && onGoToField(target.tab, target.fieldId)}
-                      className={`text-left text-[12px] ${
-                        issue.severity === 'error' ? 'text-danger-600' : 'text-warn-600'
-                      } ${target ? 'hover:underline' : 'cursor-default'}`}
+          {/* The checklist (04 §23), reduced to what is still missing. */}
+          {missing.length > 0 && (
+            <p className="border-b border-line px-3.5 py-2 text-[12px] text-ink-500">
+              尚缺：
+              {missing
+                .map((item) =>
+                  item === 'Rjc' && surfaceReferenced ? null : COMPLETENESS_ITEMS_ZH[item],
+                )
+                .filter(Boolean)
+                .join('、')}
+            </p>
+          )}
+          {issues.length > 0 && (
+            <ul className="flex flex-col gap-1.5 p-3.5">
+              {issues.map((issue, index) => {
+                const target = issueTarget(issue.field);
+                const confirm = target?.confirm ? confirmAction(component, target.confirm) : null;
+                return (
+                  <li key={`${issue.field}-${index}`} className="flex items-start gap-1.5">
+                    <span
+                      aria-hidden
+                      className={issue.severity === 'error' ? 'text-danger-600' : 'text-warn-600'}
                     >
-                      {issue.message}
-                      <span className="block text-[11px] text-ink-400">{issue.message_zh}</span>
-                    </button>
-                    {confirm && !readOnly && (
-                      <Button
-                        className="mt-1 h-6"
-                        onClick={() => onPatch(component.id, confirm.patch, confirm.fields)}
+                      {issue.severity === 'error' ? '✕' : '⚠'}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      {/* Every issue is a link to the control that fixes it. */}
+                      <button
+                        type="button"
+                        disabled={!target}
+                        onClick={() => target && onGoToField(target.tab, target.fieldId)}
+                        className={`text-left text-[12px] ${
+                          issue.severity === 'error' ? 'text-danger-600' : 'text-warn-600'
+                        } ${target ? 'hover:underline' : 'cursor-default'}`}
                       >
-                        {confirm.label} / {confirm.labelZh}
-                      </Button>
-                    )}
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
+                        {issue.message_zh}
+                      </button>
+                      {confirm && !readOnly && (
+                        <Button
+                          className="mt-1 h-6"
+                          onClick={() => onPatch(component.id, confirm.patch, confirm.fields)}
+                        >
+                          {confirm.labelZh}
+                        </Button>
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </section>
       )}
     </div>

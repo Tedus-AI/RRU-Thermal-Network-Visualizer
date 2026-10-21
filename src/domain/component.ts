@@ -309,6 +309,14 @@ export const PACKAGE_TYPES = [
 ] as const;
 export type PackageType = (typeof PACKAGE_TYPES)[number];
 
+/** Package codes stay as written (QFN, BGA …); only the two non-codes are said in Chinese. */
+export function packageLabel(packageType: string | null | undefined): string | null {
+  if (!packageType) return null;
+  if (packageType === 'Custom') return '自訂';
+  if (packageType === 'Unknown') return '未知';
+  return packageType;
+}
+
 /** Which base-station part wears each package — shown on hover in the select. */
 export const PACKAGE_TYPE_HINTS: Record<PackageType, { en: string; zh: string }> = {
   QFN: {
@@ -560,10 +568,18 @@ export const QTY_MODELS = ['DECIDE_LATER', 'AGGREGATE', 'INDIVIDUAL', 'GROUPED']
 export type QtyModel = (typeof QTY_MODELS)[number];
 
 export const QTY_MODEL_LABELS: Record<QtyModel, string> = {
-  DECIDE_LATER: 'Decide Later',
-  AGGREGATE: 'Aggregate',
-  INDIVIDUAL: 'Individual',
-  GROUPED: 'Grouped',
+  DECIDE_LATER: '稍後決定',
+  AGGREGATE: '合併成一條（Aggregate）',
+  INDIVIDUAL: '每顆一條（Individual）',
+  GROUPED: '分組（Grouped）',
+};
+
+/** Whether the component is in Screen 05's network yet, as the inspector says it. */
+export const THERMAL_PROFILE_STATUS_ZH: Record<ThermalProfileStatus, string> = {
+  'Not Assigned': '未建入熱網路',
+  Draft: '熱網路草稿',
+  Ready: '已建入熱網路',
+  Custom: '熱網路已手動修改',
 };
 
 export type ThermalProfileStatus = 'Not Assigned' | 'Draft' | 'Ready' | 'Custom';

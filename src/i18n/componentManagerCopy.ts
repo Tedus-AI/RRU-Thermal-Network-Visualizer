@@ -7,25 +7,25 @@ export const MANAGER_TOOLTIPS_ZH: Record<string, string> = {
   Rjc: '接面到外殼熱阻；若使用「模組散熱面／底板」模型則不適用，也不會建立 Rjc 熱阻邊。',
   'Limit Type': '指定溫度上限的參考位置：Tj 接面、Tc 外殼、Tb 底板或 Ts 原廠指定表面。',
   'Reference Location': '選擇原廠指定散熱面上的量測位置：左側、中央或右側。',
-  'Thermal Profile': '供 Screen 05 建立熱網路使用的準備資料；本頁不建立 Node/Edge。',
+  'Thermal Profile': '此元件是否已建入 05 的熱網路。',
   'Preferred Base Zone':
-    '此元件的熱要交給哪一塊共用散熱結構。Screen 05 據此建議把元件的散熱出口接到哪個基座節點——接到不同區域＝走不同的散熱器＝到環境的路徑不同，會影響溫度。此處只是建議，不會自行建立節點。',
+    '此元件的熱要交給哪一塊共用散熱結構。05 據此建議把元件的散熱出口接到哪個基座節點——接到不同區域＝走不同的散熱器＝到環境的路徑不同，會影響溫度。此處只是建議，不會自行建立節點。',
   'Qty Modeling':
-    '數量大於 1 時，Screen 05 要把它們畫成幾條熱路徑。Aggregate＝一條，該節點承擔全部功耗（4 顆 45W 就是一個 180W 節點）；Individual＝每顆一條各 45W；Grouped＝分成幾組。Aggregate 最省節點但會低估單顆熱點溫度，Individual 才看得出單顆峰值。',
+    '數量大於 1 時，05 要把它們畫成幾條熱路徑。Aggregate＝一條，該節點承擔全部功耗（4 顆 45W 就是一個 180W 節點）；Individual＝每顆一條各 45W；Grouped＝分成幾組。Aggregate 最省節點但會低估單顆熱點溫度，Individual 才看得出單顆峰值。',
   'External Mapping':
     '預留給 FloTHERM 等外部模擬物件的 mapping；03 目前延後，本頁不解析 FloTHERM 格式。',
-  'Total Power': 'Qty × Power 的元件功耗摘要，不是 Thermal Edge 的 Heat Flow Q。',
+  'Total Power': '數量 × 單顆功耗的加總；不是熱路徑上的熱流 Q。',
   'Project Default': '此元件繼承 Project 共用材料或 thermal parameter。',
   'Component Override': '此元件改用自己的 thermal parameter。',
   'Architecture Template Preference':
-    '只保存建模偏好；真正 Thermal Nodes / Edges 由 Screen 05 建立。',
-  Qty: '元件數量；不代表 Screen 05 一定建立相同數量的節點。',
+    '只保存建模偏好；熱網路的節點與路徑由 05 建立。',
+  Qty: '元件數量；不代表 05 一定建立相同數量的節點。',
   Power: '單顆元件轉為熱的耗散功率 Pdiss，單位 W；電源模組請勿填額定輸出功率。',
   Limit: '元件允許最高溫度，單位 °C。',
   Package: '封裝型式，例如 QFN、BGA、Bare Die、Module。',
   'Heat Path':
-    '熱離開元件的主要方向，決定套用哪一條熱阻鏈與哪一個架構模板。「模組散熱面／底板」從原廠指定表面經 TIM 導出，不使用 Rjc。選擇路徑本身不會建立 Node/Edge。',
-  TIM: '熱介面材料；指定材料不代表一定建立獨立 Edge。',
+    '熱離開元件的主要方向，決定套用哪一條熱阻鏈與哪一個架構模板。「模組散熱面／底板」從原廠指定表面經 TIM 導出，不使用 Rjc。選擇路徑本身不會建立熱網路。',
+  TIM: '熱介面材料（TIM）。',
   'Source Area':
     '熱離開元件的那個面的面積，由長寬相乘導出，或改用自訂面積。焊料層與擴散段的熱阻用它。',
   'Spread Area':
@@ -64,7 +64,7 @@ export const ZH: Record<string, string> = {
   Overview: '概要',
   'Thermal Spec': '熱規格',
   Geometry: '幾何',
-  'Architecture Prep': '架構準備',
+  'Architecture Prep': '建模偏好',
   'External Mapping': '外部映射',
   Completeness: '完整度',
 };

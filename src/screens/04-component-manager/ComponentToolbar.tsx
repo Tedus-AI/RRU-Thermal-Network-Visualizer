@@ -1,9 +1,23 @@
-/** Category tabs, filters and actions — 04 §8, §9. */
+/**
+ * Category tabs, filters and the actions on the table — 04 §8, §9.
+ *
+ * The filter row used to be five dropdowns, a checkbox and a Reset button, and
+ * the status dropdown repeated the status chips above the table. Search stays
+ * out in the open; status is the chips; the rarely used rest (heat source, data
+ * source, completeness, show disabled) is behind 更多篩選, which says how many
+ * of them are set. Reset only appears when something is filtered.
+ *
+ * The actions moved from under the table to its top-right corner, beside the
+ * filters, where they are found before the table is scrolled past.
+ * "Manage Library" is gone from here: the header's 元件庫 opens the same
+ * dialog.
+ */
 
-import { Layers, Library, Plus, RotateCcw, Settings2, Upload } from 'lucide-react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { ChevronDown, Layers, Library, Plus, RotateCcw, SlidersHorizontal, Upload } from 'lucide-react';
 import { Button } from '@/ui/primitives';
 import { dataSourceLabelZh } from '@/ui/dataSourceLabels';
-import { COMPONENT_CATEGORIES, componentTotalPowerW, type Component, type ComponentCategory } from '@/domain/component';
+import { COMPONENT_CATEGORIES, type Component, type ComponentCategory } from '@/domain/component';
 import { statusOf } from '@/domain/componentReadiness';
 
 export type CategoryTab = 'All' | ComponentCategory;
@@ -29,6 +43,89 @@ export const DEFAULT_FILTERS: Filters = {
   showDisabled: true,
 };
 
+/** How many of the folded-away filters are set. */
+function moreFilterCount(filters: Filters): number {
+  return (
+    (filters.heatSource !== 'ALL' ? 1 : 0) +
+    (filters.source !== 'ALL' ? 1 : 0) +
+    (filters.completeness !== 'ALL' ? 1 : 0) +
+    (filters.showDisabled !== DEFAULT_FILTERS.showDisabled ? 1 : 0)
+  );
+}
+
+function isFiltered(filters: Filters, tab: CategoryTab): boolean {
+  return (
+    tab !== 'All' ||
+    filters.search.trim() !== '' ||
+    filters.status !== 'ALL' ||
+    moreFilterCount(filters) > 0
+  );
+}
+
+/** A button that opens a small panel under itself; closes on Esc or a click elsewhere. */
+function Popover({
+  label,
+  icon,
+  align = 'left',
+  disabled,
+  variant = 'secondary',
+  children,
+}: {
+  label: ReactNode;
+  icon?: ReactNode;
+  align?: 'left' | 'right';
+  disabled?: boolean;
+  variant?: 'primary' | 'secondary';
+  children: (close: () => void) => ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  const root = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointer = (event: PointerEvent) => {
+      if (!root.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('pointerdown', onPointer);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('pointerdown', onPointer);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  return (
+    <div ref={root} className="relative">
+      <Button
+        variant={variant}
+        className="h-8"
+        icon={icon}
+        disabled={disabled}
+        aria-expanded={open}
+        aria-haspopup="true"
+        trailingIcon={<ChevronDown size={13} className={open ? 'rotate-180' : ''} />}
+        onClick={() => setOpen((value) => !value)}
+      >
+        {label}
+      </Button>
+      {open && (
+        <div
+          className={`absolute top-full z-30 mt-1 min-w-[15rem] rounded-lg border border-line bg-surface p-2 shadow-xl ${
+            align === 'right' ? 'right-0' : 'left-0'
+          }`}
+        >
+          {children(() => setOpen(false))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const SELECT_CLASS = 'h-8 w-full rounded-md border border-line-strong bg-surface px-2 text-[12px]';
+
 export function CategoryTabs({
   components,
   active,
@@ -40,20 +137,17 @@ export function CategoryTabs({
 }) {
   const tabs: CategoryTab[] = ['All', ...COMPONENT_CATEGORIES];
 
-  // Same card metrics as ComponentReadinessCards — the two form one status row.
   return (
-    <div role="tablist" aria-label="Component categories" className="flex flex-wrap gap-1.5">
+    <div
+      role="tablist"
+      aria-label="元件分類"
+      className="flex flex-wrap items-end gap-1 border-b border-line"
+    >
       {tabs.map((tab) => {
-        const scoped =
-          tab === 'All' ? components : components.filter((c) => c.category === tab);
+        const scoped = tab === 'All' ? components : components.filter((c) => c.category === tab);
         if (tab !== 'All' && scoped.length === 0) return null;
-
-        const power = scoped.reduce((sum, c) => sum + (c.enabled ? componentTotalPowerW(c) : 0), 0);
-        const ready = scoped.filter((c) => statusOf(c) === 'READY').length;
-        const attention = scoped.filter((c) => {
-          const status = statusOf(c);
-          return status === 'WARNING' || status === 'ERROR';
-        }).length;
+        const errors = scoped.filter((c) => statusOf(c) === 'ERROR').length;
+        const warnings = scoped.filter((c) => statusOf(c) === 'WARNING').length;
         const selected = active === tab;
 
         return (
@@ -63,24 +157,21 @@ export function CategoryTabs({
             type="button"
             aria-selected={selected}
             onClick={() => onChange(tab)}
-            className={`rounded-lg border px-2 py-2 text-left transition-colors ${
+            className={`-mb-px flex items-center gap-1.5 border-b-2 px-3 py-1.5 text-[13px] font-semibold transition-colors ${
               selected
-                ? 'border-accent-600 bg-accent-50'
-                : 'border-line bg-surface hover:border-ink-400'
+                ? 'border-accent-600 text-accent-700'
+                : 'border-transparent text-ink-500 hover:text-ink-900'
             }`}
           >
-            <span
-              className={`block text-[13px] font-semibold ${
-                selected ? 'text-accent-700' : 'text-ink-900'
-              }`}
-            >
-              {tab}
-              <span className="tabular ml-1.5 font-normal text-ink-400">{scoped.length}</span>
-            </span>
-            <span className="tabular mt-0.5 block text-[11px] text-ink-400">
-              {power.toFixed(1)} W · {ready} ✓
-              {attention > 0 && <span className="text-warn-600"> · {attention} ⚠</span>}
-            </span>
+            {/* Category names stay English — RF / Digital / Power is how the
+                parts are sorted on the floor. "All" is not a category. */}
+            {tab === 'All' ? '全部' : tab}
+            <span className="tabular font-normal text-ink-400">{scoped.length}</span>
+            {errors > 0 ? (
+              <span className="size-1.5 rounded-full bg-danger-500" title={`${errors} 個錯誤`} />
+            ) : warnings > 0 ? (
+              <span className="size-1.5 rounded-full bg-warn-500" title={`${warnings} 個警告`} />
+            ) : null}
           </button>
         );
       })}
@@ -88,160 +179,199 @@ export function CategoryTabs({
   );
 }
 
-/**
- * Filters only. The row that acts on components is `ComponentActions`, which
- * sits under the table where the rows it acts on are.
- */
 export function ComponentToolbar({
   filters,
   onFilters,
   sources,
+  tab,
+  onReset,
+  actions,
 }: {
   filters: Filters;
   onFilters: (next: Filters) => void;
   sources: string[];
+  /** The category tab, so Reset can say whether anything is filtered at all. */
+  tab: CategoryTab;
+  /** Clears the filters and the category tab together. */
+  onReset: () => void;
+  /** The table actions, shown at the right end of the row. */
+  actions?: ReactNode;
 }) {
   const set = (patch: Partial<Filters>) => onFilters({ ...filters, ...patch });
+  const more = moreFilterCount(filters);
 
   return (
     <div className="flex flex-wrap items-center gap-2">
       <input
         type="search"
-        aria-label="Search components"
-        placeholder="Search / 搜尋元件…"
+        aria-label="搜尋元件"
+        placeholder="搜尋元件、代號或封裝…"
         value={filters.search}
         onChange={(event) => set({ search: event.target.value })}
-        className="h-8 w-52 rounded-md border border-line-strong bg-surface px-2.5 text-[12px]"
+        className="h-8 w-56 rounded-md border border-line-strong bg-surface px-2.5 text-[12px]"
       />
 
-      <select
-        aria-label="Filter by status"
-        value={filters.status}
-        onChange={(event) => set({ status: event.target.value as StatusFilter })}
-        className="h-8 rounded-md border border-line-strong bg-surface px-2 text-[12px]"
+      <Popover
+        icon={<SlidersHorizontal size={13} />}
+        label={
+          <>
+            更多篩選
+            {more > 0 && <span className="tabular font-normal text-accent-700">（{more}）</span>}
+          </>
+        }
       >
-        <option value="ALL">All statuses / 全部狀態</option>
-        <option value="READY">Ready / 就緒</option>
-        <option value="WARNING">Warning / 警告</option>
-        <option value="ERROR">Error / 錯誤</option>
-        <option value="DISABLED">Disabled / 停用</option>
-      </select>
+        {() => (
+          <div className="flex flex-col gap-2.5 p-1">
+            <label className="flex flex-col gap-1 text-[12px] font-semibold text-ink-700">
+              熱源
+              <select
+                aria-label="依熱源篩選"
+                value={filters.heatSource}
+                onChange={(event) => set({ heatSource: event.target.value as HeatSourceFilter })}
+                className={SELECT_CLASS}
+              >
+                <option value="ALL">不限</option>
+                <option value="HEAT">只看熱源</option>
+                <option value="PASSIVE">只看被動元件（0 W）</option>
+              </select>
+            </label>
+            <label className="flex flex-col gap-1 text-[12px] font-semibold text-ink-700">
+              資料來源
+              <select
+                aria-label="依資料來源篩選"
+                value={filters.source}
+                onChange={(event) => set({ source: event.target.value })}
+                className={SELECT_CLASS}
+              >
+                <option value="ALL">不限</option>
+                {sources.map((source) => (
+                  <option key={source} value={source}>
+                    {dataSourceLabelZh(source)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex flex-col gap-1 text-[12px] font-semibold text-ink-700">
+              熱資料完整度
+              <select
+                aria-label="依熱資料完整度篩選"
+                value={filters.completeness}
+                onChange={(event) =>
+                  set({ completeness: event.target.value as CompletenessFilter })
+                }
+                className={SELECT_CLASS}
+              >
+                <option value="ALL">不限</option>
+                <option value="COMPLETE">已齊全</option>
+                <option value="INCOMPLETE">未齊全</option>
+              </select>
+            </label>
+            <label className="flex items-center gap-1.5 text-[12px] text-ink-700">
+              <input
+                type="checkbox"
+                className="size-4 accent-[var(--color-accent-600)]"
+                checked={filters.showDisabled}
+                onChange={(event) => set({ showDisabled: event.target.checked })}
+              />
+              顯示停用的元件
+            </label>
+          </div>
+        )}
+      </Popover>
 
-      <select
-        aria-label="Filter by heat source"
-        value={filters.heatSource}
-        onChange={(event) => set({ heatSource: event.target.value as HeatSourceFilter })}
-        className="h-8 rounded-md border border-line-strong bg-surface px-2 text-[12px]"
-      >
-        <option value="ALL">Heat source: any / 熱源不限</option>
-        <option value="HEAT">Heat sources / 熱源</option>
-        <option value="PASSIVE">Passive / 被動元件</option>
-      </select>
+      {isFiltered(filters, tab) && (
+        <Button variant="ghost" className="h-8" icon={<RotateCcw size={13} />} onClick={onReset}>
+          清除篩選
+        </Button>
+      )}
 
-      <select
-        aria-label="Filter by source"
-        value={filters.source}
-        onChange={(event) => set({ source: event.target.value })}
-        className="h-8 rounded-md border border-line-strong bg-surface px-2 text-[12px]"
-      >
-        <option value="ALL">全部來源</option>
-        {sources.map((source) => (
-          <option key={source} value={source}>
-            {dataSourceLabelZh(source)}
-          </option>
-        ))}
-      </select>
-
-      <select
-        aria-label="Filter by thermal completeness"
-        value={filters.completeness}
-        onChange={(event) => set({ completeness: event.target.value as CompletenessFilter })}
-        className="h-8 rounded-md border border-line-strong bg-surface px-2 text-[12px]"
-      >
-        <option value="ALL">Completeness: any / 完整度不限</option>
-        <option value="COMPLETE">Complete / 已完整</option>
-        <option value="INCOMPLETE">Incomplete / 未完整</option>
-      </select>
-
-      <label className="flex items-center gap-1.5 text-[12px] text-ink-700">
-        <input
-          type="checkbox"
-          className="size-4 accent-[var(--color-accent-600)]"
-          checked={filters.showDisabled}
-          onChange={(event) => set({ showDisabled: event.target.checked })}
-        />
-        Show disabled / 顯示停用
-      </label>
-
-      <Button className="h-8" icon={<RotateCcw size={13} />} onClick={() => onFilters(DEFAULT_FILTERS)}>
-        Reset / 重設
-      </Button>
+      {actions && <div className="ml-auto flex flex-wrap items-center gap-2">{actions}</div>}
     </div>
   );
 }
 
 /**
- * Actions under the table.
- *
- * Duplicate and Delete used to live here and act on "the selected row", which
- * put them in conflict with selection itself: clicking a row opens the
- * inspector over the table. They are now two icons at the head of every row,
- * where they need no selection at all. What is left here is what genuinely has
- * no single row to sit on — Bulk Edit says how many rows it would touch.
+ * The table actions. Duplicate and Delete are icons at the head of every row,
+ * where they need no selection; what is left has no single row to sit on.
+ * Bulk Edit says how many rows it would touch — the ones the filters show.
  */
 export function ComponentActions({
-  selectedName,
   visibleCount,
   readOnly,
   onAdd,
   onAddFromLibrary,
-  onManageLibrary,
   onSaveAllToLibrary,
   onBulkEdit,
 }: {
-  selectedName: string | null;
   visibleCount: number;
   readOnly: boolean;
   onAdd: () => void;
   onAddFromLibrary: () => void;
-  onManageLibrary: () => void;
   onSaveAllToLibrary: () => void;
   onBulkEdit: () => void;
 }) {
+  const item =
+    'flex w-full items-center gap-2 rounded px-2.5 py-2 text-left text-[13px] text-ink-700 hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-50';
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <Button icon={<Plus size={14} />} disabled={readOnly} onClick={onAdd}>
-        Add Component / 新增
-      </Button>
-      <Button icon={<Library size={13} />} disabled={readOnly} onClick={onAddFromLibrary}>
-        From Library / 從元件庫
-      </Button>
-      {/* Browsing the catalogue is reading, so it is not gated on write access. */}
-      <Button icon={<Settings2 size={13} />} onClick={onManageLibrary}>
-        Manage Library / 管理元件庫
-      </Button>
-      {/* Files the whole table at once. Gated on there being rows to file,
-          not on write access: the catalogue is a different document from the
-          project, and an archived project's parts are still worth keeping. */}
+    <>
       <Button
-        icon={<Upload size={13} />}
-        disabled={visibleCount === 0}
-        onClick={onSaveAllToLibrary}
+        className="h-8"
+        icon={<Layers size={13} />}
+        disabled={readOnly || visibleCount === 0}
+        title="同時修改目前列出的元件"
+        onClick={onBulkEdit}
       >
-        Save All to Library / 全部匯入元件庫
-        <span className="ml-1 font-normal text-ink-400">({visibleCount})</span>
+        批次編輯
+        <span className="tabular font-normal text-ink-400">（{visibleCount}）</span>
       </Button>
-      <Button icon={<Layers size={13} />} disabled={readOnly || visibleCount === 0} onClick={onBulkEdit}>
-        Bulk Edit / 批次編輯
-        <span className="ml-1 font-normal text-ink-400">({visibleCount})</span>
-      </Button>
-      {selectedName && (
-        <span className="text-[12px] text-ink-400">
-          Selected / 已選取：
-          <span className="font-medium text-ink-700">{selectedName}</span>
-        </span>
-      )}
-    </div>
+      <Popover variant="primary" icon={<Plus size={14} />} label="新增元件" align="right">
+        {(close) => (
+          <div className="flex flex-col">
+            <button
+              type="button"
+              className={item}
+              disabled={readOnly}
+              onClick={() => {
+                close();
+                onAdd();
+              }}
+            >
+              <Plus size={14} className="text-ink-400" />
+              新增空白元件
+            </button>
+            <button
+              type="button"
+              className={item}
+              disabled={readOnly}
+              onClick={() => {
+                close();
+                onAddFromLibrary();
+              }}
+            >
+              <Library size={14} className="text-ink-400" />
+              從元件庫加入
+            </button>
+            {/* Files the listed rows into the catalogue. Gated on there being
+                rows, not on write access: the catalogue is a different document
+                from the project, and an archived project's parts are still
+                worth keeping. */}
+            <div className="my-1 border-t border-line" />
+            <button
+              type="button"
+              className={item}
+              disabled={visibleCount === 0}
+              onClick={() => {
+                close();
+                onSaveAllToLibrary();
+              }}
+            >
+              <Upload size={14} className="text-ink-400" />
+              把目前列出的 {visibleCount} 筆存入元件庫
+            </button>
+          </div>
+        )}
+      </Popover>
+    </>
   );
 }
 

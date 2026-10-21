@@ -7,6 +7,7 @@
 
 import {
   GEOMETRY_RULES,
+  HEAT_PATH_LABELS,
   isBodySourced,
   isHeatSource,
   metalBaseExposedAreaMm2,
@@ -318,7 +319,7 @@ export function validateComponent(component: Component): ComponentIssue[] {
       severity: 'warning',
       field: 'heat_path.type',
       message: `Heat path is assumed to be ${spec.heat_path.type} — it selects the whole resistance chain, so confirm it.`,
-      message_zh: `散熱路徑為推定值（${spec.heat_path.type}），它決定整條熱阻鏈，請確認。`,
+      message_zh: `散熱路徑為推定值（${HEAT_PATH_LABELS[spec.heat_path.type]?.zh ?? spec.heat_path.type}），它決定整條熱阻鏈，請確認。`,
     });
   }
 
@@ -405,7 +406,7 @@ export function validateComponent(component: Component): ComponentIssue[] {
       severity: 'warning',
       field: 'architecture_prep',
       message: 'No base zone chosen — Screen 05 cannot suggest where this part attaches.',
-      message_zh: '尚未指定基座區域，Screen 05 將無法建議此元件的連接位置。',
+      message_zh: '尚未指定基座區域，05 將無法建議此元件的連接位置。',
     });
   }
 

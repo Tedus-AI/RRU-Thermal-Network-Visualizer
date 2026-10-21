@@ -1,6 +1,8 @@
 /**
- * Component inspector: the Overview, Architecture Prep, Source and External
- * Mapping tabs. Thermal Spec and Geometry have files of their own.
+ * Component inspector: the Overview, Architecture Prep (建模偏好), Source and
+ * External Mapping tabs. Thermal Spec and Geometry have files of their own.
+ * External Mapping is not offered while Screen 03 is deferred; the tab stays
+ * here so the stored aliases have somewhere to be edited once it is.
  */
 
 import { CircleCheck } from 'lucide-react';
@@ -18,6 +20,7 @@ import {
   type QtyModel,
 } from '@/domain/component';
 import type { DataSource } from '@/thermal/types';
+import { dataSourceLabelZh } from '@/ui/dataSourceLabels';
 import { tip } from '@/i18n/componentManagerCopy';
 import { SourcedNumberField, sourceOptions } from './ComponentInspectorFields';
 import type { InspectorTabProps } from './componentInspectorModel';
@@ -86,7 +89,7 @@ export function OverviewTab({ component, readOnly, onPatch }: InspectorTabProps)
       <div className="rounded-md border border-line bg-surface-muted px-3 py-2">
         <div className="flex items-baseline justify-between">
           <BilingualTooltip zh={tip('Total Power') ?? ''} align="left">
-            <span className="text-[12px] text-ink-500">Total Power / 總功耗</span>
+            <span className="text-[12px] text-ink-500">總功耗</span>
           </BilingualTooltip>
           <span className="tabular text-[14px] font-bold">
             {componentTotalPowerW(component).toFixed(2)} W
@@ -156,7 +159,7 @@ export function ArchitectureTab({ component, readOnly, derived }: InspectorTabPr
         />
         {component.qty <= 1 && (
           <p className="text-[11px] text-ink-400">
-            Only applies when Qty &gt; 1. / 僅在數量大於 1 時適用。
+            數量大於 1 時才適用。
           </p>
         )}
       </div>
@@ -166,13 +169,10 @@ export function ArchitectureTab({ component, readOnly, derived }: InspectorTabPr
           disagree. Screen 05 is where a template is genuinely chosen. */}
       <div className="rounded-md border border-line bg-surface-muted px-3 py-2 text-[12px]">
         <div className="flex items-baseline justify-between">
-          <span className="text-ink-500">Template / 架構模板</span>
+          <span className="text-ink-500">架構模板</span>
           <span className="font-semibold text-ink-900">{prep.template_preference}</span>
         </div>
-        <p className="mt-1 text-[11px] text-ink-400">
-          Follows the heat path. Screen 05 can override it.
-          <span className="block">由散熱路徑決定，可於 Screen 05 覆寫。</span>
-        </p>
+        <p className="mt-1 text-[11px] text-ink-400">由散熱路徑決定，可在 05 覆寫。</p>
       </div>
     </>
   );
@@ -195,17 +195,14 @@ export function SourceTab({
       <dl className="flex flex-col gap-1.5 text-[12px]">
         {(
           [
-            ['Imported From / 匯入來源', component.provenance.source_type],
+            ['資料來源', dataSourceLabelZh(component.provenance.source_type)],
             [
-              'Original Project / 原始專案',
+              '原始專案',
               component.provenance.source_project_name ??
                 component.provenance.source_project_id,
             ],
-            ['Source File / 來源檔案', component.provenance.source_file],
-            [
-              'Last Modified / 最後修改',
-              component.provenance.last_modified_at?.slice(0, 19).replace('T', ' '),
-            ],
+            ['來源檔案', component.provenance.source_file],
+            ['最後修改', component.provenance.last_modified_at?.slice(0, 19).replace('T', ' ')],
           ] as const
         )
           // A row of dashes is not information. Only what is known shows.
@@ -221,15 +218,13 @@ export function SourceTab({
       {/* Provenance is edited here rather than beside every number, so
           one place answers "where did this come from" for all of them. */}
       <div className="border-t border-line pt-2.5">
-        <h4 className="mb-1.5 text-[11px] font-bold text-ink-700">
-          Per-field Data Source / 各欄位資料來源
-        </h4>
+        <h4 className="mb-1.5 text-[11px] font-bold text-ink-700">各欄位資料來源</h4>
         <div className="flex flex-col gap-2">
           {(
             [
-              ['Power / 功耗', component.power_W, 'power_W'],
-              ['Thermal Limit / 溫度上限', spec.limit_C, 'limit_C'],
-              ['Rjc / 接面熱阻', spec.r_jc_C_per_W, 'r_jc_C_per_W'],
+              ['功耗', component.power_W, 'power_W'],
+              ['溫度上限', spec.limit_C, 'limit_C'],
+              ['Rjc', spec.r_jc_C_per_W, 'r_jc_C_per_W'],
             ] as const
           )
             .filter(([, , field]) => !(surfaceReferenced && field === 'r_jc_C_per_W'))
@@ -237,7 +232,7 @@ export function SourceTab({
             <div key={field} className="flex items-center justify-between gap-3">
               <span className="text-[12px] text-ink-500">{label}</span>
               <Select
-                aria-label={`${label} data source`}
+                aria-label={`${label}資料來源`}
                 className="h-8 w-40 text-[12px]"
                 // The stored value is always offered, even when the
                 // app assigned it, so the picker never misreports what
@@ -267,9 +262,7 @@ export function SourceTab({
 
       {component.metadata && Object.keys(component.metadata).length > 0 && (
         <div className="border-t border-line pt-2.5">
-          <h4 className="mb-1.5 text-[11px] font-bold text-ink-700">
-            Preserved Source Fields / 保留的原始欄位
-          </h4>
+          <h4 className="mb-1.5 text-[11px] font-bold text-ink-700">保留的原始欄位</h4>
           <dl className="flex flex-col gap-1 text-[12px]">
             {Object.entries(component.metadata).map(([key, value]) => (
               <div key={key} className="flex justify-between gap-3">
@@ -291,7 +284,7 @@ export function SourceTab({
             setLibrarySavedAt(Date.now());
           }}
         >
-          Save to Library / 存入元件庫
+          存入元件庫
         </Button>
         {librarySavedAt > 0 && (
           <span
@@ -300,16 +293,12 @@ export function SourceTab({
             className="flex items-center gap-1 text-[12px] font-semibold text-ok-600"
           >
             <CircleCheck size={14} aria-hidden />
-            Saved to library / 已存入元件庫
+            已存入元件庫
           </span>
         )}
       </div>
       <p className="text-[11px] leading-relaxed text-ink-400">
-        The library stores the thermal spec only — base zone, external mapping, graph ids
-        and solver results are project-specific and are excluded.
-        <span className="block">
-          元件庫只保存熱規格；基座區域、外部映射、節點 ID 與求解結果屬專案專用，不會存入。
-        </span>
+        元件庫只存熱規格；基座區域與求解結果屬於專案，不會存入。
       </p>
     </>
   );
@@ -325,8 +314,8 @@ export function ExternalMappingTab({ component, readOnly, onPatch }: InspectorTa
         </BilingualTooltip>
         <Badge tone="neutral">
           {component.external_mappings.flotherm?.mapping_status === 'mapped'
-            ? 'Mapped / 已映射'
-            : 'Not Mapped / 未映射'}
+            ? '已映射'
+            : '未映射'}
         </Badge>
       </div>
 
@@ -367,11 +356,7 @@ export function ExternalMappingTab({ component, readOnly, onPatch }: InspectorTa
         schema is validated, and guessing it here would be worse than waiting.
       */}
       <p className="rounded-md border border-line bg-surface-muted p-2.5 text-[11px] leading-relaxed text-ink-500">
-        Screen 03 is deferred. Aliases are stored as free text only — nothing is parsed or
-        validated against a FloTHERM model yet.
-        <span className="mt-1 block">
-          Screen 03 目前延後。此處僅以純文字保存別名，不解析也不驗證 FloTHERM 格式。
-        </span>
+        03 FloTHERM 匯入尚未開放；別名只以純文字保存，不解析也不驗證。
       </p>
     </>
   );

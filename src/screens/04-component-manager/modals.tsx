@@ -6,6 +6,7 @@ import { presetZones } from '@/thermal/graph/sharedStructure';
 import { useState } from 'react';
 import { Button, Field, Modal, NumberInput, Select, TextInput } from '@/ui/primitives';
 import {
+  HEAT_PATH_LABELS,
   HEAT_PATH_TYPES,
   COMPONENT_CATEGORIES,
   LIMIT_TYPES,
@@ -49,32 +50,32 @@ export function AddComponentModal({
     (name) => name.trim().toLowerCase() === draft.name.trim().toLowerCase(),
   );
   const error = !draft.name.trim()
-    ? 'Component name is required.'
+    ? '請填元件名稱。'
     : nameTaken
-      ? 'A component with this name already exists.'
+      ? '已有同名的元件。'
       : draft.qty <= 0 || !Number.isInteger(draft.qty)
-        ? 'Qty must be a whole number greater than 0.'
+        ? '數量需為大於 0 的整數。'
         : draft.power_W < 0
-          ? 'Power cannot be negative.'
+          ? '功耗不可為負值。'
           : null;
 
   return (
     <Modal
-      title="Add Component / 新增元件"
-      description="Minimum fields required to create a component. Thermal detail is completed in the inspector."
+      title="新增元件"
+      description="先填最少的欄位；熱規格之後在元件檢視面板補齊。"
       onClose={onClose}
       footer={
         <>
-          <Button onClick={onClose}>Cancel / 取消</Button>
+          <Button onClick={onClose}>取消</Button>
           <Button variant="primary" disabled={Boolean(error)} onClick={() => onAdd(draft)}>
-            Add / 新增
+            新增
           </Button>
         </>
       }
     >
       <div className="flex flex-col gap-3.5">
         <Field
-          label="Component Name / 元件名稱"
+          label="元件名稱"
           htmlFor="add-name"
           required
           error={error ?? undefined}
@@ -88,7 +89,7 @@ export function AddComponentModal({
         </Field>
 
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Category / 分類" htmlFor="add-category">
+          <Field label="分類" htmlFor="add-category">
             <Select
               id="add-category"
               options={COMPONENT_CATEGORIES}
@@ -98,7 +99,7 @@ export function AddComponentModal({
               }
             />
           </Field>
-          <Field label="Qty / 數量" htmlFor="add-qty" required>
+          <Field label="數量" htmlFor="add-qty" required>
             <NumberInput
               id="add-qty"
               value={draft.qty}
@@ -106,7 +107,7 @@ export function AddComponentModal({
               onChange={(event) => setDraft({ ...draft, qty: Number(event.target.value) })}
             />
           </Field>
-          <Field label="Power / 單顆功耗" htmlFor="add-power" suffix="W" required>
+          <Field label="單顆功耗" htmlFor="add-power" suffix="W" required>
             <NumberInput
               id="add-power"
               step="0.01"
@@ -115,7 +116,7 @@ export function AddComponentModal({
               onChange={(event) => setDraft({ ...draft, power_W: Number(event.target.value) })}
             />
           </Field>
-          <Field label="Limit Type / 限制類型" htmlFor="add-limit-type">
+          <Field label="限制類型" htmlFor="add-limit-type">
             <Select
               id="add-limit-type"
               options={LIMIT_TYPES}
@@ -125,7 +126,7 @@ export function AddComponentModal({
               }
             />
           </Field>
-          <Field label="Thermal Limit / 溫度上限" htmlFor="add-limit" suffix="°C">
+          <Field label="溫度上限" htmlFor="add-limit" suffix="°C">
             <NumberInput
               id="add-limit"
               className="pr-10"
@@ -199,14 +200,14 @@ export function BulkEditModal({
     options: readonly string[],
     labelFor?: (value: string) => string,
   ) => (
-    <Field label={`${label} / ${zh}`} htmlFor={`bulk-${key}`}>
+    <Field label={label} zh={zh} htmlFor={`bulk-${key}`}>
       <select
         id={`bulk-${key}`}
         value={pick(key)}
         onChange={(event) => setPick(key, event.target.value)}
         className="h-9 w-full rounded-md border border-line-strong bg-surface px-3 text-[13px]"
       >
-        <option value={UNCHANGED}>— Leave unchanged / 不變更 —</option>
+        <option value={UNCHANGED}>— 不變更 —</option>
         {options.map((option) => (
           <option key={option} value={option}>
             {labelFor ? labelFor(option) : option}
@@ -218,15 +219,15 @@ export function BulkEditModal({
 
   return (
     <Modal
-      title={`Bulk Edit / 批次編輯 — ${count} components`}
-      description="Only the fields you change are written. Component Name cannot be bulk-edited."
+      title={`批次編輯（${count} 筆）`}
+      description="只寫入有改的欄位；元件名稱不能批次修改。"
       width="max-w-lg"
       onClose={onClose}
       footer={
         <>
-          <Button onClick={onClose}>Cancel / 取消</Button>
+          <Button onClick={onClose}>取消</Button>
           <Button variant="primary" disabled={nothingSelected} onClick={() => onApply(build())}>
-            Apply to {count} / 套用
+            套用到 {count} 筆
           </Button>
         </>
       }
@@ -234,7 +235,9 @@ export function BulkEditModal({
       <div className="grid grid-cols-2 gap-3.5">
         {row('category', 'Category', '分類', COMPONENT_CATEGORIES)}
         {row('limit_type', 'Limit Type', '限制類型', LIMIT_TYPES)}
-        {row('heat_path', 'Heat Path', '散熱路徑', HEAT_PATH_TYPES)}
+        {row('heat_path', 'Heat Path', '散熱路徑', HEAT_PATH_TYPES, (value) =>
+          HEAT_PATH_LABELS[value as HeatPathType]?.zh ?? value,
+        )}
         {row(
           'tim_id',
           'TIM',
@@ -251,11 +254,11 @@ export function BulkEditModal({
           zones.map((zone) => zone.key),
           (value) => {
             const zone = zones.find((entry) => entry.key === value);
-            return zone ? `${zone.name} / ${zone.zh}` : value;
+            return zone ? zone.zh : value;
           },
         )}
         {row('enabled', 'Enabled', '啟用', ['true', 'false'], (value) =>
-          value === 'true' ? 'Enabled / 啟用' : 'Disabled / 停用',
+          value === 'true' ? '啟用' : '停用',
         )}
       </div>
     </Modal>

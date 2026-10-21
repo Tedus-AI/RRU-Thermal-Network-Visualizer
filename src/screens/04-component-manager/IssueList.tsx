@@ -6,10 +6,13 @@
  * opens the inspector on the right tab and puts the caret in the field. Once the
  * field is filled — or the guess confirmed — the row disappears on its own,
  * because it is derived from the component, not from a dismissed-flag.
+ *
+ * With nothing open it renders nothing: the status chips above already read
+ * 警告 0 · 錯誤 0, and a green banner saying so again was one more line to read.
  */
 
 import { useState } from 'react';
-import { AlertTriangle, ChevronDown, ChevronRight, CircleCheck, XCircle } from 'lucide-react';
+import { AlertTriangle, ChevronDown, ChevronRight, XCircle } from 'lucide-react';
 
 import { Button } from '@/ui/primitives';
 import type { Component } from '@/domain/component';
@@ -32,17 +35,7 @@ export function IssueList({
   const [open, setOpen] = useState(true);
   const groups = groupIssues(components, validate);
 
-  if (groups.length === 0) {
-    return (
-      <div className="flex items-center gap-2 rounded-lg border border-ok-500/30 bg-ok-100/40 px-3.5 py-2.5 text-[12px] text-ok-600">
-        <CircleCheck size={15} aria-hidden />
-        <span className="font-semibold">
-          Every enabled component is ready.
-          <span className="ml-1.5 font-normal text-ink-500">所有啟用中的元件皆已就緒。</span>
-        </span>
-      </div>
-    );
-  }
+  if (groups.length === 0) return null;
 
   const errors = groups.reduce((sum, group) => sum + group.errors, 0);
   const warnings = groups.reduce((sum, group) => sum + group.warnings, 0);
@@ -56,10 +49,8 @@ export function IssueList({
         className="flex w-full items-center gap-2 px-3.5 py-2.5 text-left"
       >
         {open ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
-        <h2 className="text-[13px] font-bold text-ink-900">
-          Needs attention
-          <span className="ml-1.5 font-normal text-ink-500">待處理</span>
-        </h2>
+        <h2 className="text-[13px] font-bold text-ink-900">待處理</h2>
+        <span className="text-[12px] text-ink-400">點項目可直接跳到該欄位</span>
         <span className="ml-auto flex items-center gap-3 text-[12px]">
           {errors > 0 && (
             <span className="flex items-center gap-1 font-semibold text-danger-600">
@@ -73,9 +64,7 @@ export function IssueList({
               {warnings}
             </span>
           )}
-          <span className="text-ink-400">
-            {groups.length} component{groups.length > 1 ? 's' : ''} / {groups.length} 個元件
-          </span>
+          <span className="text-ink-400">{groups.length} 個元件</span>
         </span>
       </button>
 
@@ -117,7 +106,6 @@ export function IssueList({
                         } ${target ? 'hover:underline' : 'cursor-default'}`}
                       >
                         {issue.message_zh}
-                        <span className="ml-1.5 text-[11px] text-ink-400">{issue.message}</span>
                       </button>
                       {/* An assumed value is cleared by saying so, not by retyping it. */}
                       {confirm && !readOnly && (
