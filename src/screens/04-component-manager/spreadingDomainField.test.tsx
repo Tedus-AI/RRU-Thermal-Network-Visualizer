@@ -12,8 +12,9 @@ import { createComponent, type Component, type SpreadingDomainSpec } from '@/dom
 import { defaultMaterials } from '@/domain/materials';
 import { sourced } from '@/domain/sourcedValue';
 
-import { ThermalSpecTab } from './ComponentInspectorThermalTab';
+import { PathTab } from './ComponentInspectorPathTab';
 import { deriveInspector } from './componentInspectorModel';
+import { heatPathView } from './heatPathModel';
 
 const materials = {
   ...defaultMaterials(),
@@ -43,7 +44,14 @@ function render(component: Component, readOnly = false) {
   const onPatch = vi.fn();
   const derived = deriveInspector(component, onPatch, materials, undefined);
   const html = renderToStaticMarkup(
-    <ThermalSpecTab component={component} readOnly={readOnly} onPatch={onPatch} derived={derived} />,
+    <PathTab
+      component={component}
+      readOnly={readOnly}
+      onPatch={onPatch}
+      derived={derived}
+      view={heatPathView(component, materials)}
+      hotCard={null}
+    />,
   );
   return { html, onPatch, derived };
 }

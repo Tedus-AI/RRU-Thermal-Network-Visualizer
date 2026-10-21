@@ -19,13 +19,11 @@ import {
 } from '@/domain/component';
 import type { ComponentIssue } from '@/domain/componentReadiness';
 
-export type InspectorTab =
-  | 'overview'
-  | 'thermal'
-  | 'geometry'
-  | 'architecture'
-  | 'source'
-  | 'external';
+/**
+ * `thermal` is the 散熱路徑 tab. It absorbed the old 熱規格 and 幾何 tabs, so
+ * geometry fields point at it too.
+ */
+export type InspectorTab = 'overview' | 'thermal' | 'architecture' | 'source' | 'external';
 
 /**
  * Some issues are not "a value is missing" but "nobody has said this guess is
@@ -57,27 +55,27 @@ const TARGETS: Record<string, IssueTarget> = {
   'tim.measured_rth_C_per_W': { tab: 'thermal', fieldId: 'ins-interface-rth' },
   'heat_path.type': { tab: 'thermal', fieldId: 'ins-heat-path', confirm: 'heat_path' },
 
-  'geometry.package_L_mm': { tab: 'geometry', fieldId: 'geo-package_L_mm' },
-  'geometry.package_W_mm': { tab: 'geometry', fieldId: 'geo-package_W_mm' },
-  'geometry.package_H_mm': { tab: 'geometry', fieldId: 'geo-package_H_mm' },
-  'geometry.source_L_mm': { tab: 'geometry', fieldId: 'geo-source_L_mm' },
-  'geometry.source_W_mm': { tab: 'geometry', fieldId: 'geo-source_W_mm' },
-  'geometry.board_thickness_mm': { tab: 'geometry', fieldId: 'geo-board_thickness_mm' },
+  'geometry.package_L_mm': { tab: 'thermal', fieldId: 'geo-package_L_mm' },
+  'geometry.package_W_mm': { tab: 'thermal', fieldId: 'geo-package_W_mm' },
+  'geometry.package_H_mm': { tab: 'thermal', fieldId: 'geo-package_H_mm' },
+  'geometry.source_L_mm': { tab: 'thermal', fieldId: 'geo-source_L_mm' },
+  'geometry.source_W_mm': { tab: 'thermal', fieldId: 'geo-source_W_mm' },
+  'geometry.board_thickness_mm': { tab: 'thermal', fieldId: 'geo-board_thickness_mm' },
   'geometry.needs_review': {
-    tab: 'geometry',
+    tab: 'thermal',
     fieldId: 'geo-source_L_mm',
     confirm: 'geometry_review',
   },
   'heat_path.parameters.perimeter_land_width_mm': {
-    tab: 'geometry',
+    tab: 'thermal',
     fieldId: 'geo-perimeter-land-width',
   },
   'heat_path.parameters.custom_contact_area_mm2': {
-    tab: 'geometry',
+    tab: 'thermal',
     fieldId: 'geo-custom-contact-area',
   },
   'heat_path.parameters.custom_exposed_area_mm2': {
-    tab: 'geometry',
+    tab: 'thermal',
     fieldId: 'geo-custom-exposed-area',
   },
 
