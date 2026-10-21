@@ -15,6 +15,12 @@ import {
   unrecognisedPackage,
 } from './normalizeComponent';
 import {
+  CARRIED_SPEC_COLUMN,
+  carriedBodySource,
+  carriedDirectContact,
+  decodeCarriedSpec,
+} from './carriedSpec';
+import {
   IGNORE_COLUMN,
   REQUIRED_FIELDS,
   type CanonicalField,
@@ -309,7 +315,13 @@ export function validateStagingRow(row: StagingRow, context: ValidateContext = {
     });
   }
 
-  if (row.r_jc_C_per_W == null && !invalid.R_jc) {
+  // A carried spec (an existing project, an AI-Thermal project) can say what no
+  // column can: that the part is an isothermal body with no Rjc at all, or that
+  // its interface is bare metal on metal. Warning about a missing Rjc or TIM then
+  // would report a gap the source never had.
+  const carried = decodeCarriedSpec(row.extra[CARRIED_SPEC_COLUMN]);
+  const body = carriedBodySource(carried, effectiveHeatPath(row));
+  if (row.r_jc_C_per_W == null && !invalid.R_jc && !body) {
     issues.push({
       severity: 'warning',
       field: 'R_jc',
@@ -327,7 +339,7 @@ export function validateStagingRow(row: StagingRow, context: ValidateContext = {
     });
   }
 
-  if (!row.tim_name) {
+  if (!row.tim_name && !carriedDirectContact(carried)) {
     issues.push({
       severity: 'warning',
       field: 'TIM_Type',

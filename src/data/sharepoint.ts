@@ -344,6 +344,20 @@ export async function readTimCatalog(): Promise<unknown> {
   return (await res.json()) as unknown;
 }
 
+/**
+ * The AI-Thermal tool's shared database (`ToolDatabase/thermal_db.json`, which the
+ * 5G-RRU tool writes too) — read only, for Screen 02's AI-Thermal source. The
+ * parsed JSON, or null when the file is not there. Never opens a sign-in popup;
+ * never writes: the two tools that own it coordinate through a lock this tool
+ * does not take part in.
+ */
+export async function readAiThermalDb(path: string): Promise<unknown> {
+  await resolveSite(false);
+  const res = await graph(`${itemByPath(path)}:/content`, { ok: (status) => status === 404 });
+  if (res.status === 404) return null;
+  return (await res.json()) as unknown;
+}
+
 // --- session -----------------------------------------------------------------
 
 export type SignInResult =

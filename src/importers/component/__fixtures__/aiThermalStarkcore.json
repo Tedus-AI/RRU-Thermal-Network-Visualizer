@@ -1,0 +1,437 @@
+{
+ "version": 1789950720634,
+ "projects": {
+  "StarKcore-12L": {
+   "project_name": "StarKcore-12L",
+   "meta": {
+    "version": "v4.30 (GitHub Pages)",
+    "timestamp": "2026-09-17T08:32:44.401Z"
+   },
+   "pcb_thickness": {
+    "RF": 2.2,
+    "Digital": 2.0
+   },
+   "rf_data": [
+    {
+     "Thick(mm)": 2.5,
+     "Limit(C)": 225,
+     "Pad_W": 9.78,
+     "Component": "GTRB384608FC-Final",
+     "R_jc": 1.5,
+     "Pad_L": 20.57,
+     "Power(W)": 52.99,
+     "Board_Type": "Copper Coin",
+     "Qty": 4,
+     "TIM_Type": "Grease",
+     "Height(mm)": 225,
+     "Type": "Final PA",
+     "TV_ID_mil": "N/A",
+     "TV_Qty": "N/A",
+     "Temp_Sensor": "N",
+     "Sensor_Type": "Local",
+     "Local_Qty": "",
+     "Remote_Qty": "",
+     "Power_RT(W)": 52.129,
+     "note": "",
+     "Rth": [
+      {
+       "type": "JC_bot",
+       "value": "1.5",
+       "cond": "",
+       "primary": true
+      }
+     ],
+     "_rjc_from": "JC_bot",
+     "_pad_from": "heatSourceSize",
+     "TIM_Model": "Tgrease 2500"
+    },
+    {
+     "Power(W)": 9.751,
+     "Qty": 4,
+     "Board_Type": "Thermal Via",
+     "TIM_Type": "None",
+     "Height(mm)": 177,
+     "Limit(C)": 200,
+     "Thick(mm)": 2,
+     "Component": "B11G3338N81D-Driver",
+     "Pad_W": 4.8,
+     "R_jc": 1.7,
+     "Pad_L": 9.8,
+     "Type": "Driver",
+     "TV_ID_mil": "N/A",
+     "TV_Qty": "N/A",
+     "Power_RT(W)": 9.538,
+     "Rth": [
+      {
+       "type": "JC_bot",
+       "value": "1.7",
+       "cond": "",
+       "primary": true
+      }
+     ],
+     "_rjc_from": "JC_bot",
+     "_pad_from": "epadSize"
+    },
+    {
+     "Power(W)": 2.21,
+     "TIM_Type": "None",
+     "Qty": 4,
+     "Board_Type": "Thermal Via",
+     "Height(mm)": 289,
+     "Pad_W": 10,
+     "Component": "Circulators(SC12L)",
+     "Limit(C)": 125,
+     "Thick(mm)": 2,
+     "Pad_L": 10,
+     "R_jc": 0,
+     "Type": "CR",
+     "TV_ID_mil": "N/A",
+     "TV_Qty": "N/A",
+     "Power_RT(W)": 2.764,
+     "_pad_from": "epadSize"
+    },
+    {
+     "Height(mm)": 0,
+     "Qty": 1,
+     "Board_Type": "None",
+     "TIM_Type": "None",
+     "Power(W)": 24.85,
+     "R_jc": 0,
+     "Pad_L": 0,
+     "Limit(C)": 125,
+     "Thick(mm)": 0,
+     "Pad_W": 0,
+     "Component": "Cavity Filter(SC12L)",
+     "Type": "filter",
+     "TV_ID_mil": "N/A",
+     "TV_Qty": "N/A",
+     "Power_RT(W)": 31.072,
+     "note": "",
+     "_pad_from": "none"
+    }
+   ],
+   "digital_data": [
+    {
+     "Power(W)": 35,
+     "TIM_Type": "Putty",
+     "Qty": 1,
+     "Board_Type": "None",
+     "Height(mm)": 84,
+     "Component": "XCZU67DR-FFVE1156",
+     "Pad_W": 35,
+     "Limit(C)": 100,
+     "Thick(mm)": 0,
+     "Pad_L": 35,
+     "R_jc": 0.16,
+     "Type": "CPU",
+     "TV_ID_mil": "N/A",
+     "TV_Qty": "N/A",
+     "Power_RT(W)": 35,
+     "Temp_Sensor": "Y",
+     "Local_Qty": 3,
+     "Remote_Qty": 2,
+     "Rth": [
+      {
+       "type": "JA",
+       "value": "7.8",
+       "cond": "",
+       "primary": false
+      },
+      {
+       "type": "JC_top",
+       "value": "0.16",
+       "cond": "",
+       "primary": true
+      },
+      {
+       "type": "JB",
+       "value": "1.94",
+       "cond": "",
+       "primary": false
+      }
+     ],
+     "_rjc_from": "JC_top",
+     "_pad_from": "heatSourceSize",
+     "TIM_Model": "T-Putty 910"
+    },
+    {
+     "Limit(C)": 125,
+     "Thick(mm)": 2,
+     "Pad_W": 8.6,
+     "Component": "U850-Si5518",
+     "R_jc": 3,
+     "Pad_L": 8.6,
+     "Power(W)": 2,
+     "Qty": 1,
+     "Board_Type": "Thermal Via",
+     "TIM_Type": "Putty",
+     "Height(mm)": 31,
+     "Type": "CLK IC",
+     "TV_ID_mil": 8,
+     "TV_Qty": 134,
+     "Power_RT(W)": 2,
+     "Rth": [
+      {
+       "type": "JC_bot",
+       "value": "3",
+       "cond": "",
+       "primary": true
+      }
+     ],
+     "_rjc_from": "JC_bot",
+     "_pad_from": "epadSize",
+     "TIM_Model": "T-Putty 910"
+    },
+    {
+     "Thick(mm)": 0,
+     "Limit(C)": 95,
+     "Component": "2GB_DDR",
+     "Pad_W": 7.5,
+     "R_jc": 0,
+     "Pad_L": 13,
+     "Power(W)": 0.545,
+     "Height(mm)": 80,
+     "Qty": 2,
+     "Board_Type": "None",
+     "TIM_Type": "Putty",
+     "Type": "DDR",
+     "TV_ID_mil": "N/A",
+     "TV_Qty": "N/A",
+     "Power_RT(W)": 0.545,
+     "_pad_from": "heatSourceSize",
+     "TIM_Model": "T-Putty 910"
+    },
+    {
+     "Component": "Q6505-PSMQC094N10NS2",
+     "Type": "Power MOSFET",
+     "Qty": 1,
+     "Power(W)": 0.82,
+     "Power_RT(W)": 0.82,
+     "TV_ID_mil": 8,
+     "TV_Qty": 16,
+     "Height(mm)": 50,
+     "Pad_L": 7.25,
+     "Pad_W": 5.3,
+     "Thick(mm)": 0,
+     "Board_Type": "None",
+     "Limit(C)": 100,
+     "R_jc": 0.5,
+     "TIM_Type": "Putty",
+     "Temp_Sensor": "N",
+     "Local_Qty": "",
+     "Remote_Qty": "",
+     "_excluded": true,
+     "_pad_from": "heatSourceSize",
+     "TIM_Model": "Tflex P300"
+    }
+   ],
+   "pwr_data": [
+    {
+     "Power(W)": 29,
+     "Height(mm)": 30,
+     "Qty": 1,
+     "Board_Type": "None",
+     "TIM_Type": "Putty",
+     "Thick(mm)": 0,
+     "Limit(C)": 95,
+     "Pad_W": 57.9,
+     "Component": "Power Module(H48SA50030NRDH)",
+     "R_jc": 0,
+     "Pad_L": 61,
+     "TV_ID_mil": "N/A",
+     "Power_RT(W)": 29,
+     "Type": "Power Modules",
+     "TV_Qty": "N/A",
+     "_pad_from": "heatSourceSize",
+     "TIM_Model": "T-Putty 910"
+    }
+   ],
+   "thermal_specs": {
+    "XCZU67DR-FFVE1156": {
+     "heatDirection": "IC top",
+     "timType": "Putty",
+     "bossSurface": "表面刻花",
+     "icToHSK": "0.5",
+     "bossSizeType": "自動帶入",
+     "timThickness": "0.5",
+     "heatSourceSize": "35*35",
+     "heatSourceHeight": "3.86",
+     "padUnlock": {},
+     "padAuto": true,
+     "bossSize": "35*35",
+     "timSize": "35*35",
+     "timModel": "T-Putty 910"
+    },
+    "Power_Module(H48SA50030NRDH)": {
+     "icToHSK": "0.5",
+     "bossSurface": "表面刻花",
+     "heatSourceSize": "61*57.9",
+     "bossSizeType": "自動帶入",
+     "timType": "Putty",
+     "bossSize": "61*57.9",
+     "heatDirection": "IC top",
+     "heatSourceHeight": "12.9",
+     "timThickness": "0.5",
+     "padUnlock": {},
+     "padAuto": true,
+     "timSize": "61*57.9",
+     "timModel": "T-Putty 910"
+    },
+    "U850-Si5518": {
+     "bossSize": "10*10",
+     "heatDirection": "Thermal Via",
+     "timType": "Putty",
+     "timThickness": "0.5",
+     "heatSourceHeight": "0.9",
+     "bossSurface": "表面刻花",
+     "icToHSK": "0.5",
+     "bossSizeType": "自動帶入",
+     "heatSourceSize": "10*10",
+     "padUnlock": {},
+     "padAuto": true,
+     "timSize": "10*10",
+     "epadSize": "8.6*8.6",
+     "timModel": "T-Putty 910"
+    },
+    "2GB_DDR": {
+     "icToHSK": "0.5",
+     "bossSurface": "表面刻花",
+     "heatSourceSize": "13*7.5",
+     "bossSizeType": "自動帶入",
+     "timType": "Putty",
+     "heatDirection": "IC top",
+     "bossSize": "13*7.5",
+     "heatSourceHeight": "1.2",
+     "timThickness": "0.5",
+     "padUnlock": {},
+     "padAuto": true,
+     "timSize": "13*7.5",
+     "timModel": "T-Putty 910"
+    },
+    "GTRB384608FC-Final": {
+     "heatSourceSize": "20.57*9.78",
+     "bossSizeType": "自訂",
+     "icToHSK": "直觸",
+     "bossSurface": "表面光滑",
+     "heatSourceHeight": "3.78",
+     "timThickness": "0.05mm以下",
+     "timType": "Grease",
+     "heatDirection": "Copper Coin",
+     "bossSize": "43*39.6",
+     "padUnlock": {},
+     "padAuto": true,
+     "timSize": "43*39.6",
+     "timModel": "Tgrease 2500"
+    },
+    "Q6505-PSMQC094N10NS2": {
+     "heatSourceSize": "7.25*5.3",
+     "heatSourceHeight": "1.1",
+     "bossSizeType": "自動帶入",
+     "bossSize": "7.3×5.3",
+     "bossSurface": "表面光滑",
+     "timType": "Pad",
+     "timThickness": "2.5",
+     "icToHSK": "1.7",
+     "note": "EE要求凸台在引腳內",
+     "heatDirection": "IC top",
+     "padUnlock": {},
+     "padAuto": true,
+     "timSize": "10×10",
+     "timModel": "Tflex P300"
+    },
+    "B11G3338N81D-Driver": {
+     "heatDirection": "Thermal Via",
+     "heatSourceHeight": "2.1",
+     "heatSourceSize": "12*7",
+     "epadSize": "9.8*4.8",
+     "timType": "None",
+     "padUnlock": {},
+     "padAuto": false
+    },
+    "Circulators(SC12L)": {
+     "timType": "None",
+     "padUnlock": {},
+     "padAuto": false,
+     "heatDirection": "Thermal Via",
+     "heatSourceSize": "10*10",
+     "epadSize": "10*10",
+     "heatSourceHeight": "7"
+    },
+    "Cavity_Filter(SC12L)": {
+     "heatDirection": "None",
+     "timType": "None",
+     "padUnlock": {},
+     "padAuto": false
+    }
+   },
+   "hidden_components": {
+    "B11G3338N81D-Driver": true,
+    "BTS6201U-PreDriver": true,
+    "Cavity_Filter(SC12L)": true,
+    "SFP": true,
+    "Circulators(SC12L)": true
+   },
+   "global_params": {
+    "t_PCB": 2.0
+   }
+  }
+ },
+ "tim_library": {
+  "tim_mu6m6njc_kp97": {
+   "model": "HD7.5",
+   "timType": "Pad",
+   "k": 7.5,
+   "thickness": 2.5,
+   "gapThickness": 1.7,
+   "gapUnlock": false,
+   "vendor": "Laird",
+   "note": "",
+   "at": "2026-09-18T07:05:39.240Z",
+   "by": "TEDUS.CHEN 陳慶峰",
+   "updatedAt": "2026-09-18T07:05:39.240Z",
+   "updatedBy": "TEDUS.CHEN 陳慶峰"
+  },
+  "tim_mu6m6njc_k6q6": {
+   "model": "T-Putty 910",
+   "timType": "Putty",
+   "k": 9.1,
+   "thickness": 0.5,
+   "gapThickness": 0.5,
+   "gapUnlock": false,
+   "vendor": "Laird",
+   "note": "",
+   "at": "2026-09-18T07:05:39.240Z",
+   "by": "TEDUS.CHEN 陳慶峰",
+   "updatedAt": "2026-09-18T07:05:39.240Z",
+   "updatedBy": "TEDUS.CHEN 陳慶峰"
+  },
+  "tim_mu6m6njc_klhc": {
+   "model": "Tflex P300",
+   "timType": "Pad",
+   "k": 3,
+   "thickness": 2.5,
+   "gapThickness": 1.7,
+   "gapUnlock": false,
+   "vendor": "Laird",
+   "note": "有膜",
+   "at": "2026-09-18T07:05:39.240Z",
+   "by": "TEDUS.CHEN 陳慶峰",
+   "updatedAt": "2026-09-18T07:05:39.240Z",
+   "updatedBy": "TEDUS.CHEN 陳慶峰"
+  },
+  "tim_mu6m6njc_muyx": {
+   "model": "Tgrease 2500",
+   "timType": "Grease",
+   "k": 3.8,
+   "thickness": 0.05,
+   "gapThickness": 0.05,
+   "gapUnlock": false,
+   "vendor": "Laird",
+   "note": "",
+   "at": "2026-09-18T07:05:39.240Z",
+   "by": "TEDUS.CHEN 陳慶峰",
+   "updatedAt": "2026-09-18T07:05:39.240Z",
+   "updatedBy": "TEDUS.CHEN 陳慶峰"
+  }
+ }
+}
