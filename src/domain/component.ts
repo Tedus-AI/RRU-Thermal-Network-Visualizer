@@ -1150,7 +1150,14 @@ export interface ArchitecturePrep {
   thermal_profile_status: ThermalProfileStatus;
 }
 
-export type ImportSourceType = 'ExistingProject' | 'CSV' | 'Excel' | 'Paste' | 'Manual' | 'Library';
+export type ImportSourceType =
+  | 'ExistingProject'
+  | 'AIThermal'
+  | 'CSV'
+  | 'Excel'
+  | 'Paste'
+  | 'Manual'
+  | 'Library';
 
 export interface ComponentProvenance {
   source_type: ImportSourceType;

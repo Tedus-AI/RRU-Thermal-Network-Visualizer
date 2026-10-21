@@ -25,6 +25,7 @@ const DATA_SOURCE_LABEL_ZH: Readonly<Record<string, string>> = {
   FloTHERM: 'FloTHERM',
   flotherm: 'FloTHERM',
   ExistingProject: '既有專案',
+  AIThermal: 'AI-Thermal 專案',
   CSV: 'CSV 檔案',
   Excel: 'Excel 檔案',
   Paste: '貼上資料',

@@ -9,7 +9,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { ArrowRight, Boxes, XCircle } from 'lucide-react';
+import { ArrowRight, Boxes, PanelRightClose, PanelRightOpen, XCircle } from 'lucide-react';
 
 import { ScreenWorkspace } from '@/app/ScreenWorkspace';
 import { projectPath } from '@/app/navigation';
@@ -17,9 +17,13 @@ import { FOCUS_PARAM, consumeFocus, revealField } from '@/app/focusLink';
 
 /** Long enough for the inspector to render the box and the flash to finish. */
 const FOCUS_REVEAL_WINDOW_MS = 6000;
+/** The inspector with its heat path drawing beside the form, and without. */
+const INSPECTOR_WIDE = 1120;
+const INSPECTOR_NARROW = 560;
 import { useShellActions } from '@/app/shellActions';
 import { Badge, Button, Modal, Skeleton } from '@/ui/primitives';
 import { FloatingPanel } from '@/ui/FloatingPanel';
+import { useRememberedFlag } from '@/ui/rememberedFlag';
 import { toast } from '@/ui/toast';
 
 import { useProjectStore } from '@/data/projectStore';
@@ -135,6 +139,8 @@ export function ComponentManagerView() {
     };
   }, [pendingField]);
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>('overview');
+  /** The heat path drawing beside the inspector form; open unless folded away. */
+  const [inspectorDiagram, setInspectorDiagram] = useRememberedFlag('04.inspector.diagram', true);
   const [focus, setFocus] = useState<FocusRequest | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [showLibrary, setShowLibrary] = useState(false);
@@ -410,7 +416,24 @@ export function ComponentManagerView() {
           non-modal on purpose: clicking another row retargets it in place. */}
       {selected && (
         <FloatingPanel
-          storageKey="tnv.04.inspector"
+          // A new key: the old one remembers the single-column width, which
+          // would open the two-pane inspector squeezed into one column.
+          storageKey="tnv.04.inspector.v2"
+          defaultWidth={inspectorDiagram ? INSPECTOR_WIDE : INSPECTOR_NARROW}
+          requestedWidth={inspectorDiagram ? INSPECTOR_WIDE : INSPECTOR_NARROW}
+          bodyClassName="p-0"
+          actions={
+            <button
+              type="button"
+              aria-pressed={inspectorDiagram}
+              title={inspectorDiagram ? '收合右邊的散熱路徑圖，回到單欄' : '在右邊顯示散熱路徑圖'}
+              onClick={() => setInspectorDiagram((open) => !open)}
+              className="flex h-6 items-center gap-1 rounded px-1.5 text-[12px] text-ink-500 hover:bg-surface hover:text-ink-900"
+            >
+              {inspectorDiagram ? <PanelRightClose size={14} aria-hidden /> : <PanelRightOpen size={14} aria-hidden />}
+              {inspectorDiagram ? '收合圖' : '顯示圖'}
+            </button>
+          }
           title={selected.name}
           // The internal id is not shown: nobody reads or types it. Whether
           // the part is in Screen 05's network yet used to be a table column.
@@ -452,6 +475,7 @@ export function ComponentManagerView() {
             focus={focus}
             onGoToField={(nextTab, fieldId) => goToIssue(selected.id, nextTab, fieldId)}
             onPatch={patchComponent}
+            showDiagram={inspectorDiagram}
             onSaveToLibrary={(component) => {
               useComponentLibraryStore.getState().saveComponent(component, libraryProject);
               toast.success(`已把「${component.name}」存入元件庫`);

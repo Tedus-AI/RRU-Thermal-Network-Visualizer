@@ -1,0 +1,301 @@
+/*
+ * Screen 04 heat path panel: the layer palette and the drawing's own styles.
+ *
+ * One colour per layer, shared by the drawing, the card chips beside the form
+ * and the chain bar, so a colour means the same thing in all three. Scoped to
+ * `.hp-root` (the inspector), because nothing else in the app draws a stack.
+ */
+
+.hp-root {
+  --hp-die: #e5484d;
+  --hp-pkg: #3e4a5b;
+  --hp-face: #d6409f;
+  --hp-solder: #9aa3b2;
+  --hp-coin: #c2692b;
+  --hp-pcb: #2f9e44;
+  --hp-via: #339af0;
+  --hp-tim: #f2c200;
+  --hp-mount: #7048e8;
+  --hp-pipe: #12b886;
+  --hp-base: #8ea3bb;
+  --hp-fin: #b7c5d6;
+  --hp-heat: #ff7a29;
+  --hp-air: #74c0fc;
+  --hp-dry: var(--color-ink-700);
+  --hp-viz-bg: #f5f7fb;
+  --hp-viz-dot: #dfe5ee;
+}
+
+/* ---- Heat-flow rail beside the cards ---- */
+.hp-flow {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-left: 16px;
+}
+.hp-flow::before {
+  content: '';
+  position: absolute;
+  left: 5px;
+  top: 14px;
+  bottom: 14px;
+  width: 2px;
+  border-radius: 2px;
+  background: linear-gradient(var(--hp-die), var(--hp-heat) 45%, var(--hp-base));
+  opacity: 0.55;
+}
+.hp-card {
+  position: relative;
+  scroll-margin-top: 56px;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
+}
+.hp-card::before {
+  content: '';
+  position: absolute;
+  left: -15px;
+  top: 15px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--color-surface);
+  border: 2px solid var(--c);
+}
+.hp-card.is-hot {
+  border-color: var(--c);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--c) 18%, transparent);
+}
+.hp-card:focus-within {
+  border-color: var(--color-accent-600);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent-600) 16%, transparent);
+}
+.hp-card.flash {
+  animation: hp-flash 0.9s ease;
+}
+@keyframes hp-flash {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+  30% {
+    box-shadow: 0 0 0 5px color-mix(in srgb, var(--c) 35%, transparent);
+  }
+}
+.hp-chip {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  background: var(--c);
+  flex: none;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12);
+}
+.hp-chip + .hp-chip {
+  margin-left: -4px;
+}
+
+/* ---- Viz stage ---- */
+.hp-stage {
+  position: relative;
+  background-color: var(--hp-viz-bg);
+  background-image: radial-gradient(var(--hp-viz-dot) 1px, transparent 1.2px);
+  background-size: 14px 14px;
+}
+.hp-stage svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* ---- SVG ---- */
+.hp-svg .ly {
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.hp-svg .ly .sh {
+  stroke: rgba(15, 27, 48, 0.28);
+  stroke-width: 0.8;
+}
+.hp-svg .ly:hover .sh {
+  stroke: var(--color-ink-900);
+  stroke-width: 1.4;
+}
+.hp-svg.focusing .ly,
+.hp-svg.focusing .lab {
+  opacity: 0.2;
+}
+.hp-svg.focusing .ly.hl,
+.hp-svg.focusing .lab.hl,
+.hp-svg.focusing .ly.keep {
+  opacity: 1;
+}
+.hp-svg .ly.hl .sh {
+  stroke: var(--color-accent-600);
+  stroke-width: 2.4;
+}
+.hp-svg .lab {
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.hp-svg .lab text {
+  fill: var(--color-ink-900);
+}
+.hp-svg .lab .t1 {
+  font-size: 12.5px;
+  font-weight: 700;
+}
+.hp-svg .lab .t2 {
+  font-size: 10.5px;
+  fill: var(--color-ink-500);
+}
+.hp-svg .lab .tr {
+  font-size: 11.5px;
+  font-weight: 600;
+  fill: var(--color-ink-700);
+}
+.hp-svg .lab .tr.miss {
+  fill: var(--color-danger-600);
+  font-weight: 700;
+}
+.hp-svg .lab .tr.later {
+  fill: var(--color-ink-400);
+  font-weight: 500;
+}
+.hp-svg .lab .lead {
+  fill: none;
+  stroke: var(--color-ink-300);
+  stroke-width: 1;
+}
+.hp-svg .lab.hl .lead {
+  stroke: var(--color-accent-600);
+  stroke-width: 1.5;
+}
+.hp-svg .lab.hl .t1 {
+  fill: var(--color-accent-700);
+}
+.hp-svg .dim line,
+.hp-svg .dim path {
+  stroke: var(--color-accent-600);
+  stroke-width: 1.3;
+  fill: none;
+}
+.hp-svg .dim .ext {
+  stroke-dasharray: 3 3;
+  stroke-width: 1;
+}
+.hp-svg .dim rect {
+  fill: var(--color-surface);
+  stroke: var(--color-accent-600);
+  stroke-width: 1;
+}
+.hp-svg .dim text {
+  fill: var(--color-accent-700);
+  font-size: 11.5px;
+  font-weight: 700;
+}
+.hp-svg .probe-tag rect {
+  fill: var(--color-surface);
+  stroke: var(--color-ink-700);
+  stroke-width: 1;
+}
+.hp-svg .probe-tag text {
+  fill: var(--color-ink-900);
+  font-size: 12px;
+  font-weight: 700;
+}
+.hp-svg .probe-tag.miss rect {
+  stroke: var(--color-danger-600);
+}
+.hp-svg .probe-tag.miss text {
+  fill: var(--color-danger-600);
+}
+.hp-svg .flowline {
+  fill: none;
+  stroke: var(--hp-heat);
+  stroke-width: 2.6;
+  stroke-dasharray: 7 6;
+  stroke-linecap: round;
+  animation: hp-flowdash 1.1s linear infinite;
+}
+@keyframes hp-flowdash {
+  to {
+    stroke-dashoffset: -13;
+  }
+}
+.hp-svg .svg-txt {
+  fill: var(--color-ink-500);
+  font-size: 11px;
+}
+.hp-svg .svg-txt.on-dark {
+  fill: #fff;
+  font-weight: 600;
+}
+.hp-svg .miss-ol {
+  stroke: var(--color-danger-600);
+  stroke-width: 1.5;
+  stroke-dasharray: 4 3;
+  pointer-events: none;
+}
+
+/* ---- Chain bar ---- */
+.hp-seg {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 30px;
+  border: 0;
+  border-right: 1px solid var(--color-surface);
+  padding: 0 4px;
+  background: var(--c);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  overflow: hidden;
+  white-space: nowrap;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.35);
+  font-variant-numeric: tabular-nums;
+}
+.hp-seg:last-child {
+  border-right: 0;
+}
+.hp-seg.light {
+  color: #2a2200;
+  text-shadow: none;
+}
+.hp-seg.miss {
+  background: repeating-linear-gradient(
+    135deg,
+    var(--color-danger-100) 0 5px,
+    var(--color-surface) 5px 10px
+  );
+  color: var(--color-danger-600);
+  text-shadow: none;
+  min-width: max-content;
+  padding: 0 8px;
+}
+.hp-seg.later {
+  background: repeating-linear-gradient(
+    135deg,
+    var(--color-surface-muted) 0 5px,
+    var(--color-surface) 5px 10px
+  );
+  color: var(--color-ink-400);
+  text-shadow: none;
+  flex: 0 0 auto !important;
+  padding: 0 8px;
+  font-weight: 600;
+}
+.hp-seg.is-hot {
+  outline: 2px solid var(--color-accent-600);
+  outline-offset: -2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hp-svg .flowline,
+  .hp-card.flash {
+    animation: none;
+  }
+}

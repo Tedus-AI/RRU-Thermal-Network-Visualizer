@@ -3,7 +3,7 @@
  */
 
 import { useRef, useState } from 'react';
-import { ClipboardPaste, FileSpreadsheet, FileText, FolderOpen } from 'lucide-react';
+import { ClipboardPaste, Database, FileSpreadsheet, FileText, FolderOpen } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 import { Button, SectionCard, Select, TextArea } from '@/ui/primitives';
@@ -18,8 +18,9 @@ import {
   summarizeSourceProject,
 } from '@/importers/component/parseExistingProject';
 import { tip } from '@/i18n/componentImportCopy';
+import { AiThermalSourcePanel } from './AiThermalSourcePanel';
 
-type SourceKind = 'project' | 'csv' | 'excel' | 'paste';
+type SourceKind = 'aithermal' | 'project' | 'csv' | 'excel' | 'paste';
 
 const SOURCES: Array<{
   kind: SourceKind;
@@ -30,6 +31,16 @@ const SOURCES: Array<{
   descriptionZh: string;
   cta: string;
 }> = [
+  {
+    // First: the usual start is a project AI-Thermal already holds.
+    kind: 'aithermal',
+    icon: Database,
+    title: 'AI-Thermal 專案',
+    zh: '',
+    description: '直接讀 AI-Thermal 建好的專案（SharePoint 共用資料庫或本機備份檔）。',
+    descriptionZh: '',
+    cta: '選擇專案',
+  },
   {
     kind: 'project',
     icon: FolderOpen,
@@ -194,7 +205,7 @@ export function ImportSourceCards() {
 
   return (
     <SectionCard step={1} title="Import Source" subtitle="匯入來源">
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         {SOURCES.map((source) => {
           const Icon = source.icon;
           const selected = kind === source.kind;
@@ -214,12 +225,12 @@ export function ImportSourceCards() {
                 <Icon size={18} className={selected ? 'text-accent-600' : 'text-ink-400'} />
                 <span className="leading-tight">
                   <span className="block text-[13px] font-bold text-ink-900">{source.title}</span>
-                  <span className="block text-[11px] text-ink-400">{source.zh}</span>
+                  {source.zh && <span className="block text-[11px] text-ink-400">{source.zh}</span>}
                 </span>
               </span>
               <span className="text-[12px] leading-relaxed text-ink-500">
                 {source.description}
-                <span className="block text-ink-400">{source.descriptionZh}</span>
+                {source.descriptionZh && <span className="block text-ink-400">{source.descriptionZh}</span>}
               </span>
             </button>
           );
@@ -229,6 +240,8 @@ export function ImportSourceCards() {
       {/* Section B — Source Detail */}
       {kind && (
         <div className="mt-4 rounded-lg border border-line bg-surface-muted p-4">
+          {kind === 'aithermal' && <AiThermalSourcePanel />}
+
           {kind === 'project' && (
             <div className="flex flex-col gap-3">
               <div className="max-w-md">

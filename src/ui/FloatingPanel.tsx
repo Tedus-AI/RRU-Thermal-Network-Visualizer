@@ -98,6 +98,7 @@ export function FloatingPanel({
   storageKey,
   defaultWidth = 560,
   defaultHeight = 900,
+  requestedWidth,
   autoHeight = false,
   onClose,
   children,
@@ -113,6 +114,13 @@ export function FloatingPanel({
   storageKey: string;
   defaultWidth?: number;
   defaultHeight?: number;
+  /**
+   * A width the content asks for when it changes shape — Screen 04's inspector
+   * folding its drawing away, or opening it again. Applied on CHANGE only, so a
+   * width the reader dragged to is kept until the content next asks; the right
+   * edge stays put, because the panel docks on the right.
+   */
+  requestedWidth?: number;
   /**
    * Fit the height to the content instead of restoring a remembered one.
    *
@@ -148,6 +156,19 @@ export function FloatingPanel({
   const drag = useRef<{ mode: 'move' | 'resize'; dx: number; dy: number; rect: PanelRect } | null>(
     null,
   );
+
+  const lastRequestedWidth = useRef(requestedWidth);
+  useEffect(() => {
+    if (requestedWidth == null || requestedWidth === lastRequestedWidth.current) return;
+    lastRequestedWidth.current = requestedWidth;
+    setRect((current) =>
+      clampRect(
+        { ...current, x: current.x + current.w - requestedWidth, w: requestedWidth },
+        window.innerWidth,
+        window.innerHeight,
+      ),
+    );
+  }, [requestedWidth]);
 
   // Persist only deliberate geometry, never the maximized override.
   useEffect(() => {

@@ -13,6 +13,7 @@
 # 1. Purpose / 目的
 
 本頁把既有硬體元件資料安全匯入目前 Thermal Network Project，來源包含：
+- AI-Thermal 專案（共用資料庫 `thermal_db.json`）
 - Existing Project / 既有專案
 - CSV
 - Excel
@@ -106,7 +107,11 @@ Main 70–75%，Right 25–30%。
 
 # 5. Import Source / 匯入來源
 
-四個 source cards：
+五個 source cards：
+
+## AI-Thermal 專案
+直接讀 AI-Thermal（pad & stud 工具）與 5G-RRU 共用的 `thermal_db.json`：SharePoint `ToolDatabase/thermal_db.json`
+（本工具既有的 Microsoft 登入，唯讀），或本機檔案（AI-Thermal 的離線資料庫、「💾 備份資料庫」下載的檔案）。見 §6b。
 
 ## Existing Project / 既有專案
 從 existing `5G-RRU-Quick-Volume-Evaluation-Tool` 或 shared DB Project 匯入。
@@ -145,6 +150,42 @@ Import Scope：
 - `_ref_locked`
 
 需保留 lineage / provenance。
+
+---
+
+# 6b. AI-Thermal Project Import
+
+實作：`src/importers/component/parseAiThermal.ts`（轉成與既有專案相同的 `ParsedTable`＋`_ref_spec`，走同一條
+Mapping → Validation → Duplicate → Apply）、`AiThermalSourcePanel.tsx`、`sharepoint.readAiThermalDb`。**只讀，絕不寫回**
+（那份資料庫由 AI-Thermal 與 5G-RRU 共用一把編輯鎖，本工具不參與）。
+
+畫面：資料庫來源（SharePoint／本機檔案）→ 專案（RF／Digital／PWR 顆數）→ PCB 板厚、5G-RRU 已排除顆數、最後儲存 →
+匯入範圍（RF／Digital／PWR、包含 5G-RRU 已排除的元件）→「會帶入／還要在 04 補」說明 →「載入元件（N 顆）」。
+
+欄位對照（元件 ＝ `rf_data`／`digital_data`／`pwr_data` 的一筆；TH/ME ＝ `thermal_specs[specKey(名稱)]`，兩邊都有時 TH/ME 優先，
+因為元件上的 `Board_Type`／`Pad_*` 只在 AI-Thermal 存檔時才由 TH/ME 推導）：
+
+| AI-Thermal | 本工具 |
+|---|---|
+| `Component`、`Qty`、`Power(W)`、`Limit(C)` | 名稱、數量、單顆功耗、溫度上限 |
+| 所在清單（Type `filter` → Filter）| 分類 RF／Digital／Power／Filter |
+| `Limit_Ref`（沒填 → 兩工具共用的自動規則 `CompMerge.limitRef`）| 限溫類型；有填＝已確認，自動＝待 04 確認 |
+| `R_jc`（沒有 → `Rth` 的 θJC，依散熱路徑取 top／bottom）| Rjc。**`R_jc = 0` → 表面／本體型熱源、Rjc 留空**（Rjc 0 會被 07 拒絕）|
+| TH/ME `heatDirection`（→ 元件 `Board_Type`）| 散熱路徑：Copper Coin → 銅塊、Thermal Via → 板級導熱孔、IC top → 元件表面；None／舊值 → 依分類推定（未確認）|
+| TH/ME `heatSourceSize`／`heatSourceHeight` | 本體 L × W × H |
+| TH/ME `epadSize`（→ `Pad_L/W`）| E-PAD（板級導熱孔的熱源面）|
+| `projects[id].pcb_thickness[RF／Digital／PWR]` → 5G-RRU 元件 `Thick(mm)` → `global_params.t_PCB` | 板厚（只有板級導熱孔）|
+| TH/ME `timModel`／`timType`（→ `TIM_Model`／`TIM_Type`）| TIM：本專案有同名材料就用型號，否則用類型；None → 乾式金屬接觸 |
+| TH/ME `icToHSK`（壓縮後縫隙）→ 型號 `gapThickness` | 壓合厚度 BLT（與材料預設相同就不寫，沿用材料）|
+| TH/ME `bossSize`（元件表面路徑）| 記在凸台的「上次設定」（`mount_by_type.Pedestal`）：04 選「凸台」時帶入；接合方式仍是直接貼合 |
+| 元件 `note`＋TH/ME `note` | 備註 |
+| `_excluded`（5G-RRU 👁）| 預設不匯入；勾「包含已排除」→ 匯入為停用 |
+| `Type`、`Power_RT(W)`、`TIM_Model`、`TV_ID_mil`、`TV_Qty`、`bossSize`、板厚來源 | 元件「來源」分頁的保留欄位 |
+
+- TH/ME 的 `hidden_components` **不是**排除（那是機構規格清單的隱藏，Driver／環形器／濾波器都在裡面，是真的熱源）。
+- 封裝型式只認得 `filter` → Cavity Filter、`Power Modules` → Module，其餘留給 04。
+- 本體型元件不報「缺 Rjc」、乾式金屬接觸不報「未指定 TIM」（`_ref_spec` 已經說明，既有專案匯入也一併修正）。
+- 測試：`aiThermalImport.test.ts`（StarKcore-12L 真實備份資料，parse → map → stage → apply）。
 
 ---
 

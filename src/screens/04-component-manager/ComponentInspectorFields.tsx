@@ -36,6 +36,7 @@ export function SourcedNumberField({
   placeholder = '—',
   step = 'any',
   readOnly,
+  required = false,
   onChange,
 }: {
   id: string;
@@ -47,8 +48,11 @@ export function SourcedNumberField({
   placeholder?: string;
   step?: string | number;
   readOnly: boolean;
+  /** Frames an empty box in red: the chain has no number until it is filled. */
+  required?: boolean;
   onChange: (next: SourcedValue<number> | null) => void;
 }) {
+  const empty = value?.value == null;
   return (
     <div className="flex flex-col gap-1.5">
       <FieldLabel label={label} zh={zh} unit={unit} tooltip={tooltip} htmlFor={id} />
@@ -56,7 +60,8 @@ export function SourcedNumberField({
         id={id}
         step={step}
         value={value?.value ?? ''}
-        placeholder={placeholder}
+        placeholder={required && empty ? '必填' : placeholder}
+        invalid={required && empty}
         disabled={readOnly}
         onChange={(event) =>
           onChange(withValue(value, event.target.value === '' ? null : Number(event.target.value)))
@@ -75,6 +80,8 @@ export function GeometryField({
   field,
   geometry,
   readOnly,
+  unit,
+  required = false,
   onChange,
 }: {
   label: string;
@@ -82,18 +89,23 @@ export function GeometryField({
   field: keyof ComponentGeometry;
   geometry: ComponentGeometry;
   readOnly: boolean;
+  unit?: string;
+  /** Frames an empty box in red: the chain has no number until it is filled. */
+  required?: boolean;
   onChange: (patch: Partial<ComponentGeometry>) => void;
 }) {
   const id = `geo-${String(field)}`;
   const value = geometry[field];
+  const empty = typeof value !== 'number';
   return (
     <div className="flex flex-col gap-1.5">
-      <FieldLabel label={label} zh={zh} htmlFor={id} />
+      <FieldLabel label={label} zh={zh} unit={unit} htmlFor={id} />
       <NumberInput
         id={id}
         step="any"
         value={typeof value === 'number' ? value : ''}
-        placeholder="—"
+        placeholder={required && empty ? '必填' : '—'}
+        invalid={required && empty}
         disabled={readOnly}
         onChange={(event) =>
           onChange({
@@ -144,18 +156,20 @@ export function DerivedField({
   zh,
   value,
   from,
+  unit,
 }: {
   id: string;
   label: string;
   zh: string;
   value: number | null;
   from: string;
+  unit?: string;
 }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <FieldLabel label={label} zh={zh} htmlFor={id} />
+      <FieldLabel label={label} zh={zh} unit={unit} htmlFor={id} />
       <NumberInput id={id} value={value ?? ''} placeholder="—" disabled readOnly />
-      <p className="text-[11px] text-ink-400">{from}</p>
+      {from && <p className="text-[11px] text-ink-400">{from}</p>}
     </div>
   );
 }

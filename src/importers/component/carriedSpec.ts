@@ -163,7 +163,26 @@ export function applyCarriedSpec(built: ThermalSpec, carried: CarriedSpec): Ther
     // two-pipe embedded mount arrives as a Direct one and the part loses the
     // route most of its heat actually takes.
     mount: spec.mount ? mountSpec(spec) : emptyMount(),
+    // What the other mount types were last given. Never read by the solve; it is
+    // what Screen 04 hands back when the engineer switches type — an AI-Thermal
+    // boss size waits here for the moment "凸台" is picked.
+    ...(spec.mount_by_type ? { mount_by_type: spec.mount_by_type } : {}),
   };
+}
+
+/**
+ * Whether the row will import as a body source (no junction, no Rjc), judged the
+ * way `applyCarriedSpec` will apply it: the carried parameters only count when
+ * the carried heat path is the one the row imports with.
+ */
+export function carriedBodySource(carried: CarriedSpec | null, heatPath: string): boolean {
+  const path = carried?.thermal_spec.heat_path;
+  return path?.type === heatPath && path.parameters?.source_model === 'SurfaceBodyBased';
+}
+
+/** Whether the row will import as dry metal-to-metal contact — a stated absence of TIM. */
+export function carriedDirectContact(carried: CarriedSpec | null): boolean {
+  return carried?.thermal_spec.tim?.tim_id === DIRECT_CONTACT_TIM_ID;
 }
 
 /**
