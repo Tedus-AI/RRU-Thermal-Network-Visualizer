@@ -12,6 +12,7 @@
  */
 
 import {
+  HEAT_PATH_LABELS,
   HEAT_PATH_PATCH_FIELDS,
   heatPathPatch,
   type Component,
@@ -131,7 +132,7 @@ export function confirmAction(component: Component, kind: ConfirmKind): ConfirmA
       }
       return {
         label: `Confirm ${spec.heat_path.type}`,
-        labelZh: `確認為 ${spec.heat_path.type}`,
+        labelZh: `確認為${HEAT_PATH_LABELS[spec.heat_path.type]?.zh ?? spec.heat_path.type}`,
         // Confirmation is equivalent to selecting the visible option. Besides
         // clearing the inferred-value warning, this seeds the architecture's
         // category-aware defaults (for example a Filter starts as a passive

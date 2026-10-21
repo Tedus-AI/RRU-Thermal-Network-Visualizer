@@ -51,25 +51,26 @@ function render(component: Component, readOnly = false) {
 describe('Screen 04 spreading domain field', () => {
   it('offers the three choices and marks the whole base as the default', () => {
     const { html } = render(part());
-    expect(html).toContain('Spreading into the Base / 擴散範圍');
-    expect(html).toContain('Whole base / 整片基座 — default');
-    expect(html).toContain('Own share of the heat / 依熱量分配');
-    expect(html).toContain('Stated area / 指定面積');
+    // The UI went Chinese-first: each option shows its Chinese name.
+    expect(html).toContain('擴散範圍');
+    expect(html).toContain('整片基座（預設）');
+    expect(html).toContain('依熱量分配');
+    expect(html).toContain('指定面積');
     expect(html).not.toContain('ins-spreading-area');
   });
 
   it('says a stated mode without its area falls back to the whole base', () => {
     const { html } = render(part({ mode: 'Manual', area_mm2: null }));
     expect(html).toContain('ins-spreading-area');
-    expect(html).toContain('No area stated — this part spreads into the whole base until one is.');
+    expect(html).toContain('尚未填面積；填寫前這顆以整片基座計算。');
   });
 
   it('shows a stated area as a share of the base, and says when it is clamped', () => {
     expect(render(part({ mode: 'Manual', area_mm2: 8000 })).html).toContain(
-      '8.7 % of the 92,208 mm² base.',
+      '佔整片基座 92,208 mm² 的 8.7 %。',
     );
     expect(render(part({ mode: 'Manual', area_mm2: 200000 })).html).toContain(
-      'larger than the base, so the whole base is used',
+      '大於基座，以整片基座計算',
     );
   });
 

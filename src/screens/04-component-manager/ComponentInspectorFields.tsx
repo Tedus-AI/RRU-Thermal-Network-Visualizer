@@ -63,7 +63,7 @@ export function SourcedNumberField({
         }
       />
       {value?.value != null && value.source === 'Assumed' && (
-        <p className="text-[11px] text-warn-600">Assumed / 推定值</p>
+        <p className="text-[11px] text-warn-600">推定值</p>
       )}
     </div>
   );
@@ -123,8 +123,8 @@ export const VIA_OVERRIDES = [
     zh: '導熱孔等效 k',
     unit: 'W/m·K',
     step: '1',
-    inheritNote: 'From Screen 01. / 取自 Screen 01 的專案設定。',
-    customNote: 'This part\u2019s own via field. / 此元件下方導熱孔區的實際值。',
+    inheritNote: '取自 01 的專案設定。',
+    customNote: '此元件下方導熱孔區的實際值。',
   },
   {
     key: 'via_efficiency',
@@ -132,8 +132,8 @@ export const VIA_OVERRIDES = [
     zh: '導熱孔製程係數',
     unit: '—',
     step: '0.01',
-    inheritNote: 'From Screen 01. / 取自 Screen 01 的專案設定。',
-    customNote: 'This part\u2019s own process derate. / 此元件的製程折減。',
+    inheritNote: '取自 01 的專案設定。',
+    customNote: '此元件的製程折減。',
   },
 ] as const;
 

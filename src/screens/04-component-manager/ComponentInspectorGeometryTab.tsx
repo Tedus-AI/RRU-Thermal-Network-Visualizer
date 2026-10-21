@@ -69,13 +69,7 @@ export function GeometryTab({ readOnly, derived }: InspectorTabProps) {
 
       {spec.package_type === 'Cavity Filter' && surfaceReferenced && (
         <p className="mt-2 rounded-md border border-accent-500/20 bg-accent-100/40 p-2.5 text-[11px] leading-relaxed text-ink-500">
-          A cavity filter bolts down across most of the heat sink, so a blank body L and W
-          are filled from the HSK Base outline in Screen 01. They stay editable — a filter
-          is usually a little smaller than the base.
-          <span className="block">
-            腔體濾波器幾乎橫跨整片散熱器，所以本體長寬若留空，會以 Screen 01
-            的散熱器底座外框預填。這兩欄仍可修改 —— 濾波器通常比底座略小一些。
-          </span>
+          腔體濾波器幾乎橫跨整片散熱器，本體長寬留空時會以 01 的散熱器底座外框預填；兩欄仍可修改（濾波器通常比底座略小）。
         </p>
       )}
 
@@ -83,7 +77,7 @@ export function GeometryTab({ readOnly, derived }: InspectorTabProps) {
         <>
           <fieldset className="rounded-md border border-line p-3">
             <legend className="px-1 text-[12px] font-semibold text-ink-700">
-              Contact Geometry / 接觸幾何
+              接觸幾何
             </legend>
             <div className="grid grid-cols-2 gap-2.5">
               <div className="col-span-2 flex flex-col gap-1.5">
@@ -96,7 +90,7 @@ export function GeometryTab({ readOnly, derived }: InspectorTabProps) {
                   id="geo-metal-contact-model"
                   items={METAL_BASE_CONTACT_GEOMETRIES.map((geometry) => ({
                     value: geometry,
-                    label: `${METAL_BASE_CONTACT_GEOMETRY_LABELS[geometry].en} / ${METAL_BASE_CONTACT_GEOMETRY_LABELS[geometry].zh}`,
+                    label: METAL_BASE_CONTACT_GEOMETRY_LABELS[geometry].zh,
                   }))}
                   value={metalBaseModel.contact_geometry}
                   disabled={readOnly}
@@ -116,14 +110,14 @@ export function GeometryTab({ readOnly, derived }: InspectorTabProps) {
                     label="Base Contact L"
                     zh="底面接觸長"
                     value={spec.geometry.package_L_mm}
-                    from={`= ${envelopeLabels.L.en} / 等於${envelopeLabels.L.zh}`}
+                    from={`等於${envelopeLabels.L.zh}`}
                   />
                   <DerivedField
                     id="geo-metal-contact-W"
                     label="Base Contact W"
                     zh="底面接觸寬"
                     value={spec.geometry.package_W_mm}
-                    from={`= ${envelopeLabels.W.en} / 等於${envelopeLabels.W.zh}`}
+                    from={`等於${envelopeLabels.W.zh}`}
                   />
                 </>
               )}
@@ -153,7 +147,7 @@ export function GeometryTab({ readOnly, derived }: InspectorTabProps) {
                     }
                   />
                   <p className="text-[11px] text-ink-400">
-                    Effective area = outer base − open centre. / 有效面積＝完整底面－中央開口。
+                    有效面積＝完整底面－中央開口。
                   </p>
                 </div>
               )}
@@ -183,8 +177,7 @@ export function GeometryTab({ readOnly, derived }: InspectorTabProps) {
                     }
                   />
                   <p className="text-[11px] text-ink-400">
-                    Use the actual clamped lands; exclude paint, gaps and uncompressed gasket.
-                    <span className="block">只計入實際壓緊區域，扣除噴漆、缺口與未壓縮墊片。</span>
+                    只計入實際壓緊區域，扣除噴漆、缺口與未壓縮墊片。
                   </p>
                 </div>
               )}
@@ -193,7 +186,7 @@ export function GeometryTab({ readOnly, derived }: InspectorTabProps) {
 
           <fieldset className="rounded-md border border-line p-3">
             <legend className="px-1 text-[12px] font-semibold text-ink-700">
-              Additional Exposed Surface / 額外暴露表面
+              額外暴露表面
             </legend>
             <label className="flex items-start gap-2 text-[12px] text-ink-700">
               <input
@@ -210,9 +203,9 @@ export function GeometryTab({ readOnly, derived }: InspectorTabProps) {
                 }
               />
               <span>
-                Generate a convection/radiation boundary opening
+                產生對流／輻射邊界出口
                 <span className="block text-[11px] text-ink-400">
-                  在 Screen 05 產生可供 Screen 06 設定對流／輻射的表面出口
+                  在 05 建立表面出口，供 06 設定對流與輻射
                 </span>
               </span>
             </label>
@@ -230,9 +223,9 @@ export function GeometryTab({ readOnly, derived }: InspectorTabProps) {
                     items={[
                       {
                         value: 'DerivedPackage',
-                        label: 'Package top + four sides / 封裝頂面＋四個側面',
+                        label: '封裝頂面＋四個側面',
                       },
-                      { value: 'Custom', label: 'Custom exposed area / 自訂暴露面積' },
+                      { value: 'Custom', label: '自訂暴露面積' },
                     ]}
                     value={metalBaseModel.exposed_area_mode}
                     disabled={readOnly}
@@ -276,7 +269,7 @@ export function GeometryTab({ readOnly, derived }: InspectorTabProps) {
                     label="Derived Exposed Area"
                     zh="推導暴露面積"
                     value={exposedArea}
-                    from="Top + four sides; base excluded / 頂面加四側，底面不重複計入"
+                    from="頂面加四側，底面不重複計入"
                   />
                 )}
               </div>
@@ -347,7 +340,7 @@ export function GeometryTab({ readOnly, derived }: InspectorTabProps) {
             label="Coin Thickness"
             zh="銅塊厚度"
             value={materials.coin_thickness_mm?.value ?? null}
-            from="Screen 01 / 專案設定"
+            from="取自 01"
           />
         </div>
       )}
@@ -375,7 +368,7 @@ export function GeometryTab({ readOnly, derived }: InspectorTabProps) {
         <div className="flex items-baseline justify-between">
           <BilingualTooltip zh={tip('Source Area') ?? ''} align="left">
             <span className="text-[12px] text-ink-500">
-              {metalBase ? 'Effective Contact Area / 有效接觸面積' : 'Source Area / 熱源面積'}
+              {metalBase ? '有效接觸面積' : '熱源面積'}
             </span>
           </BilingualTooltip>
           <span className="tabular text-[13px] font-bold">
@@ -384,7 +377,7 @@ export function GeometryTab({ readOnly, derived }: InspectorTabProps) {
         </div>
         {!metalBase && <div className="mt-1.5 flex items-baseline justify-between">
           <BilingualTooltip zh={tip('Spread Area') ?? ''} align="left">
-            <span className="text-[12px] text-ink-500">Spread Area / 擴散面積</span>
+            <span className="text-[12px] text-ink-500">擴散面積</span>
           </BilingualTooltip>
           <span className="tabular text-[13px] font-bold">
             {spreadArea == null ? '—' : `${spreadArea.toFixed(1)} mm²`}
@@ -393,7 +386,7 @@ export function GeometryTab({ readOnly, derived }: InspectorTabProps) {
         {metalBase && metalBaseModel.exposed_surface_enabled && (
           <div className="mt-1.5 flex items-baseline justify-between">
             <span className="text-[12px] text-ink-500">
-              Exposed Surface Area / 暴露表面積
+              暴露表面積
             </span>
             <span className="tabular text-[13px] font-bold">
               {exposedArea == null ? '—' : `${exposedArea.toFixed(1)} mm²`}
@@ -405,11 +398,7 @@ export function GeometryTab({ readOnly, derived }: InspectorTabProps) {
       {spec.geometry.needs_review && (
         <div className="rounded-md border border-warn-500/30 bg-warn-100/60 p-2.5">
           <p className="text-[11px] leading-relaxed text-warn-600">
-            Imported legacy geometry needs review — Thickness / Pad may follow Volume Tool
-            semantics.
-            <span className="block">
-              匯入的舊版幾何資料需人工確認（可能沿用舊工具定義）。
-            </span>
+            匯入的舊版幾何資料需人工確認（厚度與 Pad 可能沿用舊工具的定義）。
           </p>
           {/* The fix is a decision, not a value, so it is one click here. */}
           <Button
@@ -417,7 +406,7 @@ export function GeometryTab({ readOnly, derived }: InspectorTabProps) {
             disabled={readOnly}
             onClick={() => patchGeometry({ needs_review: false })}
           >
-            Mark reviewed / 標記為已確認
+            標記為已確認
           </Button>
         </div>
       )}

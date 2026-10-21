@@ -45,9 +45,9 @@ function savedAgo(iso: string | undefined): string {
   const then = new Date(iso).getTime();
   if (!Number.isFinite(then)) return '—';
   const days = Math.floor((Date.now() - then) / 86_400_000);
-  if (days <= 0) return 'today / 今天';
-  if (days === 1) return '1 day ago / 1 天前';
-  return `${days} days ago / ${days} 天前`;
+  if (days <= 0) return '今天';
+  if (days === 1) return '1 天前';
+  return `${days} 天前`;
 }
 
 function EntryRow({
@@ -82,7 +82,7 @@ function EntryRow({
             <div className="flex items-center gap-1.5">
               <TextInput
                 autoFocus
-                aria-label={`Rename ${entry.name}`}
+                aria-label={`重新命名 ${entry.name}`}
                 value={draft}
                 onChange={(event) => setDraft(event.target.value)}
                 onKeyDown={(event) => {
@@ -96,13 +96,13 @@ function EntryRow({
               />
               <Button
                 className="h-7 px-2"
-                aria-label="Save name"
+                aria-label="儲存名稱"
                 icon={<Check size={13} />}
                 onClick={commit}
               />
               <Button
                 className="h-7 px-2"
-                aria-label="Cancel rename"
+                aria-label="取消重新命名"
                 icon={<X size={13} />}
                 onClick={() => {
                   setDraft(entry.name);
@@ -114,7 +114,7 @@ function EntryRow({
             <div className="flex items-baseline gap-2">
               <span className="truncate text-[13px] font-semibold text-ink-900">{entry.name}</span>
               <span className="shrink-0 text-[11px] text-ink-400">{entry.category}</span>
-              {inProject && <Badge tone="accent">in project / 專案內已有</Badge>}
+              {inProject && <Badge tone="accent">專案內已有</Badge>}
             </div>
           )}
 
@@ -139,7 +139,7 @@ function EntryRow({
           <div className="flex shrink-0 gap-1">
             <Button
               className="h-7 px-2"
-              aria-label={`Rename ${entry.name}`}
+              aria-label={`重新命名 ${entry.name}`}
               icon={<Pencil size={13} />}
               onClick={() => setEditing(true)}
             />
@@ -147,7 +147,7 @@ function EntryRow({
               className="h-7 px-2"
               variant={confirmingDelete ? 'danger' : undefined}
               aria-label={
-                confirmingDelete ? `Confirm delete ${entry.name}` : `Delete ${entry.name}`
+                confirmingDelete ? `確認刪除 ${entry.name}` : `刪除 ${entry.name}`
               }
               icon={<Trash2 size={13} />}
               onClick={() => {
@@ -165,9 +165,7 @@ function EntryRow({
 
       {confirmingDelete && (
         <p className="mt-1.5 text-[11px] text-danger-600">
-          Click again to remove it from the library. Components already added to a project keep
-          their data.
-          <span className="block">再按一次即從元件庫移除。已加入專案的元件不受影響。</span>
+          再按一次即從元件庫移除；已加入專案的元件不受影響。
         </p>
       )}
     </li>
@@ -219,21 +217,21 @@ export function ComponentLibraryManager({
   const handleImport = async (file: File) => {
     const result = importFile(await file.text());
     if (!result.ok) {
-      toast.error(`Not a component library file — ${result.error} / 不是元件庫檔案`);
+      toast.error(`不是元件庫檔案：${result.error}`);
       return;
     }
     toast.success(
-      `Library merged — ${result.added} added, ${result.updated} updated, ${result.kept} already newer / 已合併元件庫`,
+      `已合併元件庫：新增 ${result.added}、更新 ${result.updated}、${result.kept} 筆原本就較新`,
     );
   };
 
   return (
     <Modal
-      title="Component Library / 元件庫管理"
-      description="Saved thermal specs, reusable across projects. Base zone, FloTHERM mapping and solver results are never stored here — they describe where a part sat in one particular radio."
+      title="元件庫管理"
+      description="跨專案共用的元件熱規格。基座區域與求解結果屬於個別專案，不會存在這裡。"
       width="max-w-3xl"
       onClose={onClose}
-      footer={<Button onClick={onClose}>Close / 關閉</Button>}
+      footer={<Button onClick={onClose}>關閉</Button>}
     >
       <div className="flex flex-col gap-3">
         {/* Where it lives — the question that produced the file format. */}
@@ -242,13 +240,11 @@ export function ComponentLibraryManager({
           <span className="tabular font-medium text-ink-700">{LIBRARY_FILENAME}</span>
           {folderName ? (
             <span>
-              in <span className="font-medium text-ink-700">{folderName}</span> /{' '}
-              {folderName.includes('SharePoint') ? `已寫入 ${folderName}` : '已寫入資料夾'}
+              存在 <span className="font-medium text-ink-700">{folderName}</span>
             </span>
           ) : (
             <span className="text-warn-600">
-              No folder bound — kept in this browser only, and a new build clears it. /
-              未綁定資料夾，僅存於此瀏覽器，改版後會清空。
+              未設定資料夾：只存在這個瀏覽器，改版後會清空。
             </span>
           )}
         </div>
@@ -261,20 +257,20 @@ export function ComponentLibraryManager({
               className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-ink-400"
             />
             <TextInput
-              aria-label="Search the component library"
+              aria-label="搜尋元件庫"
               className="pl-8"
-              placeholder="Search / 搜尋…"
+              placeholder="搜尋…"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
             />
           </div>
           <select
-            aria-label="Filter by category"
+            aria-label="依分類篩選"
             value={category}
             onChange={(event) => setCategory(event.target.value as ComponentCategory | 'ALL')}
             className="h-8 rounded-md border border-line-strong bg-surface px-2 text-[12px]"
           >
-            <option value="ALL">All categories / 全部類別</option>
+            <option value="ALL">全部分類</option>
             {COMPONENT_CATEGORIES.map((entry) => (
               <option key={entry} value={entry}>
                 {entry}
@@ -284,7 +280,7 @@ export function ComponentLibraryManager({
 
           <div className="ml-auto flex gap-2">
             <Button icon={<Upload size={14} />} onClick={() => fileInput.current?.click()}>
-              Merge File / 合併
+              合併
             </Button>
             <Button
               icon={<Download size={14} />}
@@ -295,7 +291,7 @@ export function ComponentLibraryManager({
                 URL.revokeObjectURL(url);
               }}
             >
-              Export / 匯出
+              匯出
             </Button>
           </div>
           <input
@@ -314,10 +310,7 @@ export function ComponentLibraryManager({
 
         {entries.length === 0 ? (
           <p className="py-6 text-center text-[13px] text-ink-500">
-            The library is empty. Save a component from its Source tab, or merge a library file.
-            <span className="mt-1 block text-[12px] text-ink-400">
-              元件庫是空的。請於元件的「Source 來源」分頁按「存入元件庫」，或合併他人的元件庫檔案。
-            </span>
+            元件庫是空的。請在元件的「來源」分頁按「存入元件庫」，或合併別人的元件庫檔案。
           </p>
         ) : (
           <>
@@ -329,7 +322,7 @@ export function ComponentLibraryManager({
             <div className="flex max-h-[26rem] flex-col gap-2 overflow-y-auto">
               {visible.length === 0 && (
                 <p className="px-2 py-6 text-center text-[12px] text-ink-400">
-                  No saved part matches. / 沒有符合的元件。
+                  沒有符合的元件。
                 </p>
               )}
               {tree.map((project) => {
@@ -377,7 +370,7 @@ export function ComponentLibraryManager({
                                   onDelete={() => {
                                     remove(entry.id);
                                     toast.success(
-                                      `Removed "${entry.name}" from the library / 已從元件庫移除`,
+                                      `已從元件庫移除「${entry.name}」`,
                                     );
                                   }}
                                 />
@@ -392,7 +385,7 @@ export function ComponentLibraryManager({
               })}
             </div>
             <p className="tabular text-right text-[11px] text-ink-400">
-              {visible.length} of {entries.length} parts / 共 {entries.length} 筆
+              顯示 {visible.length} 筆，共 {entries.length} 筆
             </p>
           </>
         )}

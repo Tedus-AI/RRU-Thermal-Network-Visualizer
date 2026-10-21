@@ -3,6 +3,12 @@
  *
  * Inline editing is limited to the fields 04 §12 allows; everything else lives in
  * the inspector so a mis-click cannot silently change a thermal spec.
+ *
+ * Twelve columns, down from sixteen, so a 1600 px screen shows the row without
+ * scrolling sideways: the enable box sits in the status cell, limit type and
+ * limit share one cell ("Tj 150"), and the network-mapping status and the data
+ * source moved to the inspector, where they are read on the one row that needs
+ * them.
  */
 
 import { AlertTriangle, CircleCheck, CircleSlash, Copy, Trash2, XCircle } from 'lucide-react';
@@ -17,6 +23,7 @@ import {
   componentTotalPowerW,
   heatPathPatch,
   isBodySourced,
+  packageLabel,
   type HeatPathType,
   type Component,
   type ComponentCategory,
@@ -37,6 +44,7 @@ const STATUS_META: Record<
   ERROR: { label: 'Error', zh: '錯誤', icon: XCircle, className: 'text-danger-600' },
   DISABLED: { label: 'Disabled', zh: '停用', icon: CircleSlash, className: 'text-ink-400' },
 };
+
 
 const CELL_BASE =
   'tabular h-7 w-full rounded border border-transparent bg-transparent text-[12px] hover:border-line-strong focus:border-accent-500 focus:bg-surface focus:outline-none disabled:hover:border-transparent';
@@ -73,9 +81,10 @@ const COLUMNS: ReadonlyArray<{
   // "the selected row", but selecting a row is what opens the inspector, so
   // reaching them meant a floating panel over the thing being worked on. On the
   // row itself they need no selection at all.
-  { id: 'actions', label: '', zh: '', width: 62 },
-  { id: 'on', label: 'On', zh: ZH.Enabled, width: 56 },
-  { id: 'status', label: 'Status', zh: ZH.Status, width: 96 },
+  { id: 'actions', label: '', zh: '', width: 58 },
+  // New ids where a column changed shape, so a width remembered for the old
+  // narrower column does not squeeze the new one.
+  { id: 'state', label: 'Status', zh: ZH.Status, width: 104 },
   { id: 'category', label: 'Category', zh: ZH.Category, width: 96 },
   { id: 'component', label: 'Component', zh: ZH.Component, width: 210 },
   { id: 'qty', label: 'Qty', zh: ZH.Qty, tooltip: 'Qty', width: 64 },
@@ -89,23 +98,14 @@ const COLUMNS: ReadonlyArray<{
     highlight: true,
     width: 96,
   },
-  { id: 'limit_type', label: 'Limit Type', zh: ZH['Limit Type'], tooltip: 'Limit Type', width: 96 },
-  { id: 'limit', label: 'Limit', unit: '°C', zh: ZH.Limit, tooltip: 'Limit', width: 80 },
-  { id: 'rjc', label: 'Rjc', unit: '°C/W', zh: ZH.Rjc, tooltip: 'Rjc', width: 84 },
-  { id: 'package', label: 'Package', zh: ZH.Package, tooltip: 'Package', width: 150 },
+  { id: 'limit_ref', label: 'Limit', unit: '°C', zh: '限溫', tooltip: 'Limit Type', width: 132 },
+  { id: 'rjc', label: 'Rjc', unit: '°C/W', zh: 'Rjc', tooltip: 'Rjc', width: 84 },
+  { id: 'package', label: 'Package', zh: ZH.Package, tooltip: 'Package', width: 120 },
   // Wide enough for the two nine-character path labels plus the arrow well on
   // either side. The sixteen-character one fits no sane column, so that one is
   // read from the hover title or the open dropdown.
-  { id: 'heat_path', label: 'Heat Path', zh: ZH['Heat Path'], tooltip: 'Heat Path', width: 172 },
-  { id: 'tim', label: 'TIM', zh: ZH.TIM, tooltip: 'TIM', width: 110 },
-  {
-    id: 'thermal_profile',
-    label: 'Thermal Profile',
-    zh: ZH['Thermal Profile'],
-    tooltip: 'Thermal Profile',
-    width: 110,
-  },
-  { id: 'source', label: 'Source', zh: ZH.Source, tooltip: 'Source', width: 160 },
+  { id: 'heat_path', label: 'Heat Path', zh: ZH['Heat Path'], tooltip: 'Heat Path', width: 166 },
+  { id: 'tim', label: 'TIM', zh: 'TIM', tooltip: 'TIM', width: 104 },
 ];
 
 const COLUMN_DEFAULTS = Object.fromEntries(
@@ -142,8 +142,8 @@ function RowAction({
     <button
       type="button"
       disabled={disabled}
-      title={`${label} / ${zh}`}
-      aria-label={`${label} / ${zh}`}
+      title={zh || label}
+      aria-label={zh || label}
       onClick={(event) => {
         event.stopPropagation();
         onClick();
@@ -229,8 +229,8 @@ export function ComponentTable({
         <tbody>
           {components.length === 0 && (
             <tr>
-              <td colSpan={16} className="px-3 py-6 text-center text-[13px] text-ink-400">
-                No components match the current filters. / 沒有符合篩選條件的元件。
+              <td colSpan={COLUMNS.length} className="px-3 py-6 text-center text-[13px] text-ink-400">
+                沒有符合篩選條件的元件。
               </td>
             </tr>
           )}
@@ -280,30 +280,29 @@ export function ComponentTable({
                   </div>
                 </td>
                 <td className="px-2 py-1.5">
-                  <input
-                    type="checkbox"
-                    aria-label={`Enable ${component.name}`}
-                    className="size-4 accent-[var(--color-accent-600)]"
-                    checked={component.enabled}
-                    disabled={readOnly}
-                    onClick={(event) => event.stopPropagation()}
-                    onChange={(event) =>
-                      onPatch(component.id, { enabled: event.target.checked }, ['enabled'])
-                    }
-                  />
-                </td>
-                <td className="px-2 py-1.5">
-                  {/* Icon + text, never colour alone. */}
-                  <span className={`inline-flex items-center gap-1.5 ${meta.className}`}>
-                    <Icon size={14} aria-hidden />
-                    <span className="text-[12px] font-medium whitespace-nowrap">
-                      {meta.label}
+                  <div className="flex items-center justify-center gap-2">
+                    <input
+                      type="checkbox"
+                      aria-label={`啟用 ${component.name}`}
+                      title={component.enabled ? '取消勾選即停用此元件' : '勾選以啟用此元件'}
+                      className="size-4 accent-[var(--color-accent-600)]"
+                      checked={component.enabled}
+                      disabled={readOnly}
+                      onClick={(event) => event.stopPropagation()}
+                      onChange={(event) =>
+                        onPatch(component.id, { enabled: event.target.checked }, ['enabled'])
+                      }
+                    />
+                    {/* Icon + text, never colour alone. */}
+                    <span className={`inline-flex items-center gap-1 ${meta.className}`}>
+                      <Icon size={14} aria-hidden />
+                      <span className="text-[12px] font-medium whitespace-nowrap">{meta.zh}</span>
                     </span>
-                  </span>
+                  </div>
                 </td>
                 <td className="px-2 py-1.5">
                   <select
-                    aria-label={`Category for ${component.name}`}
+                    aria-label={`${component.name} 分類`}
                     className={SELECT_CELL}
                     onClick={(event) => event.stopPropagation()}
                     value={component.category}
@@ -336,7 +335,7 @@ export function ComponentTable({
                 <td className="px-2 py-1.5">
                   <input
                     type="number"
-                    aria-label={`Qty for ${component.name}`}
+                    aria-label={`${component.name} 數量`}
                     onClick={(event) => event.stopPropagation()}
                     className={NUMBER_CELL}
                     value={component.qty}
@@ -350,7 +349,7 @@ export function ComponentTable({
                   <input
                     type="number"
                     step="0.01"
-                    aria-label={`Power for ${component.name}`}
+                    aria-label={`${component.name} 單顆功耗`}
                     onClick={(event) => event.stopPropagation()}
                     className={NUMBER_CELL}
                     value={component.power_W.value ?? ''}
@@ -374,67 +373,71 @@ export function ComponentTable({
                 <td className="tabular bg-accent-50/60 px-2 py-1.5 font-semibold">
                   {componentTotalPowerW(component).toFixed(2)}
                 </td>
+                {/* Limit type and limit read as one value — "Tj 150" — so they
+                    share a cell; each half is still its own editor. */}
                 <td className="px-2 py-1.5">
-                  <select
-                    aria-label={`Limit type for ${component.name}`}
-                    onClick={(event) => event.stopPropagation()}
-                    // Amber while the type is still this tool's guess.
-                    className={`${SELECT_CELL} ${spec.limit_type_confirmed ? '' : 'text-warn-600'}`}
-                    title={
-                      spec.limit_type_confirmed
-                        ? undefined
-                        : `推定值（${spec.limit_type}），請對照規格書確認。`
-                    }
-                    value={spec.limit_type}
-                    disabled={readOnly}
-                    onChange={(event) =>
-                      patchSpec(
-                        component,
-                        {
-                          limit_type: event.target.value as LimitType,
-                          // Picking it IS the confirmation.
-                          limit_type_confirmed: true,
-                        },
-                        ['limit_type'],
-                      )
-                    }
-                  >
-                    {LIMIT_TYPES.map((type) => (
-                      <option key={type} value={type}>
-                        {type}
-                      </option>
-                    ))}
-                  </select>
-                </td>
-                <td className="px-2 py-1.5">
-                  <input
-                    type="number"
-                    aria-label={`Limit for ${component.name}`}
-                    onClick={(event) => event.stopPropagation()}
-                    className={NUMBER_CELL}
-                    value={spec.limit_C?.value ?? ''}
-                    placeholder="—"
-                    disabled={readOnly}
-                    onChange={(event) =>
-                      patchSpec(
-                        component,
-                        {
-                          limit_C: withValue(
-                            spec.limit_C,
-                            event.target.value === '' ? null : Number(event.target.value),
-                          ),
-                        },
-                        ['limit_C'],
-                      )
-                    }
-                  />
+                  <div className="flex items-center gap-1">
+                    <div className="w-14 shrink-0">
+                      <select
+                        aria-label={`${component.name} 限制類型`}
+                        onClick={(event) => event.stopPropagation()}
+                        // Amber while the type is still this tool's guess.
+                        className={`${SELECT_CELL} ${spec.limit_type_confirmed ? '' : 'text-warn-600'}`}
+                        title={
+                          spec.limit_type_confirmed
+                            ? undefined
+                            : `推定值（${spec.limit_type}），請對照規格書確認。`
+                        }
+                        value={spec.limit_type}
+                        disabled={readOnly}
+                        onChange={(event) =>
+                          patchSpec(
+                            component,
+                            {
+                              limit_type: event.target.value as LimitType,
+                              // Picking it IS the confirmation.
+                              limit_type_confirmed: true,
+                            },
+                            ['limit_type'],
+                          )
+                        }
+                      >
+                        {LIMIT_TYPES.map((type) => (
+                          <option key={type} value={type}>
+                            {type}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <input
+                      type="number"
+                      aria-label={`${component.name} 溫度上限`}
+                      onClick={(event) => event.stopPropagation()}
+                      className={NUMBER_CELL}
+                      value={spec.limit_C?.value ?? ''}
+                      placeholder="—"
+                      disabled={readOnly}
+                      onChange={(event) =>
+                        patchSpec(
+                          component,
+                          {
+                            limit_C: withValue(
+                              spec.limit_C,
+                              event.target.value === '' ? null : Number(event.target.value),
+                            ),
+                          },
+                          ['limit_C'],
+                        )
+                      }
+                    />
+                  </div>
                 </td>
                 {/* Unknown Rjc shows N/A, never 0 (04 §11, AC-04-06). */}
                 <td className="px-2 py-1.5">
                   <input
                     type="number"
                     step="0.01"
-                    aria-label={`Rjc for ${component.name}`}
+                    aria-label={`${component.name} Rjc`}
                     onClick={(event) => event.stopPropagation()}
                     className={NUMBER_CELL}
                     value={surfaceReferenced ? '' : (spec.r_jc_C_per_W?.value ?? '')}
@@ -442,7 +445,7 @@ export function ComponentTable({
                     disabled={readOnly || surfaceReferenced}
                     title={
                       surfaceReferenced
-                        ? 'Rjc does not apply to the Module Surface / Baseplate model.'
+                        ? '表面／本體型熱源不使用 Rjc。'
                         : undefined
                     }
                     onChange={(event) =>
@@ -460,11 +463,11 @@ export function ComponentTable({
                   />
                 </td>
                 <td className="tabular px-2 py-1.5 whitespace-nowrap">
-                  {spec.package_type ?? <span className="text-warn-600">—</span>}
+                  {packageLabel(spec.package_type) ?? <span className="text-warn-600">—</span>}
                 </td>
                 <td className="px-2 py-1.5">
                   <select
-                    aria-label={`Heat path for ${component.name}`}
+                    aria-label={`${component.name} 散熱路徑`}
                     onClick={(event) => event.stopPropagation()}
                     // Amber while the path is still this tool's guess.
                     className={`${SELECT_CELL} ${spec.heat_path_confirmed ? '' : 'text-warn-600'}`}
@@ -473,7 +476,7 @@ export function ComponentTable({
                     title={
                       spec.heat_path_confirmed
                         ? HEAT_PATH_LABELS[spec.heat_path.type].zh
-                        : `推定值（${spec.heat_path.type}），它決定整條熱阻鏈，請確認。`
+                        : `推定值（${HEAT_PATH_LABELS[spec.heat_path.type].zh}），它決定整條熱阻鏈，請確認。`
                     }
                     value={spec.heat_path.type}
                     disabled={readOnly}
@@ -496,7 +499,7 @@ export function ComponentTable({
                 </td>
                 <td className="px-2 py-1.5">
                   <select
-                    aria-label={`TIM for ${component.name}`}
+                    aria-label={`${component.name} TIM`}
                     onClick={(event) => event.stopPropagation()}
                     className={SELECT_CELL}
                     value={spec.tim.tim_id ?? ''}
@@ -517,32 +520,6 @@ export function ComponentTable({
                       </option>
                     ))}
                   </select>
-                </td>
-                <td className="px-2 py-1.5 whitespace-nowrap">
-                  <span
-                    className={
-                      component.architecture_prep.thermal_profile_status === 'Not Assigned'
-                        ? 'text-ink-400'
-                        : 'text-accent-700'
-                    }
-                  >
-                    {component.architecture_prep.thermal_profile_status}
-                  </span>
-                </td>
-                {/* The project name is long and rarely the thing being read,
-                    so the column is capped and the full text is on hover. */}
-                <td
-                  className="max-w-[11rem] truncate px-2 py-1.5 text-[11px] text-ink-400"
-                  title={`${component.provenance.source_type}${
-                    component.provenance.source_project_name
-                      ? ` · ${component.provenance.source_project_name}`
-                      : ''
-                  }`}
-                >
-                  {component.provenance.source_type}
-                  {component.provenance.source_project_name
-                    ? ` · ${component.provenance.source_project_name}`
-                    : ''}
                 </td>
               </tr>
             );

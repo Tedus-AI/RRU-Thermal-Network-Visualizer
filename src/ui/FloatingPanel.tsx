@@ -295,7 +295,8 @@ export function FloatingPanel({
         )}
         <button
           type="button"
-          aria-label={maximized ? 'Restore panel size' : 'Maximize panel'}
+          aria-label={maximized ? '還原面板大小' : '放大面板'}
+          title={maximized ? '還原面板大小' : '放大面板'}
           onPointerDown={(event) => event.stopPropagation()}
           onClick={() => setMaximized((value) => !value)}
           className="rounded p-1 text-ink-500 hover:bg-surface hover:text-ink-900"
@@ -304,7 +305,8 @@ export function FloatingPanel({
         </button>
         <button
           type="button"
-          aria-label="Close panel"
+          aria-label="關閉面板"
+          title="關閉面板"
           onPointerDown={(event) => event.stopPropagation()}
           onClick={onClose}
           className="rounded p-1 text-ink-500 hover:bg-surface hover:text-ink-900"

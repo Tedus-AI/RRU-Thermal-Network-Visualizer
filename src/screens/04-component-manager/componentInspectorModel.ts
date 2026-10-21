@@ -10,6 +10,7 @@
 import {
   PACKAGE_TYPES,
   PACKAGE_TYPE_HINTS,
+  packageLabel,
   GEOMETRY_RULES,
   cavityFilterBodyPrefill,
   isBodySourced,
@@ -110,8 +111,8 @@ export function deriveInspector(
 
   const zones = presetZones(projectContext?.base_structure ?? 'SINGLE_MAIN_BASE');
   const zoneOptions = [
-    { value: UNASSIGNED_ZONE, label: 'Unassigned / 未指定' },
-    ...zones.map((zone) => ({ value: zone.key, label: `${zone.name} / ${zone.zh}` })),
+    { value: UNASSIGNED_ZONE, label: '未指定' },
+    ...zones.map((zone) => ({ value: zone.key, label: zone.zh })),
   ];
   // A structure change can orphan a zone a component still points at; showing
   // it keeps the select honest about what the component actually says.
@@ -121,7 +122,7 @@ export function deriveInspector(
   if (zoneOrphaned) {
     zoneOptions.push({
       value: prep.preferred_base_zone,
-      label: `${prep.preferred_base_zone} — not in this structure / 不屬於目前基座結構`,
+      label: `${prep.preferred_base_zone}（不屬於目前基座結構）`,
     });
   }
 
@@ -154,15 +155,15 @@ export function deriveInspector(
   const packageOptions = [
     ...PACKAGE_TYPES.map((type) => ({
       value: type,
-      label: type,
-      hint: `${PACKAGE_TYPE_HINTS[type].en}\n${PACKAGE_TYPE_HINTS[type].zh}`,
+      label: packageLabel(type) ?? type,
+      hint: PACKAGE_TYPE_HINTS[type].zh,
     })),
     ...(spec.package_type != null && !PACKAGE_TYPE_SET.has(spec.package_type)
       ? [
           {
             value: spec.package_type,
-            label: `${spec.package_type} — no longer listed / 已不在清單`,
-            hint: 'Stored by an earlier version. Pick the closest current package when you next review this part.\n由舊版存下的封裝型式。下次檢核這顆零件時，請改選目前清單中最接近的型式。',
+            label: `${spec.package_type}（已不在清單）`,
+            hint: '由舊版存下的封裝型式。下次檢核這顆零件時，請改選目前清單中最接近的型式。',
           },
         ]
       : []),
@@ -236,19 +237,18 @@ export function deriveInspector(
   const bltCustom = spec.tim.blt_mm != null;
 
   const SOURCE_ORIGIN = {
-    Coin: '= Package outline (soldered across its base) / 等於封裝外形（整個底面焊接）',
-    TopSurface: '= Package outline (the case top) / 等於封裝外形（Case 上表面）',
-    ModuleSurface:
-      '= Package outline (specified module surface) / 等於封裝外形（原廠指定散熱面）',
+    Coin: '等於封裝外形（整個底面焊接）',
+    TopSurface: '等於封裝外形（Case 上表面）',
+    ModuleSurface: '等於封裝外形（原廠指定散熱面）',
   } as const;
   const spreadOrigin =
     rule.spread === 'project_coin'
       ? coinAreaMm2(materials) == null
-        ? 'Needs the project coin size (Screen 01) / 需先於 Screen 01 設定銅塊尺寸'
-        : 'From the project coin size / 取自專案銅塊尺寸'
+        ? '需先在 01 設定銅塊尺寸'
+        : '取自 01 的銅塊尺寸'
       : rule.spread === 'board_spread'
-        ? 'Derived: (L + board thickness) × (W + board thickness) / 由 45° 擴散推導'
-        : 'No spreading on this path — heat leaves the face it entered / 此路徑無擴散，等於熱源面';
+        ? '由 45° 擴散推導：(長 + 板厚) × (寬 + 板厚)'
+        : '此路徑無擴散，等於熱源面';
 
   return {
     spec,

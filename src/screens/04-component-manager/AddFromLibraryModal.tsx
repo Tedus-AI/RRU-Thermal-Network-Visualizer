@@ -45,29 +45,26 @@ export function AddFromLibraryModal({
 
   return (
     <Modal
-      title="Add from Library / 從元件庫新增"
+      title="從元件庫新增"
       description="Pick a saved part. Its thermal spec comes across; base zone and external mapping stay project-specific and are not copied."
       width="max-w-lg"
       onClose={onClose}
       footer={
         <>
-          <Button onClick={onClose}>Cancel / 取消</Button>
+          <Button onClick={onClose}>取消</Button>
           <Button
             variant="primary"
             disabled={!selected || !Number.isInteger(qty) || qty < 1}
             onClick={() => selected && onAdd(selected, qty)}
           >
-            Add / 新增
+            新增
           </Button>
         </>
       }
     >
       {entries.length === 0 ? (
         <p className="py-4 text-center text-[13px] text-ink-500">
-          The library is empty. Save a component from its Source tab first.
-          <span className="mt-1 block text-[12px] text-ink-400">
-            元件庫是空的。請先在元件的「Source 來源」分頁按「存入元件庫」。
-          </span>
+          元件庫是空的。請先在元件的「來源」分頁按「存入元件庫」。
         </p>
       ) : (
         <div className="flex flex-col gap-3">
@@ -78,9 +75,9 @@ export function AddFromLibraryModal({
               className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-ink-400"
             />
             <TextInput
-              aria-label="Search the component library"
+              aria-label="搜尋元件庫"
               className="pl-8"
-              placeholder="Search / 搜尋…"
+              placeholder="搜尋…"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
             />
@@ -89,7 +86,7 @@ export function AddFromLibraryModal({
           <ul className="flex max-h-72 flex-col gap-1 overflow-y-auto" role="listbox">
             {visible.length === 0 && (
               <li className="px-2 py-4 text-center text-[12px] text-ink-400">
-                No saved part matches. / 沒有符合的元件。
+                沒有符合的元件。
               </li>
             )}
             {visible.map((entry) => {
@@ -130,7 +127,7 @@ export function AddFromLibraryModal({
                 htmlFor="lib-qty"
                 className="mb-1 block text-[12px] font-medium text-ink-700"
               >
-                Qty / 數量
+                數量
               </label>
               <NumberInput
                 id="lib-qty"
@@ -141,9 +138,7 @@ export function AddFromLibraryModal({
             </div>
             {duplicate && (
               <p className="flex-1 text-[11px] leading-relaxed text-warn-600">
-                This project already has a component with that name — it will be added as a second
-                one.
-                <span className="block">此專案已有同名元件，將另外新增一筆。</span>
+                此專案已有同名元件，會另外新增一筆。
               </p>
             )}
           </div>

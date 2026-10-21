@@ -77,7 +77,7 @@ export function ThermalSpecTab({ component, readOnly, onPatch, derived }: Inspec
           below is read in its light. */}
       <fieldset className="rounded-md border border-line p-3">
         <legend className="px-1 text-[12px] font-semibold text-ink-700">
-          Heat Path / 主要散熱路徑
+          主要散熱路徑
         </legend>
         <div className="flex flex-col gap-2">
           <Select
@@ -85,7 +85,7 @@ export function ThermalSpecTab({ component, readOnly, onPatch, derived }: Inspec
             aria-label="Heat path type"
             items={HEAT_PATH_TYPES.map((type) => ({
               value: type,
-              label: `${HEAT_PATH_LABELS[type].en} / ${HEAT_PATH_LABELS[type].zh}`,
+              label: HEAT_PATH_LABELS[type].zh,
             }))}
             value={heatPath}
             disabled={readOnly}
@@ -124,8 +124,7 @@ export function ThermalSpecTab({ component, readOnly, onPatch, derived }: Inspec
           />
           {!spec.heat_path_confirmed && (
             <p className="text-[11px] text-warn-600">
-              Assumed from category — it selects the whole resistance chain, so confirm it.
-              <span className="block">依類別推定，它決定整條熱阻鏈，請確認。</span>
+              依類別推定，它決定整條熱阻鏈，請確認。
             </p>
           )}
 
@@ -137,7 +136,7 @@ export function ThermalSpecTab({ component, readOnly, onPatch, derived }: Inspec
             <FieldLabel
               label="Heat Source Reference"
               zh="熱源基準"
-              tooltip="決定 Screen 05 是否建立 Junction 與 Rjc；這是物理模型，不由 Limit Type 推定。等溫本體（環形器、濾波器、模組）請選本體型，不要用 Rjc = 0 表達。"
+              tooltip="決定 05 是否建立 Junction 與 Rjc；這是物理模型，不由 Limit Type 推定。等溫本體（環形器、濾波器、模組）請選本體型，不要用 Rjc = 0 表達。"
             />
             <div className="mt-1.5 grid grid-cols-2 gap-2" role="radiogroup">
               {METAL_BASE_SOURCE_MODELS.map((model) => {
@@ -174,12 +173,9 @@ export function ThermalSpecTab({ component, readOnly, onPatch, derived }: Inspec
                           )
                         }
                       />
-                      {label.en} / {label.zh}
+                      {label.zh}
                     </span>
-                    <span className="mt-1 block text-[10px] text-ink-400">
-                      {label.description}
-                      <span className="block">{label.descriptionZh}</span>
-                    </span>
+                    <span className="mt-1 block text-[10px] text-ink-400">{label.descriptionZh}</span>
                   </label>
                 );
               })}
@@ -229,7 +225,7 @@ export function ThermalSpecTab({ component, readOnly, onPatch, derived }: Inspec
                             patchHeatPathParameters({ [field.key]: null }, ['heat_path'])
                           }
                         />
-                        Screen 01 / 專案設定
+                        取自 01
                       </label>
                       <label className="flex items-center gap-1.5">
                         <input
@@ -244,7 +240,7 @@ export function ThermalSpecTab({ component, readOnly, onPatch, derived }: Inspec
                             ])
                           }
                         />
-                        Custom / 自訂
+                        自訂
                       </label>
                     </div>
                     <NumberInput
@@ -284,7 +280,7 @@ export function ThermalSpecTab({ component, readOnly, onPatch, derived }: Inspec
       */}
       <fieldset className="rounded-md border border-line p-3">
         <legend className="px-1 text-[12px] font-semibold text-ink-700">
-          Mount to Structure / 與結構的接合方式
+          與結構的接合方式
         </legend>
         <div className="flex flex-col gap-2">
           <Select
@@ -292,8 +288,8 @@ export function ThermalSpecTab({ component, readOnly, onPatch, derived }: Inspec
             aria-label="Mount type"
             items={MOUNT_TYPES.map((type) => ({
               value: type,
-              label: `${MOUNT_TYPE_LABELS[type].en} / ${MOUNT_TYPE_LABELS[type].zh}`,
-              hint: `${MOUNT_TYPE_HINTS[type].en}\n${MOUNT_TYPE_HINTS[type].zh}`,
+              label: MOUNT_TYPE_LABELS[type].zh,
+              hint: MOUNT_TYPE_HINTS[type].zh,
             }))}
             value={mount.type}
             disabled={readOnly}
@@ -302,8 +298,7 @@ export function ThermalSpecTab({ component, readOnly, onPatch, derived }: Inspec
             }
           />
           <p className="text-[11px] leading-relaxed text-ink-400">
-            {MOUNT_TYPE_HINTS[mount.type].en}
-            <span className="mt-0.5 block">{MOUNT_TYPE_HINTS[mount.type].zh}</span>
+            {MOUNT_TYPE_HINTS[mount.type].zh}
           </p>
 
           {mount.type !== 'Direct' && (
@@ -489,7 +484,7 @@ export function ThermalSpecTab({ component, readOnly, onPatch, derived }: Inspec
                     id="ins-mount-attach"
                     items={MOUNT_ATTACHMENTS.map((value) => ({
                       value,
-                      label: `${MOUNT_ATTACHMENT_LABELS[value].en} / ${MOUNT_ATTACHMENT_LABELS[value].zh}`,
+                      label: MOUNT_ATTACHMENT_LABELS[value].zh,
                       hint: `${MOUNT_ATTACHMENT_LABELS[value].description}\n${MOUNT_ATTACHMENT_LABELS[value].descriptionZh}`,
                     }))}
                     value={mount.attachment}
@@ -510,7 +505,7 @@ export function ThermalSpecTab({ component, readOnly, onPatch, derived }: Inspec
                     zh="塊體導熱係數"
                     unit="W/m·K"
                     htmlFor="ins-mount-k"
-                    tooltip="留空＝沿用 Screen 01 的底座材質。銅凸台請填 385 左右。"
+                    tooltip="留空＝沿用 01 的底座材質。銅凸台請填 385 左右。"
                   />
                   <NumberInput
                     id="ins-mount-k"
@@ -533,12 +528,12 @@ export function ThermalSpecTab({ component, readOnly, onPatch, derived }: Inspec
                       label="Joint interface"
                       zh="接合面材料"
                       htmlFor="ins-mount-joint-tim"
-                      tooltip="鎖上去的介面。選「乾接觸」則改用 Screen 01 的接觸導熱係數。"
+                      tooltip="鎖上去的介面。選「乾接觸」則改用 01 的接觸導熱係數。"
                     />
                     <Select
                       id="ins-mount-joint-tim"
                       items={[
-                        { value: '', label: 'Dry contact / 乾接觸' },
+                        { value: '', label: '乾接觸' },
                         ...materials.tim.map((entry) => ({
                           value: entry.id,
                           label: `${entry.name}${
@@ -580,18 +575,12 @@ export function ThermalSpecTab({ component, readOnly, onPatch, derived }: Inspec
               <p className="col-span-2 text-[10px] leading-relaxed text-ink-400">
                 {mount.type === 'VaporChamber' ? (
                   <>
-                    Its worth is the footprint it hands the base, not its own conductivity —
-                    a chamber no bigger than the part only adds resistance. Anything left
-                    empty leaves that step UNRESOLVED; Screen 05 still draws it. /
-                    均熱板的價值在於交給底座的面積，不是它本身的導熱率 ——
-                    若沒有比元件大就只是徒增熱阻。留空該段維持未解析，Screen 05 仍會畫出來。
+                    均熱板的價值在於交給底座的面積，不是它本身的導熱率——沒有比元件大就只是徒增熱阻。留空的那一段維持未解析，05
+                    仍會畫出來。
                   </>
                 ) : (
                   <>
-                    A machined block is the heat sink&rsquo;s own metal, so its k comes from
-                    Screen 01. Anything left empty leaves that step of the chain UNRESOLVED —
-                    Screen 05 still draws it. / 銑出的塊體與散熱器同材，k 取自 Screen
-                    01。留空該段維持未解析，Screen 05 仍會畫出來。
+                    銑出的塊體與散熱器同材，k 取自 01。留空的那一段維持未解析，05 仍會畫出來。
                   </>
                 )}
               </p>
@@ -607,18 +596,16 @@ export function ThermalSpecTab({ component, readOnly, onPatch, derived }: Inspec
       */}
       <fieldset className="rounded-md border border-line p-3">
         <legend className="px-1 text-[12px] font-semibold text-ink-700">
-          Spreading into the Base / 擴散範圍
+          擴散範圍
         </legend>
         <div className="flex flex-col gap-2">
           <Select
             id="ins-spreading-domain"
-            aria-label="Spreading domain"
+            aria-label="擴散範圍"
             items={SPREADING_DOMAIN_MODES.map((mode) => ({
               value: mode,
-              label: `${SPREADING_DOMAIN_LABELS[mode].en} / ${SPREADING_DOMAIN_LABELS[mode].zh}${
-                mode === 'WholeBase' ? ' — default' : ''
-              }`,
-              hint: `${SPREADING_DOMAIN_HINTS[mode].en}\n${SPREADING_DOMAIN_HINTS[mode].zh}`,
+              label: `${SPREADING_DOMAIN_LABELS[mode].zh}${mode === 'WholeBase' ? '（預設）' : ''}`,
+              hint: SPREADING_DOMAIN_HINTS[mode].zh,
             }))}
             value={spreadingDomain.mode}
             disabled={readOnly}
@@ -627,8 +614,7 @@ export function ThermalSpecTab({ component, readOnly, onPatch, derived }: Inspec
             }
           />
           <p className="text-[11px] leading-relaxed text-ink-400">
-            {SPREADING_DOMAIN_HINTS[spreadingDomain.mode].en}
-            <span className="mt-0.5 block">{SPREADING_DOMAIN_HINTS[spreadingDomain.mode].zh}</span>
+            {SPREADING_DOMAIN_HINTS[spreadingDomain.mode].zh}
           </p>
           {spreadingDomain.mode === 'Manual' && (
             <div className="flex flex-col gap-1.5 rounded-md border border-line bg-surface-muted p-2.5">
@@ -647,18 +633,15 @@ export function ThermalSpecTab({ component, readOnly, onPatch, derived }: Inspec
               />
               {domainArea == null ? (
                 <p className="text-[10px] leading-relaxed text-warn-600">
-                  No area stated — this part spreads into the whole base until one is. /
-                  尚未填面積——在填寫之前，這顆以整片基座計算。
+                  尚未填面積；填寫前這顆以整片基座計算。
                 </p>
               ) : (
                 <p className="text-[10px] leading-relaxed text-ink-400">
                   {baseAreaMm2 != null
-                    ? `${((100 * Math.min(domainArea, baseAreaMm2)) / baseAreaMm2).toFixed(1)} % of the ${Math.round(baseAreaMm2).toLocaleString('en-US')} mm² base${
-                        domainArea > baseAreaMm2 ? ' — larger than the base, so the whole base is used' : ''
-                      }. / 佔整片基座 ${Math.round(baseAreaMm2).toLocaleString('en-US')} mm² 的 ${((100 * Math.min(domainArea, baseAreaMm2)) / baseAreaMm2).toFixed(1)} %${
-                        domainArea > baseAreaMm2 ? '，大於基座，以整片基座計算' : ''
+                    ? `佔整片基座 ${Math.round(baseAreaMm2).toLocaleString('en-US')} mm² 的 ${((100 * Math.min(domainArea, baseAreaMm2)) / baseAreaMm2).toFixed(1)} %${
+                        domainArea > baseAreaMm2 ? '；大於基座，以整片基座計算' : ''
                       }。`
-                    : 'Screen 01 has no HSK base size yet, so the share cannot be shown. / Screen 01 尚未設定 HSK 基座尺寸，無法顯示比例。'}
+                    : '01 尚未設定 HSK 底座尺寸，無法顯示比例。'}
                 </p>
               )}
             </div>
@@ -678,7 +661,7 @@ export function ThermalSpecTab({ component, readOnly, onPatch, derived }: Inspec
             id="ins-limit-type"
             items={LIMIT_TYPES.map((type) => ({
               value: type,
-              label: `${type} — ${LIMIT_TYPE_LABELS[type].en} / ${LIMIT_TYPE_LABELS[type].zh}`,
+              label: `${type} — ${LIMIT_TYPE_LABELS[type].zh}`,
             }))}
             value={spec.limit_type}
             disabled={readOnly}
@@ -692,8 +675,7 @@ export function ThermalSpecTab({ component, readOnly, onPatch, derived }: Inspec
           />
           {!spec.limit_type_confirmed && (
             <p className="text-[11px] text-warn-600">
-              Assumed — confirm against the datasheet.
-              <span className="block">依類別推定，請對照規格書確認。</span>
+              依類別推定，請對照規格書確認。
             </p>
           )}
         </div>
@@ -720,10 +702,10 @@ export function ThermalSpecTab({ component, readOnly, onPatch, derived }: Inspec
             <Select
               id="ins-limit-reference"
               items={[
-                { value: '', label: 'Select location / 請選擇位置' },
+                { value: '', label: '請選擇位置' },
                 ...MODULE_REFERENCE_LOCATIONS.map((location) => ({
                   value: location,
-                  label: `${MODULE_REFERENCE_LOCATION_LABELS[location].en} / ${MODULE_REFERENCE_LOCATION_LABELS[location].zh}`,
+                  label: MODULE_REFERENCE_LOCATION_LABELS[location].zh,
                 })),
               ]}
               value={normalizeModuleReferenceLocation(spec.limit_reference_note) ?? ''}
@@ -740,11 +722,7 @@ export function ThermalSpecTab({ component, readOnly, onPatch, derived }: Inspec
               }
             />
             <p className="text-[11px] leading-relaxed text-ink-400">
-              Choose the left, center or right reference point on the specified
-              surface or body.
-              <span className="block">
-                選擇指定散熱面或本體上的左側、中央或右側量測位置。
-              </span>
+              選擇指定散熱面或本體上的左側、中央或右側量測位置。
             </p>
           </div>
         )}
@@ -758,9 +736,9 @@ export function ThermalSpecTab({ component, readOnly, onPatch, derived }: Inspec
               htmlFor="ins-rjc"
               tooltip={tip('Rjc')}
             />
-            <TextInput id="ins-rjc" value="N/A — surface/body-reference model" disabled />
+            <TextInput id="ins-rjc" value="不適用（表面／本體型）" disabled />
             <p className="text-[11px] leading-relaxed text-ink-400">
-              No junction node or Rjc edge is created. / 不建立接面節點或 Rjc 熱阻邊。
+              不建立接面節點或 Rjc 熱阻邊。
             </p>
           </div>
         ) : (
@@ -803,7 +781,7 @@ export function ThermalSpecTab({ component, readOnly, onPatch, derived }: Inspec
       {/* --- Interface: material, dry contact or measured whole-joint Rth. --- */}
       <fieldset className="rounded-md border border-line p-3">
         <legend className="px-1 text-[12px] font-semibold text-ink-700">
-          {metalBase ? 'Interface / 接觸介面' : 'TIM / 熱介面材料'}
+          {metalBase ? '接觸介面' : '熱介面材料'}
         </legend>
         <div className="flex flex-col gap-2.5">
           <div className="flex flex-col gap-1.5">
@@ -811,13 +789,13 @@ export function ThermalSpecTab({ component, readOnly, onPatch, derived }: Inspec
             <Select
               id="ins-tim"
               items={[
-                { value: '', label: 'Not decided / 未指定' },
+                { value: '', label: '未指定' },
                 // Not a material — a bolted joint with nothing in it,
                 // which resolves through the project's contact
                 // conductance rather than a k and a thickness.
                 {
                   value: DIRECT_CONTACT_TIM_ID,
-                  label: `Dry metal contact / 乾式金屬接觸 — h ${
+                  label: `乾式金屬接觸 — h ${
                     materials.contact_conductance_W_m2K.value ?? '?'
                   } W/m²·K`,
                 },
@@ -825,7 +803,7 @@ export function ThermalSpecTab({ component, readOnly, onPatch, derived }: Inspec
                   ? [
                       {
                         value: MEASURED_INTERFACE_TIM_ID,
-                        label: 'Measured interface Rth / 實測整體介面熱阻',
+                        label: '實測整體介面熱阻',
                       },
                     ]
                   : []),
@@ -847,20 +825,13 @@ export function ThermalSpecTab({ component, readOnly, onPatch, derived }: Inspec
           {/* A dangling reference is not the same as "no TIM", so it says so. */}
           {resolvedTim.missing && (
             <p className="text-[11px] leading-relaxed text-danger-600">
-              This component points at a material the project no longer has. Pick another.
-              <span className="block">
-                此元件指向的材料已不存在於專案清單中，請重新選擇。
-              </span>
+              此元件指向的材料已不在專案清單中，請重新選擇。
             </p>
           )}
 
           {resolvedTim.directContact && (
             <p className="rounded-md border border-line bg-surface-muted p-2.5 text-[11px] leading-relaxed text-ink-500">
-              Dry metal-to-metal joint, no TIM. The joint resistance is{' '}
-              1 / (h · A) with h from Screen 01 — there is no bond line to state.
-              <span className="block">
-                乾式金屬接觸、無 TIM。介面熱阻為 1/(h·A)，h 取自 Screen 01，沒有壓合厚度。
-              </span>
+              乾式金屬接觸、無 TIM。介面熱阻為 1/(h·A)，h 取自 01，沒有壓合厚度。
             </p>
           )}
 
@@ -882,8 +853,7 @@ export function ThermalSpecTab({ component, readOnly, onPatch, derived }: Inspec
                 }
               />
               <p className="mt-1.5 text-[11px] leading-relaxed text-ink-400">
-                Characterized value for the complete installed joint; k and BLT are not used.
-                <span className="block">代表完整安裝介面的量測值，不再使用 k 與 BLT 計算。</span>
+                代表完整安裝介面的量測值，不再使用 k 與 BLT 計算。
               </p>
             </div>
           )}
@@ -905,7 +875,7 @@ export function ThermalSpecTab({ component, readOnly, onPatch, derived }: Inspec
                   disabled={readOnly || spec.tim.tim_id == null}
                   onChange={() => patchSpec({ tim: { ...spec.tim, blt_mm: null } }, ['tim'])}
                 />
-                Project default / 系統預設
+                系統預設
               </label>
               <label className="flex items-center gap-1.5">
                 <input
@@ -931,7 +901,7 @@ export function ThermalSpecTab({ component, readOnly, onPatch, derived }: Inspec
                     )
                   }
                 />
-                Custom / 自訂
+                自訂
               </label>
             </div>
             <NumberInput
@@ -960,18 +930,14 @@ export function ThermalSpecTab({ component, readOnly, onPatch, derived }: Inspec
             />
             <p className="text-[11px] leading-relaxed text-ink-400">
               {bltCustom
-                ? 'A measured bond line for this build. k always comes from the material. / 此組裝的量測值；k 一律取自材料。'
-                : `From ${resolvedTim.material?.name ?? 'the project material'} in Screen 01. / 取自 Screen 01 的材料設定。`}
+                ? '此組裝的量測值；k 一律取自材料。'
+                : `取自 01 的材料設定（${resolvedTim.material?.name ?? '專案材料'}）。`}
             </p>
           </div>
           )}
           {metalBase && !resolvedTim.directContact && !resolvedTim.measuredInterface && (
             <p className="rounded-md border border-accent-500/20 bg-accent-100/40 p-2.5 text-[11px] leading-relaxed text-ink-500">
-              Grease, PCM and thin pads are represented by the terminal TIM HEAT_OUT node in
-              Screen 05. Use the installed compressed BLT, not the supplied sheet thickness.
-              <span className="block">
-                Grease、PCM 與薄型導熱片會在 Screen 05 以 TIM HEAT_OUT 端點表示；請填入實際壓合厚度。
-              </span>
+              Grease、PCM 與薄型導熱片在 05 以 TIM HEAT_OUT 端點表示；請填實際壓合厚度，不是原始片厚。
             </p>
           )}
         </div>
