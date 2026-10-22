@@ -221,7 +221,9 @@ Mapping → Validation → Duplicate → Apply）、`AiThermalSourcePanel.tsx`�
   同一個專案重新匯入會保留已解開的欄位（`unlocked`）。其他來源不建連結。
 - 欄位（`AI_FIELDS`）：名稱、數量、單顆功耗、限溫、限溫對象、Rjc（含本體型）、散熱路徑、本體大小、E-PAD、板厚、TIM（含 BLT）、
   導熱孔等效 k。**AI-Thermal 沒給的不鎖**（本工具要填的）；尺寸要長寬都有才算有給。名稱不鎖（只在更新時同步）。
-- 「複製元件」的複本不帶連結（是新的一顆，不能讓兩顆對到 AI-Thermal 同一筆）。04 的行為見 04 規格 §AI-Thermal。
+- 「複製元件」的複本不帶連結（是新的一顆，不能讓兩顆對到 AI-Thermal 同一筆）。04 的行為見 04 規格 §25b。
+- **連結功能上線前匯入的元件**（來源是 AI-Thermal、有專案 id、沒有連結：`isAiFirstLink`）不必重新匯入：04 的
+  「從 AI-Thermal 更新」會做第一次連結（見 04 規格 §25b）。AI-Thermal 已沒有、選擇保留的元件標 `ai_unlinked`，不再提示連結。
 - 測試：`src/importers/component/aiThermalSync.test.ts`（真實 StarKcore-12L 資料）、`src/data/componentImportStore.test.ts`。
 
 ---

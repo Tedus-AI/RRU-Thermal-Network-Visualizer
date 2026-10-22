@@ -1173,6 +1173,8 @@ export interface ComponentProvenance {
   ref_locked?: boolean | null;
   /** Imported from AI-Thermal: which fields it owns and their values there (`aiThermalLink.ts`). */
   ai_link?: AiThermalLink;
+  /** The link was dropped on purpose (AI-Thermal no longer has the part): not offered a first link again. */
+  ai_unlinked?: boolean;
 }
 
 export interface Component {

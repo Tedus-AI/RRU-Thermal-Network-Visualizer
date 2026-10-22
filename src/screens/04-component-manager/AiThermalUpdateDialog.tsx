@@ -66,10 +66,19 @@ export function AiThermalUpdateDialog({
   const addable = plan?.added.filter((component) => component.enabled) ?? [];
   const excluded = plan?.added.filter((component) => !component.enabled) ?? [];
   const pickedCount = Object.values(fields).reduce((sum, list) => sum + list.length, 0);
-  const total = pickedCount + add.length + (plan?.removed.length ?? 0);
+  // A first link is an item of its own: applying it locks the part even with nothing ticked.
+  const total = pickedCount + add.length + (plan?.removed.length ?? 0) + (plan?.firstLinks ?? 0);
   const nothing =
-    !!plan && plan.updates.length === 0 && plan.removed.length === 0 && addable.length === 0 && add.length === 0;
-
+    !!plan &&
+    plan.updates.length === 0 &&
+    plan.removed.length === 0 &&
+    plan.link.length === 0 &&
+    addable.length === 0 &&
+    add.length === 0;
+  const tickAll = (on: boolean) =>
+    setFields(
+      Object.fromEntries(plan?.updates.map((u) => [u.componentId, on ? u.changes.map((c) => c.field) : []]) ?? []),
+    );
 
   const toggle = (id: string, field: AiField, on: boolean) =>
     setFields((previous) => {
@@ -197,6 +206,11 @@ export function AiThermalUpdateDialog({
           <p className="tabular text-ink-700">
             <b>{plan.updates.length}</b> 顆有更新・AI-Thermal 新增 <b>{addable.length}</b> 顆・已刪除{' '}
             <b>{plan.removed.length}</b> 顆・相同 <b>{plan.same}</b> 顆
+            {plan.firstLinks > 0 && (
+              <>
+                ・第一次連結 <b>{plan.firstLinks}</b> 顆
+              </>
+            )}
             {update.source && (
               <button
                 type="button"
@@ -215,9 +229,30 @@ export function AiThermalUpdateDialog({
 
         {nothing && <p className="text-ok-600">已是最新：連到這個 AI-Thermal 專案的元件都與 AI-Thermal 相同。</p>}
 
+        {plan && plan.firstLinks > 0 && (
+          <div className="rounded-md border border-accent-500/25 bg-accent-50 p-2.5 text-[12px] leading-relaxed text-ink-700">
+            <p className="font-semibold">第一次連結</p>
+            <p className="mt-0.5 text-ink-600">
+              這 {plan.firstLinks} 顆是舊版從 AI-Thermal 匯入的，當時沒有記下 AI-Thermal 的值，所以數值不同的欄位分不出是
+              AI-Thermal 改了、還是在 04 改過：預設不勾，請逐欄確認。勾的用 AI-Thermal 的值並鎖定；沒勾的保留本工具的值、不鎖定。
+              與 AI-Thermal 相同的欄位直接鎖定{plan.link.length > 0 ? `（其中 ${plan.link.length} 顆完全相同，套用後直接連結）` : ''}。
+            </p>
+          </div>
+        )}
+
         {plan && plan.updates.length > 0 && (
           <section>
-            <h3 className="mb-1 text-[12px] font-bold text-ink-700">有更新的欄位</h3>
+            <div className="mb-1 flex flex-wrap items-baseline justify-between gap-2">
+              <h3 className="text-[12px] font-bold text-ink-700">有更新的欄位</h3>
+              <span className="flex gap-3 text-[11.5px]">
+                <button type="button" className="text-accent-700 hover:underline" onClick={() => tickAll(true)}>
+                  全部用 AI-Thermal
+                </button>
+                <button type="button" className="text-accent-700 hover:underline" onClick={() => tickAll(false)}>
+                  全部保留本工具
+                </button>
+              </span>
+            </div>
             <p className="mb-2 text-[11.5px] text-ink-500">沒勾的欄位保留本工具的值，之後可以在本工具修改（不再鎖定）。</p>
             <table className="w-full table-fixed border-collapse">
               <colgroup>
@@ -259,6 +294,11 @@ export function AiThermalUpdateDialog({
                       <td colSpan={4} className="py-1 font-semibold text-ink-900">
                         {u.name}
                         <span className="ml-1.5 font-normal text-ink-400">{u.changes.length} 項</span>
+                        {u.firstLink && (
+                          <span className="ml-2 rounded-sm bg-accent-100 px-1 text-[10.5px] font-semibold text-accent-700">
+                            第一次連結
+                          </span>
+                        )}
                       </td>
                     </tr>
                     {u.changes.map((c) => (

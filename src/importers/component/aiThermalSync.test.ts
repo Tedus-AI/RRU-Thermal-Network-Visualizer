@@ -18,6 +18,7 @@ import {
   aiPlanPending,
   aiValueOf,
   applyAiPlan,
+  isAiFirstLink,
   isAiLocked,
   linkedAiProjects,
   planAiUpdate,
@@ -279,5 +280,89 @@ describe('「從 AI-Thermal 更新」', () => {
   it('reads values the way 04 shows them', () => {
     const pa = by(importFrom(db()), 'GTRB384608FC-Final');
     expect(aiValueOf(pa, 'rjc')).toEqual({ body: false, rjc: pa.thermal_spec.r_jc_C_per_W?.value ?? null });
+  });
+});
+
+describe('the first link — parts imported before links were recorded', () => {
+  /** What an import by the earlier version left: the provenance, no link. */
+  const oldImport = (source: AiThermalDb = db()) =>
+    importFrom(source).map((c) => {
+      const { ai_link: _link, ...provenance } = c.provenance;
+      void _link;
+      return { ...c, provenance };
+    });
+
+  it('is recognised from the provenance, and not locked yet', () => {
+    const components = oldImport();
+    expect(components.every(isAiFirstLink)).toBe(true);
+    expect(linkedAiProjects(components)).toEqual([{ id: PROJECT, count: components.length }]);
+    expect(isAiLocked(by(components, 'GTRB384608FC-Final'), 'power')).toBe(false);
+    // Another source, or a part whose link was dropped on purpose, is not.
+    expect(importFrom(db(), [], 'CSV').some(isAiFirstLink)).toBe(false);
+  });
+
+  it('links identical parts as they are, and locks them', () => {
+    const components = oldImport();
+    const plan = planAiUpdate(components, fresh(db()), PROJECT);
+    expect(plan.updates).toEqual([]);
+    expect(plan.link).toHaveLength(components.length);
+    expect(plan.firstLinks).toBe(components.length);
+
+    const result = applyAiPlan(components, plan, { fields: {}, add: [], disable: [] }, PROJECT, null);
+    expect(result.linked).toBe(components.length);
+    expect(result.fields).toEqual([]);
+    const pa = by(result.components, 'GTRB384608FC-Final');
+    expect(isAiLocked(pa, 'power')).toBe(true);
+    expect(pa.power_W.value).toBe(52.99);
+    expect(planAiUpdate(result.components, fresh(db()), PROJECT)).toMatchObject({ firstLinks: 0, link: [] });
+  });
+
+  it('cannot tell which side moved a differing value, so it starts unticked; a blank AI-Thermal fills starts ticked', () => {
+    const components = oldImport().map((c) =>
+      c.name === 'GTRB384608FC-Final'
+        ? {
+            ...c,
+            power_W: withValue(c.power_W, 55),
+            thermal_spec: { ...c.thermal_spec, limit_C: null },
+          }
+        : c,
+    );
+    const plan = planAiUpdate(components, fresh(db()), PROJECT);
+    const [u] = plan.updates;
+    expect(u).toMatchObject({ name: 'GTRB384608FC-Final', firstLink: true });
+    expect(u.changes.map((c) => [c.field, c.pick, c.note])).toEqual([
+      ['power', false, '第一次連結：分不出是哪一邊改的'],
+      ['limit', true, undefined],
+    ]);
+    expect(aiPlanPending(plan)).toEqual({ components: 1, fields: 1 });
+
+    // Keep this tool's power, take AI-Thermal's limit.
+    const result = applyAiPlan(
+      components,
+      plan,
+      { fields: { [u.componentId]: ['limit'] }, add: [], disable: [] },
+      PROJECT,
+      null,
+    );
+    const pa = by(result.components, 'GTRB384608FC-Final');
+    expect(pa.power_W.value).toBe(55);
+    expect(isAiLocked(pa, 'power')).toBe(false);
+    expect(pa.thermal_spec.limit_C?.value).toBe(225);
+    expect(isAiLocked(pa, 'limit')).toBe(true);
+    expect(isAiLocked(pa, 'qty')).toBe(true);
+  });
+
+  it('a part AI-Thermal no longer has is kept, and not offered a first link again', () => {
+    const components = oldImport();
+    const next = db((raw) => {
+      (raw.projects[PROJECT] as unknown as Record<string, RawComp[]>).pwr_data = [];
+    });
+    const plan = planAiUpdate(components, fresh(next), PROJECT);
+    expect(plan.removed.map((c) => c.name)).toEqual(['Power Module(H48SA50030NRDH)']);
+    const result = applyAiPlan(components, plan, { fields: {}, add: [], disable: [] }, PROJECT, null);
+    const pm = by(result.components, 'Power Module(H48SA50030NRDH)');
+    expect(pm.enabled).toBe(true);
+    expect(isAiFirstLink(pm)).toBe(false);
+    expect(planAiUpdate(result.components, fresh(next), PROJECT).removed).toEqual([]);
   });
 });

@@ -93,6 +93,22 @@ export function aiLinkOf(component: Component): AiThermalLink | null {
   return link && typeof link === 'object' && !Array.isArray(link) ? (link as AiThermalLink) : null;
 }
 
+/**
+ * Imported from AI-Thermal before imports recorded a link: the provenance says
+ * which AI-Thermal project it came from, but not what AI-Thermal's values were
+ * then. 「從 AI-Thermal 更新」 links it the first time, field by field.
+ * One whose link was dropped on purpose (`ai_unlinked`) is not one of these.
+ */
+export function isAiFirstLink(component: Component): boolean {
+  const p = component.provenance;
+  return !aiLinkOf(component) && !p.ai_unlinked && p.source_type === 'AIThermal' && !!p.source_project_id;
+}
+
+/** The AI-Thermal project a component belongs to — linked, or waiting for its first link. */
+export function aiProjectOf(component: Component): string | null {
+  return aiLinkOf(component)?.project_id ?? (isAiFirstLink(component) ? component.provenance.source_project_id! : null);
+}
+
 /** A field's current value on the component. */
 export function aiValueOf(component: Component, field: AiField): AiValue {
   const spec = component.thermal_spec;
@@ -391,6 +407,8 @@ export interface AiFieldChange {
 export interface AiComponentUpdate {
   componentId: string;
   name: string;
+  /** Not linked yet (`isAiFirstLink`): this update is its first link. */
+  firstLink?: boolean;
   changes: AiFieldChange[];
   /** The values to store as AI-Thermal's once applied (every field it supplies now). */
   fresh: Component;
@@ -402,6 +420,10 @@ export interface AiComponentUpdate {
  * A field AI-Thermal owns and nobody took over starts ticked. One the engineer
  * took over (✂), or filled in here while AI-Thermal had it empty, starts
  * unticked and says so — the engineer chose that value.
+ *
+ * A first link has no record of AI-Thermal's values at import, so a value that
+ * differs may have moved on either side: it starts unticked. A blank here that
+ * AI-Thermal now fills starts ticked — filling it overwrites nothing.
  */
 export function aiChangesFor(current: Component, fresh: Component): AiFieldChange[] {
   const link = aiLinkOf(current);
@@ -411,6 +433,17 @@ export function aiChangesFor(current: Component, fresh: Component): AiFieldChang
     const incoming = aiValueOf(fresh, field);
     const now = aiValueOf(current, field);
     if (sameAiValue(now, incoming)) continue;
+    if (!link) {
+      const filled = supplied(current, field);
+      changes.push({
+        field,
+        current: now,
+        incoming,
+        pick: !filled,
+        ...(filled ? { note: '第一次連結：分不出是哪一邊改的' } : {}),
+      });
+      continue;
+    }
     const unlocked = (link?.unlocked ?? []).includes(field);
     const had = link ? field in link.values : false;
     const changedHere = had && !sameAiValue(now, link?.values[field]);
@@ -468,16 +501,17 @@ export function applyAiChanges(
 export function unlinkAi(component: Component): Component {
   const { ai_link: _link, ...provenance } = component.provenance;
   void _link;
-  return { ...component, provenance };
+  // Remembered, so a part imported from AI-Thermal is not offered a first link again.
+  return { ...component, provenance: { ...provenance, ai_unlinked: true } };
 }
 
 // --- planning an update over a whole project ---------------------------------
 
-/** The AI-Thermal projects a project's components are linked to, most components first. */
+/** The AI-Thermal projects a project's components belong to (linked or not yet), most components first. */
 export function linkedAiProjects(components: readonly Component[]): Array<{ id: string; count: number }> {
   const counts = new Map<string, number>();
   for (const component of components) {
-    const id = aiLinkOf(component)?.project_id;
+    const id = aiProjectOf(component);
     if (id) counts.set(id, (counts.get(id) ?? 0) + 1);
   }
   return [...counts].map(([id, count]) => ({ id, count })).sort((a, b) => b.count - a.count);
@@ -494,6 +528,10 @@ export interface AiUpdatePlan {
   removed: Component[];
   /** Linked components with nothing new. */
   same: number;
+  /** Not linked yet and identical to AI-Thermal: linked, and locked, as they are. */
+  link: Array<{ componentId: string; name: string; fresh: Component }>;
+  /** Components this update links for the first time (in `updates` and `link`). */
+  firstLinks: number;
 }
 
 const nameKey = (name: string) => name.trim().toLowerCase();
@@ -501,19 +539,21 @@ const nameKey = (name: string) => name.trim().toLowerCase();
 /**
  * Matches the project's linked components to AI-Thermal's current ones — by
  * AI-Thermal's component id first (a part renamed there still matches), then
- * by the name it had at the last sync — and lists what would change.
+ * by the name it had at the last sync — and lists what would change. Parts
+ * imported before links were recorded (`isAiFirstLink`) are matched the same
+ * way, by the id and name they were imported with, and linked by the update.
  */
 export function planAiUpdate(
   components: readonly Component[],
   fresh: readonly Component[],
   projectId: string,
 ): AiUpdatePlan {
-  const linked = components.filter((component) => aiLinkOf(component)?.project_id === projectId);
+  const linked = components.filter((component) => aiProjectOf(component) === projectId);
   const taken = new Set<number>();
   const match = new Map<string, Component>();
 
   for (const component of linked) {
-    const cid = aiLinkOf(component)?.cid;
+    const cid = aiLinkOf(component)?.cid ?? (isAiFirstLink(component) ? component.provenance.ref_origin_id : null);
     if (!cid) continue;
     const index = fresh.findIndex((f, i) => !taken.has(i) && f.provenance.ref_origin_id === cid);
     if (index >= 0) {
@@ -534,16 +574,28 @@ export function planAiUpdate(
 
   const updates: AiComponentUpdate[] = [];
   const removed: Component[] = [];
+  const link: AiUpdatePlan['link'] = [];
   let same = 0;
+  let firstLinks = 0;
   for (const component of linked) {
     const incoming = match.get(component.id);
     if (!incoming) {
       removed.push(component);
       continue;
     }
+    const first = isAiFirstLink(component);
+    if (first) firstLinks++;
     const changes = aiChangesFor(component, incoming);
-    if (changes.length === 0) same++;
-    else updates.push({ componentId: component.id, name: component.name, changes, fresh: incoming });
+    if (changes.length > 0) {
+      updates.push({
+        componentId: component.id,
+        name: component.name,
+        ...(first ? { firstLink: true } : {}),
+        changes,
+        fresh: incoming,
+      });
+    } else if (first) link.push({ componentId: component.id, name: component.name, fresh: incoming });
+    else same++;
   }
 
   const here = new Set(components.map((component) => nameKey(component.name)));
@@ -554,7 +606,7 @@ export function planAiUpdate(
     if (here.has(nameKey(component.name))) sameName.push(component.name);
     else added.push(component);
   });
-  return { updates, added, sameName, removed, same };
+  return { updates, added, sameName, removed, same, link, firstLinks };
 }
 
 /** How many changes an update would make as offered (the ticked ones) — what the reminder counts. */
@@ -585,8 +637,17 @@ export function applyAiPlan(
   choice: AiUpdateChoice,
   projectId: string,
   savedAt: string | null,
-): { components: Component[]; fields: string[]; updated: number; added: number; removed: number } {
+): {
+  components: Component[];
+  fields: string[];
+  updated: number;
+  added: number;
+  removed: number;
+  /** Linked for the first time. */
+  linked: number;
+} {
   const byId = new Map(plan.updates.map((update) => [update.componentId, update]));
+  const linking = new Map(plan.link.map((entry) => [entry.componentId, entry.fresh]));
   const removedIds = new Set(plan.removed.map((component) => component.id));
   const touched = new Set<string>();
   let updated = 0;
@@ -598,6 +659,8 @@ export function applyAiPlan(
       for (const field of picked) for (const f of AI_PATCH_FIELDS[field]) touched.add(f);
       return applyAiChanges(component, update.fresh, picked, projectId, savedAt);
     }
+    const fresh = linking.get(component.id);
+    if (fresh) return applyAiChanges(component, fresh, [], projectId, savedAt);
     if (removedIds.has(component.id)) {
       const kept = unlinkAi(component);
       if (!choice.disable.includes(component.id)) return kept;
@@ -623,5 +686,6 @@ export function applyAiPlan(
     updated,
     added: adding.length,
     removed: plan.removed.length,
+    linked: plan.firstLinks,
   };
 }
