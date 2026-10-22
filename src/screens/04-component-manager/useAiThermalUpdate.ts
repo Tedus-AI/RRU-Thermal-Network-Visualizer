@@ -12,7 +12,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { Component } from '@/domain/component';
 import type { MaterialDefaults } from '@/domain/materials';
-import { aiPlanPending, linkedAiProjects, planAiUpdate, type AiUpdatePlan } from '@/domain/aiThermalLink';
+import {
+  aiPlanPending,
+  isAiFirstLink,
+  linkedAiProjects,
+  planAiUpdate,
+  type AiUpdatePlan,
+} from '@/domain/aiThermalLink';
 import { readAiThermalFromFile, readAiThermalFromSharePoint, type AiDbRead } from '@/data/aiThermalDb';
 import { freshAiThermalComponents, type AiThermalFresh } from '@/importers/component/aiThermalFresh';
 import type { AiThermalDb } from '@/importers/component/parseAiThermal';
@@ -35,6 +41,8 @@ export interface AiThermalUpdate {
   plan: AiUpdatePlan | null;
   /** What the header reminder counts: linked components with ticked changes, plus deleted ones. */
   pending: number;
+  /** Imported from AI-Thermal before links were recorded: waiting for their first link (no read needed). */
+  unlinked: number;
   readSharePoint: () => Promise<void>;
   readFile: (file: File) => Promise<void>;
 }
@@ -110,6 +118,7 @@ export function useAiThermalUpdate(components: Component[], materials: MaterialD
     [components, fresh, target],
   );
   const pending = plan ? aiPlanPending(plan).components + plan.removed.length : 0;
+  const unlinked = useMemo(() => components.filter(isAiFirstLink).length, [components]);
 
   return {
     linked,
@@ -122,6 +131,7 @@ export function useAiThermalUpdate(components: Component[], materials: MaterialD
     fresh,
     plan,
     pending,
+    unlinked,
     readSharePoint,
     readFile,
   };

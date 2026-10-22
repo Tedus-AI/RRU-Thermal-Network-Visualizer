@@ -201,15 +201,13 @@ export function ComponentManagerView() {
       useNetworkStore.getState().setRequiresReview(true, 'ai_thermal_update');
     }
     setShowAiUpdate(false);
-    toast.success(
-      [
-        `已從 AI-Thermal 更新 ${result.updated} 顆`,
-        result.added > 0 ? `加入 ${result.added} 顆` : null,
-        result.removed > 0 ? `${result.removed} 顆改由本工具維護` : null,
-      ]
-        .filter(Boolean)
-        .join('・'),
-    );
+    const done = [
+      result.updated > 0 ? `更新 ${result.updated} 顆` : null,
+      result.linked > 0 ? `連結 ${result.linked} 顆` : null,
+      result.added > 0 ? `加入 ${result.added} 顆` : null,
+      result.removed > 0 ? `${result.removed} 顆改由本工具維護` : null,
+    ].filter(Boolean);
+    toast.success(done.length > 0 ? `已從 AI-Thermal ${done.join('・')}` : '已與 AI-Thermal 同步');
   };
 
   useEffect(() => {
@@ -342,6 +340,17 @@ export function ComponentManagerView() {
       badge={
         <div className="flex flex-wrap items-center gap-2">
           {readOnly && <Badge tone="accent">唯讀</Badge>}
+          {aiUpdate.pending === 0 && aiUpdate.unlinked > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowAiUpdate(true)}
+              title="這些元件是舊版從 AI-Thermal 匯入的，還沒有連結。點開逐欄確認後連結，之後 AI-Thermal 的欄位會鎖定並可更新。"
+              className="flex items-center gap-1 rounded-full border border-accent-500/40 bg-accent-50 px-2.5 py-0.5 text-[11px] font-semibold text-accent-700 hover:border-accent-500"
+            >
+              {aiUpdate.unlinked} 顆待連結 AI-Thermal
+              <ArrowRight size={12} aria-hidden />
+            </button>
+          )}
           {aiUpdate.pending > 0 && (
             <button
               type="button"
