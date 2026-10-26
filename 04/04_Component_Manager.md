@@ -600,7 +600,18 @@ AI-Thermal 鎖定的限溫對象／散熱路徑／TIM 不改（`bulkPatchFor(val
 （`provenance.ai_link`：複本是新的一顆，不能讓兩顆對到 AI-Thermal 同一筆）。
 
 ## Delete
-若已被 network 引用：刪 component 後將 mapping 標 orphaned，`network review required`，不在 04 自動重寫 topology。
+刪除＝**05 與 06 跟著刪**（使用者要求，2026-10；取代原本「標 orphaned、不在 04 重寫 topology」）：`src/data/componentDeletion.ts`。
+- 05：這個元件擁有的所有節點（範本產生與手畫的）、熱阻、port 連線、版面位置、FloTHERM 對應、架構綁定一起移除
+  （`thermal/graph/componentPruning.ts`）；指向被刪節點的連線一併移除。
+- 06：每個情境裡建在這些節點上的邊界端口指派，以及只被它們使用的邊界設定檔，一併移除並存檔。
+- 原因：原本「依偏好產生」只重建現有元件，刪掉的元件子圖一直留在 05；計算投影找不到元件就跳過，節點上存的功耗**照樣算進 07**。
+- 舊專案：只要元件清單與熱路徑屬於同一個專案而且不一致（熱路徑裡有清單沒有的元件），打開時自動清掉並提示
+  （`startComponentDeletionSync`，AppShell 啟動）；元件清單是空的時候不動（可能是還沒載入）。05「依偏好產生」也會先清。
+- 測試：`src/data/componentDeletion.test.ts`。
+
+## Reorder
+每一列最前面的 ↑／↓ 把元件上移／下移一列（`moveComponent`）。篩選時是跟「畫面上看得到的上一列／下一列」交換位置；
+順序存在元件清單裡（其他頁照這個順序列出），不影響計算、不讓結果失效。
 
 ## Disable
 資料保留；既有 mapping 需 review，solver DIRTY。

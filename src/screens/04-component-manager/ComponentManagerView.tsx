@@ -474,6 +474,13 @@ export function ComponentManagerView() {
                 }
               }}
               onDelete={setDeleteTarget}
+              onMove={(component, direction) =>
+                useComponentStore.getState().moveComponent(
+                  component.id,
+                  direction,
+                  visible.map((entry) => entry.id),
+                )
+              }
               readOnly={readOnly}
             />
             {visible.length !== components.length && (
@@ -734,7 +741,7 @@ export function ComponentManagerView() {
       {deleteTarget && (
         <Modal
           title="刪除元件？"
-          description={`「${deleteTarget.name}」會從本專案移除。熱網路中用到它的部分需要到 05 重新檢視；本頁不會改動熱網路。`}
+          description={`「${deleteTarget.name}」會從本專案移除，05 熱路徑裡它的節點與連線、06 的邊界設定也會一起移除。`}
           onClose={() => setDeleteTarget(null)}
           footer={
             <>

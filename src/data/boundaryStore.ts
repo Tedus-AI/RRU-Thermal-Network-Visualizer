@@ -69,6 +69,13 @@ interface BoundaryStoreState {
 
   revalidate: () => void;
   save: (projectId: string) => void;
+  /**
+   * Forgets the assignments on ports that went with deleted components
+   * (`componentDeletion.ts`), in every scenario of the project, stored and
+   * loaded alike, and the profiles only those assignments used. Returns how
+   * many assignments were dropped.
+   */
+  dropPorts: (projectId: string, portIds: string[]) => number;
 }
 
 const keyOf = (networkId: string, scenarioId: string) => `${networkId}::${scenarioId}`;
@@ -473,6 +480,48 @@ export const useBoundaryStore = create<BoundaryStoreState>((set, get) => ({
     useScenarioStore.getState().touchScenarioRevision(fresh.scenario_id);
     useSolverStore.getState().invalidate('boundary_changed');
     get().revalidate();
+  },
+
+  dropPorts: (projectId, portIds) => {
+    if (portIds.length === 0) return 0;
+    const gone = new Set(portIds);
+    const clean = (entry: ScenarioBoundaryConditionSet): ScenarioBoundaryConditionSet | null => {
+      const assignments = entry.assignments.filter((a) => !gone.has(a.boundary_port_id));
+      if (assignments.length === entry.assignments.length) return null;
+      const used = new Set(assignments.flatMap((a) => a.profile_ids));
+      const orphaned = new Set(
+        entry.assignments.filter((a) => gone.has(a.boundary_port_id)).flatMap((a) => a.profile_ids),
+      );
+      return {
+        ...entry,
+        assignments,
+        profiles: entry.profiles.filter((p) => used.has(p.id) || !orphaned.has(p.id)),
+        updated_at: new Date().toISOString(),
+      };
+    };
+
+    const droppedBy = new Map<string, number>();
+    for (const stored of loadBoundarySets(projectId)) {
+      const next = clean(stored);
+      if (!next) continue;
+      droppedBy.set(keyOf(stored.network_id, stored.scenario_id), stored.assignments.length - next.assignments.length);
+      saveBoundarySet(projectId, next);
+    }
+
+    // A loaded set may hold edits not written yet; clean it too, keeping them.
+    const sets = { ...get().sets };
+    let changed = false;
+    for (const [key, entry] of Object.entries(sets)) {
+      if (entry.project_id !== projectId) continue;
+      const next = clean(entry);
+      if (!next) continue;
+      droppedBy.set(key, Math.max(droppedBy.get(key) ?? 0, entry.assignments.length - next.assignments.length));
+      sets[key] = next;
+      changed = true;
+    }
+    set({ sets, ports: deriveBoundaryPorts(useNetworkStore.getState().network) });
+    if (changed) get().revalidate();
+    return [...droppedBy.values()].reduce((sum, n) => sum + n, 0);
   },
 
   revalidate: () => {

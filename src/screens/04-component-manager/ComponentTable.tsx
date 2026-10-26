@@ -11,7 +11,16 @@
  * them.
  */
 
-import { AlertTriangle, CircleCheck, CircleSlash, Copy, Trash2, XCircle } from 'lucide-react';
+import {
+  AlertTriangle,
+  ChevronDown,
+  ChevronUp,
+  CircleCheck,
+  CircleSlash,
+  Copy,
+  Trash2,
+  XCircle,
+} from 'lucide-react';
 import { ColumnLabel } from '@/ui/FieldLabel';
 import { ColumnResizer, useColumnWidths } from '@/ui/ResizableColumns';
 import {
@@ -83,7 +92,9 @@ const COLUMNS: ReadonlyArray<{
   // "the selected row", but selecting a row is what opens the inspector, so
   // reaching them meant a floating panel over the thing being worked on. On the
   // row itself they need no selection at all.
-  { id: 'actions', label: '', zh: '', width: 58 },
+  // Up / down move the row; a new id, so a width remembered for the
+  // two-button column does not squeeze the four.
+  { id: 'row_actions', label: '', zh: '', width: 82 },
   // New ids where a column changed shape, so a width remembered for the old
   // narrower column does not squeeze the new one.
   { id: 'state', label: 'Status', zh: ZH.Status, width: 104 },
@@ -168,6 +179,7 @@ export function ComponentTable({
   onPatch,
   onDuplicate,
   onDelete,
+  onMove,
   readOnly,
 }: {
   components: Component[];
@@ -176,6 +188,8 @@ export function ComponentTable({
   onPatch: (id: string, patch: Partial<Component>, fields: string[]) => void;
   onDuplicate: (component: Component) => void;
   onDelete: (component: Component) => void;
+  /** One place up (-1) or down (+1) among the rows shown. */
+  onMove: (component: Component, direction: -1 | 1) => void;
   readOnly: boolean;
 }) {
   // The TIM column offers the project's own materials, so it has to read them.
@@ -237,7 +251,7 @@ export function ComponentTable({
               </td>
             </tr>
           )}
-          {components.map((component) => {
+          {components.map((component, index) => {
             const status = statusOf(component);
             const meta = STATUS_META[status];
             const Icon = meta.icon;
@@ -267,6 +281,20 @@ export function ComponentTable({
                     inspector over the table the reader is working down. */}
                 <td className="px-1 py-1.5">
                   <div className="flex items-center justify-center gap-0.5">
+                    <RowAction
+                      icon={ChevronUp}
+                      label={`Move ${component.name} up`}
+                      zh={`上移 ${component.name}`}
+                      disabled={readOnly || index === 0}
+                      onClick={() => onMove(component, -1)}
+                    />
+                    <RowAction
+                      icon={ChevronDown}
+                      label={`Move ${component.name} down`}
+                      zh={`下移 ${component.name}`}
+                      disabled={readOnly || index === components.length - 1}
+                      onClick={() => onMove(component, 1)}
+                    />
                     <RowAction
                       icon={Copy}
                       label={`Duplicate ${component.name}`}

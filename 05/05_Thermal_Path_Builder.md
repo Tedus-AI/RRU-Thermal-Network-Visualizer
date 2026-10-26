@@ -1171,6 +1171,9 @@ Generate preview：
 `Generate Network`
 才 commit。
 
+Generate 以 04 目前的元件清單為準：**04 已經沒有的元件先整個移除**（節點、熱阻、port 連線，以及 06 建在這些節點上的邊界指派），
+再重建現有元件（`src/data/componentDeletion.ts`）。04 刪除元件時本來就會同步移除；這一步是給舊專案與還沒同步到的情況。
+
 ---
 
 # 50. Start Blank

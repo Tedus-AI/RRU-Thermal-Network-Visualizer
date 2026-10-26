@@ -30,6 +30,8 @@ import { setSyncProject, startFolderAutoSync, useFolderStore } from '@/data/fold
 import { WorkspaceGate } from './WorkspaceGate';
 import { startAutoPersist } from '@/data/autoPersist';
 import { startUnloadGuard } from '@/data/unloadGuard';
+import { describePrune, startComponentDeletionSync } from '@/data/componentDeletion';
+import { useComponentStore } from '@/data/componentStore';
 import { toast } from '@/ui/toast';
 import { Button, Modal } from '@/ui/primitives';
 import { projectPath } from './navigation';
@@ -65,10 +67,21 @@ export function AppShell() {
     const stopPersist = startAutoPersist();
     // A tab closed inside the save debounce used to lose the edit.
     const stopGuard = startUnloadGuard();
+    // A component deleted in 04 leaves 05 and 06 too, including in a project
+    // saved before deletions did that.
+    const stopDeletionSync = startComponentDeletionSync(
+      () => {
+        const { loaded_project_id, components } = useComponentStore.getState();
+        return { projectId: loaded_project_id, ids: components.map((component) => component.id) };
+      },
+      useComponentStore.subscribe,
+      (result) => toast.success(describePrune(result)),
+    );
     return () => {
       stopSync();
       stopPersist();
       stopGuard();
+      stopDeletionSync();
     };
   }, []);
 

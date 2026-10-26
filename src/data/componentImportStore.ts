@@ -23,9 +23,11 @@ import {
   type ParsedTable,
   type StagingRow,
 } from '@/importers/component/types';
+import type { AiThermalTimNeed } from '@/importers/component/parseAiThermal';
 import { useComponentStore } from './componentStore';
 import { useSolverStore } from './solverStore';
 import { useNetworkStore } from './networkStore';
+import { useProjectStore } from './projectStore';
 
 /**
  * Three steps: pick a source, settle the columns, check and apply. Duplicate
@@ -51,6 +53,8 @@ export interface ImportSourceContext {
   /** The AI-Thermal project document, for its 5G-RRU parameter console. */
   aiThermalProject?: Record<string, unknown>;
   reparse?: (materials: MaterialDefaults) => ParsedTable;
+  /** AI-Thermal TIM models the rows use that these materials do not have (`missingAiThermalTims`). */
+  missingTims?: (materials: MaterialDefaults) => AiThermalTimNeed[];
 }
 
 interface ImportState {
@@ -136,6 +140,12 @@ function existingComponents(): Component[] {
   return useComponentStore.getState().components;
 }
 
+/** The open project's TIM names, lower-cased — what a row's TIM is matched against at apply. */
+function timNames(): ReadonlySet<string> {
+  const materials = normalizeMaterials(useProjectStore.getState().draft?.materials);
+  return new Set(materials.tim.map((material) => material.name.trim().toLowerCase()));
+}
+
 export const useComponentImportStore = create<ImportState>((set, get) => ({
   ...EMPTY,
 
@@ -150,7 +160,7 @@ export const useComponentImportStore = create<ImportState>((set, get) => ({
 
   loadTable: (table, source, context) => {
     const mapping = autoMapColumns(table.headers);
-    const rows = buildStagingRows({ table, mapping, existingComponents: existingComponents() });
+    const rows = buildStagingRows({ table, mapping, existingComponents: existingComponents(), timNames: timNames() });
     const mappingAuto =
       SELF_MAPPED_SOURCES.has(source.source_type) && REQUIRED_FIELDS.every((field) => mapping.includes(field));
     set({
@@ -170,7 +180,12 @@ export const useComponentImportStore = create<ImportState>((set, get) => ({
 
   reparse: (materials) => {
     const { sourceContext, table, phase } = get();
-    if (!sourceContext?.reparse || !table || phase !== 'ready') return;
+    if (!table || phase !== 'ready') return;
+    // Without a re-reader the cells stay, but whether each TIM is in 01 moved.
+    if (!sourceContext?.reparse) {
+      get().rebuildRows();
+      return;
+    }
     const next = sourceContext.reparse(materials);
     // Same source, same columns: the mapping and the row decisions carry over.
     if (next.headers.join('\u0000') !== table.headers.join('\u0000')) return;
@@ -208,7 +223,7 @@ export const useComponentImportStore = create<ImportState>((set, get) => ({
   rebuildRows: () => {
     const { table, mapping, rows: previous } = get();
     if (!table) return;
-    const rebuilt = buildStagingRows({ table, mapping, existingComponents: existingComponents() });
+    const rebuilt = buildStagingRows({ table, mapping, existingComponents: existingComponents(), timNames: timNames() });
     // Preserve the user's include / duplicate choices across a remap.
     const decisions = new Map(previous.map((row) => [row.row_id, row]));
     set({
@@ -219,6 +234,7 @@ export const useComponentImportStore = create<ImportState>((set, get) => ({
           { ...row, include: prior.include, duplicate_action: prior.duplicate_action },
           existingComponents(),
           mapping,
+          timNames(),
         );
       }),
     });
@@ -229,7 +245,7 @@ export const useComponentImportStore = create<ImportState>((set, get) => ({
     set({
       rows: rows.map((row) =>
         row.row_id === rowId
-          ? revalidateRow({ ...row, ...patch }, existingComponents(), mapping)
+          ? revalidateRow({ ...row, ...patch }, existingComponents(), mapping, timNames())
           : row,
       ),
     });
@@ -253,7 +269,7 @@ export const useComponentImportStore = create<ImportState>((set, get) => ({
       rows: rows.map((row) =>
         row.status === 'ERROR'
           ? row
-          : revalidateRow({ ...row, include: true }, existingComponents(), mapping),
+          : revalidateRow({ ...row, include: true }, existingComponents(), mapping, timNames()),
       ),
     });
   },
@@ -263,7 +279,7 @@ export const useComponentImportStore = create<ImportState>((set, get) => ({
     set({
       rows: rows.map((row) =>
         row.status === 'ERROR'
-          ? revalidateRow({ ...row, include: false }, existingComponents(), mapping)
+          ? revalidateRow({ ...row, include: false }, existingComponents(), mapping, timNames())
           : row,
       ),
     });
@@ -273,7 +289,7 @@ export const useComponentImportStore = create<ImportState>((set, get) => ({
     const { rows, mapping } = get();
     set({
       rows: rows.map((row) =>
-        revalidateRow({ ...row, category }, existingComponents(), mapping),
+        revalidateRow({ ...row, category }, existingComponents(), mapping, timNames()),
       ),
     });
   },
@@ -283,7 +299,7 @@ export const useComponentImportStore = create<ImportState>((set, get) => ({
     const ids = new Set(rowIds);
     set({
       rows: rows.map((row) =>
-        ids.has(row.row_id) ? revalidateRow({ ...row, category }, existingComponents(), mapping) : row,
+        ids.has(row.row_id) ? revalidateRow({ ...row, category }, existingComponents(), mapping, timNames()) : row,
       ),
     });
   },

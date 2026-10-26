@@ -188,8 +188,8 @@ export function HeatPathPane({
         </svg>
         <p className="pointer-events-none absolute bottom-2.5 left-3 max-w-[calc(100%-150px)] text-[11px] text-ink-400">
           {mode === '2d'
-            ? '剖面沿長度 L；厚度放大不依比例，寬度依比例。'
-            : '拖曳可旋轉；各層分開畫（爆炸圖），長寬依比例。'}
+            ? '剖面沿長度 L；寬度依比例放大，厚度為了看得清楚不依比例。'
+            : '拖曳可旋轉；各層分開畫（爆炸圖），長寬依比例放大。'}
         </p>
         {mode === '3d' && (
           <div className="absolute right-2.5 bottom-2.5 flex gap-1">
