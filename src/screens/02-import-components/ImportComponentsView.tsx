@@ -12,7 +12,7 @@
  * Applying is the check step's action and, by default, carries on to 04.
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { AlertTriangle, ArrowLeft, ArrowRight, CheckCircle2, ChevronDown, Loader2, XCircle } from 'lucide-react';
 
@@ -36,6 +36,7 @@ import { ComponentPreviewTable } from './ComponentPreviewTable';
 import { MaterialDefaultsForm } from '@/project/MaterialDefaultsForm';
 import { BlockingIssuesPanel, DuplicateBar, ReviewStatsLine } from './ImportSummaryPanel';
 import { RruMaterialsOffer, useRruMaterialsSummary } from './RruMaterialsOffer';
+import { AiTimOffer } from './AiTimOffer';
 
 const STEP_ORDER: ImportStep[] = ['source', 'mapping', 'review'];
 
@@ -142,6 +143,10 @@ export function ImportComponentsView() {
   const canApply = useComponentImportStore((s) => s.canApply()) && !readOnly;
   const existing = useComponentStore((s) => s.components);
   const materials = draft?.materials;
+  const timNeeds = useMemo(
+    () => (draft && sourceContext?.missingTims ? sourceContext.missingTims(draft.materials) : []),
+    [draft, sourceContext],
+  );
   const rruSummary = useRruMaterialsSummary(
     source?.source_type === 'AIThermal' ? (sourceContext?.aiThermalProject ?? null) : null,
   );
@@ -324,15 +329,19 @@ export function ImportComponentsView() {
           */}
           <MaterialDefaultsForm
             readOnly={readOnly}
-            defaultOpen={false}
-            summaryExtra={rruSummary}
+            // Open when a TIM model is missing: closed, the parts would import bare.
+            defaultOpen={timNeeds.length > 0}
+            summaryExtra={`${rruSummary ?? ''}${timNeeds.length > 0 ? ` · ⚠ ${timNeeds.length} 個 TIM 型號 01 沒有` : ''}` || undefined}
             lead={
               source?.source_type === 'AIThermal' && sourceContext?.aiThermalProject && draft ? (
-                <RruMaterialsOffer
-                  project={sourceContext.aiThermalProject}
-                  projectName={source.source_project_name ?? source.source_project_id ?? ''}
-                  materials={draft.materials}
-                />
+                <div className="flex flex-col gap-3">
+                  <AiTimOffer needs={timNeeds} materials={draft.materials} />
+                  <RruMaterialsOffer
+                    project={sourceContext.aiThermalProject}
+                    projectName={source.source_project_name ?? source.source_project_id ?? ''}
+                    materials={draft.materials}
+                  />
+                </div>
               ) : undefined
             }
           />

@@ -23,6 +23,7 @@ import {
   AI_THERMAL_HEADERS,
   aiThermalSpecKey,
   listAiThermalProjects,
+  missingAiThermalTims,
   parseAiThermalDb,
   parseAiThermalProject,
   parseAiThermalSize,
@@ -30,6 +31,7 @@ import {
   type AiThermalScope,
 } from './parseAiThermal';
 import { CANONICAL_FIELDS, IGNORE_COLUMN, type StagingRow } from './types';
+import { timMaterialFromAiThermal } from '@/screens/02-import-components/AiTimOffer';
 
 const ALL: AiThermalScope = { lists: ['RF', 'Digital', 'PWR'], includeExcluded: false };
 const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
@@ -305,6 +307,65 @@ describe('choices that depend on the target project', () => {
     // Digital infers Board; nothing confirmed it.
     expect(s.heat_path.type).toBe('Board');
     expect(s.heat_path_confirmed).toBe(false);
+  });
+});
+
+describe('the TIM, whatever 01 calls it', () => {
+  /** A project whose TIMs were linked to the TIM Management Tool: renamed to its names. */
+  const renamed = (): MaterialDefaults => {
+    const materials = defaultMaterials();
+    materials.tim = materials.tim.map((m) =>
+      m.id === 'TIM_GREASE'
+        ? { ...m, name: 'Laird TG-2500', catalog: { id: 'CAT_TG2500' } }
+        : m.id === 'TIM_PUTTY'
+          ? { ...m, name: 'T Putty-910' }
+          : m.id === 'TIM_PAD'
+            ? { ...m, name: 'Generic gap pad' }
+            : m,
+    );
+    return materials;
+  };
+
+  it('finds it by the TIM Management Tool link, a loose name, or the built-in of its type', () => {
+    const linked = db((raw) => {
+      (raw.tim_library as Record<string, Record<string, unknown>>).tim_mu6m6njc_muyx.srcId = 'CAT_TG2500';
+    });
+    const { components, rows } = run(linked, ALL, renamed());
+    // Copper coin + grease: the link says which material it is.
+    expect(by(components, 'GTRB384608FC-Final').thermal_spec.tim.tim_id).toBe('TIM_GREASE');
+    // "T-Putty 910" = "T Putty-910".
+    expect(by(components, 'XCZU67DR-FFVE1156').thermal_spec.tim.tim_id).toBe('TIM_PUTTY');
+    expect(rowOf(rows, 'GTRB384608FC-Final').issues.map((i) => i.field)).not.toContain('TIM_Type');
+    // Without the link, the renamed built-in grease is still the grease.
+    expect(by(run(db(), ALL, renamed()).components, 'GTRB384608FC-Final').thermal_spec.tim.tim_id).toBe('TIM_GREASE');
+  });
+
+  it('names a model 01 has no material for, warns, and lists it with AI-Thermal\'s k and gap', () => {
+    const materials = defaultMaterials();
+    materials.tim = materials.tim.filter((m) => m.id !== 'TIM_PUTTY');
+    const timNames = new Set(materials.tim.map((m) => m.name.toLowerCase()));
+    const table = parseAiThermalProject(db(), 'StarKcore-12L', ALL, materials);
+    const rows = buildStagingRows({ table, mapping: autoMapColumns(table.headers), existingComponents: [], timNames });
+    const fpga = rowOf(rows, 'XCZU67DR-FFVE1156');
+    expect(fpga.tim_name).toBe('T-Putty 910');
+    expect(fpga.issues).toContainEqual(
+      expect.objectContaining({ field: 'TIM_Type', message_zh: 'TIM「T-Putty 910」不在 01 的材料清單，匯入後會沒有 TIM。' }),
+    );
+
+    const needs = missingAiThermalTims(db(), 'StarKcore-12L', materials);
+    expect(needs).toEqual([
+      expect.objectContaining({ model: 'T-Putty 910', type: 'Putty', k: 9.1, gap_mm: 0.5, catalogId: null }),
+    ]);
+    expect(needs[0].components).toEqual(
+      expect.arrayContaining(['XCZU67DR-FFVE1156', 'U850-Si5518', '2GB_DDR', 'Power Module(H48SA50030NRDH)']),
+    );
+
+    // Added to 01, the same rows find it.
+    const taken = new Set(materials.tim.map((m) => m.id));
+    materials.tim.push(timMaterialFromAiThermal(needs[0], taken));
+    expect(missingAiThermalTims(db(), 'StarKcore-12L', materials)).toEqual([]);
+    const fixed = run(db(), ALL, materials).components;
+    expect(by(fixed, 'XCZU67DR-FFVE1156').thermal_spec.tim.tim_id).toBe('TIM_AIT_T_PUTTY_910');
   });
 });
 

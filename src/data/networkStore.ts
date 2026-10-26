@@ -48,6 +48,7 @@ import {
 } from '@/thermal/graph/componentMount';
 import { reconcilePortConnections } from '@/thermal/graph/portConnectionReconciliation';
 import { repairLegacySharedFinLinks } from '@/thermal/graph/sharedStructure';
+import { pruneComponentObjects } from '@/thermal/graph/componentPruning';
 import type { MaterialDefaults } from '@/domain/materials';
 
 export function emptyNetwork(projectId: string): ThermalNetwork {
@@ -75,6 +76,8 @@ const HISTORY_LIMIT = 50;
 
 interface NetworkStoreState {
   network: ThermalNetwork | null;
+  /** The project `loadFor` loaded (the network's own `project_id` may predate a copy). */
+  projectId: string | null;
   dirty: boolean;
   requiresReview: boolean;
   requiresReviewReasons: string[];
@@ -117,6 +120,12 @@ interface NetworkStoreState {
     binding?: ComponentTemplateBinding;
     zones?: BaseZone[];
   }) => void;
+  /**
+   * Takes components that no longer exist out of the graph: every node and
+   * edge they own, and anything pointing at those nodes (`componentPruning.ts`).
+   * Returns the removed node ids.
+   */
+  pruneComponents: (componentIds: string[]) => { nodes: string[]; edges: number };
   /** Replaces generated shared structure without deleting component subgraphs. */
   replaceSharedStructure: (
     input: {
@@ -360,6 +369,7 @@ function statusFor(network: ThermalNetwork, validation: GraphValidationResult): 
 
 export const useNetworkStore = create<NetworkStoreState>((set, get) => ({
   network: null,
+  projectId: null,
   dirty: false,
   requiresReview: false,
   requiresReviewReasons: [],
@@ -384,6 +394,7 @@ export const useNetworkStore = create<NetworkStoreState>((set, get) => ({
     const review = loadNetworkReviewState(projectId);
     set({
       network,
+      projectId,
       dirty: false,
       requiresReview: review.requires_review,
       requiresReviewReasons: review.reasons,
@@ -396,6 +407,7 @@ export const useNetworkStore = create<NetworkStoreState>((set, get) => ({
   clear: () =>
     set({
       network: null,
+      projectId: null,
       dirty: false,
       requiresReview: false,
       requiresReviewReasons: [],
@@ -447,6 +459,15 @@ export const useNetworkStore = create<NetworkStoreState>((set, get) => ({
     if (!options.skipInvalidate) {
       useSolverStore.getState().invalidate('topology_changed');
     }
+  },
+
+  pruneComponents: (componentIds) => {
+    let result = { nodes: [] as string[], edges: 0 };
+    if (componentIds.length === 0) return result;
+    get().mutate((network) => {
+      result = pruneComponentObjects(network, new Set(componentIds));
+    });
+    return result;
   },
 
   upsertNode: (node) => get().mutate((network) => void (network.nodes[node.id] = node)),

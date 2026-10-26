@@ -65,7 +65,7 @@ import {
   type LimitType,
   type ThermalSpec,
 } from '@/domain/component';
-import { DIRECT_CONTACT_TIM_ID, type MaterialDefaults } from '@/domain/materials';
+import { BUILTIN_TIM_IDS, DIRECT_CONTACT_TIM_ID, type MaterialDefaults } from '@/domain/materials';
 import { aiThermalViaKeff, aiThermalViaReason, equalAreaSide } from './aiThermalVia';
 import { CARRIED_SPEC_COLUMN, type CarriedSpec } from './carriedSpec';
 import { CANONICAL_FIELDS, type CanonicalField, type ParsedTable } from './types';
@@ -269,6 +269,112 @@ export interface AiThermalMapped {
   excluded: boolean;
 }
 
+/** A name compared loosely: case, spaces and punctuation do not count ("T-Grease 2500" = "tgrease2500"). */
+const looseKey = (value: string) => value.toLowerCase().replace(/[^a-z0-9\u4e00-\u9fff]+/g, '');
+
+/** AI-Thermal's TIM types and the built-in material a new project starts with for each. */
+const BUILTIN_FOR_TYPE: Record<string, string> = {
+  grease: BUILTIN_TIM_IDS.grease,
+  pad: BUILTIN_TIM_IDS.pad,
+  putty: BUILTIN_TIM_IDS.putty,
+};
+
+/**
+ * Which of this project's materials an AI-Thermal component's TIM is.
+ *
+ * In order: the material linked to the same TIM Management Tool material as
+ * AI-Thermal's model (`tim_library[].srcId` = `catalog.id`); a material named as
+ * the model; one named as the type; the built-in material of that type, even
+ * renamed. Names are compared loosely. A project that links its TIMs to the TIM
+ * Management Tool renames them to the catalogue's names, which is how every TIM
+ * used to arrive empty: only an exact "Grease" or model name matched.
+ */
+export function resolveAiThermalTim(
+  comp: Raw,
+  spec: Raw,
+  db: AiThermalDb,
+  materials: MaterialDefaults,
+): {
+  timType: string;
+  timModel: string;
+  direct: boolean;
+  material: MaterialDefaults['tim'][number] | undefined;
+  libraryRow: Raw | null;
+} {
+  const timType = text(spec.timType) || text(comp.TIM_Type);
+  const timModel = text(spec.timModel) || text(comp.TIM_Model);
+  const direct = timType === 'None';
+  const rows = Object.values(db.tim_library).filter(isObj);
+  const libraryRow = timModel
+    ? (rows.find(
+        (row) => looseKey(text(row.model)) === looseKey(timModel) && text(row.timType) === timType,
+      ) ??
+      rows.find((row) => looseKey(text(row.model)) === looseKey(timModel)) ??
+      null)
+    : null;
+  if (direct || (!timType && !timModel)) return { timType, timModel, direct, material: undefined, libraryRow };
+
+  const byName = (wanted: string) =>
+    wanted ? materials.tim.find((m) => looseKey(m.name) === looseKey(wanted)) : undefined;
+  const srcId = libraryRow ? text(libraryRow.srcId) : '';
+  const builtin = BUILTIN_FOR_TYPE[timType.toLowerCase()];
+  const material =
+    (srcId ? materials.tim.find((m) => m.catalog?.id === srcId) : undefined) ??
+    byName(timModel) ??
+    byName(timType) ??
+    (builtin ? materials.tim.find((m) => m.id === builtin) : undefined);
+  return { timType, timModel, direct, material, libraryRow };
+}
+
+/** An AI-Thermal TIM model a project's components use that 01 has no material for. */
+export interface AiThermalTimNeed {
+  model: string;
+  type: string;
+  k: number | null;
+  /** Compressed gap — this tool's bond line. */
+  gap_mm: number | null;
+  /** The TIM Management Tool material it is linked to there. */
+  catalogId: string | null;
+  /** Components that use it. */
+  components: string[];
+}
+
+/** The TIM models the components in `scope` use that `materials` cannot resolve. */
+export function missingAiThermalTims(
+  db: AiThermalDb,
+  projectId: string,
+  materials: MaterialDefaults,
+  scope: AiThermalScope = { lists: AI_THERMAL_LISTS.map((list) => list.key), includeExcluded: false },
+): AiThermalTimNeed[] {
+  const project = db.projects[projectId];
+  if (!isObj(project)) return [];
+  const specs: Raw = isObj(project.thermal_specs) ? project.thermal_specs : {};
+  const needs = new Map<string, AiThermalTimNeed>();
+  for (const list of AI_THERMAL_LISTS) {
+    if (!scope.lists.includes(list.key)) continue;
+    for (const comp of listOf(project, list.field)) {
+      const name = text(comp.Component);
+      if (!name || (!scope.includeExcluded && comp._excluded === true)) continue;
+      const found = specs[aiThermalSpecKey(name)];
+      const spec: Raw = isObj(found) ? found : {};
+      const tim = resolveAiThermalTim(comp, spec, db, materials);
+      if (tim.direct || tim.material || !(tim.timModel || tim.timType)) continue;
+      const key = looseKey(tim.timModel || tim.timType);
+      const entry = needs.get(key) ?? {
+        model: tim.timModel || tim.timType,
+        type: tim.timType,
+        k: tim.libraryRow ? positive(tim.libraryRow.k) : null,
+        gap_mm: tim.libraryRow ? positive(tim.libraryRow.gapThickness) : null,
+        catalogId: tim.libraryRow ? text(tim.libraryRow.srcId) || null : null,
+        components: [],
+      };
+      entry.components.push(name);
+      needs.set(key, entry);
+    }
+  }
+  return [...needs.values()];
+}
+
 export function mapAiThermalComponent(
   comp: Raw,
   list: (typeof AI_THERMAL_LISTS)[number],
@@ -342,24 +448,14 @@ export function mapAiThermalComponent(
     else if (fromGlobal != null) [boardT, boardFrom] = [fromGlobal, '5G-RRU 參數 t_PCB'];
   }
 
-  // TIM: the model when this project has a material of that name, else the type.
-  const timType = text(spec.timType) || text(comp.TIM_Type);
-  const timModel = text(spec.timModel) || text(comp.TIM_Model);
-  const direct = timType === 'None';
-  const byName = (wanted: string) =>
-    wanted ? materials.tim.find((m) => m.name.trim().toLowerCase() === wanted.toLowerCase()) : undefined;
-  const material = direct ? undefined : (byName(timModel) ?? byName(timType));
-  const timName = direct ? '' : material ? material.name : timType;
+  // TIM: this project's material for AI-Thermal's model (`resolveAiThermalTim`).
+  const { timType, timModel, direct, material, libraryRow } = resolveAiThermalTim(comp, spec, db, materials);
+  // Unmatched: the model's name, so the review says which one 01 is missing.
+  const timName = direct ? '' : material ? material.name : timModel || timType;
   // The compressed gap IS the bond line (5G-RRU's t_Pad 1.7 is AI-Thermal's 1.7 gap,
   // not its 2.5 mm sheet). Stated only where it differs from the material's own.
   const gap = positive(spec.icToHSK);
-  const libraryGap = (() => {
-    if (!timModel) return null;
-    const row = Object.values(db.tim_library).find(
-      (entry) => isObj(entry) && text(entry.model).toLowerCase() === timModel.toLowerCase(),
-    );
-    return row ? positive(row.gapThickness) : null;
-  })();
+  const libraryGap = libraryRow ? positive(libraryRow.gapThickness) : null;
   const blt = direct ? null : (gap ?? libraryGap);
   const bltCell = blt != null && material && material.blt_mm.value === blt ? null : blt;
 

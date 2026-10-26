@@ -20,6 +20,8 @@ import { useNetworkStore } from '@/data/networkStore';
 import { useScenarioStore } from '@/data/scenarioStore';
 import { useBoundaryStore } from '@/data/boundaryStore';
 import { useSolverStore } from '@/data/solverStore';
+import { describePrune, pruneDeletedComponents } from '@/data/componentDeletion';
+import { orphanedComponentIds } from '@/thermal/graph/componentPruning';
 
 import type { Component } from '@/domain/component';
 import { defaultMaterials } from '@/domain/materials';
@@ -499,6 +501,12 @@ export function useThermalPathBuilder() {
     const store = useNetworkStore.getState();
     let dropped = 0;
     const skipped: string[] = [];
+
+    // Generate builds from the component list as it is, so a part 04 no
+    // longer has goes first — its subgraph, wiring and 06 assignments.
+    const gone = store.network ? orphanedComponentIds(store.network, new Set(components.map((c) => c.id))) : [];
+    const pruned = projectId && gone.length > 0 ? pruneDeletedComponents(projectId, gone) : null;
+    if (pruned && pruned.nodes > 0) toast.success(describePrune(pruned));
 
     store.addSubgraph({
       nodes: structure.nodes,

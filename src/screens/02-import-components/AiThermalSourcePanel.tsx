@@ -25,6 +25,7 @@ import { defaultMaterials } from '@/domain/materials';
 import {
   AI_THERMAL_LISTS,
   listAiThermalProjects,
+  missingAiThermalTims,
   parseAiThermalProject,
   type AiThermalDb,
   type AiThermalList,
@@ -117,6 +118,7 @@ export function AiThermalSourcePanel() {
         {
           aiThermalProject: db.projects[summary.id],
           reparse: (next) => parseAiThermalProject(db, summary.id, scope, next),
+          missingTims: (next) => missingAiThermalTims(db, summary.id, next, scope),
         },
       );
     } catch (error) {

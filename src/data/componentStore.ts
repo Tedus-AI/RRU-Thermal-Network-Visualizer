@@ -9,6 +9,7 @@
 import { create } from 'zustand';
 import { useSolverStore } from './solverStore';
 import { useNetworkStore } from './networkStore';
+import { pruneDeletedComponents } from './componentDeletion';
 import {
   loadComponentRevisions,
   loadComponents,
@@ -219,9 +220,12 @@ export const useComponentStore = create<ComponentStoreState>((set, get) => ({
       revisions: advanceRevisions(get().revisions, { solverInput: true, limits: true }),
       dirty: true,
     });
-    // 04 §25 — a deleted component leaves its graph mapping orphaned. Screen 04
-    // never rewrites topology; it flags the graph for review.
-    if (component && isMappedToNetwork(component)) {
+    // The part leaves Screens 05 and 06 with it (`componentDeletion.ts`): its
+    // subgraph and its boundary assignments. Only when that graph is not
+    // loaded is the review flag left for 05 — the sync prunes it on load.
+    const projectId = get().loaded_project_id;
+    const pruned = projectId ? pruneDeletedComponents(projectId, [id]) : null;
+    if (!pruned && component && isMappedToNetwork(component)) {
       useNetworkStore.getState().setRequiresReview(true, 'component_deleted');
     }
     useSolverStore.getState().invalidate('component_architecture_changed');

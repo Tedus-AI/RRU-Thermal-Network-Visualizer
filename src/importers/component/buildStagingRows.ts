@@ -49,12 +49,15 @@ export interface BuildOptions {
   table: ParsedTable;
   mapping: MappingTarget[];
   existingComponents: Component[];
+  /** The project's TIM names, lower-cased: a TIM it does not have imports as none (`matchTimId`). */
+  timNames?: ReadonlySet<string>;
 }
 
 export function buildStagingRows({
   table,
   mapping,
   existingComponents,
+  timNames,
 }: BuildOptions): StagingRow[] {
   const existingByKey = new Map<string, Component>();
   for (const component of existingComponents) {
@@ -144,6 +147,7 @@ export function buildStagingRows({
       heatPathUnrecognised: unrecognisedHeatPath(rawHeatPath, heatPath),
       packageUnrecognised: unrecognisedPackage(rawPackage, packageType),
       unmappedRequired: REQUIRED_FIELDS.filter((field) => !mapping.includes(field)),
+      timNames,
     });
   });
 }
@@ -153,6 +157,7 @@ export interface ValidateContext {
   heatPathUnrecognised?: boolean;
   packageUnrecognised?: boolean;
   unmappedRequired?: CanonicalField[];
+  timNames?: ReadonlySet<string>;
 }
 
 /**
@@ -346,6 +351,15 @@ export function validateStagingRow(row: StagingRow, context: ValidateContext = {
       message: 'No TIM named — the component will import with none assigned.',
       message_zh: '未指定熱介面材料，將以「無」匯入。',
     });
+  } else if (row.tim_name && context.timNames && !context.timNames.has(row.tim_name.trim().toLowerCase())) {
+    // Matched by name at apply; one the project does not have used to import
+    // as no TIM without a word, while the preview still showed the name.
+    issues.push({
+      severity: 'warning',
+      field: 'TIM_Type',
+      message: `TIM "${row.tim_name}" is not in the project's materials (01) — it will import with none assigned.`,
+      message_zh: `TIM「${row.tim_name}」不在 01 的材料清單，匯入後會沒有 TIM。`,
+    });
   }
 
   // The heat path selects the whole resistance chain, so a missing or
@@ -405,6 +419,7 @@ export function revalidateRow(
   row: StagingRow,
   existingComponents: Component[],
   mapping: MappingTarget[],
+  timNames?: ReadonlySet<string>,
 ): StagingRow {
   const existingByKey = new Map<string, Component>();
   for (const component of existingComponents) {
@@ -414,7 +429,7 @@ export function revalidateRow(
 
   return validateStagingRow(
     { ...row, duplicate_of: duplicate?.id ?? null },
-    { unmappedRequired: REQUIRED_FIELDS.filter((field) => !mapping.includes(field)) },
+    { unmappedRequired: REQUIRED_FIELDS.filter((field) => !mapping.includes(field)), timNames },
   );
 }
 
