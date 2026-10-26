@@ -181,7 +181,7 @@ Mapping → Validation → Duplicate → Apply）、`AiThermalSourcePanel.tsx`�
 | TH/ME `epadSize`（→ `Pad_L/W`）| E-PAD（板級導熱孔的熱源面）|
 | `projects[id].pcb_thickness[RF／Digital／PWR]` → 5G-RRU 元件 `Thick(mm)` → `global_params.t_PCB` | 板厚（只有板級導熱孔）|
 | TH/ME `via`（AI-Thermal「Thermal Via 計算」的設計）＋元件 `TV_Qty`／`TV_ID_mil` | 板級導熱孔：設計完整 → 該元件**自訂**導熱孔等效 k ＝ K_eff、製程係數 1（K_eff 已含銅壁／塞孔／FR4 的比例，不再折減；與 5G-RRU 相同）；沒有設計／暫不納入／缺輸入／via 超過焊盤 → 不寫，沿用 01 的通用值。圓形焊盤且 TH/ME 沒填 `epadSize` → E-PAD 用等面積方形 |
-| TH/ME `timModel`／`timType`（→ `TIM_Model`／`TIM_Type`）| TIM：本專案有同名材料就用型號，否則用類型；None → 乾式金屬接觸 |
+| TH/ME `timModel`／`timType`（→ `TIM_Model`／`TIM_Type`）| TIM（`resolveAiThermalTim`）：依序找 ① AI-Thermal 型號庫連到的 TIM 管理工具材料（`tim_library[].srcId` = 01 材料的 `catalog.id`）② 名稱＝型號 ③ 名稱＝類型 ④ 該類型的內建材料（Grease／Pad／Putty，改過名也算）；名稱比對不分大小寫、空白與符號。None → 乾式金屬接觸。**都找不到 → 02 警告「TIM 不在 01 的材料清單」**，材料卡最上面列出這些型號（AI-Thermal 型號庫的 k 與填縫厚度），預設勾選、按「加入 01」才寫入（`AiTimOffer`）。原本只認完全同名，01 的 TIM 連到 TIM 管理工具改了名之後，每顆元件都沒有 TIM、也沒有警告 |
 | TH/ME `icToHSK`（壓縮後縫隙）→ 型號 `gapThickness` | 壓合厚度 BLT（與材料預設相同就不寫，沿用材料）|
 | TH/ME `bossSize`（元件表面路徑）| 記在凸台的「上次設定」（`mount_by_type.Pedestal`）：04 選「凸台」時帶入；接合方式仍是直接貼合 |
 | 元件 `note`＋TH/ME `note` | 備註 |

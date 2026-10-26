@@ -54,6 +54,12 @@ interface ComponentStoreState {
   duplicateComponent: (id: string) => Component | null;
   deleteComponent: (id: string) => void;
   setEnabled: (id: string, enabled: boolean) => void;
+  /**
+   * Moves a component one place up (-1) or down (+1) past its neighbour in
+   * `order` — the rows the table shows, so a filtered table moves it past the
+   * row the engineer sees. Order is presentation: nothing is invalidated.
+   */
+  moveComponent: (id: string, direction: -1 | 1, order?: string[]) => void;
   bulkPatch: (ids: string[], patch: (component: Component) => Partial<Component>, fields: string[]) => void;
 
   save: (projectId: string) => void;
@@ -232,6 +238,20 @@ export const useComponentStore = create<ComponentStoreState>((set, get) => ({
   },
 
   setEnabled: (id, enabled) => get().patchComponent(id, { enabled }, ['enabled']),
+
+  moveComponent: (id, direction, order) => {
+    const components = get().components;
+    const ids = order ?? components.map((component) => component.id);
+    const at = ids.indexOf(id);
+    const neighbour = at >= 0 ? ids[at + direction] : undefined;
+    const moving = components.find((component) => component.id === id);
+    if (!moving || !neighbour) return;
+    const rest = components.filter((component) => component.id !== id);
+    const n = rest.findIndex((component) => component.id === neighbour);
+    if (n < 0) return;
+    rest.splice(direction < 0 ? n : n + 1, 0, moving);
+    set({ components: rest, dirty: true });
+  },
 
   bulkPatch: (ids, patch, fields) => {
     const components = get().components;

@@ -503,7 +503,10 @@ export function draw2D(view: HeatPathView, ids: SvgIds): Drawing {
   if (path === 'Coin') widths.push(view.coin.L);
   if (m.type !== 'Direct') widths.push(m.contact_L_mm);
   const maxW = Math.max(...widths.filter(pos), 1);
-  const s = Math.min(270 / maxW, 9);
+  // The widest layer fills the drawing. Capped at 9 px/mm, a 3 × 3 mm QFN came
+  // out 27 px wide under a package drawn 45 px tall: thicknesses are enlarged
+  // to be legible, and the width has to be enlarged with them.
+  const s = Math.min(270 / maxW, 40);
   const px = (mm: number | null, fallback: number) => (pos(mm) ? Math.max(mm * s, 8) : fallback);
   let y = 64;
 
@@ -1133,7 +1136,8 @@ export function draw3D(view: HeatPathView, ids: SvgIds, az: number): Drawing {
   if (path === 'Board') footprints.push(view.spreadFace.L, view.spreadFace.W);
   if (m.type !== 'Direct' && m.type !== 'EmbeddedHeatPipe') footprints.push(m.contact_L_mm, m.contact_W_mm);
   const maxD = Math.max(...footprints.filter(pos), 4);
-  const s = Math.min(150 / maxD, 10);
+  // As in the section: a small part is drawn large, not lost under fixed-height layers.
+  const s = Math.min(150 / maxD, 40);
   const mm = (v: number | null, fallback: number) => (pos(v) ? v * s : fallback);
 
   const slabs: Slab[] = [];

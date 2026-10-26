@@ -227,3 +227,34 @@ describe('the graph function', () => {
     expect(network.flotherm_mappings.M1).toBeUndefined();
   });
 });
+
+describe('moving a row in 04', () => {
+  const ids = () => useComponentStore.getState().components.map((c) => c.id);
+  const three = () => [pa(), driver(), part('CMP_PRE', 'Pre-driver', 1)];
+
+  it('swaps with the neighbour, and stops at either end', () => {
+    useComponentStore.setState({ components: three(), dirty: false });
+    useComponentStore.getState().moveComponent('CMP_DRV', -1);
+    expect(ids()).toEqual(['CMP_DRV', 'CMP_PA', 'CMP_PRE']);
+    expect(useComponentStore.getState().dirty).toBe(true);
+    useComponentStore.getState().moveComponent('CMP_DRV', -1);
+    expect(ids()).toEqual(['CMP_DRV', 'CMP_PA', 'CMP_PRE']);
+    useComponentStore.getState().moveComponent('CMP_PRE', 1);
+    expect(ids()).toEqual(['CMP_DRV', 'CMP_PA', 'CMP_PRE']);
+  });
+
+  it('in a filtered table, moves past the row the engineer sees', () => {
+    useComponentStore.setState({ components: three() });
+    // The driver is filtered out: Pre-driver up goes above the PA.
+    useComponentStore.getState().moveComponent('CMP_PRE', -1, ['CMP_PA', 'CMP_PRE']);
+    expect(ids()).toEqual(['CMP_PRE', 'CMP_PA', 'CMP_DRV']);
+  });
+
+  it('changes nothing the solve reads', () => {
+    useComponentStore.setState({ components: three() });
+    const invalidate = vi.spyOn(useSolverStore.getState(), 'invalidate');
+    useComponentStore.getState().moveComponent('CMP_PA', 1);
+    expect(invalidate).not.toHaveBeenCalled();
+    invalidate.mockRestore();
+  });
+});
