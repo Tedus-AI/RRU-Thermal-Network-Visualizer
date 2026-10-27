@@ -85,7 +85,10 @@ export function ScreenWorkspace({
       <div className="relative flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-6 pb-4 xl:flex-row">
         <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4">{children}</div>
         {rightPanel && (
-          <aside className="flex w-full shrink-0 flex-col gap-4 xl:w-[22rem] 2xl:w-[24rem]">
+          /* As narrow as its rows allow without wrapping: the longest ones
+             ("9999 節點 · 9999 段", "下一步：02 匯入硬體元件") measure about
+             230 px. It was 22–24 rem, mostly air beside short numbers. */
+          <aside className="flex w-full shrink-0 flex-col gap-4 xl:w-[15.5rem]">
             {rightPanel}
           </aside>
         )}
