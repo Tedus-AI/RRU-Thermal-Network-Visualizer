@@ -14,6 +14,7 @@
  */
 
 import type { AiThermalLink } from './aiThermalLink';
+import type { PowerBasis } from './powerBasis';
 import { sourced, unknownValue, valueOf, type SourcedValue } from './sourcedValue';
 import type { ExternalMappings } from '@/thermal/resultValue';
 
@@ -1184,8 +1185,14 @@ export interface Component {
   /** Disabled components keep their data but leave the active dataset (04 §25). */
   enabled: boolean;
   qty: number;
-  /** Dissipation of ONE unit, W. */
+  /** Dissipation of ONE unit, W — at the high-temperature condition (AI-Thermal's `Power(W)`). */
   power_W: SourcedValue<number>;
+  /**
+   * Dissipation of ONE unit at room temperature (AI-Thermal's `Power_RT(W)`,
+   * Pd@25°C), W. What a room-temperature scenario solves with
+   * (`domain/powerBasis.ts`); absent when the source does not state it.
+   */
+  power_rt_W?: SourcedValue<number> | null;
 
   thermal_spec: ThermalSpec;
   architecture_prep: ArchitecturePrep;
@@ -1292,6 +1299,25 @@ export function createComponent(input: {
 
 export function powerWOf(component: Component): number {
   return valueOf(component.power_W) ?? 0;
+}
+
+/** The room-temperature Pd of one unit, or null when the component does not state it. */
+export function powerRtWOf(component: Component): number | null {
+  const value = valueOf(component.power_rt_W ?? null);
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+/**
+ * One unit's power for a scenario's basis. A room-temperature scenario takes
+ * the high-temperature value where no room-temperature one is stated — the
+ * conservative side — and the solve says which components it did that for.
+ */
+export function componentPowerFor(component: Component, basis: PowerBasis): number {
+  if (basis === 'rt') {
+    const rt = powerRtWOf(component);
+    if (rt != null) return rt;
+  }
+  return powerWOf(component);
 }
 
 function finiteParameter(parameters: HeatPathSpec['parameters'], key: string): number | null {

@@ -94,8 +94,10 @@ export function effectOfChange(field: string, isMapped: boolean): InvalidationEf
     case 'enabled':
       return effect(true, true, 'component_enabled_changed');
 
-    // Power changes the load, not the shape of the graph.
+    // Power changes the load, not the shape of the graph. The room-temperature
+    // Pd is what a room-temperature scenario solves with.
     case 'power_W':
+    case 'power_rt_W':
       return effect(false, true, 'component_power_changed');
 
     // Resistance changes the physical solution, never topology.

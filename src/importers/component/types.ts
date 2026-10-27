@@ -34,6 +34,8 @@ export const CANONICAL_FIELDS = [
   'Component',
   'Qty',
   'Power(W)',
+  /** Room-temperature Pd (AI-Thermal's Pd@25°C): what a room-temperature scenario solves with. */
+  'Power_RT(W)',
   'Category',
   'Limit(C)',
   'R_jc',
@@ -109,6 +111,8 @@ export interface StagingRow {
   category: ComponentCategory | null;
   qty: number | null;
   power_W: number | null;
+  /** Room-temperature Pd of one unit; optional. */
+  power_rt_W: number | null;
 
   r_jc_C_per_W: number | null;
   limit_C: number | null;

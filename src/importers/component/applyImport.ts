@@ -191,6 +191,7 @@ function componentFromRow(
     qty: row.qty ?? 0,
     power_W:
       row.power_W == null ? unknownValue<number>('Imported') : sourced(row.power_W, 'Imported'),
+    ...(row.power_rt_W == null ? {} : { power_rt_W: sourced(row.power_rt_W, 'Imported') }),
     thermal_spec: specFromRow(row, materials),
     // 02 §34 / 04 §40 — importing still never creates graph topology. What
     // carries is the PREFERENCES: which template, which base zone, how
@@ -390,10 +391,13 @@ export function applyImport({ existing, rows, sessionPolicy, source, materials }
 
       const nextQty = row.qty ?? target.qty;
       const nextPower = row.power_W == null ? target.power_W : sourced(row.power_W, 'Imported');
+      const nextPowerRt =
+        row.power_rt_W == null ? (target.power_rt_W ?? null) : sourced(row.power_rt_W, 'Imported');
 
       // 02 §24 / 04 §32 — did anything the solver depends on actually move?
       const before = [
         target.power_W.value,
+        target.power_rt_W?.value ?? null,
         target.qty,
         target.thermal_spec.r_jc_C_per_W?.value ?? null,
         target.thermal_spec.limit_C?.value ?? null,
@@ -402,6 +406,7 @@ export function applyImport({ existing, rows, sessionPolicy, source, materials }
       ];
       const after = [
         nextPower.value,
+        nextPowerRt?.value ?? null,
         nextQty,
         nextSpec.r_jc_C_per_W?.value ?? null,
         nextSpec.limit_C?.value ?? null,
@@ -419,6 +424,7 @@ export function applyImport({ existing, rows, sessionPolicy, source, materials }
         ...target,
         qty: nextQty,
         power_W: nextPower,
+        ...(nextPowerRt ? { power_rt_W: nextPowerRt } : {}),
         thermal_spec: nextSpec,
         // 02 §17: Replace only overwrites component-owned fields; unknown
         // metadata written by other tools survives either way.

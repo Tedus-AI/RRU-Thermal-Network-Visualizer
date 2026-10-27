@@ -45,7 +45,7 @@ const SCENARIO_FIELDS = [
   { key: 'show_ambient', label: 'Ambient', zh: '環境溫度' },
   { key: 'show_wind', label: 'Wind', zh: '風速' },
   { key: 'show_solar', label: 'Solar', zh: '太陽輻射' },
-  { key: 'show_power_scale', label: 'Power Scale', zh: '功率倍率' },
+  { key: 'show_power_scale', label: 'Power Basis & Scale', zh: '功耗與倍率' },
   { key: 'show_last_solved', label: 'Last Solved', zh: '最後求解' },
 ] as const;
 

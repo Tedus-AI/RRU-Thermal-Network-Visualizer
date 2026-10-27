@@ -10,6 +10,7 @@ import { defaultMaterials, type MaterialDefaults } from './materials';
 import type { ProjectAiLink } from './projectAiLink';
 import { STRUCTURE_PRESETS, type StructurePreset } from '@/thermal/graph/sharedStructure';
 import { createRevision, type RevisionId } from './revision';
+import type { PowerBasis } from './powerBasis';
 
 export const PROJECT_STAGES = ['Prototype', 'EVT', 'DVT', 'PVT'] as const;
 export type ProjectStage = (typeof PROJECT_STAGES)[number];
@@ -152,6 +153,11 @@ export interface Scenario {
   wind_mps: number;
   solar_W_m2: number;
   power_scale: number;
+  /**
+   * Which component power the scenario solves with (`domain/powerBasis.ts`):
+   * `rt` = each component's room-temperature Pd. No key = high temperature.
+   */
+  power_basis?: PowerBasis;
   notes: string;
   is_default: boolean;
 }
@@ -232,6 +238,7 @@ export function createScenario(
     wind_mps: base?.wind_mps ?? 0,
     solar_W_m2: base?.solar_W_m2 ?? 0,
     power_scale: base?.power_scale ?? 1,
+    ...(base?.power_basis === 'rt' ? { power_basis: 'rt' as const } : {}),
     notes: '',
     is_default: false,
   };

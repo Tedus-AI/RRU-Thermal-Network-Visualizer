@@ -667,6 +667,19 @@ AI-Thermal 鎖定的限溫對象／散熱路徑／TIM 不改（`bulkPatchFor(val
 
 ---
 
+# 25c. 常溫功耗（`power_rt_W`）
+
+AI-Thermal 的 `Power_RT(W)`（Pd@25°C）。檢視面板「概要」在單顆功耗下面一格「常溫功耗」（`ins-power-rt`）：
+連動 AI-Thermal 時與單顆功耗一樣鎖定＋✂（`AiOwned` field `power_rt`）；沒連動或解開後是一般數字欄，placeholder「同單顆功耗」。
+
+- **只有 01 的情境「功耗」選「常溫 Pd」時才用到**（01 §51）；高溫情境（預設）一律用單顆功耗。
+- 空白＝沒有這個 key（不寫 0）：常溫情境暫用單顆功耗，07 列出是哪些元件。
+- 改它屬於功耗變更（`component_power_changed`，求解失效），與單顆功耗同一組。
+- 「從 AI-Thermal 更新」比對、勾選、鎖定的規則與單顆功耗相同；AI-Thermal 清掉這個值時，本工具的值不會被清掉（與其他欄位一致）。
+- 表格不另開一欄（一列維持一行）；02「從既有專案複製元件」照樣帶過去（`Power_RT(W)` 欄）。
+
+---
+
 # 26. Save to Component Library
 
 保存：

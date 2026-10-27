@@ -26,7 +26,8 @@ import { buildAllPreviews } from '../boundary/validation';
 import { windRecordedOnly } from '../boundary/wind';
 import { finRootLinkOf } from '../boundary/boundaryPorts';
 import { edgeResistance } from '../rth';
-import { projectComponentMaster } from '../graph/componentProjection';
+import { componentsMissingRtPower, projectComponentMaster } from '../graph/componentProjection';
+import { POWER_BASIS_LABEL, type PowerBasis } from '@/domain/powerBasis';
 import type { Component } from '@/domain/component';
 import type {
   BoundaryDerivedPreview,
@@ -63,6 +64,8 @@ export interface SolveInput {
   /** Frozen authoritative-store provenance; not part of the physics hash. */
   source_revision: SourceRevision;
   power_scale: number;
+  /** Which component power the nodes carry (01 情境「功耗」). */
+  power_basis: PowerBasis;
   ambient_C: number | null;
 
   /** node id → pinned temperature, °C. */
@@ -102,6 +105,8 @@ export interface BuildSolveInputOptions {
   scenarioId: string;
   sourceRevision?: SourceRevision;
   powerScale?: number;
+  /** The scenario's power basis; no value = the hot-condition Pd. */
+  powerBasis?: PowerBasis;
 }
 
 function cloneNode(node: ThermalNode): ThermalNode {
@@ -190,11 +195,13 @@ function boundaryEdgesOf(network: ThermalNetwork, nodeId: string): ThermalEdge[]
 export function buildSolveInput(options: BuildSolveInputOptions): SolveInput {
   const { network, boundarySet, ports, scenarioId } = options;
   const powerScale = options.powerScale ?? 1;
+  const powerBasis: PowerBasis = options.powerBasis ?? 'hot';
 
   const clone = options.components
     ? projectComponentMaster(network, options.components, options.materials, {
         physics: true,
         limits: true,
+        powerBasis,
       })
     : cloneNetwork(network);
 
@@ -209,6 +216,29 @@ export function buildSolveInput(options: BuildSolveInputOptions): SolveInput {
   }
 
   const notes: SolverIssue[] = [];
+
+  // A room-temperature scenario reads each part's 常溫功耗. A part without one
+  // keeps its hot power — never zero, which would cool it for no reason — and
+  // the solve names the parts so the gap can be filled in Screen 04. The hot
+  // power is not a safe bound: a filter's loss can be higher at 25 °C.
+  if (powerBasis === 'rt' && options.components) {
+    const missing = componentsMissingRtPower(network, options.components);
+    if (missing.length > 0) {
+      const names = missing.map((component) => component.name);
+      const shown = names.slice(0, 6).join('、') + (names.length > 6 ? ` 等 ${names.length} 顆` : '');
+      notes.push(
+        issue(
+          'warning',
+          'rt_power_missing',
+          'pre_solve',
+          `${missing.length} component(s) have no room-temperature power; this ${POWER_BASIS_LABEL.rt} scenario uses their hot power instead: ${names.join(', ')}.`,
+          `${missing.length} 顆元件沒有常溫功耗，這個「${POWER_BASIS_LABEL.rt}」情境暫用它們的高溫功耗：${shown}。有的元件常溫時功耗反而較高（濾波器、環形器），請到 04 填「常溫功耗」，或從 AI-Thermal 更新。`,
+          { fix_in: '04' },
+        ),
+      );
+    }
+  }
+
   const fixedNodes: Record<string, number> = {};
   const pinnedNodeIds = new Set<string>();
   const boundaryEdges: BoundaryEdgeAssignment[] = [];
@@ -450,6 +480,7 @@ export function buildSolveInput(options: BuildSolveInputOptions): SolveInput {
       `${network.project_id}:${network.network_name}:${scenarioId}:${network.revision}`,
     ),
     power_scale: powerScale,
+    power_basis: powerBasis,
     ambient_C,
     fixed_nodes: fixedNodes,
     pinned_node_ids: [...pinnedNodeIds],
@@ -476,6 +507,9 @@ export function solveInputSignature(input: SolveInput): string {
     `scenario=${input.scenario_id}`,
     `scale=${input.power_scale}`,
     `ambient=${input.ambient_C ?? 'null'}`,
+    // Only stated when it is not the default, so a hot solution saved before
+    // the basis existed keeps its signature (the node powers carry the rest).
+    ...(input.power_basis === 'rt' ? ['basis=rt'] : []),
   ];
 
   for (const node of Object.values(input.network.nodes).sort((a, b) => a.id.localeCompare(b.id))) {

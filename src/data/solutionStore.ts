@@ -36,6 +36,7 @@ import type { SolveInput } from '@/thermal/solver/buildSolveInput';
 import type { PreSolveReport } from '@/thermal/solver/preSolveChecks';
 import type { ThermalSolution } from '@/thermal/solver/solverTypes';
 import { hydrateSourceRevision, physicsRevisionMatches } from '@/domain/revision';
+import { powerBasisOf } from '@/domain/powerBasis';
 
 const keyOf = (networkId: string, scenarioId: string) => `${networkId}::${scenarioId}`;
 
@@ -97,6 +98,7 @@ function gather(scenarioId: string | null) {
     ports: boundary.ports,
     scenarioId,
     powerScale: scenario?.power_scale ?? 1,
+    powerBasis: powerBasisOf(scenario),
     networkId: boundary.current()?.network_id ?? network.network_name,
     sourceRevision: hydrateSourceRevision(
       {

@@ -17,6 +17,7 @@ export const FIELD_ZH: Record<string, string> = {
   Component: '元件名稱',
   Qty: '數量',
   'Power(W)': '單顆功耗（W）',
+  'Power_RT(W)': '常溫功耗 Pd@25°C（W）',
   Category: '分類',
   'Limit(C)': '限溫（°C）',
   R_jc: 'Rjc（°C/W）',

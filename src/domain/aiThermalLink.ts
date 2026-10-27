@@ -37,6 +37,7 @@ export const AI_FIELDS = [
   'name',
   'qty',
   'power',
+  'power_rt',
   'limit',
   'limit_type',
   'rjc',
@@ -56,6 +57,7 @@ export const AI_FIELD_LABEL: Record<AiField, string> = {
   name: '名稱',
   qty: '數量',
   power: '單顆功耗',
+  power_rt: '常溫功耗',
   limit: '限溫',
   limit_type: '限溫對象',
   rjc: 'Rjc',
@@ -122,6 +124,8 @@ export function aiValueOf(component: Component, field: AiField): AiValue {
       return component.qty;
     case 'power':
       return component.power_W.value ?? null;
+    case 'power_rt':
+      return component.power_rt_W?.value ?? null;
     case 'limit':
       return spec.limit_C?.value ?? null;
     case 'limit_type':
@@ -239,6 +243,7 @@ export const AI_PATCH_FIELDS: Record<AiField, string[]> = {
   name: ['name'],
   qty: ['qty'],
   power: ['power_W'],
+  power_rt: ['power_rt_W'],
   limit: ['limit_C'],
   limit_type: ['limit_type'],
   rjc: ['r_jc_C_per_W', 'heat_path.parameters.source_model'],
@@ -284,6 +289,15 @@ export function writeAiValue(component: Component, field: AiField, value: AiValu
       return { ...component, qty: num(value) ?? component.qty };
     case 'power':
       return { ...component, power_W: withValue(component.power_W, num(value), 'Imported') };
+    case 'power_rt': {
+      const n = num(value);
+      if (n == null) {
+        const { power_rt_W: _drop, ...rest } = component;
+        void _drop;
+        return rest;
+      }
+      return { ...component, power_rt_W: withValue(component.power_rt_W ?? null, n, 'Imported') };
+    }
     case 'limit':
       return {
         ...component,
@@ -376,6 +390,7 @@ export function formatAiValue(field: AiField, value: AiValue | undefined, timNam
   const n = (v: number | null | undefined) => (v == null ? '?' : String(+v.toFixed(4)));
   switch (field) {
     case 'power':
+    case 'power_rt':
       return `${n(value as number)} W`;
     case 'limit':
       return `${n(value as number)} °C`;

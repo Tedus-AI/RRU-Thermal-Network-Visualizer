@@ -101,6 +101,8 @@ export interface ProjectAiFresh {
   rru_ambient_C: number | null;
   /** 5G-RRU's saved design result, when it has saved one. */
   rru_design?: RruDesign | null;
+  /** Parts stating AI-Thermal's Pd@25°C (`Power_RT(W)`); not a linked field. */
+  rt_power_parts?: number;
 }
 
 export const AI_KEY = { name: 'name', band: 'band', ambient: 'ambient', fin: 'fin' } as const;
@@ -638,4 +640,44 @@ export function rruAmbientMismatch(project: Pick<Project, 'ai_link'>): { ai: num
   if (!link || link.sources[AI_KEY.ambient] !== 'AI-Thermal' || link.rru_ambient_C == null) return null;
   const ai = link.values[AI_KEY.ambient];
   return typeof ai === 'number' && !sameProjectAiValue(ai, link.rru_ambient_C) ? { ai, rru: link.rru_ambient_C } : null;
+}
+
+// --- the room-temperature scenario --------------------------------------------
+
+/**
+ * AI-Thermal's second condition: 25 °C ambient, every part at its Pd@25°C. It
+ * is a scenario here (01 情境, 功耗＝常溫 Pd), not a linked field — the engineer
+ * may rename or retune it, and an update never touches it again.
+ */
+export const ROOM_TEMP_SCENARIO = {
+  name: '常溫 25 °C',
+  ambient_C: 25,
+  wind_mps: 0,
+  solar_W_m2: 0,
+  power_scale: 1,
+  power_basis: 'rt',
+} as const satisfies Partial<Scenario>;
+
+/**
+ * Whether linking (or updating) should offer to create that scenario: AI-Thermal
+ * states a room-temperature power for at least one part, and the project has no
+ * room-temperature scenario yet. Returns how many parts state one.
+ */
+export function roomTempScenarioOffer(
+  scenarios: readonly Scenario[],
+  fresh: Pick<ProjectAiFresh, 'rt_power_parts'> | null,
+): { parts: number } | null {
+  const parts = fresh?.rt_power_parts ?? 0;
+  if (parts === 0) return null;
+  if (scenarios.some((scenario) => scenario.power_basis === 'rt')) return null;
+  return { parts };
+}
+
+/** A name the project does not already use: 「常溫 25 °C」, else 「常溫 25 °C (2)」 … */
+export function roomTempScenarioName(scenarios: readonly Scenario[]): string {
+  const taken = new Set(scenarios.map((scenario) => scenario.name));
+  if (!taken.has(ROOM_TEMP_SCENARIO.name)) return ROOM_TEMP_SCENARIO.name;
+  let n = 2;
+  while (taken.has(`${ROOM_TEMP_SCENARIO.name} (${n})`)) n++;
+  return `${ROOM_TEMP_SCENARIO.name} (${n})`;
 }

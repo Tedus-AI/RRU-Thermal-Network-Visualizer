@@ -59,6 +59,7 @@ import { useBoundaryStore } from '@/data/boundaryStore';
 import { useSolutionStore } from '@/data/solutionStore';
 
 import { projectComponentLimits } from '@/thermal/graph/componentProjection';
+import { powerBasisOf } from '@/domain/powerBasis';
 import { triggerDownload } from '@/export/download';
 import { exportFilename } from '@/export/exportNetworkGraph';
 import { DEFAULT_SOLVER_SETTINGS, type SolverSettings } from '@/thermal/types';
@@ -312,9 +313,10 @@ export function ThermalNetworkView() {
   // WHICH node holds it — so a part re-typed from Tj to Tc has to have its
   // limit moved onto the case before any margin is computed from it. Reading
   // the stored graph judged it wherever Screen 05 last wrote it.
+  const powerBasis = powerBasisOf(scenario);
   const limited = useMemo(
-    () => (network ? projectComponentLimits(network, components) : null),
-    [network, components],
+    () => (network ? projectComponentLimits(network, components, powerBasis) : null),
+    [network, components, powerBasis],
   );
 
   const rows = useMemo(
@@ -602,7 +604,7 @@ export function ThermalNetworkView() {
             title={biTitle('Back to 05 Network & Boundary', T07.action.backTo06)}
             onClick={() => navigate(projectPath(projectId, 'thermal-path'))}
           >
-            Back to 06
+            Back to 05
           </Button>
           <Button
             icon={<ShieldCheck size={15} />}
@@ -745,7 +747,7 @@ export function ThermalNetworkView() {
               </h2>
               <Badge tone="neutral">
                 <span title="熱網路與邊界條件都來自 05，此畫面不修改任何一項。">
-                  From 05 + 06
+                  From 05
                 </span>
               </Badge>
               {stale && <Badge tone="warn">Stale / 已失效</Badge>}

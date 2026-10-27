@@ -161,6 +161,13 @@ describe('each part, as an engineer would have entered it', () => {
     expect(pa.provenance).toMatchObject({ source_type: 'AIThermal', ref_origin_project: 'StarKcore-12L' });
   });
 
+  it('brings each part’s room-temperature power (Pd@25°C) along, as 04’s 常溫功耗', () => {
+    expect(by(components, 'GTRB384608FC-Final').power_rt_W?.value).toBe(52.129);
+    // Higher than the hot power: a filter loses more at 25 °C.
+    expect(by(components, 'Cavity Filter(SC12L)').power_rt_W?.value).toBe(31.072);
+    expect(rowOf(rows, 'Cavity Filter(SC12L)').power_rt_W).toBe(31.072);
+  });
+
   it('Driver through board vias: E-PAD, the RF board thickness, bare metal contact', () => {
     const drv = by(components, 'B11G3338N81D-Driver');
     const s = drv.thermal_spec;

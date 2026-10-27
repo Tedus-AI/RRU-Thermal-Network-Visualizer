@@ -13,8 +13,9 @@
 import { Copy, Plus, Trash2 } from 'lucide-react';
 
 import { windRecordedOnly } from '@/thermal/boundary/wind';
-import { Button, NumberInput, SectionCard, TextInput } from '@/ui/primitives';
+import { Button, NumberInput, SectionCard, Select, TextInput } from '@/ui/primitives';
 import { SCENARIO_LIMITS, type Scenario } from '@/domain/project';
+import { POWER_BASES, POWER_BASIS_LABEL, powerBasisOf, type PowerBasis } from '@/domain/powerBasis';
 import { patchScenarioValues } from './scenarioEnvironment';
 import { AI_KEY, baselineOf, rruAmbientMismatch } from '@/domain/projectAiLink';
 import { useProjectStore } from '@/data/projectStore';
@@ -32,12 +33,20 @@ const SCENARIO_FIELDS = [
 
 type NumericField = 'ambient_C' | 'wind_mps' | 'solar_W_m2' | 'power_scale';
 
-const COLUMNS: Array<{ field: NumericField; label: string; unit?: string; step: number }> = [
-  { field: 'ambient_C', label: '環境溫度', unit: '°C', step: 0.1 },
-  { field: 'wind_mps', label: '風速', unit: 'm/s', step: 0.1 },
-  { field: 'solar_W_m2', label: '日照', unit: 'W/m²', step: 10 },
-  { field: 'power_scale', label: '功耗倍率', step: 0.05 },
+// Input widths are `!`: the control base carries `w-full`, which otherwise wins.
+const COLUMNS: Array<{ field: NumericField; label: string; unit?: string; step: number; input: string }> = [
+  { field: 'ambient_C', label: '環境溫度', unit: '°C', step: 0.1, input: '!w-24' },
+  { field: 'wind_mps', label: '風速', unit: 'm/s', step: 0.1, input: '!w-16' },
+  { field: 'solar_W_m2', label: '日照', unit: 'W/m²', step: 10, input: '!w-16' },
+  { field: 'power_scale', label: '功耗倍率', step: 0.05, input: '!w-14' },
 ];
+
+/** Column width; the power scale shares one column with the power basis it multiplies. */
+function columnWidth(field: NumericField, ambientLocked: boolean): string {
+  if (field === 'ambient_C') return ambientLocked ? 'w-40' : 'w-28';
+  if (field === 'power_scale') return 'w-[11rem]';
+  return 'w-20';
+}
 
 function format(field: NumericField, value: number): string {
   if (!Number.isFinite(value)) return '—';
@@ -47,6 +56,10 @@ function format(field: NumericField, value: number): string {
 }
 
 const WIND_NOTE = '風速僅記錄：目前都是自然對流，求解不套用風速。';
+
+const BASIS_TITLE =
+  '每顆元件用哪一個功耗求解：高溫 Pd＝04 的單顆功耗（AI-Thermal 的高溫條件）；常溫 Pd＝04 的常溫功耗（AI-Thermal 的 Pd@25°C），沒填的元件暫用高溫 Pd。';
+const BASIS_ITEMS = POWER_BASES.map((basis) => ({ value: basis, label: POWER_BASIS_LABEL[basis] }));
 
 /**
  * Marks a wind speed the solve will not apply (see `windRecordedOnly`); the
@@ -118,7 +131,7 @@ export function ProjectScenarios({
         alert={alert}
         summary={
           scenario
-            ? `目前：${scenario.name} · ${format('ambient_C', scenario.ambient_C)} °C · 共 ${scenarios.length} 個`
+            ? `目前：${scenario.name} · ${format('ambient_C', scenario.ambient_C)} °C${powerBasisOf(scenario) === 'rt' ? ` · ${POWER_BASIS_LABEL.rt}` : ''} · 共 ${scenarios.length} 個`
             : '首次建立專案時自動建立'
         }
         actions={
@@ -139,22 +152,31 @@ export function ProjectScenarios({
         ) : (
           <>
             <div className="overflow-x-auto rounded-md border border-line">
-              <table className="w-full min-w-[640px] border-collapse text-[13px]">
+              <table className="w-full min-w-[700px] border-collapse text-[13px]">
                 <thead className="bg-surface-muted">
                   <tr className="text-left text-[12px] text-ink-500">
                     <th className="px-2.5 py-2 font-semibold">名稱</th>
                     {COLUMNS.map((column) => (
                       <th
                         key={column.field}
-                        className={`${column.field === 'ambient_C' && ambientLock?.locked ? 'w-40' : 'w-28'} px-2.5 py-2 text-right font-semibold`}
+                        className={`${columnWidth(column.field, !!ambientLock?.locked)} px-2.5 py-2 text-right font-semibold`}
+                        title={column.field === 'power_scale' ? BASIS_TITLE : undefined}
                       >
-                        {column.label}
-                        {column.unit && (
-                          <span className="ml-0.5 font-normal text-ink-400">({column.unit})</span>
+                        {column.field === 'power_scale' ? (
+                          <>
+                            功耗 <span className="font-normal text-ink-400">× 倍率</span>
+                          </>
+                        ) : (
+                          <>
+                            {column.label}
+                            {column.unit && (
+                              <span className="ml-0.5 font-normal text-ink-400">({column.unit})</span>
+                            )}
+                          </>
                         )}
                       </th>
                     ))}
-                    <th className="w-16 px-2.5 py-2">
+                    <th className="w-14 px-2.5 py-2">
                       <span className="sr-only">操作</span>
                     </th>
                   </tr>
@@ -188,7 +210,8 @@ export function ProjectScenarios({
                               ) : (
                                 <span className="font-semibold text-ink-900">{row.name}</span>
                               )}
-                              <span className="shrink-0 text-[11px] font-semibold text-accent-700">
+                              {/* The dot and the row tint say it too; the word goes where the name needs the room. */}
+                              <span className="sr-only min-[1440px]:not-sr-only min-[1440px]:shrink-0 min-[1440px]:text-[11px] min-[1440px]:font-semibold min-[1440px]:text-accent-700">
                                 使用中
                               </span>
                             </div>
@@ -209,6 +232,53 @@ export function ProjectScenarios({
                             column.field === 'ambient_C' && row.id === baselineId && ambientLock?.locked
                               ? ambientLock
                               : null;
+                          const input = (
+                            <NumberInput
+                              id={column.field}
+                              aria-label={column.label}
+                              className={`h-8 ${column.input} shrink-0 !px-2 text-right`}
+                              value={Number.isNaN(value) ? '' : value}
+                              min={SCENARIO_LIMITS[column.field].min}
+                              max={SCENARIO_LIMITS[column.field].max}
+                              step={column.step}
+                              invalid={Boolean(visibleError(column.field))}
+                              onChange={(event) => patch({ [column.field]: numeric(event.target.value) })}
+                            />
+                          );
+                          if (column.field === 'power_scale') {
+                            // The basis says which power each part solves with; the scale multiplies it.
+                            const basis = powerBasisOf(row);
+                            return (
+                              <td key={column.field} className="px-2.5 py-1.5 text-right">
+                                {editable ? (
+                                  <div className="flex items-center justify-end gap-1">
+                                    <Select
+                                      id="power_basis"
+                                      aria-label="功耗"
+                                      title={BASIS_TITLE}
+                                      className="h-8 !w-[5.75rem] shrink-0 text-[13px]"
+                                      items={BASIS_ITEMS}
+                                      value={basis}
+                                      onChange={(event) => {
+                                        const next = event.target.value as PowerBasis;
+                                        // Hot is the default and is stored as no key.
+                                        patch({ power_basis: next === 'rt' ? 'rt' : undefined });
+                                      }}
+                                    />
+                                    <span aria-hidden className="text-ink-400">×</span>
+                                    {input}
+                                  </div>
+                                ) : (
+                                  <span className="tabular whitespace-nowrap text-ink-700" title={BASIS_TITLE}>
+                                    <span className={basis === 'rt' ? 'font-semibold text-accent-700' : undefined}>
+                                      {POWER_BASIS_LABEL[basis]}
+                                    </span>{' '}
+                                    × {format(column.field, value)}
+                                  </span>
+                                )}
+                              </td>
+                            );
+                          }
                           return (
                             <td key={column.field} className="px-2.5 py-1.5 text-right">
                               {linked ? (
@@ -222,21 +292,9 @@ export function ProjectScenarios({
                                   compact
                                 />
                               ) : editable ? (
-                                <div className="flex items-center justify-end">
+                                <div className="flex items-center justify-end gap-1">
                                   {column.field === 'wind_mps' && <WindMark wind={value} reserve />}
-                                  <NumberInput
-                                    id={column.field}
-                                    aria-label={column.label}
-                                    className="ml-1 h-8 w-24 shrink-0 text-right"
-                                    value={Number.isNaN(value) ? '' : value}
-                                    min={SCENARIO_LIMITS[column.field].min}
-                                    max={SCENARIO_LIMITS[column.field].max}
-                                    step={column.step}
-                                    invalid={Boolean(visibleError(column.field))}
-                                    onChange={(event) =>
-                                      patch({ [column.field]: numeric(event.target.value) })
-                                    }
-                                  />
+                                  {input}
                                 </div>
                               ) : (
                                 <span className="tabular text-ink-700">

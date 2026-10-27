@@ -14,7 +14,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { BUILTIN_TIM_IDS, defaultMaterials, type MaterialDefaults } from '@/domain/materials';
-import { createBaselineScenario, createEmptyProject, type Project } from '@/domain/project';
+import { createBaselineScenario, createEmptyProject, createScenario, type Project } from '@/domain/project';
 import {
   AI_KEY,
   applyProjectAiPlan,
@@ -25,13 +25,18 @@ import {
   projectAiAfterRename,
   projectAiPending,
   relockProjectAiField,
+  ROOM_TEMP_SCENARIO,
+  roomTempScenarioName,
+  roomTempScenarioOffer,
   suggestedAiProject,
   timKey,
   unlinkProjectAi,
   unlockProjectAiField,
 } from '@/domain/projectAiLink';
 import { sourced } from '@/domain/sourcedValue';
-import { loadProject, saveProject } from '@/data/persistence';
+import { loadProject, loadScenarios, saveProject, saveScenarios } from '@/data/persistence';
+import { useScenarioStore } from '@/data/scenarioStore';
+import { addRoomTempScenario } from '@/project/projectAiActions';
 
 import fixture from './__fixtures__/aiThermalStarkcore.json';
 import { projectAiFresh } from './aiThermalProject';
@@ -422,6 +427,34 @@ describe('✂, ↺, unlinking and copies', () => {
   });
 });
 
+describe('the room-temperature scenario', () => {
+  // StarKcore-12L states a Pd@25°C for every part; Q6505 is hidden (👁) in AI-Thermal.
+  it('counts the parts that state a room-temperature power, hidden ones left out', () => {
+    expect(projectAiFresh(db(), ID, defaultMaterials())!.rt_power_parts).toBe(8);
+    const none = db((p) => {
+      for (const key of ['rf_data', 'digital_data', 'pwr_data']) {
+        for (const comp of p[key] as Array<Record<string, unknown>>) delete comp['Power_RT(W)'];
+      }
+    });
+    expect(projectAiFresh(none, ID, defaultMaterials())!.rt_power_parts).toBe(0);
+  });
+
+  it('is offered only when AI-Thermal states one and the project has no room-temperature scenario', () => {
+    const scenarios = [baseline()];
+    expect(roomTempScenarioOffer(scenarios, { rt_power_parts: 8 })).toEqual({ parts: 8 });
+    expect(roomTempScenarioOffer(scenarios, { rt_power_parts: 0 })).toBeNull();
+    expect(roomTempScenarioOffer(scenarios, null)).toBeNull();
+    const rt = createScenario('P', '室溫', { power_basis: 'rt' });
+    expect(roomTempScenarioOffer([...scenarios, rt], { rt_power_parts: 8 })).toBeNull();
+  });
+
+  it('takes a name the project does not use yet', () => {
+    expect(roomTempScenarioName([baseline()])).toBe('常溫 25 °C');
+    const taken = createScenario('P', '常溫 25 °C');
+    expect(roomTempScenarioName([baseline(), taken])).toBe('常溫 25 °C (2)');
+  });
+});
+
 describe('the link on disk', () => {
   class MemoryStorage implements Storage {
     private data = new Map<string, string>();
@@ -459,6 +492,29 @@ describe('the link on disk', () => {
     saveProject(unlinkProjectAi(loaded));
     expect(loadProject('P')!.ai_link).toBeUndefined();
     expect(JSON.parse(localStorage.getItem('tnv.projects')!).P).not.toHaveProperty('ai_link');
+  });
+
+  it('adds the room-temperature scenario to the project once, and leaves the active one active', () => {
+    const base = baseline();
+    saveScenarios('P', [base]);
+    useScenarioStore.getState().loadFor('P');
+    const active = useScenarioStore.getState().activeScenarioId;
+
+    expect(addRoomTempScenario('P')).toBe('常溫 25 °C');
+    const stored = loadScenarios('P');
+    expect(stored).toHaveLength(2);
+    expect(stored[1]).toMatchObject({
+      name: '常溫 25 °C',
+      ambient_C: ROOM_TEMP_SCENARIO.ambient_C,
+      wind_mps: 0,
+      solar_W_m2: 0,
+      power_scale: 1,
+      power_basis: 'rt',
+    });
+    expect(useScenarioStore.getState().activeScenarioId).toBe(active);
+
+    expect(addRoomTempScenario('P')).toBeNull();
+    expect(loadScenarios('P')).toHaveLength(2);
   });
 
   it('ignores a malformed link rather than failing to open', () => {

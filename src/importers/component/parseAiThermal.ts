@@ -199,7 +199,6 @@ function rjcFromRth(comp: Raw, heatPath: HeatPathType): number | null {
 /** Values this tool does not model, kept on the component's 來源 tab. */
 const EXTRA_COLUMNS = [
   'AI-Thermal 元件類型',
-  '常溫功耗 Pd@25°C(W)',
   '限溫對象',
   'TIM 型號',
   'Thermal Via 內徑(mil)',
@@ -516,6 +515,7 @@ export function mapAiThermalComponent(
     Component: name,
     Qty: cell(num(comp.Qty)),
     'Power(W)': cell(num(comp['Power(W)'])),
+    'Power_RT(W)': cell(num(comp['Power_RT(W)'])),
     Category: category,
     'Limit(C)': cell(num(comp['Limit(C)'])),
     R_jc: cell(rjc),
@@ -534,7 +534,6 @@ export function mapAiThermalComponent(
   };
   const extra: Record<ExtraColumn, string> = {
     'AI-Thermal 元件類型': type,
-    '常溫功耗 Pd@25°C(W)': cell(num(comp['Power_RT(W)'])),
     限溫對象: limitNote,
     'TIM 型號': timModel,
     'Thermal Via 內徑(mil)': cell(positive(comp.TV_ID_mil)),

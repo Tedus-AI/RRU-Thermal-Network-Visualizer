@@ -15,6 +15,8 @@ export const MANAGER_TOOLTIPS_ZH: Record<string, string> = {
   'External Mapping':
     '預留給 FloTHERM 等外部模擬物件的 mapping；03 目前延後，本頁不解析 FloTHERM 格式。',
   'Total Power': '數量 × 單顆功耗的加總；不是熱路徑上的熱流 Q。',
+  'Power RT':
+    '環境 25 °C 時的單顆功耗（AI-Thermal 的 Pd@25°C）。只有 01 的情境「功耗」選「常溫 Pd」時才用到；沒填的元件在常溫情境暫用上面的單顆功耗，07 會列出是哪些。',
   'Project Default': '此元件繼承 Project 共用材料或 thermal parameter。',
   'Component Override': '此元件改用自己的 thermal parameter。',
   'Architecture Template Preference':

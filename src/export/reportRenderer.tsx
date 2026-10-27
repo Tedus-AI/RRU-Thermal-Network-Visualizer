@@ -9,6 +9,7 @@
  * config, unchanged, because it is literally the same component.
  */
 
+import type { PowerBasis } from '@/domain/powerBasis';
 import { createRoot, type Root } from 'react-dom/client';
 import { flushSync } from 'react-dom';
 
@@ -36,6 +37,8 @@ export interface ReportRenderInput {
     wind_mps: number;
     solar_W_m2: number;
     power_scale: number;
+    /** Absent on a config built before the basis existed = hot. */
+    power_basis?: PowerBasis;
   };
   /** Sections the snapshot has no data for, so they render as Not Available. */
   unavailable: SectionRenderInput['section']['id'][];

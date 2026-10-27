@@ -424,6 +424,7 @@ export function migrateComponent(raw: unknown, index: number): Component | null 
     enabled: typeof raw.enabled === 'boolean' ? raw.enabled : true,
     qty: num(raw.qty) ?? 1,
     power_W: toSourced(raw.power_W) ?? unknownValue<number>('Imported'),
+    ...(toSourced(raw.power_rt_W) ? { power_rt_W: toSourced(raw.power_rt_W) } : {}),
 
     thermal_spec: {
       ...limit,

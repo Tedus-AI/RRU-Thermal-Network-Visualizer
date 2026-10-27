@@ -9,6 +9,9 @@
  * already set here (it is not knowable which side changed). Ticked rows take
  * the linked value and lock; unticked ones keep this tool's value, marked
  * taken over so 01 offers 改回.
+ *
+ * Below the fields, when AI-Thermal states room-temperature powers and the
+ * project has no room-temperature scenario: create 「常溫 25 °C」 (ticked).
  */
 
 import { useEffect, useRef, useState } from 'react';
@@ -34,6 +37,7 @@ export function ProjectAiLinkDialog({
   const materials = useProjectStore((s) => s.draft?.materials);
   const fileInput = useRef<HTMLInputElement>(null);
   const [picks, setPicks] = useState<Record<string, boolean>>({});
+  const [roomTemp, setRoomTemp] = useState(true);
   // The picks start from the plan, once per plan shown (a new read or project).
   const seeded = useRef<unknown>(null);
   useEffect(() => {
@@ -45,8 +49,12 @@ export function ProjectAiLinkDialog({
   const linking = !link || (plan?.first ?? false);
   const reading = ai.status === 'reading';
   const picked = plan ? plan.rows.filter((row) => picks[row.key] ?? row.pick).length : 0;
-  const upToDate = !!plan && !plan.first && plan.rows.length === 0 && plan.relock.length === 0 && plan.dropped.length === 0;
-  const total = picked + (plan?.relock.length ?? 0) + (plan?.dropped.length ?? 0);
+  const fieldsUpToDate =
+    !!plan && !plan.first && plan.rows.length === 0 && plan.relock.length === 0 && plan.dropped.length === 0;
+  const offerRoomTemp = !!plan && !!ai.roomTemp;
+  const upToDate = fieldsUpToDate && !offerRoomTemp;
+  const addsScenario = offerRoomTemp && roomTemp;
+  const total = picked + (plan?.relock.length ?? 0) + (plan?.dropped.length ?? 0) + (addsScenario ? 1 : 0);
 
   const description = fresh
     ? [
@@ -59,13 +67,16 @@ export function ProjectAiLinkDialog({
     : '專案名稱、頻段、環境溫度，以及 5G-RRU 參數控制台的鰭片製程、銅塊、焊料、導熱孔、散熱器底座與 TIM，連到 AI-Thermal 的同一個專案。';
 
   const apply = () => {
-    const changed = ai.apply(picks);
+    const { changed, scenario } = ai.apply(picks, { roomTemp: addsScenario });
+    const created = scenario ? `，並新增情境「${scenario}」` : '';
     toast.success(
       linking
-        ? `已連結 AI-Thermal 專案「${fresh?.project_name}」${changed ? `，更新 ${changed} 項` : ''}。`
+        ? `已連結 AI-Thermal 專案「${fresh?.project_name}」${changed ? `，更新 ${changed} 項` : ''}${created}。`
         : changed
-          ? `已從 AI-Thermal 更新 ${changed} 項。`
-          : '已與 AI-Thermal 同步。',
+          ? `已從 AI-Thermal 更新 ${changed} 項${created}。`
+          : scenario
+            ? `已新增情境「${scenario}」。`
+            : '已與 AI-Thermal 同步。',
     );
     onClose();
   };
@@ -84,8 +95,12 @@ export function ProjectAiLinkDialog({
         ) : (
           <>
             <Button onClick={onClose}>取消</Button>
-            <Button variant="primary" disabled={readOnly} onClick={apply}>
-              {linking ? `連結${picked ? `並套用 ${picked} 項` : ''}` : `套用 ${total} 項`}
+            <Button
+              variant="primary"
+              disabled={readOnly || (!linking && fieldsUpToDate && !addsScenario)}
+              onClick={apply}
+            >
+              {linking ? `連結${picked ? `並套用 ${picked} 項` : ''}` : fieldsUpToDate ? '新增情境' : `套用 ${total} 項`}
             </Button>
           </>
         )
@@ -173,7 +188,7 @@ export function ProjectAiLinkDialog({
           </p>
         )}
 
-        {upToDate && <p className="text-ok-600">已是最新：01 與 AI-Thermal 專案「{fresh?.project_name}」相同。</p>}
+        {fieldsUpToDate && <p className="text-ok-600">已是最新：01 與 AI-Thermal 專案「{fresh?.project_name}」相同。</p>}
 
         {plan?.first && (
           <div className="rounded-md border border-accent-500/25 bg-accent-50 p-2.5 text-[12px] leading-relaxed text-ink-700">
@@ -242,6 +257,25 @@ export function ProjectAiLinkDialog({
               </tbody>
             </table>
           </div>
+        )}
+
+        {offerRoomTemp && ai.roomTemp && (
+          <label className="flex items-start gap-2 rounded-md border border-line bg-surface-muted p-2.5" data-room-temp-offer>
+            <input
+              type="checkbox"
+              className="mt-0.5 size-4 shrink-0 accent-[var(--color-accent-600)]"
+              checked={roomTemp}
+              disabled={readOnly}
+              onChange={(event) => setRoomTemp(event.target.checked)}
+            />
+            <span className="leading-relaxed">
+              <span className="font-semibold text-ink-900">另外新增情境「常溫 25 °C」</span>
+              <span className="block text-[12px] text-ink-600">
+                環境 25 °C、功耗用「常溫 Pd」：AI-Thermal 有 {ai.roomTemp.parts} 顆元件填了 Pd@25°C（帶進 04 的「常溫功耗」）。
+                目前的情境不變；新增後可在 01 的情境表改名或調整，之後的更新不會再動它。
+              </span>
+            </span>
+          </label>
         )}
 
         {plan && plan.relock.length > 0 && (

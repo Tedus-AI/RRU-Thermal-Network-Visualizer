@@ -6,6 +6,7 @@
  * Screen 06, which is what the button does.
  */
 
+import { POWER_BASIS_LABEL, powerBasisOf } from '@/domain/powerBasis';
 import { windLabel } from '@/thermal/boundary/wind';
 import { ArrowLeft } from 'lucide-react';
 
@@ -81,6 +82,7 @@ export function ScenarioSummary({
               : num(set?.site.solar_irradiance_W_m2 ?? scenario?.solar_W_m2, 0, 'W/m²')
           }
         />
+        <Row label="Power Basis" zh="功耗" value={POWER_BASIS_LABEL[powerBasisOf(scenario)]} />
         <Row label="Power Scale" zh="功率縮放" value={`${(scenario?.power_scale ?? 1).toFixed(2)} ×`} />
         <Row
           label="Boundaries"

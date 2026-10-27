@@ -779,14 +779,19 @@ export function loadScenarios(projectId: string): Scenario[] {
   const projectUpdatedAt = loadProject(projectId)?.meta.updated_at ?? projectId;
   return Object.values(bucket)
     .filter(isPlainObject)
-    .map((scenario) => ({
-      ...scenario,
-      revision: hydrateRevision(
-        scenario.revision,
-        'scenario',
-        `${projectUpdatedAt}:${scenario.id}`,
-      ),
-    }));
+    .map((scenario) => {
+      // `rt` is the only basis stored; anything else is the high-temperature default.
+      const { power_basis, ...rest } = scenario;
+      return {
+        ...rest,
+        ...(power_basis === 'rt' ? { power_basis } : {}),
+        revision: hydrateRevision(
+          scenario.revision,
+          'scenario',
+          `${projectUpdatedAt}:${scenario.id}`,
+        ),
+      };
+    });
 }
 
 export function saveScenarios(projectId: string, scenarios: Scenario[]): void {

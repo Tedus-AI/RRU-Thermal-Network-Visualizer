@@ -11,6 +11,7 @@
  * without touching the surrounding UI.
  */
 
+import { powerBasisText, type PowerBasis } from '@/domain/powerBasis';
 import { windLabel } from '@/thermal/boundary/wind';
 import type { ResultsOverviewSnapshot } from '@/thermal/overview/overviewTypes';
 import type { NetworkFigure } from '@/report/networkFigures';
@@ -36,6 +37,8 @@ export interface SectionRenderInput {
     wind_mps: number;
     solar_W_m2: number;
     power_scale: number;
+    /** Absent on a config built before the basis existed = hot. */
+    power_basis?: PowerBasis;
   };
   /** Sections whose backing data is absent from the snapshot. */
   unavailable: boolean;
@@ -228,7 +231,8 @@ function ProjectSection({ input }: { input: SectionRenderInput }) {
   const show = section.content;
 
   // One switch per field — a report sent to a supplier may want the ambient and
-  // nothing else. Absent means on, so an older config keeps all seven.
+  // nothing else. Absent means on, so an older config keeps them all. The power
+  // basis shares the power-scale switch: the two together say what was solved.
   const fields: Array<[boolean, string, string, string]> = [
     [show.show_stage !== false, 'Stage', '階段', project.stage || '—'],
     [show.show_scenario !== false, 'Scenario', '情境', scenario.name],
@@ -240,6 +244,12 @@ function ProjectSection({ input }: { input: SectionRenderInput }) {
       windLabel(num(scenario.wind_mps, 1, 'm/s'), scenario.wind_mps, mode),
     ],
     [show.show_solar !== false, 'Solar', '太陽輻射', num(scenario.solar_W_m2, 0, 'W/m²')],
+    [
+      show.show_power_scale !== false,
+      'Power Basis',
+      '功耗',
+      powerBasisText(scenario.power_basis ?? 'hot', mode),
+    ],
     [
       show.show_power_scale !== false,
       'Power Scale',
