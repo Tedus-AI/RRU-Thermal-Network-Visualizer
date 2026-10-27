@@ -366,3 +366,91 @@ describe('the first link — parts imported before links were recorded', () => {
     expect(planAiUpdate(result.components, fresh(next), PROJECT).removed).toEqual([]);
   });
 });
+
+describe('TIMs linked to the TIM Management Tool on both sides', () => {
+  /** 01 as the user has it: every TIM linked to the TIM Management Tool and named after it. */
+  const lairdMaterials = () => {
+    const m = defaultMaterials();
+    m.tim = [
+      { id: 'TIM_L_TG2500', name: 'Laird Tgrease 2500', k_W_mK: withValue(null, 3.8), blt_mm: withValue(null, 0.05), catalog: { id: 'CAT_TG2500' } },
+      { id: 'TIM_L_TP910', name: 'Laird Tputty 910', k_W_mK: withValue(null, 9.1), blt_mm: withValue(null, 0.5), catalog: { id: 'CAT_TP910' } },
+      { id: 'TIM_L_P300', name: 'Laird Tflex P300', k_W_mK: withValue(null, 3), blt_mm: withValue(null, 0.5), catalog: { id: 'CAT_P300' } },
+    ];
+    return m;
+  };
+  /** AI-Thermal's 型號庫 linked to the same materials, renamed to the catalogue's short names. */
+  const linkedDb = (linked = true) =>
+    db((raw) => {
+      const lib = raw.tim_library as Record<string, Record<string, unknown>>;
+      lib.tim_mu6m6njc_muyx.srcId = linked ? 'CAT_TG2500' : undefined;
+      lib.tim_mu6m6njc_k6q6.model = 'Tputty 910';
+      lib.tim_mu6m6njc_k6q6.srcId = linked ? 'CAT_TP910' : undefined;
+      lib.tim_mu6m6njc_klhc.srcId = linked ? 'CAT_P300' : undefined;
+    });
+  const importWith = (source: AiThermalDb, m = lairdMaterials(), existing: Component[] = []) => {
+    const table = parseAiThermalProject(source, PROJECT, { lists: ['RF', 'Digital', 'PWR'], includeExcluded: false }, m);
+    const rows = buildStagingRows({ table, mapping: autoMapColumns(table.headers), existingComponents: existing });
+    return applyImport({
+      existing,
+      rows,
+      sessionPolicy: 'MERGE_NON_EMPTY',
+      source: { source_type: 'AIThermal', source_project_id: PROJECT, source_project_name: PROJECT, source_file: 'test' },
+      materials: m,
+    }).components;
+  };
+
+  it('match by the link although the names differ, and arrive locked', () => {
+    const components = importWith(linkedDb());
+    const pa = by(components, 'GTRB384608FC-Final');
+    const fpga = by(components, 'XCZU67DR-FFVE1156');
+    expect(pa.thermal_spec.tim.tim_id).toBe('TIM_L_TG2500');
+    // The part still names the model as "T-Putty 910"; the library calls it "Tputty 910".
+    expect(fpga.thermal_spec.tim.tim_id).toBe('TIM_L_TP910');
+    expect(isAiLocked(pa, 'tim')).toBe(true);
+    expect(isAiLocked(fpga, 'tim')).toBe(true);
+  });
+
+  it('a TIM picked by hand after an import that did not match is locked by the next update', () => {
+    // Before the link was matched: the TIMs came in empty and were picked in 04.
+    const unmatched = lairdMaterials();
+    unmatched.tim = unmatched.tim.map((t) => ({ ...t, name: `X ${t.name}`, catalog: undefined }));
+    const before = importWith(linkedDb(false), unmatched).map((c) =>
+      c.name === 'XCZU67DR-FFVE1156'
+        ? { ...c, thermal_spec: { ...c.thermal_spec, tim: { ...c.thermal_spec.tim, tim_id: 'TIM_L_TP910' } } }
+        : c,
+    );
+    const fpga0 = by(before, 'XCZU67DR-FFVE1156');
+    expect(isAiLocked(fpga0, 'tim')).toBe(false);
+
+    const next = freshAiThermalComponents(linkedDb(), PROJECT, lairdMaterials(), [], 'test').components;
+    const plan = planAiUpdate(before, next, PROJECT, lairdMaterials());
+    const relock = plan.relock.find((entry) => entry.name === 'XCZU67DR-FFVE1156');
+    expect(relock?.fields).toEqual(['tim']);
+    expect(plan.updates.find((u) => u.name === 'XCZU67DR-FFVE1156')).toBeUndefined();
+
+    const result = applyAiPlan(before, plan, { fields: {}, add: [], disable: [] }, PROJECT, null);
+    const fpga = by(result.components, 'XCZU67DR-FFVE1156');
+    expect(fpga.thermal_spec.tim.tim_id).toBe('TIM_L_TP910');
+    expect(isAiLocked(fpga, 'tim')).toBe(true);
+    expect(result.fields).toEqual([]);
+    expect(planAiUpdate(result.components, next, PROJECT, lairdMaterials()).relock.map((e) => e.name)).not.toContain(
+      'XCZU67DR-FFVE1156',
+    );
+  });
+
+  it('a TIM picked by hand that differs from AI-Thermal is offered, unticked', () => {
+    const unmatched = lairdMaterials();
+    unmatched.tim = unmatched.tim.map((t) => ({ ...t, name: `X ${t.name}`, catalog: undefined }));
+    const before = importWith(linkedDb(false), unmatched).map((c) =>
+      c.name === 'U850-Si5518'
+        ? { ...c, thermal_spec: { ...c.thermal_spec, tim: { ...c.thermal_spec.tim, tim_id: 'TIM_L_P300' } } }
+        : c,
+    );
+    const next = freshAiThermalComponents(linkedDb(), PROJECT, lairdMaterials(), [], 'test').components;
+    const u = planAiUpdate(before, next, PROJECT, lairdMaterials()).updates.find((entry) => entry.name === 'U850-Si5518')!;
+    expect(u.changes.find((c) => c.field === 'tim')).toMatchObject({
+      pick: false,
+      note: '本工具填過（匯入時沒有帶進來）',
+    });
+  });
+});

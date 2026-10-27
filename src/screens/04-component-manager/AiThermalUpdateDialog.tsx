@@ -67,12 +67,14 @@ export function AiThermalUpdateDialog({
   const excluded = plan?.added.filter((component) => !component.enabled) ?? [];
   const pickedCount = Object.values(fields).reduce((sum, list) => sum + list.length, 0);
   // A first link is an item of its own: applying it locks the part even with nothing ticked.
-  const total = pickedCount + add.length + (plan?.removed.length ?? 0) + (plan?.firstLinks ?? 0);
+  const total =
+    pickedCount + add.length + (plan?.removed.length ?? 0) + (plan?.firstLinks ?? 0) + (plan?.relock.length ?? 0);
   const nothing =
     !!plan &&
     plan.updates.length === 0 &&
     plan.removed.length === 0 &&
     plan.link.length === 0 &&
+    plan.relock.length === 0 &&
     addable.length === 0 &&
     add.length === 0;
   const tickAll = (on: boolean) =>
@@ -238,6 +240,17 @@ export function AiThermalUpdateDialog({
               與 AI-Thermal 相同的欄位直接鎖定{plan.link.length > 0 ? `（其中 ${plan.link.length} 顆完全相同，套用後直接連結）` : ''}。
             </p>
           </div>
+        )}
+
+        {plan && plan.relock.length > 0 && (
+          <p className="rounded-md border border-line bg-surface-muted p-2.5 text-[12px] leading-relaxed text-ink-600">
+            另有 <b>{plan.relock.length}</b> 顆：AI-Thermal 的值與本工具相同、但還沒鎖定（
+            {[...new Set(plan.relock.flatMap((entry) => entry.fields))].map((field) => AI_FIELD_LABEL[field]).join('、')}
+            ），套用後一起改為取自 AI-Thermal 並鎖定，數值不變。
+            <span className="block text-ink-400" title={plan.relock.map((entry) => entry.name).join('、')}>
+              {plan.relock.map((entry) => entry.name).join('、')}
+            </span>
+          </p>
         )}
 
         {plan && plan.updates.length > 0 && (

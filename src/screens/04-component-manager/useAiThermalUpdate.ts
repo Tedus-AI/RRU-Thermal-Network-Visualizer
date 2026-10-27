@@ -114,8 +114,8 @@ export function useAiThermalUpdate(components: Component[], materials: MaterialD
     }
   }, [read, target, materials]);
   const plan = useMemo(
-    () => (fresh && target ? planAiUpdate(components, fresh.components, target) : null),
-    [components, fresh, target],
+    () => (fresh && target ? planAiUpdate(components, fresh.components, target, materials) : null),
+    [components, fresh, target, materials],
   );
   const pending = plan ? aiPlanPending(plan).components + plan.removed.length : 0;
   const unlinked = useMemo(() => components.filter(isAiFirstLink).length, [components]);
