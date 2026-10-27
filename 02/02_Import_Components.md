@@ -176,7 +176,7 @@ Mapping → Validation → Duplicate → Apply）、`AiThermalSourcePanel.tsx`�
 | 所在清單（Type `filter` → Filter）| 分類 RF／Digital／Power／Filter |
 | `Limit_Ref`（沒填 → 兩工具共用的自動規則 `CompMerge.limitRef`）| 限溫類型，**一律已確認**（使用者決定：限溫對象屬於 AI-Thermal，要改回 AI-Thermal 改、再重新匯入）。Rjc = 0 的本體型元件 Tj → Tc。判定依據寫在「來源」分頁的「限溫對象」 |
 | `R_jc`（沒有 → `Rth` 的 θJC，依散熱路徑取 top／bottom）| Rjc。**`R_jc = 0` → 表面／本體型熱源、Rjc 留空**（Rjc 0 會被 07 拒絕）|
-| TH/ME `heatDirection`（→ 元件 `Board_Type`）| 散熱路徑：Copper Coin → 銅塊、Thermal Via → 板級導熱孔、IC top → 元件表面；None／舊值 → 依分類推定（未確認）|
+| TH/ME `heatDirection`（→ 元件 `Board_Type`）| 散熱路徑：Copper Coin → 銅塊、Thermal Via → 板級導熱孔、IC top → 元件表面、Metal Face → 金屬散熱面（腔體濾波器、模組底板、法蘭；AI-Thermal 2026-10 新增）；None／舊值 → 依分類推定（未確認，不鎖）|
 | TH/ME `heatSourceSize`／`heatSourceHeight` | 本體 L × W × H |
 | TH/ME `epadSize`（→ `Pad_L/W`）| E-PAD（板級導熱孔的熱源面）|
 | `projects[id].pcb_thickness[RF／Digital／PWR]` → 5G-RRU 元件 `Thick(mm)` → `global_params.t_PCB` | 板厚（只有板級導熱孔）|

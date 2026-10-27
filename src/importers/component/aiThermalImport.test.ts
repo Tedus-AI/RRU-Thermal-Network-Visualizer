@@ -204,6 +204,42 @@ describe('each part, as an engineer would have entered it', () => {
     expect(s.tim.tim_id).toBe(DIRECT_CONTACT_TIM_ID);
   });
 
+  it("AI-Thermal's Metal Face (金屬散熱面) states the metal face, for a filter and a module alike", () => {
+    const { components: stated } = run(
+      db((raw) => {
+        const specs = raw.projects['StarKcore-12L'].thermal_specs as Record<string, Record<string, unknown>>;
+        specs['Cavity_Filter(SC12L)'].heatDirection = 'Metal Face';
+        specs['Power_Module(H48SA50030NRDH)'].heatDirection = 'Metal Face';
+      }),
+    );
+    const filter = by(stated, 'Cavity Filter(SC12L)').thermal_spec;
+    expect(filter.heat_path.type).toBe('DirectMetal');
+    expect(filter.heat_path_confirmed).toBe(true);
+    expect(metalBaseSourceModel(filter)).toBe('SurfaceBodyBased');
+    const module = by(stated, 'Power Module(H48SA50030NRDH)').thermal_spec;
+    expect(module.heat_path.type).toBe('DirectMetal');
+    expect(module.heat_path_confirmed).toBe(true);
+    // Rjc 0 there: a body source on the metal face.
+    expect(metalBaseSourceModel(module)).toBe('SurfaceBodyBased');
+  });
+
+  it("5G-RRU's 導熱方式 Metal Face is read the same way when TH/ME says nothing", () => {
+    const { components: stated } = run(
+      db((raw) => {
+        const project = raw.projects['StarKcore-12L'];
+        const filter = (project.rf_data as Array<Record<string, unknown>>).find(
+          (c) => c.Component === 'Cavity Filter(SC12L)',
+        )!;
+        filter.Board_Type = 'Metal Face';
+        delete (project.thermal_specs as Record<string, unknown>)['Cavity_Filter(SC12L)'];
+      }),
+    );
+    expect(by(stated, 'Cavity Filter(SC12L)').thermal_spec).toMatchObject({
+      heat_path: { type: 'DirectMetal' },
+      heat_path_confirmed: true,
+    });
+  });
+
   it('FPGA: the TH/ME path beats a stale shared Board_Type, and the boss waits in the Pedestal memory', () => {
     const fpga = by(components, 'XCZU67DR-FFVE1156');
     const s = fpga.thermal_spec;

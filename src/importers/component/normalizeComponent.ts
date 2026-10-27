@@ -206,6 +206,9 @@ const HEAT_PATH_ALIASES: Record<string, HeatPathType> = {
   'surface limit': 'DirectMetal',
   'direct metal': 'DirectMetal',
   directmetal: 'DirectMetal',
+  // AI-Thermal's 主散熱路徑 and 5G-RRU's 導熱方式 spell it this way.
+  'metal face': 'DirectMetal',
+  metalface: 'DirectMetal',
   'metal base + interface': 'DirectMetal',
   'metal base interface': 'DirectMetal',
   '金屬底面＋介面層': 'DirectMetal',

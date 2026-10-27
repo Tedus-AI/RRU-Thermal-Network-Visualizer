@@ -632,6 +632,12 @@ AI-Thermal 鎖定的限溫對象／散熱路徑／TIM 不改（`bulkPatchFor(val
     鎖定框保留原本欄位的 id（`ins-limit`、`geo-package_L_mm`…），待處理清單的連結照樣跳得到。
 - ✂（`unlockAiField`）：這一欄改由本工具維護 → 變回原本的輸入框，底下一行「已解開・AI-Thermal 是 X ↺ 改回 AI-Thermal」
   （值相同時寫「已解開，目前與 AI-Thermal 相同 ↺ 鎖回」，`relockAiField` 把 AI-Thermal 的值寫回並重新鎖定）。
+  - 表格裡解開的欄位在格子右上角標一個小「✂AI」（`AiCellUnlocked`，藍色；值與 AI-Thermal 不同時琥珀色）：tooltip 寫 AI-Thermal 的值，
+    點一下改回並鎖定。⚠ 沒有這個標記時，解開的欄位與「AI-Thermal 沒給」的欄位在表格裡看起來一模一樣（使用者回報過：
+    以為是工具鎖不上）。解開狀態在重新匯入同一個專案時保留（02 §6c），所以這個標記是表格上唯一回得去的提示。
+  - 散熱路徑 AI-Thermal 沒指定（主散熱路徑 None 或未選 → 連結裡沒有 `heat_path`，由本工具推定或確認）：
+    表格下拉的 tooltip 與檢視面板主散熱路徑卡片下方寫「AI-Thermal 沒有指定主散熱路徑…到 AI-Thermal 選，再按『從 AI-Thermal 更新』」
+    （`aiNotStated`／`AI_HEAT_PATH_UNSTATED`）。之後 AI-Thermal 選了、值與這裡相同 → 更新時一起鎖定（`plan.relock`），數值不變。
 - 封裝型式、接合方式、擴散範圍、量測位置、建模偏好、備註是本工具的，不鎖。
 - 防呆：04 所有寫入都經過 `ComponentManagerView` 的 `patchComponent`，以**值**比對（`aiLockedChanges`）擋下改到鎖定欄位的修改並提示按 ✂。
 

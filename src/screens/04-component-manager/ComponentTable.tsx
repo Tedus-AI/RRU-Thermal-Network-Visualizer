@@ -44,7 +44,7 @@ import { useProjectStore } from '@/data/projectStore';
 import { statusOf, type ComponentStatus } from '@/domain/componentReadiness';
 import { isAiLocked, type AiField } from '@/domain/aiThermalLink';
 import { tip, ZH } from '@/i18n/componentManagerCopy';
-import { AiCellRef, aiLockTitle, timNameOf } from './AiLocked';
+import { AI_HEAT_PATH_UNSTATED, AiCellRef, AiCellUnlocked, aiLockTitle, aiNotStated, timNameOf } from './AiLocked';
 
 const STATUS_META: Record<
   ComponentStatus,
@@ -260,8 +260,10 @@ export function ComponentTable({
             // face itself rather than to a junction behind it — on any heat path.
             const surfaceReferenced = isBodySourced(spec);
             const selected = component.id === selectedId;
-            // AI-Thermal's values are references here; the ✂ is in the inspector.
+            // AI-Thermal's values are references here; the ✂ is in the inspector,
+            // the way back from a taken-over one is the cell's corner mark.
             const locked = (field: AiField) => isAiLocked(component, field);
+            const aiCell = { component, readOnly, onPatch };
 
             return (
               <tr
@@ -365,7 +367,8 @@ export function ComponentTable({
                     {component.name}
                   </button>
                 </td>
-                <td className="px-2 py-1.5">
+                <td className="relative px-2 py-1.5">
+                  <AiCellUnlocked {...aiCell} fields={['qty']} />
                   {locked('qty') ? (
                     <AiCellRef component={component} field="qty" text={component.qty} />
                   ) : (
@@ -382,7 +385,8 @@ export function ComponentTable({
                     />
                   )}
                 </td>
-                <td className="px-2 py-1.5">
+                <td className="relative px-2 py-1.5">
+                  <AiCellUnlocked {...aiCell} fields={['power']} />
                   {locked('power') ? (
                     <AiCellRef component={component} field="power" text={component.power_W.value ?? '—'} />
                   ) : (
@@ -416,7 +420,8 @@ export function ComponentTable({
                 </td>
                 {/* Limit type and limit read as one value — "Tj 150" — so they
                     share a cell; each half is still its own editor. */}
-                <td className="px-2 py-1.5">
+                <td className="relative px-2 py-1.5">
+                  <AiCellUnlocked {...aiCell} fields={['limit_type', 'limit']} />
                   {locked('limit_type') && locked('limit') ? (
                     <AiCellRef
                       component={component}
@@ -500,7 +505,8 @@ export function ComponentTable({
                   )}
                 </td>
                 {/* Unknown Rjc shows N/A, never 0 (04 §11, AC-04-06). */}
-                <td className="px-2 py-1.5">
+                <td className="relative px-2 py-1.5">
+                  <AiCellUnlocked {...aiCell} fields={['rjc']} />
                   {locked('rjc') ? (
                     <AiCellRef
                       component={component}
@@ -540,7 +546,8 @@ export function ComponentTable({
                 <td className="tabular px-2 py-1.5 whitespace-nowrap">
                   {packageLabel(spec.package_type) ?? <span className="text-warn-600">—</span>}
                 </td>
-                <td className="px-2 py-1.5">
+                <td className="relative px-2 py-1.5">
+                  <AiCellUnlocked {...aiCell} fields={['heat_path']} />
                   {locked('heat_path') ? (
                     <AiCellRef component={component} field="heat_path" text={HEAT_PATH_LABELS[spec.heat_path.type].zh} />
                   ) : (
@@ -551,11 +558,12 @@ export function ComponentTable({
                       className={`${SELECT_CELL} ${spec.heat_path_confirmed ? '' : 'text-warn-600'}`}
                       // The longest path label is sixteen characters wide and no
                       // sane column fits it, so hovering spells it out.
-                      title={
+                      title={[
                         spec.heat_path_confirmed
                           ? HEAT_PATH_LABELS[spec.heat_path.type].zh
-                          : `推定值（${HEAT_PATH_LABELS[spec.heat_path.type].zh}），它決定整條熱阻鏈，請確認。`
-                      }
+                          : `推定值（${HEAT_PATH_LABELS[spec.heat_path.type].zh}），它決定整條熱阻鏈，請確認。`,
+                        ...(aiNotStated(component, 'heat_path') ? [AI_HEAT_PATH_UNSTATED] : []),
+                      ].join('\n')}
                       value={spec.heat_path.type}
                       disabled={readOnly}
                       onChange={(event) =>
@@ -576,7 +584,8 @@ export function ComponentTable({
                     </select>
                   )}
                 </td>
-                <td className="px-2 py-1.5">
+                <td className="relative px-2 py-1.5">
+                  <AiCellUnlocked {...aiCell} fields={['tim']} timName={timName} />
                   {locked('tim') ? (
                     <AiCellRef component={component} field="tim" text={spec.tim.tim_id ? timName(spec.tim.tim_id) : '—'} />
                   ) : (

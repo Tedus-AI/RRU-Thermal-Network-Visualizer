@@ -128,7 +128,7 @@ export function ProjectProgressPanel() {
             <>
               <StateIcon state={row.state} />
               <span
-                className={`flex-1 text-[13px] ${
+                className={`min-w-0 flex-1 truncate text-[13px] ${
                   isNext ? 'font-bold text-ink-900' : row.state === 'done' ? 'text-ink-700' : 'text-ink-500'
                 }`}
               >
@@ -136,7 +136,7 @@ export function ProjectProgressPanel() {
               </span>
               {row.detail && (
                 <span
-                  className={`tabular text-[12px] ${
+                  className={`tabular shrink-0 text-[12px] whitespace-nowrap ${
                     row.state === 'todo' ? 'text-warn-600' : 'text-ink-500'
                   }`}
                 >
@@ -176,8 +176,8 @@ export function ProjectProgressPanel() {
             title={next.description}
             className="flex w-full items-center gap-1.5 rounded-md px-1.5 py-1.5 text-left text-[13px] font-semibold text-accent-700 hover:bg-accent-50"
           >
-            <span className="font-normal text-ink-500">下一步：</span>
-            {next.cta}
+            <span className="shrink-0 font-normal text-ink-500">下一步：</span>
+            <span className="min-w-0 truncate">{next.cta}</span>
             <ArrowRight size={14} className="ml-auto" />
           </button>
         )}
