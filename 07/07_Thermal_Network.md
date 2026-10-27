@@ -294,6 +294,7 @@ Re-Solve
 Ambient
 Wind
 Solar
+Power Basis（功耗：高溫 Pd／常溫 Pd）
 Power Scale
 Boundary Count
 ```
@@ -938,6 +939,21 @@ Switch Scenario：
 若 dirty / unsolved：
 
 要求 Solve。
+
+---
+
+# 41b. 功耗基準（`Scenario.power_basis`，01 §51）
+
+情境的「功耗」決定每顆元件的節點帶哪一個功耗：高溫 Pd（預設，04 的單顆功耗）或常溫 Pd（04 的常溫功耗）。
+
+- 單一入口：`projectComponentMaster(..., { powerBasis })` → `componentPowerFor(component, basis) × 代表顆數`；`buildSolveInput` 由
+  `solutionStore.gather` 帶 `powerBasisOf(scenario)`，再乘功耗倍率。`SolveInput.power_basis`、`solution.metadata.power_basis` 記下當時的基準。
+- 常溫情境裡沒有常溫功耗的元件 → 用單顆功耗，並在檢查／結果的提醒列出（`rt_power_missing`，warning，`fix_in: '04'`）。
+  **不寫「偏保守」**：濾波器、環形器的常溫 Pd 可能比高溫高（StarKcore-12L：Cavity Filter 24.85 → 31.07 W）。
+- 簽章：基準是常溫時多一段 `basis=rt`（高溫不加，既有的解不會因此變成過期）；節點功耗本來就在簽章裡。
+- 結果頁的功耗欄（07 的節點表、10 的節點表與「總功耗」拆分）用 `projectComponentLimits(network, components, basis)`：
+  帶了基準就一併投影功耗 → 功耗欄＝這個情境求解時用的功耗，與旁邊的溫度一致。已經用求解輸入網路（`solveInput.network`）的地方不再投影（功耗已乘過倍率）。
+- 測試：`src/thermal/graph/powerBasis.test.ts`、`src/data/scenarioPowerBasis.test.ts`。
 
 ---
 

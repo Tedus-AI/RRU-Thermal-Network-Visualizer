@@ -23,6 +23,9 @@
  *
  * The compressed gap (`gapThickness`) is the bond line — 5G-RRU's t_Pad 1.7 is
  * AI-Thermal's 1.7 gap, not its 2.5 mm sheet.
+ *
+ * Not a field: how many parts state a room-temperature power (`Power_RT(W)`,
+ * AI-Thermal's Pd@25°C), so 01 can offer the 「常溫 25 °C」 scenario that uses it.
  */
 
 import type { MaterialDefaults } from '@/domain/materials';
@@ -51,6 +54,19 @@ const num = (value: unknown): number | null => {
   }
   return null;
 };
+
+/** Parts that state AI-Thermal's Pd@25°C, the hidden ones (👁) left out. */
+function rtPowerParts(project: Raw): number {
+  let count = 0;
+  for (const key of ['rf_data', 'digital_data', 'pwr_data']) {
+    const list = project[key];
+    if (!Array.isArray(list)) continue;
+    for (const comp of list) {
+      if (isObj(comp) && comp._excluded !== true && num(comp['Power_RT(W)']) != null) count++;
+    }
+  }
+  return count;
+}
 
 /** AI-Thermal's ambient for the project: its high-temperature condition. */
 function aiThermalAmbient(project: Raw): number | null {
@@ -114,5 +130,6 @@ export function projectAiFresh(db: AiThermalDb, projectId: string, materials: Ma
     values,
     rru_ambient_C: rruT,
     rru_design: rruDesignOf(project),
+    rt_power_parts: rtPowerParts(project),
   };
 }

@@ -31,6 +31,7 @@
  * fact is how the three drift apart.
  */
 
+import { powerBasisOf } from '@/domain/powerBasis';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
@@ -546,6 +547,7 @@ export function ExportCenterView() {
         wind_mps: scenario.wind_mps,
         solar_W_m2: scenario.solar_W_m2,
         power_scale: scenario.power_scale,
+        power_basis: powerBasisOf(scenario),
       },
       unavailable: snapshotEvaluation.unavailable_sections,
       stale: snapshotEvaluation.state === 'STALE',

@@ -173,6 +173,7 @@ Mapping → Validation → Duplicate → Apply）、`AiThermalSourcePanel.tsx`�
 | AI-Thermal | 本工具 |
 |---|---|
 | `Component`、`Qty`、`Power(W)`、`Limit(C)` | 名稱、數量、單顆功耗、溫度上限 |
+| `Power_RT(W)`（AI-Thermal 的 Pd@25°C）| 常溫功耗（04；01 的常溫情境用，見 01 §51）。沒填不寫 |
 | 所在清單（Type `filter` → Filter）| 分類 RF／Digital／Power／Filter |
 | `Limit_Ref`（沒填 → 兩工具共用的自動規則 `CompMerge.limitRef`）| 限溫類型，**一律已確認**（使用者決定：限溫對象屬於 AI-Thermal，要改回 AI-Thermal 改、再重新匯入）。Rjc = 0 的本體型元件 Tj → Tc。判定依據寫在「來源」分頁的「限溫對象」 |
 | `R_jc`（沒有 → `Rth` 的 θJC，依散熱路徑取 top／bottom）| Rjc。**`R_jc = 0` → 表面／本體型熱源、Rjc 留空**（Rjc 0 會被 07 拒絕）|
@@ -186,7 +187,7 @@ Mapping → Validation → Duplicate → Apply）、`AiThermalSourcePanel.tsx`�
 | TH/ME `bossSize`（元件表面路徑）| 記在凸台的「上次設定」（`mount_by_type.Pedestal`）：04 選「凸台」時帶入；接合方式仍是直接貼合 |
 | 元件 `note`＋TH/ME `note` | 備註 |
 | `_excluded`（5G-RRU 👁）| 預設不匯入；勾「包含已排除」→ 匯入為停用 |
-| `Type`、限溫對象的判定、`Power_RT(W)`、`TIM_Model`、`TV_ID_mil`、`TV_Qty`、Thermal Via 等效 k（或用通用值的原因）、`bossSize`、板厚來源 | 元件「來源」分頁的保留欄位 |
+| `Type`、限溫對象的判定、`TIM_Model`、`TV_ID_mil`、`TV_Qty`、Thermal Via 等效 k（或用通用值的原因）、`bossSize`、板厚來源 | 元件「來源」分頁的保留欄位 |
 
 - TH/ME 的 `hidden_components` **不是**排除（那是機構規格清單的隱藏，Driver／環形器／濾波器都在裡面，是真的熱源）。
 - 封裝型式只認得 `filter` → Cavity Filter、`Power Modules` → Module，其餘留給 04。

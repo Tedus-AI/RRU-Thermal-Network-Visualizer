@@ -19,6 +19,7 @@
  * from a temperature drop and a component's total power.
  */
 
+import type { PowerBasis } from '@/domain/powerBasis';
 import type { MaterialDefaults } from '@/domain/materials';
 import { solveNetwork } from '../networkSolver';
 import { edgeResistance } from '../rth';
@@ -58,6 +59,7 @@ export interface SolveScenarioOptions {
   scenarioId: string;
   sourceRevision?: SourceRevision;
   powerScale?: number;
+  powerBasis?: PowerBasis;
   settings?: SolverSettings;
 }
 
@@ -110,6 +112,7 @@ function emptySolution(
       max_node_residual_W: 0,
       solve_time_ms: 0,
       power_scale: input.power_scale,
+      power_basis: input.power_basis,
       ambient_C: input.ambient_C,
       matrix_size: 0,
     },
@@ -151,6 +154,7 @@ export function checkScenario(options: SolveScenarioOptions): {
     scenarioId: options.scenarioId,
     sourceRevision: options.sourceRevision,
     powerScale: options.powerScale,
+    powerBasis: options.powerBasis,
   });
   const signature = solveInputSignature(input);
 
@@ -496,6 +500,7 @@ export function solveScenario(options: SolveScenarioOptions): SolveScenarioOutco
       max_node_residual_W: result.max_node_residual_W,
       solve_time_ms: result.solve_time_ms,
       power_scale: input.power_scale,
+      power_basis: input.power_basis,
       ambient_C: input.ambient_C,
       matrix_size: Object.keys(input.network.nodes).length - fixedCount,
     },

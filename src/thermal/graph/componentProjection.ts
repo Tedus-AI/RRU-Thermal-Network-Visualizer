@@ -1,7 +1,15 @@
 /** Projects Screen 04 master values onto a clone without mutating Screen 05. */
 
 import type { Component } from '@/domain/component';
-import { mountFootprintMm2, mountSpec, powerWOf, spreadingDomainOf } from '@/domain/component';
+import {
+  componentPowerFor,
+  mountFootprintMm2,
+  mountSpec,
+  powerRtWOf,
+  powerWOf,
+  spreadingDomainOf,
+} from '@/domain/component';
+import type { PowerBasis } from '@/domain/powerBasis';
 import { valueOf } from '@/domain/sourcedValue';
 
 import { defaultMaterials, type MaterialDefaults } from '@/domain/materials';
@@ -178,6 +186,34 @@ function updateLinkedEdge(
 export interface ComponentProjectionOptions {
   physics?: boolean;
   limits?: boolean;
+  /**
+   * Which of the component's two powers the nodes carry: the hot-condition Pd
+   * (default) or the room-temperature Pd, as the scenario's 功耗 says (01).
+   * With `physics: false` a stated basis still projects the power — the result
+   * screens show the power the solver used, not the one Screen 05 was built at.
+   */
+  powerBasis?: PowerBasis;
+}
+
+/**
+ * Enabled components a room-temperature solve falls back to the hot power for:
+ * they carry heat, but Screen 04 has no 常溫功耗 for them. The hot power stands
+ * in rather than zero — it is not always the larger one (a cavity filter or a
+ * circulator can dissipate more at 25 °C), so the solve names these parts
+ * instead of calling the stand-in conservative.
+ */
+export function componentsMissingRtPower(
+  network: ThermalNetwork,
+  components: Component[],
+): Component[] {
+  const byId = new Map(components.map((component) => [component.id, component]));
+  const missing = new Map<string, Component>();
+  for (const node of Object.values(network.nodes)) {
+    const component = node.component_ref ? byId.get(node.component_ref) : undefined;
+    if (!component || !component.enabled || !followsComponentPower(node)) continue;
+    if (powerWOf(component) !== 0 && powerRtWOf(component) == null) missing.set(component.id, component);
+  }
+  return [...missing.values()];
 }
 
 /**
@@ -238,6 +274,7 @@ export function projectComponentMaster(
 ): ThermalNetwork {
   const clone = structuredClone(network);
   const byId = new Map(components.map((component) => [component.id, component]));
+  const basis = options.powerBasis ?? 'hot';
 
   for (const node of Object.values(clone.nodes)) {
     const component = node.component_ref ? byId.get(node.component_ref) : undefined;
@@ -247,10 +284,11 @@ export function projectComponentMaster(
       if (!component.enabled && node.origin?.component_id === component.id) {
         node.disabled = true;
       } else if (followsComponentPower(node)) {
-        node.power_W = powerWOf(component) * representedDevices(clone, node, component);
+        node.power_W = componentPowerFor(component, basis) * representedDevices(clone, node, component);
       }
+    } else if (options.powerBasis && component.enabled && followsComponentPower(node)) {
+      node.power_W = componentPowerFor(component, basis) * representedDevices(clone, node, component);
     }
-
   }
 
   if (options.limits) applyComponentLimits(clone, byId);
@@ -270,14 +308,18 @@ export function projectComponentMaster(
 
 /**
  * Result-side projection changes interpretation only, never the physics — so it
- * needs no material constants; nothing on this path reads them.
+ * needs no material constants; nothing on this path reads them. Pass the
+ * scenario's power basis and the nodes also carry the power that scenario
+ * solves with, so a power column agrees with the temperatures beside it.
  */
 export function projectComponentLimits(
   network: ThermalNetwork,
   components: Component[],
+  powerBasis?: PowerBasis,
 ): ThermalNetwork {
   return projectComponentMaster(network, components, defaultMaterials(), {
     physics: false,
     limits: true,
+    ...(powerBasis ? { powerBasis } : {}),
   });
 }

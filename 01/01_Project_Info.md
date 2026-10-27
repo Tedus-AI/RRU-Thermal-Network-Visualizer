@@ -1585,7 +1585,7 @@ default scenario
 | `mat.hsk_fin_k_W_mK` | 鰭片 k | `rru_result.k_fin` → 參數控制台勾了自訂的 `fin_kfin_emb`／`fin_kfin_dc` → 5G-RRU 製程預設（Embedded 200／Die-casting 150，使用者要求預設就連動）|
 | `tim.<材料 id>.k`／`.blt` | TIM 材料的 k／BLT | AI-Thermal `tim_library`（連結 TIM 管理工具的材料只取 BLT＝`gapThickness`；其餘以型號名比對取 k＋BLT）→ 內建 Grease／Pad／Putty 退回 5G-RRU 的 `K_<Type>`／`t_<Type>` |
 
-不連結：功率倍率（各工具的工況不同）、常溫情境（之後在 06 處理）、客戶／負責人／階段等本工具自己的欄位、
+不連結：功率倍率（各工具的工況不同）、客戶／負責人／階段等本工具自己的欄位、
 5G-RRU 的 η_process（製程係數：它校正自己 h 經驗式用的，本工具另外算擴散熱阻，再乘一次會重複計入）。
 
 ## 50.2 畫面
@@ -1625,3 +1625,30 @@ default scenario
 - domain：`src/domain/projectAiLink.ts`；讀資料庫：`src/importers/component/aiThermalProject.ts`、`aiThermalMaterials.ts`。
 - 畫面：`src/project/ProjectAiLinkBar.tsx`、`ProjectAiLinkDialog.tsx`、`ProjectAiLocked.tsx`、`useProjectAiLink.ts`、`projectAiActions.ts`。
 - 測試：`src/importers/component/aiThermalProject.test.ts`（StarKcore-12L 真實備份：取值、第一次連結、更新、鎖回、✂／改回、解除、複製、存讀）。
+
+## 50.5 常溫情境「常溫 25 °C」
+
+AI-Thermal 每顆元件有兩個功耗：高溫條件的 `Power(W)` 與環溫 25 °C 的 `Power_RT(W)`（Pd@25°C）。
+後者帶進 04 的「常溫功耗」（`power_rt_W`，連動 AI-Thermal 時鎖定＋✂，見 04 §25c），給 01 的常溫情境用。
+
+- 連結／更新對話框：AI-Thermal 有元件填了 Pd@25°C（`ProjectAiFresh.rt_power_parts`，👁 排除的不算），而且專案還沒有「功耗＝常溫 Pd」的情境
+  （`roomTempScenarioOffer`）→ 欄位表下面多一列「另外新增情境「常溫 25 °C」」，**預設勾選**。
+- 勾了 → `addRoomTempScenario`：新增情境 `{ 環溫 25 °C、風速 0、日照 0、功耗倍率 1、功耗＝常溫 Pd }`（`ROOM_TEMP_SCENARIO`），
+  名稱重複時加 (2)…；**目前的情境不變**。它不是連結欄位：之後可以改名、調整，更新不會再動它。
+- 欄位都已是最新、只差這個情境時，主按鈕是「新增情境」；取消勾選就沒有可套用的（按鈕停用）。
+- 測試：`aiThermalProject.test.ts`「the room-temperature scenario」與「adds the room-temperature scenario…」。
+
+# 51. 情境的「功耗」：高溫 Pd／常溫 Pd（`Scenario.power_basis`）
+
+情境表在「功耗倍率」前面多一欄「功耗」（下拉：高溫 Pd／常溫 Pd）。
+
+| 值 | 每顆元件求解用的功耗 |
+|---|---|
+| 高溫 Pd（**沒有 key**，既有情境都是這個）| 04 的單顆功耗 `power_W` |
+| 常溫 Pd（`power_basis: 'rt'`）| 04 的常溫功耗 `power_rt_W`；**沒填的元件暫用單顆功耗**，07 列出是哪些（`rt_power_missing`）|
+
+- 兩種都再乘功耗倍率。改「功耗」＝情境改了物理輸入 → 求解失效（`scenario_changed`）。
+- 存讀只認 `'rt'`，其他值一律當高溫（`loadScenarios`）；以常溫情境為底新增的情境沿用常溫。
+- ⚠ 缺常溫功耗時用高溫功耗**不一定偏保守**：StarKcore-12L 的 Cavity Filter 高溫 24.85 W、常溫 31.07 W，環形器 2.21 → 2.76 W。
+- 05 的「③ 環境」、07 的情境摘要、報告的情境摘要都寫出功耗基準。
+

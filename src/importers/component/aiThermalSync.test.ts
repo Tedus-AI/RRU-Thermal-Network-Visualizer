@@ -106,6 +106,12 @@ describe('an AI-Thermal import links and locks', () => {
     expect(isAiLocked(pa, 'name')).toBe(false);
   });
 
+  it('links and locks the room-temperature power (Pd@25°C) beside the hot one', () => {
+    expect(aiLinkOf(pa)!.values.power_rt).toBe(52.129);
+    expect(pa.power_rt_W?.value).toBe(52.129);
+    expect(isAiLocked(pa, 'power_rt')).toBe(true);
+  });
+
   it('leaves a field AI-Thermal left empty for this tool to fill', () => {
     // The filter has neither a heat path nor a body size in AI-Thermal.
     const filter = by(components, 'Cavity Filter(SC12L)');
@@ -192,6 +198,31 @@ describe('「從 AI-Thermal 更新」', () => {
       ['power', 52.99, 60, true],
     ]);
     expect(aiPlanPending(plan)).toEqual({ components: 1, fields: 2 });
+  });
+
+  it('offers a changed room-temperature power; one AI-Thermal cleared is left as it is', () => {
+    const components = importFrom(db());
+    const next = db((raw) => {
+      comp(raw, 'GTRB384608FC-Final')['Power_RT(W)'] = 50;
+      delete comp(raw, 'Cavity Filter(SC12L)')['Power_RT(W)'];
+    });
+    const plan = planAiUpdate(components, fresh(next), PROJECT);
+    const change = (name: string) =>
+      plan.updates.find((u) => u.name === name)?.changes.map((c) => [c.field, c.current, c.incoming]);
+    expect(change('GTRB384608FC-Final')).toEqual([['power_rt', 52.129, 50]]);
+    expect(change('Cavity Filter(SC12L)')).toBeUndefined();
+
+    const paId = by(components, 'GTRB384608FC-Final').id;
+    const applied = applyAiPlan(
+      components,
+      plan,
+      { fields: { [paId]: ['power_rt'] }, add: [], disable: [] },
+      PROJECT,
+      null,
+    ).components;
+    expect(by(applied, 'GTRB384608FC-Final').power_rt_W?.value).toBe(50);
+    // Like any field AI-Thermal empties: an update never clears a value here.
+    expect(by(applied, 'Cavity Filter(SC12L)').power_rt_W?.value).toBe(31.072);
   });
 
   it('starts a field the engineer took over and changed unticked, and says why', () => {

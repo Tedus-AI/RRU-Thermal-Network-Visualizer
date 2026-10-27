@@ -296,7 +296,7 @@ export function AiThermalSourcePanel() {
                 <p className="mt-1">{STILL_04.join('、')}，以及 AI-Thermal 沒有指定的散熱路徑。</p>
                 <p className="mt-2 text-ink-400">
                   AI-Thermal 管的欄位在 04 顯示成參照值、要改回 AI-Thermal 改；04 的「從 AI-Thermal 更新」會帶回之後的修改。
-                  元件類型、限溫對象的判定、常溫功耗、TIM 型號、Thermal Via 孔徑、數量與等效 k 的說明保留在「來源」分頁。
+                  常溫功耗（Pd@25°C）帶進 04 的「常溫功耗」，給 01 的常溫情境用。元件類型、限溫對象的判定、TIM 型號、Thermal Via 孔徑、數量與等效 k 的說明保留在「來源」分頁。
                 </p>
               </div>
             </div>

@@ -15,6 +15,7 @@ import {
   planProjectAiUpdate,
   projectAiLinkOf,
   projectAiPending,
+  roomTempScenarioOffer,
   suggestedAiProject,
   type ProjectAiFresh,
   type ProjectAiLink,
@@ -30,7 +31,7 @@ import {
   type AiThermalDb,
   type AiThermalProjectSummary,
 } from '@/importers/component/parseAiThermal';
-import { commitProjectAiWrite } from './projectAiActions';
+import { addRoomTempScenario, commitProjectAiWrite } from './projectAiActions';
 
 export type ProjectAiStatus = 'idle' | 'reading' | 'ready' | 'error';
 
@@ -51,12 +52,20 @@ export interface ProjectAiLinkState {
   plan: ProjectAiPlan | null;
   /** What the header counts: fields an update would change by default (linked projects only). */
   pending: number;
+  /** AI-Thermal states room-temperature powers and the project has no such scenario yet. */
+  roomTemp: { parts: number } | null;
   readSharePoint: () => Promise<void>;
   readFile: (file: File) => Promise<void>;
   /** Use a database read elsewhere (Screen 02 already has one). */
   adoptDb: (db: AiThermalDb, label: string) => void;
-  /** Applies the plan with these picks; returns how many fields changed. */
-  apply: (picks: Record<string, boolean>) => number;
+  /**
+   * Applies the plan with these picks, and creates the room-temperature scenario
+   * when asked; returns how many fields changed and the scenario's name.
+   */
+  apply: (
+    picks: Record<string, boolean>,
+    extras?: { roomTemp?: boolean },
+  ) => { changed: number; scenario: string | null };
 }
 
 interface Read {
@@ -138,16 +147,19 @@ export function useProjectAiLink(options: { background?: boolean } = {}): Projec
     [fresh, draft, baseline],
   );
   const pending = link && plan && !plan.first ? projectAiPending(plan) : 0;
+  const roomTemp = useMemo(() => roomTempScenarioOffer(scenarios, fresh), [scenarios, fresh]);
 
   const apply = useCallback(
-    (picks: Record<string, boolean>) => {
+    (picks: Record<string, boolean>, extras: { roomTemp?: boolean } = {}) => {
       const current = useProjectStore.getState().draft;
-      if (!current || !fresh || !plan) return 0;
+      if (!current || !fresh || !plan) return { changed: 0, scenario: null };
       const result = applyProjectAiPlan(current, fresh, plan, picks);
       commitProjectAiWrite(result);
-      return result.changed.length;
+      const scenario =
+        extras.roomTemp && roomTemp ? addRoomTempScenario(current.project_id.trim()) : null;
+      return { changed: result.changed.length, scenario };
     },
-    [fresh, plan],
+    [fresh, plan, roomTemp],
   );
 
   return {
@@ -163,6 +175,7 @@ export function useProjectAiLink(options: { background?: boolean } = {}): Projec
     fresh,
     plan,
     pending,
+    roomTemp,
     readSharePoint,
     readFile,
     adoptDb,

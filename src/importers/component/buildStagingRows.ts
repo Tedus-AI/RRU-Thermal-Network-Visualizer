@@ -84,6 +84,7 @@ export function buildStagingRows({
 
     const qty = parseNumericCell(cellFor(cells, mapping, 'Qty'));
     const power = parseNumericCell(cellFor(cells, mapping, 'Power(W)'));
+    const powerRt = parseNumericCell(cellFor(cells, mapping, 'Power_RT(W)'));
     const rjc = parseNumericCell(cellFor(cells, mapping, 'R_jc'));
     const limit = parseNumericCell(cellFor(cells, mapping, 'Limit(C)'));
     const sourceL = parseNumericCell(cellFor(cells, mapping, 'Source_L'));
@@ -110,6 +111,7 @@ export function buildStagingRows({
       category,
       qty: qty.value,
       power_W: power.value,
+      power_rt_W: powerRt.value,
       r_jc_C_per_W: rjc.value,
       limit_C: limit.value,
       heat_path: heatPath,
@@ -134,6 +136,7 @@ export function buildStagingRows({
       invalidNumerics: {
         Qty: qty.invalid,
         'Power(W)': power.invalid,
+        'Power_RT(W)': powerRt.invalid,
         R_jc: rjc.invalid,
         'Limit(C)': limit.invalid,
         Source_L: sourceL.invalid,
@@ -300,6 +303,15 @@ export function validateStagingRow(row: StagingRow, context: ValidateContext = {
         message_zh: '功耗為 0 W，此元件不會是熱源。',
       });
     }
+  }
+
+  if (!invalid['Power_RT(W)'] && row.power_rt_W != null && row.power_rt_W < 0) {
+    issues.push({
+      severity: 'error',
+      field: 'Power_RT(W)',
+      message: 'Room-temperature power cannot be negative.',
+      message_zh: '常溫功耗不可為負值。',
+    });
   }
 
   if (!invalid.R_jc && row.r_jc_C_per_W != null && row.r_jc_C_per_W < 0) {

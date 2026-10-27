@@ -19,6 +19,7 @@
  * Snapshot/Readiness/Validation stack on the right, and the five bottom actions.
  */
 
+import { powerBasisOf } from '@/domain/powerBasis';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
@@ -556,6 +557,7 @@ export function ReportPreviewView() {
         wind_mps: scenario.wind_mps,
         solar_W_m2: scenario.solar_W_m2,
         power_scale: scenario.power_scale,
+        power_basis: powerBasisOf(scenario),
       },
       unavailable: evaluation.unavailable_sections.includes(section.id),
       network_context: networkContext,

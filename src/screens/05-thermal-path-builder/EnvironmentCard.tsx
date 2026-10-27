@@ -1,7 +1,7 @@
 /**
  * Card ③ 環境: the scenarios, as 01 states them.
  *
- * Read-only: ambient, power scale, wind and sun are 01's fields. The table is
+ * Read-only: ambient, power (basis and scale), wind and sun are 01's fields. The table is
  * here so the conditions being set up are visible next to the surfaces they
  * act on, and a row switches which scenario the page is showing — the heat
  * sink's fins are the same in every one; the surface conditions are not.
@@ -11,6 +11,7 @@ import { ArrowUpRight } from 'lucide-react';
 
 import { Button } from '@/ui/primitives';
 import type { Scenario } from '@/domain/project';
+import { powerBasisOf } from '@/domain/powerBasis';
 import { WIND_NOT_APPLIED, windRecordedOnly } from '@/thermal/boundary/wind';
 
 import { WorkspaceCard } from './WorkspaceCard';
@@ -42,7 +43,11 @@ export function EnvironmentCard({
       index={3}
       title="環境"
       subtitle="跟著 01 的情境（唯讀）"
-      status={active ? `${active.name}・${fmt(active.ambient_C, 1)} °C` : '沒有情境'}
+      status={
+        active
+          ? `${active.name}・${fmt(active.ambient_C, 1)} °C${powerBasisOf(active) === 'rt' ? '・常溫 Pd' : ''}`
+          : '沒有情境'
+      }
       tone={active ? 'neutral' : 'warn'}
       open={open}
       onToggle={onToggle}
@@ -57,7 +62,12 @@ export function EnvironmentCard({
                 <tr>
                   <th className="px-2 py-1 text-left font-semibold">情境</th>
                   <th className="px-2 py-1 text-right font-semibold">環溫 °C</th>
-                  <th className="px-2 py-1 text-right font-semibold">功耗倍率</th>
+                  <th
+                    className="px-2 py-1 text-right font-semibold"
+                    title="每顆元件用高溫 Pd 還是常溫 Pd（Pd@25°C），再乘上功耗倍率"
+                  >
+                    功耗
+                  </th>
                   <th className="px-2 py-1 text-right font-semibold">風速 m/s</th>
                   <th className="px-2 py-1 text-right font-semibold">日照 W/m²</th>
                 </tr>
@@ -90,7 +100,9 @@ export function EnvironmentCard({
                         </button>
                       </td>
                       <td className="tabular px-2 py-1 text-right">{fmt(scenario.ambient_C, 1)}</td>
-                      <td className="tabular px-2 py-1 text-right">×{fmt(scenario.power_scale, 2)}</td>
+                      <td className="tabular whitespace-nowrap px-2 py-1 text-right">
+                        {powerBasisOf(scenario) === 'rt' ? '常溫' : '高溫'} ×{fmt(scenario.power_scale, 2)}
+                      </td>
                       <td className="tabular px-2 py-1 text-right">
                         {fmt(scenario.wind_mps, 1)}
                         {windRecordedOnly(scenario.wind_mps) && <span className="text-warn-600">※</span>}

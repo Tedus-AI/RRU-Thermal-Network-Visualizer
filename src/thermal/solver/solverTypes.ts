@@ -11,6 +11,7 @@
  * written here (07 §29, §42).
  */
 
+import type { PowerBasis } from '@/domain/powerBasis';
 import type { DataSource, SolverSettings } from '../types';
 import type { SourceRevision } from '@/domain/revision';
 
@@ -139,6 +140,8 @@ export interface SolutionMetadata {
   max_node_residual_W: number;
   solve_time_ms: number;
   power_scale: number;
+  /** The scenario's power basis at solve time. Absent on older results = hot. */
+  power_basis?: PowerBasis;
   ambient_C: number | null;
   matrix_size: number;
 }

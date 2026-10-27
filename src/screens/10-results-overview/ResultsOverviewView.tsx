@@ -71,6 +71,7 @@ import { powerByCategory } from '@/thermal/overview/powerByCategory';
 import { boundarySummary } from '@/thermal/overview/boundarySummary';
 import { NEAR_LIMIT_MARGIN_C } from '@/thermal/analysis/temperatureDataset';
 import { projectComponentLimits } from '@/thermal/graph/componentProjection';
+import { powerBasisOf } from '@/domain/powerBasis';
 import { CRITICAL_COMPONENT_TOP_N } from '@/thermal/overview/criticalComponents';
 
 import { ResizableSidebar } from '@/ui/ResizableSidebar';
@@ -366,9 +367,12 @@ export function ResultsOverviewView() {
     [boundaryPorts, boundarySet],
   );
 
+  // The scenario's power basis too, so the power column is the power the
+  // temperatures beside it were solved with.
+  const powerBasis = powerBasisOf(scenario);
   const limitedNetwork = useMemo(
-    () => (network ? projectComponentLimits(network, components) : null),
-    [network, components],
+    () => (network ? projectComponentLimits(network, components, powerBasis) : null),
+    [network, components, powerBasis],
   );
 
   /**
@@ -472,15 +476,15 @@ export function ResultsOverviewView() {
   /** What the Total Power card opens into: the same heat, split by category. */
   const powerSplit = useMemo(
     () =>
-      network
+      limitedNetwork
         ? powerByCategory({
-            network,
+            network: limitedNetwork,
             components,
             powerScale: scenario?.power_scale ?? 1,
             solar_W: solution?.energy_balance.solar_W ?? 0,
           }).slices
         : [],
-    [network, components, scenario?.power_scale, solution],
+    [limitedNetwork, components, scenario?.power_scale, solution],
   );
 
   const snapshot = activeScenarioId ? (snapshots[activeScenarioId] ?? null) : null;

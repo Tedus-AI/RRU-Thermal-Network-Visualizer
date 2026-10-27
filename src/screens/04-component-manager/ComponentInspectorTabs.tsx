@@ -110,6 +110,44 @@ export function OverviewTab({ component, readOnly, onPatch }: InspectorTabProps)
         </AiOwned>
       </div>
 
+      <div className="grid grid-cols-3 gap-3">
+        <div className="col-start-3">
+          <AiOwned
+            component={component}
+            field="power_rt"
+            readOnly={readOnly}
+            onPatch={onPatch}
+            label="Power RT"
+            zh="常溫功耗"
+            unit="W"
+            tooltip={tip('Power RT')}
+            id="ins-power-rt"
+            text={component.power_rt_W?.value ?? '—'}
+          >
+            <SourcedNumberField
+              id="ins-power-rt"
+              label="Power RT"
+              zh="常溫功耗"
+              unit="W"
+              tooltip={tip('Power RT')}
+              value={component.power_rt_W ?? null}
+              placeholder="同單顆功耗"
+              step="0.01"
+              readOnly={readOnly}
+              onChange={(next) => {
+                // Empty means "not stated" — the key goes, so a room-temperature
+                // scenario falls back to the hot power instead of solving with 0.
+                onPatch(
+                  component.id,
+                  { power_rt_W: next?.value == null ? undefined : next },
+                  ['power_rt_W'],
+                );
+              }}
+            />
+          </AiOwned>
+        </div>
+      </div>
+
       <div className="rounded-md border border-line bg-surface-muted px-3 py-2">
         <div className="flex items-baseline justify-between">
           <BilingualTooltip zh={tip('Total Power') ?? ''} align="left">
