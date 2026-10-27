@@ -6,6 +6,12 @@
  */
 declare const __BUILD_ID__: string;
 
+/**
+ * The version shown in the header and published as `version.json`, injected by
+ * `vite.config.ts`: Taipei build time plus the short sha, or `dev`.
+ */
+declare const __APP_VERSION__: string;
+
 interface Window {
   /**
    * Clears every `tnv.*` collection, re-seeds the demo project and reloads.

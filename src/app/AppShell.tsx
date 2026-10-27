@@ -22,6 +22,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { TopHeader } from './TopHeader';
+import { UpdateBanner } from './UpdateBanner';
+import { startUpdateCheck } from './updateCheck';
 import { MainSidebar } from './MainSidebar';
 import { ToastViewport } from '@/ui/toast';
 import { ScreenErrorBoundary } from './ErrorBoundary';
@@ -67,6 +69,8 @@ export function AppShell() {
     const stopPersist = startAutoPersist();
     // A tab closed inside the save debounce used to lose the edit.
     const stopGuard = startUnloadGuard();
+    // A newer build deployed while this tab was open (the AI-Thermal reminder).
+    const stopUpdateCheck = startUpdateCheck();
     // A component deleted in 04 leaves 05 and 06 too, including in a project
     // saved before deletions did that.
     const stopDeletionSync = startComponentDeletionSync(
@@ -81,6 +85,7 @@ export function AppShell() {
       stopSync();
       stopPersist();
       stopGuard();
+      stopUpdateCheck();
       stopDeletionSync();
     };
   }, []);
@@ -143,6 +148,7 @@ export function AppShell() {
   return (
     <WorkspaceGate>
       <div className="flex h-full flex-col overflow-hidden">
+        <UpdateBanner />
         <TopHeader />
         <div className="flex min-h-0 flex-1">
           <MainSidebar collapsed={collapsed} onToggle={() => setCollapsed((v) => !v)} />

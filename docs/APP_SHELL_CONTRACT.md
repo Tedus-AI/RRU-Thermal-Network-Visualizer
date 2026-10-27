@@ -29,6 +29,27 @@ project name (header selector) plus the screen (sidebar and page title) were
 what the breadcrumb repeated. The header's right end shows the solver state
 only — not the screen name, which would be a third copy.
 
+### 新版本提醒（`src/app/updateCheck.ts`、`UpdateBanner.tsx`）
+
+與 AI-Thermal、5G-RRU 同一套：建置時 `vite.config.ts` 產生版本號（台北時間＋短 commit，`2026.10.27.1402-0cae7fc`）
+並在 `dist/` 放一份 `version.json`；開著的分頁在載入後 15 秒、每 5 分鐘、切回分頁時以 `cache:'no-store'` 讀它，
+版本不同就在 header 上方跳一整條提醒（「立即更新」／「稍後」＝10 分鐘後再提醒）。
+
+- 「立即更新」先把還沒寫入的修改寫完（`flushPendingWork`，最多等 15 秒）才重新載入；等不到就不重新載入、在提醒上說原因。
+  網址帶 `?v=<新版本>` 讓 HTML 重新抓（GitHub Pages 會快取幾分鐘），載入後拿掉。
+- header 標題底下是目前的版本（`v2026.10.27.1402`），讀到線上版本後標「✓ 最新」或「有新版本」。`vite dev` 是「開發版」、不檢查。
+- 讀不到 `version.json`（離線、404、內容不對）一律當作不知道，不會跳提醒。
+
+### 清空瀏覽器暫存（`src/data/browserCache.ts`、`BrowserCacheDialog.tsx`）
+
+瀏覽器的 localStorage 只是專案的工作副本，GitHub Pages 上同網站的工具（AI-Thermal、5G-RRU、本工具）共用一份空間，
+滿了會出現「瀏覽器儲存空間已滿」。**不影響存檔**（修改留在記憶體、照常寫進 SharePoint／資料夾），但提示會一直在。
+
+- 入口：儲存狀態面板的「已滿」提示、設定 → 儲存用量。視窗寫出本工具的工作副本與同網站其他資料各佔多少。
+- 清空＝刪掉 `tnv.*`（建置戳記除外）再重新載入，專案從 SharePoint／資料夾讀回來 —— 跟每次部署新版本時一樣。
+  儲存位置設定（`tnv-storage-*`）、Microsoft 登入、面板大小（`tnvui.*`）與其他工具的資料都不動。
+- 瀏覽器可能是唯一一份時不給清：SharePoint／資料夾都沒有連上、還有修改沒寫入、有專案不在任何一個連上的位置。
+
 ### Kept from 00 / 01
 
 - Dark navy Top Header and Left Sidebar.
