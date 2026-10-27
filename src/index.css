@@ -54,6 +54,11 @@
      list that carries the run's own numbers, the way a pen marks a line in a
      printout. warn-* would have read as "something is wrong"; this reads as
      "read this one". Only ever a background, always under ink-* text. */
+  /* 5G-RRU. A value Screen 01 takes from 5G-RRU's parameter console is tagged
+     in the teal that tool's own admin panel uses for itself, beside the blue
+     of an AI-Thermal value — a source, never a severity. 5.9:1 on white. */
+  --color-rru-700: #0b6e66;
+
   --color-mark-100: #fff6b8;
   --color-mark-300: #f0d975;
 

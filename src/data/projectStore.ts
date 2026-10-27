@@ -44,6 +44,13 @@ interface ProjectStoreState {
   patchProject: (patch: Partial<Pick<Project, 'project_id' | 'project_name'>>) => void;
   patchContext: (patch: Partial<ProjectContext>) => void;
   patchMaterials: (patch: Partial<MaterialDefaults>) => void;
+  /**
+   * The AI-Thermal link and the fields it writes (`projectAiLink.ts`), taken
+   * from `next` as one edit: name, context, materials and the link itself.
+   * Only a change to one of the values advances the revision; a change to the
+   * link alone (✂) is bookkeeping and must not invalidate a solve.
+   */
+  applyAiLink: (next: Project) => void;
   setActiveScenarioId: (scenarioId: string | null) => void;
   setStatus: (status: ProjectStatus) => void;
 
@@ -166,6 +173,31 @@ export const useProjectStore = create<ProjectStoreState>((set, get) => ({
         ...draft,
         revision: createRevision('project'),
         materials: { ...draft.materials, ...patch },
+      },
+      dirty: true,
+    });
+    get().scheduleAutoCommit();
+  },
+
+  applyAiLink: (next) => {
+    const draft = get().draft;
+    if (!draft || get().isReadOnly()) return;
+    const valuesMoved =
+      next.project_name !== draft.project_name ||
+      next.project_context !== draft.project_context ||
+      next.materials !== draft.materials;
+    const linkMoved = JSON.stringify(next.ai_link ?? null) !== JSON.stringify(draft.ai_link ?? null);
+    if (!valuesMoved && !linkMoved) return;
+    const { ai_link: _old, ...rest } = draft;
+    void _old;
+    set({
+      draft: {
+        ...rest,
+        project_name: next.project_name,
+        project_context: next.project_context,
+        materials: next.materials,
+        ...(next.ai_link ? { ai_link: next.ai_link } : {}),
+        revision: valuesMoved ? createRevision('project') : draft.revision,
       },
       dirty: true,
     });

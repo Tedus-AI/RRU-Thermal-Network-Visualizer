@@ -1200,6 +1200,7 @@ project_name
 meta
 project_context
 active_scenario_id
+ai_link          // 連結的 AI-Thermal 專案（§50）；解除連結時整個 key 拿掉
 ```
 
 若現有 schema 不方便，新增：
@@ -1561,3 +1562,60 @@ default scenario
 真正的熱流 topology 必須留給：
 
 # `05_Thermal_Path_Builder`
+
+---
+
+# 50. 連結的 AI-Thermal 專案（`Project.ai_link`）
+
+工具的使用順序是 AI-Thermal → 5G-RRU → 本工具。AI-Thermal 的專案 document 裡同時有 5G-RRU 的參數控制台
+（`global_params`），所以 01 連到 AI-Thermal 的**同一個專案**，就能一次取得兩個工具已經填過的值。
+原則：**兩邊都有值時以 AI-Thermal 為主，5G-RRU 第二**；沒存的 key（在 5G-RRU 是出廠預設）不帶。
+
+## 50.1 連結哪些欄位
+
+| key | 01 欄位 | 來源（依序） |
+|---|---|---|
+| `name` | 專案名稱 | AI-Thermal `project_name`（沒有就用專案 id）|
+| `band` | 頻段 | AI-Thermal `band`；沒有 key＝FR1 |
+| `ambient` | Baseline 情境的環境溫度 | AI-Thermal `param_temp`（`custom` → `param_temp_custom`）→ 5G-RRU `T_amb` |
+| `fin` | 散熱方式的 Die-casting／Embedded 鰭片 | 5G-RRU `fin_tech_selector_v2` |
+| `mat.coin_L_mm`…`mat.hsk_base_W_mm` | 材料與製程：銅塊、焊料、導熱孔通用值、散熱器底座 | 5G-RRU `Coin_*`、`K_Coin`、`K_Solder`／`t_Solder`／`Voiding`、`K_Via`／`Via_Eff`、`t_base`、`L_pcb+Top+Btm`／`W_pcb+Left+Right` |
+| `tim.<材料 id>.k`／`.blt` | TIM 材料的 k／BLT | AI-Thermal `tim_library`（連結 TIM 管理工具的材料只取 BLT＝`gapThickness`；其餘以型號名比對取 k＋BLT）→ 內建 Grease／Pad／Putty 退回 5G-RRU 的 `K_<Type>`／`t_<Type>` |
+
+不連結：功率倍率（各工具的工況不同）、常溫情境（之後在 06 處理）、客戶／負責人／階段等本工具自己的欄位。
+
+## 50.2 畫面
+
+- 「基本資料」卡片頂端一列（`#ai-link`，`ProjectAiLinkBar`）：未連結 → 「連結 AI-Thermal 專案…」（04 的元件來自 AI-Thermal 時一併提示是哪一個）；
+  已連結 → 專案名稱、上次同步、「從 AI-Thermal 更新」、「解除連結」（先確認；01 的數值都保留）。新專案還沒存過時不能連結。
+- 連結的欄位 ＝ **白底純文字＋來源標籤（AI-Thermal 藍／5G-RRU 青綠）＋✂**（`ProjectAiBox`，UX 慣例 2）；滑過去寫出取自哪裡、要到哪個工具改。
+  鰭片製程是複選 chip：鎖定那兩顆、下面一行寫來源與 ✂。表格裡（情境的環境溫度、TIM 的 k／BLT）用緊湊樣式。
+- 按 ✂ → 回到原本的編輯欄位，下面一行「已解開・AI-Thermal 是 X ↺ 改回」（值相同時寫「鎖回」）。
+- 5G-RRU 的 `T_amb` 與連結的環境溫度不同 → 情境表下方琥珀色提醒（只提醒，不擋）。
+- 連結／更新對話框（`ProjectAiLinkDialog`）：讀 SharePoint 或本機的 `thermal_db.json`（唯讀）→ 選專案 → 逐欄「01 目前／連結的值」勾選。
+  02 匯入 AI-Thermal 專案時，「檢查並套用」頁的材料卡改成同一個對話框（`ProjectAiLinkOffer`，用 02 已經讀到的資料庫、預選匯入的專案）。
+- 已連結時，01 開啟後在背景讀一次 SharePoint（只在 SharePoint 模式）；有「鎖定、而且 AI-Thermal 改過」的欄位 → 頁首「AI-Thermal 有更新（N 項）」。
+
+## 50.3 勾選規則（`planProjectAiUpdate` / `applyProjectAiPlan`）
+
+| 情況 | 預設 | 說明欄 |
+|---|---|---|
+| 第一次連結，01 還是出廠預設或空白 | 勾 | |
+| 第一次連結，01 已填過 | 不勾 | 01 已填過（分不出是哪一邊改的）|
+| 已連結、鎖定中，AI-Thermal 改了 | 勾 | 上次 X |
+| 已連結、已按 ✂ 解開 | 不勾 | 已解開（用 01 的值）|
+| AI-Thermal 新填了這一欄、01 已填過 | 不勾 | 01 已填過（上次同步時還沒有值）|
+| 值相同、還沒鎖定 | 不列，套用時一起鎖定 | |
+| AI-Thermal 不再提供 | 不列，套用後改由本工具維護（數值不變） | |
+
+勾的 → 寫入並鎖定（材料的來源記為 Imported、reference 寫 AI-Thermal 專案名）；沒勾的 → 保留 01 的值、記成已解開。
+換連到另一個 AI-Thermal 專案 ＝ 先解除再連結（02 偵測到連的是別的專案時只提醒）。
+
+## 50.4 儲存
+
+`Project.ai_link = { project_id, project_name, linked_at, synced_at, saved_at, values, sources, unlocked, rru_ambient_C }`，
+跟著專案存（`OWNED_PROJECT_KEYS` 含 `ai_link`，updateDoc merge），解除連結時整個 key 拿掉。「複製專案」帶著連結（專案名稱改成新名稱時，`name` 記成已解開）。
+
+- domain：`src/domain/projectAiLink.ts`；讀資料庫：`src/importers/component/aiThermalProject.ts`、`aiThermalMaterials.ts`。
+- 畫面：`src/project/ProjectAiLinkBar.tsx`、`ProjectAiLinkDialog.tsx`、`ProjectAiLocked.tsx`、`useProjectAiLink.ts`、`projectAiActions.ts`。
+- 測試：`src/importers/component/aiThermalProject.test.ts`（StarKcore-12L 真實備份：取值、第一次連結、更新、鎖回、✂／改回、解除、複製、存讀）。

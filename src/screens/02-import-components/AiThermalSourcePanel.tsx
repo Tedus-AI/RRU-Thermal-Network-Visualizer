@@ -117,6 +117,7 @@ export function AiThermalSourcePanel() {
         },
         {
           aiThermalProject: db.projects[summary.id],
+          aiThermalDb: { db, label: loaded.label },
           reparse: (next) => parseAiThermalProject(db, summary.id, scope, next),
           missingTims: (next) => missingAiThermalTims(db, summary.id, next, scope),
         },

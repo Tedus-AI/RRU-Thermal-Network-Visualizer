@@ -16,6 +16,7 @@
  */
 
 import { createBaselineScenario, type Project, type Scenario } from '@/domain/project';
+import { AI_KEY, projectAiAfterRename, projectAiLinkOf } from '@/domain/projectAiLink';
 import type { ComponentRevisionSet } from '@/domain/revision';
 import type { Component } from '@/domain/component';
 import type { ThermalNetwork } from '@/thermal/types';
@@ -437,13 +438,18 @@ export function duplicateProject(
   const now = new Date().toISOString();
 
   const keepScenarios = take.scenarios && source.scenarios.length > 0;
-  const baseline = keepScenarios ? null : createBaselineScenario(target.id);
+  const fresh = keepScenarios ? null : createBaselineScenario(target.id);
+  // A fresh Baseline of a linked project starts from the ambient the link holds, not from 55.
+  const linkedAmbient = projectAiLinkOf(source.project)?.values[AI_KEY.ambient];
+  const baseline =
+    fresh && typeof linkedAmbient === 'number' ? { ...fresh, ambient_C: linkedAmbient } : fresh;
   const results = take.results;
 
   const data: ProjectBundle = {
     ...source,
     project: {
-      ...source.project,
+      // A copy named differently keeps the AI-Thermal link with the name taken over.
+      ...projectAiAfterRename(source.project, target.name),
       status: 'active',
       active_scenario_id: baseline ? baseline.id : source.project.active_scenario_id,
       meta: { ...source.project.meta, created_at: now, updated_at: now },

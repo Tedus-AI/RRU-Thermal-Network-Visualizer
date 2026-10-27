@@ -195,19 +195,12 @@ Mapping → Validation → Duplicate → Apply）、`AiThermalSourcePanel.tsx`�
   `aiThermalVia.ts` 載入它）。**不要在這裡改**：在 AI-Thermal 改、複製到三個 repo，並更新 `aiThermalVia.test.ts` 釘住的 SHA-256。
   ⚠ 本工具的導熱孔熱阻用擴散面積（`spreading_area`），AI-Thermal／5G-RRU 用焊盤面積 → 同一個 K_eff，本工具的導熱孔熱阻較小
   （StarKcore-12L 的 Si5518：本工具 0.616、5G-RRU 0.759 °C/W）。計算方式未改。
-- **5G-RRU 參數控制台 → 01 材料與製程**（`aiThermalMaterials.ts`、`RruMaterialsOffer`）：專案的 `global_params` 裡 5G-RRU **有存**的值
-  （沒存的在 5G-RRU 是出廠預設，不帶）逐項列出「01 目前／5G-RRU」，勾選後按「帶入 01」才寫入（`patchMaterials`，來源 Imported、
-  reference「5G-RRU 參數控制台（專案名）」）。01 沒有值或還是出廠預設 → 預設勾；01 已設定 → 預設不勾；相同的不列（只寫筆數）。
-
-  | 5G-RRU | 01 |
-  |---|---|
-  | `Coin_L_Setting`／`Coin_W_Setting`／`Coin_T_Setting`、`K_Coin` | 銅塊長／寬／厚度、銅導熱係數 |
-  | `K_Solder`／`t_Solder`／`Voiding` | 焊料導熱係數／厚度／有效面積率 |
-  | `K_Via`／`Via_Eff` | 導熱孔等效 k／製程係數（通用值）|
-  | `t_base`；`L_pcb + Top + Btm`、`W_pcb + Left + Right`（5G-RRU 的 `rruFootprint`）| 散熱器基座厚度；長 L、寬 W |
-  | `K_Pad`／`t_Pad`、`K_Putty`／`t_Putty`、`K_Grease`／`t_Grease`（5G-RRU 沒選型號時用）| 內建 TIM「Pad」「Putty」「Grease」的 k／BLT（連結 TIM 管理工具的材料不改 k）|
+- **連結 01**（`ProjectAiLinkOffer`）：「檢查並套用」頁的材料卡是 01「連結的 AI-Thermal 專案」的入口（見 01 §50）。
+  用這一頁已經讀到的資料庫、預選這次匯入的專案，開 01 同一個對話框；連結後專案名稱、頻段、環境溫度，以及 5G-RRU 參數控制台的
+  鰭片製程、銅塊、焊料、導熱孔、散熱器底座與 TIM 由 01 的「從 AI-Thermal 更新」維護（原本的一次性「帶入 01」已移除）。
+  01 已連結這個專案 → 寫「已連結」，有可更新的才給按鈕；01 連的是別的 AI-Thermal 專案 → 琥珀色提醒，不改連結。
 - 測試：`aiThermalImport.test.ts`（StarKcore-12L 真實備份資料，parse → map → stage → apply；含 via 設計各種情況）、
-  `aiThermalVia.test.ts`（共用 `viaCalc.js` 的 SHA-256 與載入）、`aiThermalMaterials.test.ts`（參數控制台 → 01）。
+  `aiThermalVia.test.ts`（共用 `viaCalc.js` 的 SHA-256 與載入）、`aiThermalProject.test.ts`（連結 01）。
 
 
 # 6c. 與 AI-Thermal 的連結（04 鎖定與「從 AI-Thermal 更新」）

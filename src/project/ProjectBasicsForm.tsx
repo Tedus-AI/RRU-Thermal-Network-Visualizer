@@ -40,6 +40,10 @@ import {
   type StructurePreset,
 } from '@/thermal/graph/sharedStructure';
 import { useFormTouch, useSectionAlert, useVisibleError } from './formTouch';
+import { AI_KEY, formatProjectAiValue } from '@/domain/projectAiLink';
+import { ProjectAiLinkBar } from './ProjectAiLinkBar';
+import { ProjectAiLockLine, ProjectAiOwned, ProjectAiUnlockedNote, useProjectAiLock } from './ProjectAiLocked';
+import type { ProjectAiLinkState } from './useProjectAiLink';
 
 /** The fields this section can fail validation on — see `useSectionAlert`. */
 const IDENTITY_FIELDS = ['project_name', 'project_id'] as const;
@@ -65,12 +69,19 @@ const COOLING_ZH: Record<CoolingArchitecture, string> = {
   'Liquid Cooling': '液冷',
 };
 
+/** The fin process is one of the cooling elements; the link owns exactly these two. */
+const FIN_CHIPS: readonly CoolingArchitecture[] = ['Die-casting Fin', 'Embedded Fin'];
+
 export function ProjectBasicsForm({
   errors,
   readOnly,
+  ai,
+  onOpenAiLink,
 }: {
   errors: Record<string, string>;
   readOnly: boolean;
+  ai: ProjectAiLinkState;
+  onOpenAiLink: () => void;
 }) {
   const draft = useProjectStore((s) => s.draft);
   const isNew = useProjectStore((s) => s.isNew);
@@ -79,6 +90,7 @@ export function ProjectBasicsForm({
   const touch = useFormTouch((s) => s.touch);
   const visibleError = useVisibleError(errors);
   const alert = useSectionAlert(errors, IDENTITY_FIELDS);
+  const finLock = useProjectAiLock(AI_KEY.fin);
 
   if (!draft) return null;
   const context = draft.project_context;
@@ -117,25 +129,28 @@ export function ProjectBasicsForm({
       }
     >
       <div className="flex flex-col gap-5">
+        <ProjectAiLinkBar ai={ai} readOnly={readOnly} isNew={isNew} onOpen={onOpenAiLink} />
         <div className="grid grid-cols-1 gap-x-5 gap-y-4 lg:grid-cols-3">
-          <Field
-            label="Project Name"
-            zh="專案名稱"
-            htmlFor="project_name"
-            required
-            error={visibleError('project_name')}
-          >
-            <TextInput
-              id="project_name"
-              value={draft.project_name}
-              maxLength={80}
-              disabled={readOnly}
-              onBlur={() => touch('project_name')}
-              invalid={Boolean(visibleError('project_name'))}
-              placeholder="例：CBNG FR1 RRU EVT2"
-              onChange={(event) => handleNameChange(event.target.value)}
-            />
-          </Field>
+          <ProjectAiOwned aiKey={AI_KEY.name} readOnly={readOnly} label="Project Name" zh="專案名稱" id="project_name">
+            <Field
+              label="Project Name"
+              zh="專案名稱"
+              htmlFor="project_name"
+              required
+              error={visibleError('project_name')}
+            >
+              <TextInput
+                id="project_name"
+                value={draft.project_name}
+                maxLength={80}
+                disabled={readOnly}
+                onBlur={() => touch('project_name')}
+                invalid={Boolean(visibleError('project_name'))}
+                placeholder="例：CBNG FR1 RRU EVT2"
+                onChange={(event) => handleNameChange(event.target.value)}
+              />
+            </Field>
+          </ProjectAiOwned>
 
           <Field
             label="Project ID"
@@ -260,17 +275,19 @@ export function ProjectBasicsForm({
               />
             </Field>
 
-            <Field label="Frequency Range" zh="頻段" htmlFor="frequency_range">
-              <Select
-                id="frequency_range"
-                options={FREQUENCY_RANGES}
-                value={context.frequency_range}
-                disabled={readOnly}
-                onChange={(event) =>
-                  patchContext({ frequency_range: event.target.value as FrequencyRange })
-                }
-              />
-            </Field>
+            <ProjectAiOwned aiKey={AI_KEY.band} readOnly={readOnly} label="Frequency Range" zh="頻段" id="frequency_range">
+              <Field label="Frequency Range" zh="頻段" htmlFor="frequency_range">
+                <Select
+                  id="frequency_range"
+                  options={FREQUENCY_RANGES}
+                  value={context.frequency_range}
+                  disabled={readOnly}
+                  onChange={(event) =>
+                    patchContext({ frequency_range: event.target.value as FrequencyRange })
+                  }
+                />
+              </Field>
+            </ProjectAiOwned>
 
             <Field
               label="Enclosure Type"
@@ -325,10 +342,21 @@ export function ProjectBasicsForm({
               labels={COOLING_ZH}
               value={context.cooling_architecture}
               disabled={readOnly}
+              locked={finLock?.locked ? FIN_CHIPS : []}
+              lockedTitle={finLock?.title}
               onChange={(next) =>
                 patchContext({ cooling_architecture: next as CoolingArchitecture[] })
               }
             />
+            {finLock?.locked ? (
+              <ProjectAiLockLine aiKey={AI_KEY.fin} lock={finLock} readOnly={readOnly} label="鰭片製程">
+                鰭片製程取自 5G-RRU 的參數控制台（{formatProjectAiValue(AI_KEY.fin, finLock.linked)}）
+              </ProjectAiLockLine>
+            ) : (
+              <div className="mt-1.5">
+                <ProjectAiUnlockedNote aiKey={AI_KEY.fin} lock={finLock} readOnly={readOnly} />
+              </div>
+            )}
           </Field>
         </div>
       </div>

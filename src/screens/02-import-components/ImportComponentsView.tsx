@@ -35,7 +35,8 @@ import { ColumnMappingPanel } from './ColumnMappingPanel';
 import { ComponentPreviewTable } from './ComponentPreviewTable';
 import { MaterialDefaultsForm } from '@/project/MaterialDefaultsForm';
 import { BlockingIssuesPanel, DuplicateBar, ReviewStatsLine } from './ImportSummaryPanel';
-import { RruMaterialsOffer, useRruMaterialsSummary } from './RruMaterialsOffer';
+import { ProjectAiLinkOffer } from './ProjectAiLinkOffer';
+import { projectAiLinkOf } from '@/domain/projectAiLink';
 import { AiTimOffer } from './AiTimOffer';
 
 const STEP_ORDER: ImportStep[] = ['source', 'mapping', 'review'];
@@ -147,9 +148,10 @@ export function ImportComponentsView() {
     () => (draft && sourceContext?.missingTims ? sourceContext.missingTims(draft.materials) : []),
     [draft, sourceContext],
   );
-  const rruSummary = useRruMaterialsSummary(
-    source?.source_type === 'AIThermal' ? (sourceContext?.aiThermalProject ?? null) : null,
-  );
+  // An AI-Thermal source offers to link 01 to that project, unless it already is.
+  const aiProjectId = source?.source_type === 'AIThermal' ? (source.source_project_id ?? null) : null;
+  const linkedTo = projectAiLinkOf(draft)?.project_id ?? null;
+  const offerLink = !!aiProjectId && !!sourceContext?.aiThermalDb && linkedTo !== aiProjectId;
 
   // Load the project context this screen imports into.
   useEffect(() => {
@@ -325,21 +327,26 @@ export function ImportComponentsView() {
             The project materials Screen 01 owns. A TIM column is matched
             against this library by name on apply, so a name that matches
             nothing can still be fixed here; an AI-Thermal source also offers
-            5G-RRU's parameter console for it.
+            to link 01 to that project (its 5G-RRU parameter console included).
           */}
           <MaterialDefaultsForm
             readOnly={readOnly}
-            // Open when a TIM model is missing: closed, the parts would import bare.
-            defaultOpen={timNeeds.length > 0}
-            summaryExtra={`${rruSummary ?? ''}${timNeeds.length > 0 ? ` · ⚠ ${timNeeds.length} 個 TIM 型號 01 沒有` : ''}` || undefined}
+            // Open when a TIM model is missing (closed, the parts would import bare)
+            // or 01 is not linked to the AI-Thermal project yet.
+            defaultOpen={timNeeds.length > 0 || offerLink}
+            summaryExtra={
+              `${offerLink ? ' · 01 尚未連結這個 AI-Thermal 專案' : ''}${timNeeds.length > 0 ? ` · ⚠ ${timNeeds.length} 個 TIM 型號 01 沒有` : ''}` ||
+              undefined
+            }
             lead={
-              source?.source_type === 'AIThermal' && sourceContext?.aiThermalProject && draft ? (
+              source?.source_type === 'AIThermal' && sourceContext?.aiThermalDb && aiProjectId && draft ? (
                 <div className="flex flex-col gap-3">
                   <AiTimOffer needs={timNeeds} materials={draft.materials} />
-                  <RruMaterialsOffer
-                    project={sourceContext.aiThermalProject}
-                    projectName={source.source_project_name ?? source.source_project_id ?? ''}
-                    materials={draft.materials}
+                  <ProjectAiLinkOffer
+                    db={sourceContext.aiThermalDb.db}
+                    label={sourceContext.aiThermalDb.label}
+                    projectId={aiProjectId}
+                    projectName={source.source_project_name ?? aiProjectId}
                   />
                 </div>
               ) : undefined

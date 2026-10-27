@@ -7,6 +7,7 @@
  */
 
 import { defaultMaterials, type MaterialDefaults } from './materials';
+import type { ProjectAiLink } from './projectAiLink';
 import { STRUCTURE_PRESETS, type StructurePreset } from '@/thermal/graph/sharedStructure';
 import { createRevision, type RevisionId } from './revision';
 
@@ -125,6 +126,12 @@ export interface Project {
   active_scenario_id: string | null;
   status: ProjectStatus;
   meta: ProjectMeta;
+  /**
+   * The AI-Thermal project this one is linked to (`projectAiLink.ts`): which
+   * of the fields above take AI-Thermal's and 5G-RRU's values, and what those
+   * were at the last sync. Absent for a project that is not linked.
+   */
+  ai_link?: ProjectAiLink;
   /**
    * Fields owned by other tools sharing this project document. Never edited here,
    * always written back untouched (01 §35, AC-09).
