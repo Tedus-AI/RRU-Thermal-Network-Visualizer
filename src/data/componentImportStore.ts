@@ -23,7 +23,7 @@ import {
   type ParsedTable,
   type StagingRow,
 } from '@/importers/component/types';
-import type { AiThermalTimNeed } from '@/importers/component/parseAiThermal';
+import type { AiThermalDb, AiThermalTimNeed } from '@/importers/component/parseAiThermal';
 import { useComponentStore } from './componentStore';
 import { useSolverStore } from './solverStore';
 import { useNetworkStore } from './networkStore';
@@ -46,12 +46,14 @@ const SELF_MAPPED_SOURCES = new Set<ImportSourceDescriptor['source_type']>(['AIT
  * `reparse` rebuilds the table against the project's materials as they are now:
  * an AI-Thermal TIM is matched by name and its bond line is only stated where it
  * differs from the material's, so a material changed after loading (from the
- * 5G-RRU offer, or typed into the materials card) has to be read again — a part
+ * AI-Thermal link, or typed into the materials card) has to be read again — a part
  * that inherited 0.5 mm would otherwise silently inherit the new value.
  */
 export interface ImportSourceContext {
   /** The AI-Thermal project document, for its 5G-RRU parameter console. */
   aiThermalProject?: Record<string, unknown>;
+  /** The whole database it came from, for 01's link (`projectAiLink.ts`) offered on the check step. */
+  aiThermalDb?: { db: AiThermalDb; label: string };
   reparse?: (materials: MaterialDefaults) => ParsedTable;
   /** AI-Thermal TIM models the rows use that these materials do not have (`missingAiThermalTims`). */
   missingTims?: (materials: MaterialDefaults) => AiThermalTimNeed[];

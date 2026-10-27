@@ -347,6 +347,8 @@ export function ChipMultiSelect({
   onChange,
   disabled,
   label,
+  locked = [],
+  lockedTitle,
 }: {
   options: readonly string[];
   /** What each option shows, when the stored value is not what the reader should see. */
@@ -355,22 +357,27 @@ export function ChipMultiSelect({
   onChange: (next: string[]) => void;
   disabled?: boolean;
   label: string;
+  /** Options another tool owns: shown as they are, not toggled here (Screen 01's AI-Thermal link). */
+  locked?: readonly string[];
+  lockedTitle?: string;
 }) {
   const toggle = (option: string) => {
-    if (disabled) return;
+    if (disabled || locked.includes(option)) return;
     onChange(value.includes(option) ? value.filter((v) => v !== option) : [...value, option]);
   };
   return (
     <div role="group" aria-label={label} className="flex flex-wrap gap-1.5">
       {options.map((option) => {
         const selected = value.includes(option);
+        const isLocked = locked.includes(option);
         return (
           <button
             key={option}
             type="button"
             role="checkbox"
             aria-checked={selected}
-            disabled={disabled}
+            disabled={disabled || isLocked}
+            title={isLocked ? lockedTitle : undefined}
             onClick={() => toggle(option)}
             className={`rounded-md border px-2.5 py-1.5 text-[12px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
               selected

@@ -51,6 +51,11 @@ import {
   type TimCatalogMaterial,
 } from '@/domain/timCatalog';
 import { TimCatalogPicker } from './TimCatalogPicker';
+import { AI_MAT_FIELDS, matKey, timKey, type AiMatField } from '@/domain/projectAiLink';
+import { ProjectAiBox, ProjectAiUnlockedNote, useProjectAiLock } from './ProjectAiLocked';
+
+const linkedField = (field: string): string | undefined =>
+  (AI_MAT_FIELDS as readonly string[]).includes(field) ? matKey(field as AiMatField) : undefined;
 
 const PROCESS_TOOLTIPS: Partial<Record<ProcessField, string>> = {
   contact_conductance_W_m2K:
@@ -91,6 +96,7 @@ function MaterialNumber({
   placeholder = '—',
   allowEmpty = false,
   showLabel = true,
+  aiKey,
   onChange,
 }: {
   id: string;
@@ -104,11 +110,36 @@ function MaterialNumber({
   allowEmpty?: boolean;
   /** false inside a table, where the column header already names the value. */
   showLabel?: boolean;
+  /** The field's key in the AI-Thermal link (`projectAiLink.ts`): locked while the link owns it. */
+  aiKey?: string;
   onChange: (next: SourcedValue<number> | null) => void;
 }) {
   /** Text being edited. null means "show whatever is stored". */
   const [text, setText] = useState<string | null>(null);
+  const lock = useProjectAiLock(aiKey);
   const isAssumed = value?.source === 'Assumed';
+
+  if (aiKey && lock?.locked) {
+    const box = (
+      <ProjectAiBox
+        aiKey={aiKey}
+        lock={lock}
+        id={id}
+        label={showLabel ? zh : `${label} ${zh}`}
+        text={value?.value ?? '—'}
+        readOnly={readOnly}
+        compact={!showLabel}
+      />
+    );
+    return showLabel ? (
+      <div className="flex flex-col gap-1.5">
+        <FieldLabel label={label} zh={zh} unit={unit} tooltip={tooltip} htmlFor={id} />
+        {box}
+      </div>
+    ) : (
+      box
+    );
+  }
 
   const commit = () => {
     if (text == null) return;
@@ -144,6 +175,7 @@ function MaterialNumber({
           if (event.key === 'Escape') setText(null);
         }}
       />
+      {aiKey && <ProjectAiUnlockedNote aiKey={aiKey} lock={lock} readOnly={readOnly} compact={!showLabel} />}
     </div>
   );
 }
@@ -398,6 +430,7 @@ export function MaterialDefaultsForm({
                             showLabel={false}
                             value={material.k_W_mK}
                             readOnly={readOnly}
+                            aiKey={timKey(material.id, 'k')}
                             onChange={setTim(material.id, 'k_W_mK')}
                           />
                         )}
@@ -410,6 +443,7 @@ export function MaterialDefaultsForm({
                           showLabel={false}
                           value={material.blt_mm}
                           readOnly={readOnly}
+                          aiKey={timKey(material.id, 'blt')}
                           onChange={setTim(material.id, 'blt_mm')}
                         />
                       </td>
@@ -536,6 +570,7 @@ export function MaterialDefaultsForm({
               readOnly={readOnly}
               allowEmpty
               placeholder="例：5"
+              aiKey={matKey('hsk_base_thickness_mm')}
               onChange={(next) => patchMaterials({ hsk_base_thickness_mm: next })}
             />
             <MaterialNumber
@@ -547,6 +582,7 @@ export function MaterialDefaultsForm({
               readOnly={readOnly}
               allowEmpty
               placeholder="例：300"
+              aiKey={matKey('hsk_base_L_mm')}
               onChange={(next) => patchMaterials({ hsk_base_L_mm: next })}
             />
             <MaterialNumber
@@ -558,6 +594,7 @@ export function MaterialDefaultsForm({
               readOnly={readOnly}
               allowEmpty
               placeholder="例：220"
+              aiKey={matKey('hsk_base_W_mm')}
               onChange={(next) => patchMaterials({ hsk_base_W_mm: next })}
             />
             <div className="flex flex-col justify-end">
@@ -588,6 +625,7 @@ export function MaterialDefaultsForm({
                 tooltip={PROCESS_TOOLTIPS[field]}
                 value={materials[field]}
                 readOnly={readOnly}
+                aiKey={linkedField(field)}
                 onChange={setProcess(field)}
               />
             ))}
@@ -609,6 +647,7 @@ export function MaterialDefaultsForm({
               readOnly={readOnly}
               allowEmpty
               placeholder="例：55"
+              aiKey={matKey('coin_L_mm')}
               onChange={(next) => patchMaterials({ coin_L_mm: next })}
             />
             <MaterialNumber
@@ -620,6 +659,7 @@ export function MaterialDefaultsForm({
               readOnly={readOnly}
               allowEmpty
               placeholder="例：35"
+              aiKey={matKey('coin_W_mm')}
               onChange={(next) => patchMaterials({ coin_W_mm: next })}
             />
             <MaterialNumber
@@ -631,6 +671,7 @@ export function MaterialDefaultsForm({
               readOnly={readOnly}
               allowEmpty
               placeholder="例：2.0"
+              aiKey={matKey('coin_thickness_mm')}
               onChange={(next) => patchMaterials({ coin_thickness_mm: next })}
             />
             <div className="flex flex-col justify-end">

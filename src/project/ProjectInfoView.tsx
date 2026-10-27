@@ -8,7 +8,7 @@
 
 import { useEffect, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
-import { AlertTriangle, FilePlus2, RefreshCw } from 'lucide-react';
+import { AlertTriangle, ArrowRight, FilePlus2, RefreshCw } from 'lucide-react';
 
 import { Badge, Button, Skeleton } from '@/ui/primitives';
 import { ScreenWorkspace } from '@/app/ScreenWorkspace';
@@ -31,6 +31,8 @@ import { ProjectActionBar } from './ProjectActionBar';
 import { DuplicateProjectModal } from './modals/DuplicateProjectModal';
 import { ArchiveProjectModal } from './modals/ArchiveProjectModal';
 import { useProjectSave } from './useProjectSave';
+import { useProjectAiLink } from './useProjectAiLink';
+import { ProjectAiLinkDialog } from './ProjectAiLinkDialog';
 import { nextStepFor, useProjectHealth } from './projectHealth';
 import { useFormTouch } from './formTouch';
 import { seedDemoProject } from '@/mock/seed';
@@ -164,6 +166,8 @@ export function ProjectInfoView() {
 
   const [showDuplicate, setShowDuplicate] = useState(false);
   const [showArchive, setShowArchive] = useState(false);
+  const [showAiLink, setShowAiLink] = useState(false);
+  const ai = useProjectAiLink();
 
   const scenarios = useScenarioStore((s) => s.scenarios);
   const activeScenarioId = useScenarioStore((s) => s.activeScenarioId);
@@ -280,11 +284,24 @@ export function ProjectInfoView() {
       title="Project Info"
       titleZh="專案資訊"
       badge={
-        readOnly ? (
-          <Badge tone="accent">唯讀</Badge>
-        ) : isNew ? (
-          <Badge tone="warn">尚未建立</Badge>
-        ) : undefined
+        <>
+          {readOnly ? (
+            <Badge tone="accent">唯讀</Badge>
+          ) : isNew ? (
+            <Badge tone="warn">尚未建立</Badge>
+          ) : null}
+          {ai.pending > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowAiLink(true)}
+              title="連結的 AI-Thermal 專案改過名稱、頻段、環境溫度或 5G-RRU 參數。點開逐項確認後更新到 01。"
+              className="flex items-center gap-1 rounded-full border border-warn-500/40 bg-warn-100/60 px-2.5 py-0.5 text-[11px] font-semibold text-warn-600 hover:border-warn-500"
+            >
+              AI-Thermal 有更新（{ai.pending} 項）
+              <ArrowRight size={12} aria-hidden />
+            </button>
+          )}
+        </>
       }
       rightPanel={<ProjectProgressPanel />}
       actionBar={
@@ -301,7 +318,7 @@ export function ProjectInfoView() {
         />
       }
     >
-      <ProjectBasicsForm errors={errors} readOnly={readOnly} />
+      <ProjectBasicsForm errors={errors} readOnly={readOnly} ai={ai} onOpenAiLink={() => setShowAiLink(true)} />
       <ProjectScenarios
         scenarios={scenarios}
         scenario={scenario}
@@ -325,6 +342,8 @@ export function ProjectInfoView() {
       />
       <MaterialDefaultsForm readOnly={readOnly} />
       <ProjectNotes readOnly={readOnly} />
+
+      {showAiLink && <ProjectAiLinkDialog ai={ai} readOnly={readOnly} onClose={() => setShowAiLink(false)} />}
 
       {showDuplicate && (
         <DuplicateProjectModal

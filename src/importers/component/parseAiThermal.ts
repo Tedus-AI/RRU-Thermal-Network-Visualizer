@@ -273,7 +273,7 @@ export interface AiThermalMapped {
 }
 
 /** A name compared loosely: case, spaces and punctuation do not count ("T-Grease 2500" = "tgrease2500"). */
-const looseKey = (value: string) => value.toLowerCase().replace(/[^a-z0-9\u4e00-\u9fff]+/g, '');
+export const looseKey = (value: string) => value.toLowerCase().replace(/[^a-z0-9\u4e00-\u9fff]+/g, '');
 
 /** AI-Thermal's TIM types and the built-in material a new project starts with for each. */
 const BUILTIN_FOR_TYPE: Record<string, string> = {

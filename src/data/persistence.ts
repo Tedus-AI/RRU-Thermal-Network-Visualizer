@@ -36,6 +36,7 @@
 
 import type { Project, ProjectContext, Scenario } from '@/domain/project';
 import { SCHEMA_VERSION, normalizeProjectContext } from '@/domain/project';
+import { normalizeProjectAiLink, type ProjectAiLink } from '@/domain/projectAiLink';
 import { normalizeMaterials } from '@/domain/materials';
 import {
   hydrateComponentRevisionSet,
@@ -118,6 +119,8 @@ const OWNED_PROJECT_KEYS = [
   'active_scenario_id',
   'status',
   'meta',
+  // The link to an AI-Thermal project (`projectAiLink.ts`), absent when there is none.
+  'ai_link',
 ] as const;
 
 type RawDoc = Record<string, unknown>;
@@ -557,8 +560,11 @@ function hydrateProject(raw: RawDoc): Project {
       schema_version: meta.schema_version ?? SCHEMA_VERSION,
     },
     foreign_fields: splitForeignFields(raw),
+    ...withAiLink(normalizeProjectAiLink(raw.ai_link)),
   };
 }
+
+const withAiLink = (link: ProjectAiLink | undefined) => (link ? { ai_link: link } : {});
 
 export function loadProjects(): Project[] {
   return Object.values(readCollection(PROJECTS_KEY))
@@ -594,6 +600,8 @@ export function saveProject(project: Project): Project {
     active_scenario_id: project.active_scenario_id,
     status: project.status,
     meta: { ...project.meta, updated_at: new Date().toISOString() },
+    // Unlinking drops the key: it is owned, so nothing above re-attaches it.
+    ...withAiLink(project.ai_link),
   });
 
   setOwn(collection, project.project_id, merged);

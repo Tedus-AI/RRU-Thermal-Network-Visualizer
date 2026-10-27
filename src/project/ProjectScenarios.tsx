@@ -15,8 +15,10 @@ import { Copy, Plus, Trash2 } from 'lucide-react';
 import { windRecordedOnly } from '@/thermal/boundary/wind';
 import { Button, NumberInput, SectionCard, TextInput } from '@/ui/primitives';
 import { SCENARIO_LIMITS, type Scenario } from '@/domain/project';
-import { useScenarioStore } from '@/data/scenarioStore';
-import { useBoundaryStore } from '@/data/boundaryStore';
+import { patchScenarioValues } from './scenarioEnvironment';
+import { AI_KEY, baselineOf, rruAmbientMismatch } from '@/domain/projectAiLink';
+import { useProjectStore } from '@/data/projectStore';
+import { ProjectAiBox, ProjectAiUnlockedNote, useProjectAiLock } from './ProjectAiLocked';
 import { useFormTouch, useSectionAlert, useVisibleError } from './formTouch';
 
 /** The fields this section can fail validation on — see `useSectionAlert`. */
@@ -87,28 +89,18 @@ export function ProjectScenarios({
   onCopyFrom: (scenarioId: string) => void;
   onDelete: (scenarioId: string) => void;
 }) {
-  const updateScenario = useScenarioStore((s) => s.updateScenario);
   const touch = useFormTouch((s) => s.touch);
   const visibleError = useVisibleError(errors);
   const alert = useSectionAlert(errors, SCENARIO_FIELDS);
+  // The Baseline's ambient follows the linked AI-Thermal project (`projectAiLink.ts`).
+  const ambientLock = useProjectAiLock(AI_KEY.ambient);
+  const baselineId = baselineOf(scenarios)?.id ?? null;
+  const mismatch = useProjectStore((s) => (s.draft ? rruAmbientMismatch(s.draft) : null));
 
   const patch = (values: Partial<Scenario>) => {
     if (!scenario) return;
     for (const field of Object.keys(values)) touch(field === 'name' ? 'scenario_name' : field);
-    const boundaryValues = {
-      ...(Object.hasOwn(values, 'ambient_C') ? { ambient_C: values.ambient_C } : {}),
-      ...(Object.hasOwn(values, 'wind_mps') ? { wind_mps: values.wind_mps } : {}),
-      ...(Object.hasOwn(values, 'solar_W_m2') ? { solar_W_m2: values.solar_W_m2 } : {}),
-    };
-    const ownsBoundaryValue = Object.keys(boundaryValues).length > 0;
-    const synchronized = ownsBoundaryValue
-      ? useBoundaryStore.getState().syncScenarioDefaults(scenario.id, boundaryValues)
-      : false;
-    updateScenario(
-      scenario.id,
-      values,
-      synchronized ? { skipRevision: true, skipInvalidate: true } : undefined,
-    );
+    patchScenarioValues(scenario.id, values);
   };
 
   // Empty input must not silently become 0 — keep NaN so validation can report it.
@@ -152,7 +144,10 @@ export function ProjectScenarios({
                   <tr className="text-left text-[12px] text-ink-500">
                     <th className="px-2.5 py-2 font-semibold">名稱</th>
                     {COLUMNS.map((column) => (
-                      <th key={column.field} className="w-28 px-2.5 py-2 text-right font-semibold">
+                      <th
+                        key={column.field}
+                        className={`${column.field === 'ambient_C' && ambientLock?.locked ? 'w-40' : 'w-28'} px-2.5 py-2 text-right font-semibold`}
+                      >
                         {column.label}
                         {column.unit && (
                           <span className="ml-0.5 font-normal text-ink-400">({column.unit})</span>
@@ -210,9 +205,23 @@ export function ProjectScenarios({
                         </td>
                         {COLUMNS.map((column) => {
                           const value = row[column.field];
+                          const linked =
+                            column.field === 'ambient_C' && row.id === baselineId && ambientLock?.locked
+                              ? ambientLock
+                              : null;
                           return (
                             <td key={column.field} className="px-2.5 py-1.5 text-right">
-                              {editable ? (
+                              {linked ? (
+                                <ProjectAiBox
+                                  aiKey={AI_KEY.ambient}
+                                  lock={linked}
+                                  id={editable ? column.field : undefined}
+                                  label="Baseline 環境溫度"
+                                  text={format(column.field, value)}
+                                  readOnly={readOnly}
+                                  compact
+                                />
+                              ) : editable ? (
                                 <div className="flex items-center justify-end">
                                   {column.field === 'wind_mps' && <WindMark wind={value} reserve />}
                                   <NumberInput
@@ -268,6 +277,16 @@ export function ProjectScenarios({
                 </tbody>
               </table>
             </div>
+            {ambientLock?.unlocked && (
+              <div className="mt-2">
+                <ProjectAiUnlockedNote aiKey={AI_KEY.ambient} lock={ambientLock} readOnly={readOnly} />
+              </div>
+            )}
+            {mismatch && (
+              <p className="mt-2 text-[12px] text-warn-600">
+                Baseline 環境溫度取 AI-Thermal 的 {mismatch.ai} °C；5G-RRU 參數控制台的環境溫度是 {mismatch.rru} °C，兩邊不一致，請確認。
+              </p>
+            )}
             {scenarios.some((row) => windRecordedOnly(row.wind_mps)) && (
               <p className="mt-2 text-[12px] text-warn-600">※ {WIND_NOTE}</p>
             )}
