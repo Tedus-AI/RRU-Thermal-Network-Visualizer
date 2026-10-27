@@ -7,7 +7,7 @@
  * render what they are given and report edits back.
  */
 
-import { CheckCircle2, Thermometer, TriangleAlert } from 'lucide-react';
+import { Thermometer, TriangleAlert } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 import { Badge, Button, NumberInput, Select } from '@/ui/primitives';
@@ -61,24 +61,21 @@ export function Row({
 }) {
   return (
     <div className="flex items-start justify-between gap-3 border-b border-line py-1.5 last:border-b-0">
-      <span className="shrink-0 text-[11px] text-ink-500">
-        {label}
-        {zh && <span className="ml-1 text-ink-400">/ {zh}</span>}
+      {/* Chinese first, like every label (docs/APP_SHELL_CONTRACT.md); the English stays in the tooltip. */}
+      <span className="shrink-0 text-[11px] text-ink-500" title={zh ? label : undefined}>
+        {zh ?? label}
       </span>
       <span className="min-w-0 text-right text-[11px] font-semibold text-ink-900">{children}</span>
     </div>
   );
 }
 
+/**
+ * This surface's messages, beside its fields. Nothing when there are none:
+ * card ④ 檢查 already says the whole page is clean.
+ */
 export function InlineChecks({ messages }: { messages: BoundaryValidationMessage[] }) {
-  if (messages.length === 0) {
-    return (
-      <div className="flex items-start gap-2 rounded border border-ok-500/40 bg-ok-100 px-2.5 py-2 text-[11px] text-ok-600">
-        <CheckCircle2 size={14} className="mt-0.5 shrink-0" />
-        <Bi en="No issues for this boundary port." zh="此邊界端口沒有問題。" inline />
-      </div>
-    );
-  }
+  if (messages.length === 0) return null;
 
   return (
     <ul className="flex flex-col gap-1.5">
@@ -93,8 +90,9 @@ export function InlineChecks({ messages }: { messages: BoundaryValidationMessage
                 : 'border-line bg-surface-muted'
           }`}
         >
-          <p className="text-[11px] font-semibold text-ink-900">{entry.message}</p>
-          <p className="text-[10px] text-ink-500">{entry.message_zh}</p>
+          <p className="text-[11px] font-semibold text-ink-900" title={entry.message}>
+            {entry.message_zh || entry.message}
+          </p>
           {entry.suggested_action && (
             <p className="mt-0.5 text-[10px] text-ink-400">→ {entry.suggested_action}</p>
           )}
@@ -103,6 +101,12 @@ export function InlineChecks({ messages }: { messages: BoundaryValidationMessage
     </ul>
   );
 }
+
+const COMPLETENESS_ZH: Record<string, string> = {
+  complete: '完整',
+  warning: '含假設',
+  blocked: '不完整',
+};
 
 export function ApplicablePreview({
   preview,
@@ -134,9 +138,7 @@ export function ApplicablePreview({
 
   return (
     <section className="mt-3 rounded-md border border-accent-500/30 bg-accent-100/40 p-2.5">
-      <p className="mb-1 text-[11px] font-bold text-accent-700">
-        Calculated Preview <span className="font-normal text-ink-400">/ 計算預覽</span>
-      </p>
+      <p className="mb-1 text-[11px] font-bold text-accent-700">計算預覽</p>
       {showConvection && (
         <Row label="Rconv" zh="對流熱阻">
           <span title={T06.derived.rconv}>{formatRth(preview?.r_conv_C_per_W)}</span>
@@ -177,7 +179,9 @@ export function ApplicablePreview({
               screen knows, which after a solve includes the check; a bare
               `warning` beside a green "the assumption holds" was the screen
               contradicting itself. */}
-          {dischargedByCheck ? 'verified' : (preview?.completeness ?? 'blocked')}
+          {dischargedByCheck
+            ? '假設已驗證'
+            : COMPLETENESS_ZH[preview?.completeness ?? 'blocked'] ?? preview?.completeness}
         </Badge>
       </Row>
       <AssumptionNotes
@@ -501,7 +505,7 @@ export function FinGeometryPanel({
             data-fin-tech-ref
           >
             <span className="flex-1 text-ink-900">
-              {FIN_TECHNOLOGY_LABELS[projectTechnology].en} / {FIN_TECHNOLOGY_LABELS[projectTechnology].zh}
+              {FIN_TECHNOLOGY_LABELS[projectTechnology].zh}
             </span>
             <button
               type="button"
@@ -520,7 +524,7 @@ export function FinGeometryPanel({
               disabled={readOnly}
               items={FIN_TECHNOLOGIES.map((value) => ({
                 value,
-                label: `${FIN_TECHNOLOGY_LABELS[value].en} / ${FIN_TECHNOLOGY_LABELS[value].zh}`,
+                label: FIN_TECHNOLOGY_LABELS[value].zh,
               }))}
               onChange={(event) =>
                 onTechnologyChange(event.target.value === 'DieCasting' ? 'DieCasting' : 'Embedded')
@@ -601,14 +605,10 @@ export function FinGeometryPanel({
 
       <div className="mt-2.5 rounded border border-line bg-surface-muted p-2">
         <p className="mb-1.5 text-[10px] font-bold text-ink-600">
-          Derived from geometry / 由幾何算出
-          <span className="ml-1 font-normal text-ink-400">— 唯讀</span>
+          由幾何算出<span className="ml-1 font-normal text-ink-400">（唯讀）</span>
         </p>
         {result == null ? (
-          <p className="text-[11px] leading-relaxed text-warn-600">
-            Geometry incomplete — no coefficients yet.
-            <span className="block">幾何尚未填齊，無法計算係數。</span>
-          </p>
+          <p className="text-[11px] leading-relaxed text-warn-600">幾何還沒填齊，算不出係數。</p>
         ) : (
           <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
             {[
@@ -651,13 +651,16 @@ export function FinGeometryPanel({
           </dl>
         )}
         {result != null && (
-          <p className="mt-1.5 text-[10px] leading-relaxed text-ink-400">
-            鰭片不是等溫的：經典解為 θ(x)/θ_root = cosh(m(L−x))/cosh(mL)，尖端超溫為根部的{' '}
-            {(result.tipExcessRatio * 100).toFixed(0)}%，而<strong>平均</strong>超溫比恰好就是
-            η_fin = {number(result.eta_fin, 3)}。所以這道梯度沒有被忽略——它就是 η_fin 本身。
-            上面兩段熱阻即為它拆開後的形式：Screen 05 的「根部→鰭片表面」連結會帶入鰭片導熱那段，
-            使該節點顯示鰭片<strong>平均表面溫度</strong>而非根部溫度。
-          </p>
+          <details className="mt-1.5 text-[10px] leading-relaxed text-ink-400">
+            <summary className="cursor-pointer font-semibold text-ink-500">鰭片的溫度梯度怎麼算進去？</summary>
+            <p className="mt-1">
+              鰭片不是等溫的：經典解為 θ(x)/θ_root = cosh(m(L−x))/cosh(mL)，尖端超溫為根部的{' '}
+              {(result.tipExcessRatio * 100).toFixed(0)}%，而<strong>平均</strong>超溫比恰好就是
+              η_fin = {number(result.eta_fin, 3)}。所以這道梯度沒有被忽略——它就是 η_fin 本身。
+              上面兩段熱阻即為它拆開後的形式：熱網路的「根部→鰭片表面」連結會帶入鰭片導熱那段，
+              使該節點顯示鰭片<strong>平均表面溫度</strong>而非根部溫度。
+            </p>
+          </details>
         )}
 
         {/* The same honesty rule the retired radiation sink temperature was
@@ -667,8 +670,7 @@ export function FinGeometryPanel({
             profile — it just does not reach THIS surface, and the engineer is
             entitled to know which. */}
         <p className="mt-1.5 text-[10px] leading-relaxed text-ink-400">
-          發射率與視角因子不參與此表面的計算：h_rad 的關聯式已將表面發射率、通道間的多次反射與
-          包絡面積比一併校準在內。表面性質的發射率仍作用於手動輸入的輻射 profile。
+          發射率不另外算：h_rad 的關聯式已含表面發射率與鰭片之間的多次反射（表面性質的發射率只用在手動輸入的輻射條件）。
         </p>
         {verdict != null && verdict !== 'inside' && (
           <p className="mt-1.5 text-[10px] leading-relaxed text-warn-600">
@@ -804,8 +806,7 @@ export function PlateGeometryPanel({
 
       <div className="mt-2.5 rounded border border-line bg-surface-muted p-2">
         <p className="mb-1.5 text-[10px] font-bold text-ink-600">
-          Derived from geometry / 由幾何算出
-          <span className="ml-1 font-normal text-ink-400">— 唯讀</span>
+          由幾何算出<span className="ml-1 font-normal text-ink-400">（唯讀）</span>
         </p>
         {result == null ? (
           <p className="text-[11px] leading-relaxed text-warn-600">

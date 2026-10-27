@@ -28,7 +28,7 @@ import { projectPath } from './navigation';
 export const FOCUS_PARAM = {
   /** Screen 05 — select this graph edge and open its inspector. */
   edge: 'focusEdge',
-  /** Screen 06 — select the boundary port on this graph node. */
+  /** Screen 05's surface half (was Screen 06) — select the boundary port on this graph node. */
   node: 'focusNode',
   /** Screen 04 — select this component. */
   component: 'focusComponent',
@@ -37,6 +37,10 @@ export const FOCUS_PARAM = {
 } as const;
 
 export interface FocusTarget {
+  /**
+   * '06' is a boundary surface: Screen 06 became the surface half of 05, so it
+   * lands on 05 with the surface's node, which opens card ② 散熱表面.
+   */
   screen: '04' | '05' | '06';
   edge_id?: string;
   node_id?: string;
@@ -48,7 +52,7 @@ export interface FocusTarget {
 const SCREEN_PATH: Record<FocusTarget['screen'], string> = {
   '04': 'components',
   '05': 'thermal-path',
-  '06': 'boundary',
+  '06': 'thermal-path',
 };
 
 /** The route a lever's "Edit in" cell points at, selection included. */

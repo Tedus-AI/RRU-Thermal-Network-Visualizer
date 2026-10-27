@@ -295,7 +295,7 @@ export function TopHeader() {
         <label
           htmlFor="hdr-scenario"
           className="mb-0.5 flex items-center gap-1.5 text-[11px] text-white/50"
-          title="06 之後各頁都依這個情境計算；切換後結果會依新情境重新判定。"
+          title="05 的散熱表面條件與之後各頁都依這個情境計算；切換後結果會依新情境重新判定。"
         >
           <span className="truncate">情境</span>
           {activeScenario?.is_default && (

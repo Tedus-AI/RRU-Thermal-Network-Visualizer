@@ -152,8 +152,8 @@ export function ScenarioSummaryPanel({
                     <span
                       className="font-semibold text-warn-600"
                       title={biTitle(
-                        'Screen 06 marked this surface as resting on an assumption',
-                        '06 標示此面帶有假設',
+                        'Screen 05 marked this surface as resting on an assumption',
+                        '05 標示此面帶有假設',
                       )}
                     >
                       assumption / 含假設
@@ -179,8 +179,8 @@ export function ScenarioSummaryPanel({
                     {surface.fin_effectiveness != null && (
                       <span
                         title={biTitle(
-                          'Fin efficiency from the geometry, times the process coefficient set in Screen 06',
-                          '由幾何算出的鰭片效率 × 06 設定的製程係數',
+                          'Fin efficiency from the geometry, times the process coefficient set in Screen 05',
+                          '由幾何算出的鰭片效率 × 05 設定的製程係數',
                         )}
                       >
                         （有效效率 {num(surface.fin_effectiveness, 3)}

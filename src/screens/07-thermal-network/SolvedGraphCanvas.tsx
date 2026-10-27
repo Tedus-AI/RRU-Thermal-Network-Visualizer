@@ -667,7 +667,7 @@ export function buildElements(
         color = boundaryDerived ? '#2563eb' : (RTH_SOURCE_COLORS[badge?.short ?? 'A'] ?? EDGE_NEUTRAL);
         width = 3;
         if (display.showLabels) {
-          label = R == null ? 'Unresolved' : boundaryDerived ? 'Boundary (06)' : (badge?.label ?? 'Unresolved');
+          label = R == null ? 'Unresolved' : boundaryDerived ? '邊界（05）' : (badge?.label ?? 'Unresolved');
         }
         break;
       }
@@ -1447,7 +1447,7 @@ export function legendFor(
         { color: RTH_SOURCE_COLORS.U, label: 'U · Manual', zh: '手動輸入' },
         { color: RTH_SOURCE_COLORS.M, label: 'M · Measurement', zh: '量測' },
         { color: RTH_SOURCE_COLORS.F, label: 'F · FloTHERM (reserved)', zh: 'FloTHERM（03 尚未實作）' },
-        { color: '#2563eb', label: 'Boundary derived (06)', zh: '由 06 邊界條件推導' },
+        { color: '#2563eb', label: 'Boundary derived (05)', zh: '由 05 邊界條件推導' },
       ];
 
     case 'node_type':

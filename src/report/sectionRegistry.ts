@@ -88,7 +88,7 @@ export const SECTION_DEFINITIONS: SectionDefinition[] = [
     zh: '情境摘要',
     recommended: true,
     source_screen: '01',
-    source_zh: '06 邊界條件 / 情境設定',
+    source_zh: '05 熱網路與邊界 / 01 情境',
     defaultContent: {
       show_stage: true,
       show_scenario: true,

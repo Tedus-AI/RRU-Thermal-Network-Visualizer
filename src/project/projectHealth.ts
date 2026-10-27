@@ -139,6 +139,8 @@ export interface NextStep {
   cta: string;
   /** True when the user cannot leave this screen yet. */
   blockedHere: boolean;
+  /** Which progress row is next, when two rows share a screen (01 has two). */
+  rowKey?: string;
 }
 
 /** 01 §34. FloTHERM is deliberately absent — it must not gate the basic workflow. */
@@ -184,10 +186,10 @@ export function nextStepFor(health: ProjectHealth): NextStep {
     );
   }
   if (!health.thermalNetwork) {
-    return step('05', '建立熱路徑', '指定熱架構，建立元件之間的熱路徑。');
+    return step('05', '建立熱網路', '依 04 的散熱路徑產生熱網路，並設定散熱表面。');
   }
   if (!health.baselineScenario) {
-    return step('06', '設定邊界條件', '求解前需要一個有環境條件的情境。');
+    return { ...step('01', '建立情境', '求解前需要一個有環境溫度的情境，在 01 的情境表建立。'), rowKey: 'scenario' };
   }
   if (!health.solved) {
     return step('07', '求解熱網路', '執行求解，檢查溫度與熱流。');

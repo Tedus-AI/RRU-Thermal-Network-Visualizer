@@ -18,9 +18,10 @@ describe('focusHref', () => {
     );
   });
 
-  it('sends a node to Screen 06', () => {
+  // 06 is the surface half of 05: a boundary node lands on 05, which opens it in ② 散熱表面.
+  it('sends a boundary node to Screen 05', () => {
     expect(focusHref('P1', { screen: '06', node_id: 'NODE_FIN' })).toBe(
-      '/project/P1/boundary?focusNode=NODE_FIN',
+      '/project/P1/thermal-path?focusNode=NODE_FIN',
     );
   });
 
@@ -33,7 +34,7 @@ describe('focusHref', () => {
   /** An id for the wrong screen is not smuggled through under another name. */
   it('drops an id the destination screen does not read', () => {
     expect(focusHref('P1', { screen: '05', node_id: 'NODE_FIN' })).toBe('/project/P1/thermal-path');
-    expect(focusHref('P1', { screen: '06', edge_id: 'EDGE_A_B' })).toBe('/project/P1/boundary');
+    expect(focusHref('P1', { screen: '06', edge_id: 'EDGE_A_B' })).toBe('/project/P1/thermal-path');
   });
 
   it('carries the field on every screen, so the link lands on the box', () => {
@@ -41,7 +42,7 @@ describe('focusHref', () => {
       '/project/P1/thermal-path?focusEdge=E1&focusField=param-area_mm2',
     );
     expect(focusHref('P1', { screen: '06', node_id: 'N1', field: 'bc-fin-finGap_mm' })).toBe(
-      '/project/P1/boundary?focusNode=N1&focusField=bc-fin-finGap_mm',
+      '/project/P1/thermal-path?focusNode=N1&focusField=bc-fin-finGap_mm',
     );
     expect(focusHref('P1', { screen: '04', component_id: 'C1', field: 'ins-rjc' })).toBe(
       '/project/P1/components?focusComponent=C1&focusField=ins-rjc',

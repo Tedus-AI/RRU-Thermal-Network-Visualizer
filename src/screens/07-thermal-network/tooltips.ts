@@ -48,6 +48,6 @@ export const T07 = {
     resetResults: '只清除目前 Scenario 的解析解，拓樸、邊界條件與量測資料都會保留。',
     saveSolution: '將目前 Scenario 的解存入專案。',
     continue: '解成功且能量平衡在容許範圍內才能前往 08。',
-    backTo06: '回到 06 修改此情境的邊界條件。',
+    backTo06: '回到 05 熱網路與邊界，修改此情境的散熱表面條件。',
   },
 } as const;

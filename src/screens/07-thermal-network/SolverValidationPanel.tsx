@@ -215,10 +215,13 @@ export function SolverValidationPanel({
                         <button
                           type="button"
                           onClick={() => onNavigate(entry.fix_in as '05' | '06')}
-                          title={biTitle(`Go to Screen ${entry.fix_in}`, `前往 ${entry.fix_in}`)}
+                          title={biTitle(
+                            'Go to Screen 05',
+                            entry.fix_in === '06' ? '前往 05 的散熱表面' : '前往 05 熱網路',
+                          )}
                           className="text-[10px] font-bold text-accent-600 hover:underline"
                         >
-                          Go to {entry.fix_in}
+                          前往 05
                         </button>
                       )}
                     </div>

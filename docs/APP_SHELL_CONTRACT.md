@@ -107,13 +107,17 @@ and squeezed narrow fields until they broke.)
   Rjc / θJC, PA, FR1 / FR2, RRU / AAU, Die-casting, Embedded, FloTHERM,
   SharePoint, and units. They are written into the Chinese string
   (`散熱器底座`, `Die-casting 鰭片`), not appended by a helper.
-- Screens refer to each other by number and sidebar name — `05 熱路徑建立`,
-  `06 邊界條件` — never `Screen 05`.
+- Screens refer to each other by number and sidebar name — `04 元件管理`,
+  `05 熱網路與邊界` — never `Screen 05`.
 - Say a thing once, where it applies: a constraint beside its field, a missing
   value in amber where it is missing. No standing paragraphs that read the same
   every visit; longer explanations go in a tooltip.
 - The sidebar lists only screens that exist. A deferred screen (03 FloTHERM
-  Import) is hidden until it is built; the other numbers do not move.
+  Import) is hidden until it is built; the other numbers do not move. 06
+  Boundary Conditions merged into 05 (熱網路與邊界): its number stays empty,
+  `/boundary` redirects to 05 with its query string, and code that still says
+  `'06'` (a solver issue's `fix_in`, an 08 lever's `screen`) means "the surface
+  half of 05" and is shown as 05.
 
 The shared helpers still take both names, because most call sites were written
 bilingual. They now show the Chinese and fall back to the English only when no

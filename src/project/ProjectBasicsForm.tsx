@@ -313,7 +313,7 @@ export function ProjectBasicsForm({
               label="Base Structure"
               zh="基座結構"
               htmlFor="base_structure"
-              tip="決定 04 元件可連接哪些散熱器底座，以及 05 建立幾條獨立散熱路徑。RF 與數位各用一個散熱器時選「雙獨立」，並在 06 分別設定邊界。"
+              tip="決定 04 元件可連接哪些散熱器底座，以及 05 建立幾條獨立散熱路徑。RF 與數位各用一個散熱器時選「雙獨立」，並在 05 分別設定兩組散熱表面。"
             >
               <Select
                 id="base_structure"

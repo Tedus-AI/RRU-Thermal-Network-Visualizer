@@ -1,53 +1,70 @@
 /**
- * Screen 05 — Thermal Path Builder.
- * Specification: 05_Thermal_Path_Builder.md.
+ * Screen 05 — 熱網路與邊界 (Thermal Network & Boundary).
+ * Specifications: 05_Thermal_Path_Builder.md, 06_Boundary_Conditions.md (§22:
+ * the two pages became this one).
  *
- * This screen describes HOW HEAT CAN TRAVEL. It does not pretend to know how
- * many watts take each route or what any node ends up at: no solve, no boundary
- * conditions, no invented edge heat flow (05 §22, §45, §64).
+ * From 04's thermal paths to a model 07 can solve, on one page:
+ *   ① 熱網路   the network, generated from 04; hand tools under 「進階編修」
+ *   ② 散熱表面 where the heat leaves: the heat sink's fins (shared by every
+ *               scenario, linked to 5G-RRU) and any other surface's conditions
+ *   ③ 環境     the scenarios as 01 states them, read-only
+ *   ④ 檢查     one list for the network and the boundary
+ * beside the graph. Nothing here solves, and no solved temperature or heat flow
+ * is shown as an input (05 §22, 06 §3.3).
  *
- * `networkStore` is the single source of truth; Cytoscape is only a view (05 §46).
- *
- * The screen's state, effects and actions live in `useThermalPathBuilder`; the
- * action bar, tool column, canvas, inspector and dialogs are components of
- * their own (`Builder*.tsx`) that read from it. This file keeps the loading and
- * error states and the layout that puts them together.
+ * The network half is `useThermalPathBuilder` (with its canvas, inspector and
+ * dialogs), the boundary half `useBoundaryWorkspace`. Both run every hook
+ * above the loading returns below.
  */
 
-import { Boxes, CircleSlash, Link2, Octagon, Share2, TriangleAlert, XCircle } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { ArrowLeft, ArrowRight, CircleCheck, Save, XCircle } from 'lucide-react';
 
 import { ScreenWorkspace } from '@/app/ScreenWorkspace';
 import { projectPath } from '@/app/navigation';
+import { useShellActions } from '@/app/shellActions';
 import { Badge, Button } from '@/ui/primitives';
+import { ResizableSidebar } from '@/ui/ResizableSidebar';
 import { toast } from '@/ui/toast';
 
 import { useNetworkStore } from '@/data/networkStore';
 import { useBoundaryStore } from '@/data/boundaryStore';
+import { useScenarioStore } from '@/data/scenarioStore';
 
 import { powerWOf, type Component } from '@/domain/component';
+import type { BoundaryPort } from '@/thermal/boundary/types';
 
-import { BuilderStepper, type BuilderStep } from './BuilderStepper';
-import { applyBoundaryValidationOverlay } from './boundaryValidationOverlay';
-import { KpiCard, LoadingState } from './builderBlocks';
+import type { GraphSelection } from './ThermalGraphCanvas';
+import { LoadingState } from './builderBlocks';
 import { useThermalPathBuilder } from './useThermalPathBuilder';
-import { BuilderActionBar } from './BuilderActionBar';
-import { BuilderSidebar } from './BuilderSidebar';
+import { useBoundaryWorkspace } from './useBoundaryWorkspace';
 import { BuilderCanvasArea } from './BuilderCanvasArea';
 import { BuilderInspectorPanel } from './BuilderInspectorPanel';
 import { BuilderModals } from './BuilderModals';
+import { NetworkCard } from './NetworkCard';
+import { SurfaceCard } from './SurfaceCard';
+import { EnvironmentCard } from './EnvironmentCard';
+import { ChecksCard } from './ChecksCard';
+import { buildChecks, type CheckIssue } from './checksModel';
 
-// --- Screen ----------------------------------------------------------------
+type CardId = 'network' | 'surface' | 'environment' | 'checks';
+
+const CARD_DOM_ID: Record<CardId, string> = {
+  network: 'card-network',
+  surface: 'card-surface',
+  environment: 'card-environment',
+  checks: 'card-checks',
+};
 
 export function ThermalPathBuilderView() {
   const builder = useThermalPathBuilder();
+  const boundary = useBoundaryWorkspace();
   const {
-    components,
+    canvasRef,
     displayValidation,
     draft,
+    editing,
     fullscreen,
-    handleSave,
-    kpis,
-    modeledIds,
     navigate,
     network,
     projectId,
@@ -56,27 +73,80 @@ export function ThermalPathBuilderView() {
     requiresReview,
     scenarioBoundaryEdges,
     selection,
-    setStep,
+    setSelection,
     setWarningConfirm,
-    solverState,
-    step,
   } = builder;
+
+  const scenarios = useScenarioStore((s) => s.scenarios);
+  const activeScenarioId = useScenarioStore((s) => s.activeScenarioId);
+  const networkDirty = useNetworkStore((s) => s.dirty);
+
+  const [cards, setCards] = useState<Record<CardId, boolean>>({
+    network: true,
+    surface: true,
+    environment: false,
+    checks: true,
+  });
+  const toggleCard = (id: CardId) => setCards((current) => ({ ...current, [id]: !current[id] }));
+  /** Opens a card and brings it into view (after it renders). */
+  const revealCard = (id: CardId) => {
+    setCards((current) => (current[id] ? current : { ...current, [id]: true }));
+    requestAnimationFrame(() =>
+      document.getElementById(CARD_DOM_ID[id])?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
+    );
+  };
+
+  const nodeCount = network ? Object.keys(network.nodes).length : 0;
+  const checks = useMemo(
+    () =>
+      buildChecks({
+        network: displayValidation,
+        nodeCount,
+        boundary: boundary.validation,
+        summary: boundary.summary,
+        ambient_C: boundary.set?.ambient.external_ambient_C,
+      }),
+    [displayValidation, nodeCount, boundary.validation, boundary.summary, boundary.set],
+  );
+
+  const surfaceByNode = useMemo(
+    () => new Map(boundary.surfaces.map((port) => [port.connected_node_id, port])),
+    [boundary.surfaces],
+  );
+  const ambientNodeIds = useMemo(
+    () => new Set(boundary.ports.filter((port) => !port.dissipating).map((port) => port.connected_node_id)),
+    [boundary.ports],
+  );
+
+  /** Saves the network and the open scenario's boundary set — one button for the page. */
+  const saveAll = (quiet = false) => {
+    if (!projectId || readOnly) return;
+    builder.handleSave(true);
+    boundary.save();
+    if (!quiet) toast.success('熱網路與邊界已儲存');
+  };
+  const saveRef = useRef(saveAll);
+  saveRef.current = saveAll;
+  const setSaveHandler = useShellActions((s) => s.setSaveHandler);
+  useEffect(() => {
+    setSaveHandler(() => saveRef.current());
+    return () => setSaveHandler(null);
+  }, [setSaveHandler]);
 
   if (!projectId || projectStatus === 'error') {
     return (
       <div className="flex h-full items-center justify-center p-8">
         <div className="max-w-md rounded-lg border border-danger-500/30 bg-surface p-7 text-center">
           <XCircle size={22} className="mx-auto mb-3 text-danger-600" />
-          <h1 className="text-[15px] font-bold text-ink-900">Unable to load thermal network.</h1>
-          <p className="mt-1 text-[13px] text-ink-500">無法載入熱網路。</p>
+          <h1 className="text-[15px] font-bold text-ink-900">無法載入熱網路。</h1>
           <div className="mt-4 flex justify-center gap-2">
             <Button
               variant="primary"
               onClick={() => projectId && useNetworkStore.getState().loadFor(projectId)}
             >
-              Retry / 重試
+              重試
             </Button>
-            <Button onClick={() => navigate('/')}>Return to Component Manager</Button>
+            <Button onClick={() => navigate('/')}>回到首頁</Button>
           </div>
         </div>
       </div>
@@ -85,137 +155,191 @@ export function ThermalPathBuilderView() {
 
   if (projectStatus === 'loading' || !draft || !network) return <LoadingState />;
 
-  const blockingErrors = displayValidation?.errors ?? 0;
-  const warnings = displayValidation?.warnings ?? 0;
-  const isEmpty = Object.keys(network.nodes).length === 0;
+  const isEmpty = nodeCount === 0;
+  const blocking = isEmpty || checks.errors > 0;
 
-  const handleSaveAndContinue = () => {
-    if (blockingErrors > 0) return;
-    handleSave();
-    if (warnings > 0) {
-      setWarningConfirm(warnings);
+  const showPort = (port: BoundaryPort) => {
+    setSelection({ kind: 'node', id: port.connected_node_id });
+    builder.explorer.showFull(() => canvasRef.current?.center(port.connected_node_id));
+  };
+
+  /** A boundary surface opens card ②, the ambient reference card ③; anything else the inspector. */
+  const selectGraphObject = (next: GraphSelection) => {
+    setSelection(next);
+    if (next?.kind !== 'node') return;
+    const port = surfaceByNode.get(next.id);
+    if (port) {
+      boundary.selectPort(port.id);
+      revealCard('surface');
+    } else if (ambientNodeIds.has(next.id)) {
+      revealCard('environment');
+    }
+  };
+
+  const focusIssue = (entry: CheckIssue) => {
+    if (entry.source === 'network') {
+      builder.explorer.showFull(() => builder.focusIssue(entry.issue));
       return;
     }
-    navigate(projectPath(projectId, 'boundary'));
-  };
-
-  /** Both Validate buttons must report the same active-scenario view as the panel. */
-  const handleValidate = () => {
-    const rawResult = useNetworkStore.getState().revalidate();
-    const boundaryState = useBoundaryStore.getState();
-    const result = applyBoundaryValidationOverlay(
-      rawResult,
-      useNetworkStore.getState().network,
-      boundaryState.ports,
-      boundaryState.current(),
-    );
-    setStep('validate');
-    if (!result) {
-      toast.warning('Nothing to validate yet / 尚無可驗證的網路');
-    } else if (result.errors > 0) {
-      toast.error(
-        `${result.errors} error(s), ${result.warnings} warning(s) / ${result.errors} 個錯誤、${result.warnings} 個警告`,
-      );
-    } else if (result.warnings > 0) {
-      toast.warning(
-        `No errors, ${result.warnings} warning(s) / 無錯誤，${result.warnings} 個警告`,
-      );
-    } else {
-      toast.success('Network is valid / 熱網路驗證通過');
+    const { boundary_port_id, profile_id } = entry.message;
+    const portId =
+      boundary_port_id ??
+      boundary.set?.assignments.find((assignment) =>
+        profile_id ? assignment.profile_ids.includes(profile_id) : false,
+      )?.boundary_port_id;
+    const port = boundary.ports.find((entry) => entry.id === portId);
+    if (!port) return;
+    if (!port.dissipating) {
+      revealCard('environment');
+      return;
     }
+    boundary.selectPort(port.id, profile_id ?? null);
+    revealCard('surface');
+    showPort(port);
   };
 
-  const selectedNode = selection?.kind === 'node' ? network.nodes[selection.id] : null;
-  const selectedEdge = selection?.kind === 'edge' ? network.edges[selection.id] : null;
-  const selectedScenarioBoundary = selectedEdge
-    ? scenarioBoundaryEdges.get(selectedEdge.id)
-    : undefined;
+  const selectScenario = (scenarioId: string) => {
+    // The open scenario's edits go with it rather than being dropped on reload.
+    if (useBoundaryStore.getState().dirty) boundary.save();
+    useScenarioStore.getState().setActiveScenario(scenarioId, projectId);
+  };
 
-  const completedSteps: BuilderStep[] = [];
-  if (components.length > 0) completedSteps.push('components');
-  if (modeledIds.size > 0) completedSteps.push('templates');
-  if (Object.keys(network.zones).length > 0) completedSteps.push('structure');
-  if (kpis.unconnectedPorts === 0 && kpis.nodes > 0) completedSteps.push('connections');
-  if (displayValidation && displayValidation.errors === 0 && kpis.nodes > 0) {
-    completedSteps.push('validate');
-  }
+  const handleValidate = () => {
+    useNetworkStore.getState().revalidate();
+    useBoundaryStore.getState().revalidate();
+    revealCard('checks');
+  };
+
+  const handleContinue = () => {
+    if (blocking) return;
+    saveAll(true);
+    if (checks.warnings > 0) {
+      setWarningConfirm(checks.warnings);
+      return;
+    }
+    navigate(projectPath(projectId, 'network'));
+  };
+
+  const selectedNode = selection?.kind === 'node' ? (network.nodes[selection.id] ?? null) : null;
+  const selectedEdge = selection?.kind === 'edge' ? (network.edges[selection.id] ?? null) : null;
+  // A surface opens in card ②; its node's own inspector is a topology tool.
+  const nodeIsBoundary =
+    selectedNode != null && (surfaceByNode.has(selectedNode.id) || ambientNodeIds.has(selectedNode.id));
+  const showInspector = selectedEdge != null || (selectedNode != null && (!nodeIsBoundary || editing));
+  const canSave = !readOnly && (networkDirty || boundary.dirty || boundary.topologyStale);
 
   return (
     <ScreenWorkspace
-      title="Thermal Path Builder"
-      titleZh="熱路徑設定"
-      descriptionZh="定義熱可以怎麼走：元件子圖、共用結構與彼此的連接。本畫面不設定邊界條件，也不進行求解。"
+      title="Thermal Network & Boundary"
+      titleZh="熱網路與邊界"
+      descriptionZh="依 04 的散熱路徑產生熱網路，設定散熱表面；環境跟著 01 的情境。完成後到 07 求解。"
       badge={
         <div className="flex flex-wrap items-center gap-2">
-          {readOnly && <Badge tone="accent">READ ONLY / 唯讀</Badge>}
-          <Badge tone={network.status === 'NEEDS_REVIEW' ? 'warn' : 'neutral'}>
-            {network.status}
-          </Badge>
-          <Badge tone={solverState === 'DIRTY' ? 'warn' : 'neutral'}>Solver {solverState}</Badge>
-          {requiresReview && (
-            <span title="04 改了會影響熱路徑的欄位（數量、TIM、熱路徑、幾何、啟用、新增或刪除元件）。到 05 按「依偏好產生」重建，或檢查後按「儲存並繼續」，這個提醒就會消失。">
-              <Badge tone="warn">Linked parameters changed / 連動參數已變更</Badge>
+          {readOnly && <Badge tone="accent">唯讀</Badge>}
+          {requiresReview && !isEmpty && (
+            <span title="04 改了會影響熱網路的欄位。到 ① 按「依 04 重新產生」，或檢查後儲存，這個提醒就會消失。">
+              <Badge tone="warn">04 有改過</Badge>
             </span>
           )}
+          <Badge tone={blocking ? 'warn' : checks.warnings > 0 ? 'warn' : 'ok'}>
+            {isEmpty
+              ? '還沒有熱網路'
+              : checks.errors > 0
+                ? `${checks.errors} 個錯誤`
+                : checks.warnings > 0
+                  ? `可求解・${checks.warnings} 個警告`
+                  : '可求解'}
+          </Badge>
         </div>
       }
-      metrics={
-        <div className="grid grid-cols-2 gap-1.5 md:grid-cols-3 xl:grid-cols-6">
-          <KpiCard
-            icon={<Boxes size={13} />}
-            value={`${kpis.componentsModeled} / ${kpis.componentsTotal}`}
-            label="Components Modeled"
-            zh="建模元件"
-          />
-          <KpiCard icon={<Share2 size={13} />} value={kpis.nodes} label="Nodes" zh="節點" />
-          <KpiCard icon={<Link2 size={13} />} value={kpis.edges} label="Edges" zh="連線" />
-          <KpiCard
-            icon={<CircleSlash size={13} />}
-            iconTone={kpis.unconnectedPorts > 0 ? 'text-warn-600' : 'text-ink-400'}
-            value={kpis.unconnectedPorts}
-            label="Unconnected Ports"
-            zh="未連接埠"
-            tone={kpis.unconnectedPorts > 0 ? 'text-warn-600' : 'text-ink-900'}
-          />
-          <KpiCard
-            icon={<TriangleAlert size={13} />}
-            iconTone={kpis.unresolvedRth > 0 ? 'text-warn-600' : 'text-ink-400'}
-            value={kpis.unresolvedRth}
-            label="Unresolved Rth"
-            zh="未解析熱阻"
-            tone={kpis.unresolvedRth > 0 ? 'text-warn-600' : 'text-ink-900'}
-          />
-          <KpiCard
-            icon={<Octagon size={13} />}
-            iconTone={blockingErrors > 0 ? 'text-danger-600' : 'text-ok-600'}
-            value={blockingErrors}
-            label="Blocking Errors"
-            zh="阻擋錯誤"
-            tone={blockingErrors > 0 ? 'text-danger-600' : 'text-ok-600'}
-          />
-        </div>
-      }
-      stepper={<BuilderStepper current={step} onSelect={setStep} completed={completedSteps} />}
       actionBar={
-        <BuilderActionBar
-          builder={builder}
-          projectId={projectId}
-          blockingErrors={blockingErrors}
-          isEmpty={isEmpty}
-          onSaveAndContinue={handleSaveAndContinue}
-          onValidate={handleValidate}
-        />
+        <div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-line bg-surface px-6 py-3">
+          <Button icon={<ArrowLeft size={15} />} onClick={() => navigate(projectPath(projectId, 'components'))}>
+            返回 04
+          </Button>
+          <Button icon={<CircleCheck size={15} />} onClick={handleValidate} title="重新檢查熱網路與邊界">
+            重新檢查
+          </Button>
+          {checks.errors > 0 && (
+            <button
+              type="button"
+              className="text-[12px] font-medium text-danger-600 hover:underline"
+              onClick={() => revealCard('checks')}
+            >
+              {checks.errors} 個錯誤要先修正，才能求解
+            </button>
+          )}
+          <div className="ml-auto flex gap-2">
+            <Button
+              icon={<Save size={15} />}
+              disabled={!canSave}
+              title={
+                boundary.topologyStale && !networkDirty && !boundary.dirty
+                  ? '儲存 — 記錄目前的熱網路已經檢查過邊界'
+                  : '儲存熱網路與邊界'
+              }
+              onClick={() => saveAll()}
+            >
+              儲存
+            </Button>
+            <Button
+              variant="primary"
+              trailingIcon={<ArrowRight size={15} />}
+              disabled={blocking}
+              onClick={handleContinue}
+            >
+              前往 07 求解
+            </Button>
+          </div>
+        </div>
       }
     >
-      {/* The editor fills every pixel left by the shell. Fullscreen promotes this
-          workspace above the shell while keeping the same editing controls. */}
       <div
-        className={`flex min-h-[22rem] flex-1 flex-col gap-3 lg:flex-row ${fullscreen ? 'fixed inset-0 z-30 min-h-0 bg-canvas p-3' : ''}`}
+        className={`flex min-h-[30rem] flex-1 flex-col gap-3 lg:flex-row ${fullscreen ? 'fixed inset-0 z-30 min-h-0 bg-canvas p-3' : ''}`}
         data-testid="thermal-path-workspace"
       >
-        {/* The palettes scroll inside their own column so the canvas keeps a
-            stable viewport — a graph editor cannot live in a page that scrolls. */}
-        {!fullscreen && <BuilderSidebar builder={builder} network={network} />}
+        {!fullscreen && (
+          <ResizableSidebar
+            id="05-network-boundary"
+            defaultWidth={420}
+            labelEn="network and boundary"
+            labelZh="熱網路與邊界"
+            shortEn="Setup"
+            shortZh="設定"
+          >
+            <NetworkCard
+              builder={builder}
+              network={network}
+              open={cards.network}
+              onToggle={() => toggleCard('network')}
+            />
+            <SurfaceCard
+              boundary={boundary}
+              draft={draft}
+              readOnly={readOnly}
+              open={cards.surface}
+              onToggle={() => toggleCard('surface')}
+              onShowPort={showPort}
+              onEditAmbient={boundary.editScenarios}
+            />
+            <EnvironmentCard
+              scenarios={scenarios}
+              activeScenarioId={activeScenarioId}
+              open={cards.environment}
+              onToggle={() => toggleCard('environment')}
+              onSelectScenario={selectScenario}
+              onEditScenarios={boundary.editScenarios}
+            />
+            <ChecksCard
+              model={checks}
+              boundary={boundary}
+              readOnly={readOnly}
+              open={cards.checks}
+              onToggle={() => toggleCard('checks')}
+              onFocusIssue={focusIssue}
+            />
+          </ResizableSidebar>
+        )}
 
         <BuilderCanvasArea
           builder={builder}
@@ -223,22 +347,21 @@ export function ThermalPathBuilderView() {
           projectId={projectId}
           isEmpty={isEmpty}
           onValidate={handleValidate}
+          onSelectObject={selectGraphObject}
         />
       </div>
 
-      {/* Like Screen 04, inspection is non-modal: the graph keeps its full
-          width and remains clickable behind the movable, resizable window. */}
-      {(selectedNode || selectedEdge) && (
+      {/* Non-modal, like 04: the graph stays clickable behind it. */}
+      {showInspector && (
         <BuilderInspectorPanel
           builder={builder}
           network={network}
           selectedNode={selectedNode}
           selectedEdge={selectedEdge}
-          selectedScenarioBoundary={selectedScenarioBoundary}
+          selectedScenarioBoundary={selectedEdge ? scenarioBoundaryEdges.get(selectedEdge.id) : undefined}
         />
       )}
 
-      {/* --- Modals --- */}
       <BuilderModals builder={builder} network={network} projectId={projectId} />
     </ScreenWorkspace>
   );

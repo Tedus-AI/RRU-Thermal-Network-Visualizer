@@ -190,10 +190,14 @@ function SegmentBlock({ segment, projectId }: { segment: SegmentLevers; projectI
                 <Link
                   to={focusHref(projectId, lever.destination)}
                   className="inline-flex items-center gap-0.5 text-accent-700 hover:underline"
-                  title={biTitle(`Open Screen ${lever.screen}`, `前往 ${lever.screen}`)}
+                  title={biTitle(
+                    `Open Screen ${lever.screen === '06' ? '05' : lever.screen}`,
+                    lever.screen === '06' ? '前往 05 的散熱表面' : `前往 ${lever.screen}`,
+                  )}
                 >
                   <SquarePen size={9} />
-                  {lever.screen}
+                  {/* 06 (boundary) is now the surface half of 05. */}
+                  {lever.screen === '06' ? '05' : lever.screen}
                 </Link>
               )}
             </li>

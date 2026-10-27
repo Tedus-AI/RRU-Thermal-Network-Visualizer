@@ -10,6 +10,7 @@ import { useNetworkStore } from '@/data/networkStore';
 
 import { manualId } from '@/thermal/graph/idFactory';
 import type { ThermalNode, ThermalNetwork } from '@/thermal/types';
+import type { GraphSelection } from './ThermalGraphCanvas';
 
 import { GraphToolbar } from './GraphToolbar';
 import { GraphExplorerControls, GraphGroupOverview, GraphToolbarBridge } from '@/ui/GraphExplorer';
@@ -26,6 +27,8 @@ interface BuilderCanvasAreaProps {
   projectId: string;
   isEmpty: boolean;
   onValidate: () => void;
+  /** A click on the graph; the page routes a boundary surface to its own panel. */
+  onSelectObject?: (selection: GraphSelection) => void;
 }
 
 export function BuilderCanvasArea({
@@ -34,6 +37,7 @@ export function BuilderCanvasArea({
   projectId,
   isEmpty,
   onValidate: handleValidate,
+  onSelectObject,
 }: BuilderCanvasAreaProps) {
   const {
     autoConnectSuggested,
@@ -42,6 +46,7 @@ export function BuilderCanvasArea({
     components,
     contextMenu,
     displayValidation,
+    editing,
     enabledComponents,
     explorer,
     focusIssue,
@@ -62,6 +67,7 @@ export function BuilderCanvasArea({
     setAddNodeDraft,
     setComponentVisibilityOpen,
     setContextMenu,
+    setEditing,
     setFullscreen,
     setHiddenComponentIds,
     setLayoutMode,
@@ -92,6 +98,7 @@ export function BuilderCanvasArea({
         canUndo={past.length > 0}
         canRedo={future.length > 0}
         readOnly={readOnly}
+        structureLocked={!editing}
         onTool={(next) => {
           if (next === 'add-node' || next === 'add-edge' || next === 'connect') explorer.setView('full');
           setTool(next);
@@ -143,6 +150,7 @@ export function BuilderCanvasArea({
             onGenerate={() => setShowGenerate(true)}
             onStartBlank={() => {
               handleApplyPreset();
+              setEditing(true);
               setStep('structure');
             }}
             onGoToComponents={() => navigate(projectPath(projectId, 'components'))}
@@ -163,7 +171,7 @@ export function BuilderCanvasArea({
               layoutMode={layoutMode}
               hiddenComponentIds={hiddenComponentIds}
               scenarioBoundaryEdges={scenarioBoundaryEdges}
-              onSelect={setSelection}
+              onSelect={onSelectObject ?? setSelection}
               onNodeMoved={(nodeId, position) =>
                 useNetworkStore.getState().setNodePosition(nodeId, position)
               }
@@ -208,7 +216,11 @@ export function BuilderCanvasArea({
               pendingSourceRef={pendingSourceRef}
             />
             {explorer.view !== 'groups' && <Legend />}
-            <NetworkValidationPanel validation={displayValidation} onFocus={issue => explorer.showFull(() => focusIssue(issue))} />
+            {/* The page lists every check in its own column; fullscreen hides
+                that column, so the graph carries the network's list instead. */}
+            {fullscreen && (
+              <NetworkValidationPanel validation={displayValidation} onFocus={issue => explorer.showFull(() => focusIssue(issue))} />
+            )}
             {/* Beside the legend, not on top of it — and it names which of
                 the two wiring tools is armed, since they ask for the same
                 two clicks but do different things with them. */}
@@ -257,7 +269,14 @@ export function BuilderCanvasArea({
                   <button
                     type="button"
                     className="w-full px-3 py-1.5 text-left text-[12px] text-ink-700 hover:bg-surface-muted disabled:opacity-50"
-                    disabled={readOnly && item.id !== 'inspect' && item.id !== 'center'}
+                    disabled={
+                      (readOnly || !editing) && item.id !== 'inspect' && item.id !== 'center'
+                    }
+                    title={
+                      !readOnly && !editing && item.id !== 'inspect' && item.id !== 'center'
+                        ? '請先打開「進階編修」'
+                        : undefined
+                    }
                     onClick={() => {
                       const store = useNetworkStore.getState();
                       const { kind, id } = contextMenu;

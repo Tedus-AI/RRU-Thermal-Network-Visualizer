@@ -18,8 +18,8 @@ Data Provenance / Physics Correctness 原則為準。
 | 02 | Import Components | ✅ |
 | 03 | FloTHERM Import | ⏸ 刻意延後（見下） |
 | 04 | Component Manager | ✅ |
-| 05 | Thermal Path Builder | ✅ |
-| 06 | Boundary Conditions | ✅ |
+| 05 | 熱網路與邊界（Thermal Path Builder＋Boundary Conditions 合併） | ✅ |
+| 06 | Boundary Conditions | ↪ 併入 05（`/boundary` 自動導到 05） |
 | 07 | Thermal Network | ⏳ 待規格 |
 | 08 | Bottleneck Analysis | ⏳ 待規格 |
 | 09 | Temperature Distribution | ⏳ 待規格 |
@@ -68,14 +68,14 @@ Cytoscape 只是 view / interaction layer：Graph 的唯一真實來源是 `netw
   熱流取自 07 的求解，不用元件額定功耗；05 在求解前顯示整片基座）、**指定面積**（每顆）。
   縮小範圍假設周圍底座不比平均溫度高，適合遠離熱源群的元件；07 的求解訊息會列出所有縮小範圍的元件。
 
-## Screen 06 的物理界線
+## 05 邊界部分（原 Screen 06）的物理界線
 
-06 是第一個設定「情境相關邊界條件」的畫面，接續 05 刻意留白的部分：
+05「熱網路與邊界」的 ② 散熱表面／③ 環境／④ 檢查是原本 06 的工作，設定「情境相關邊界條件」：
 
-- 05 的拓樸在此**唯讀**：06 不新增、不刪除任何節點或連線，也不會改寫 05 的存檔。
+- 邊界條件不新增、不刪除任何節點或連線，也不會改寫熱網路的存檔（拓樸只在 ①「進階編修」裡改）。
 - 環境溫度、對流 h、輻射參數、太陽負載、固定溫度**依情境儲存**，鍵值為
   `projectId + networkId + scenarioId`，不寫進 base topology。
-- 06 **不求解**，也不顯示節點溫度、Edge Heat Flow Q、ΔT 或瓶頸排名。
+- 05 **不求解**，也不顯示節點溫度、Edge Heat Flow Q、ΔT 或瓶頸排名。
 - 邊界熱阻只是**求解前的輸入預覽**，畫面上明確標示；
   `Rconv = 1/(hA)`、`h_rad = εσF·(Ts²+Ta²)(Ts+Ta)`（割線線性化，周圍溫度取情境環境溫度；
   `4εσF·T³` 只在 T 取兩者平均時才近似成立）、對流與輻射為**並聯（導熱率相加）**。

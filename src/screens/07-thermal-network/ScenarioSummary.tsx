@@ -95,7 +95,7 @@ export function ScenarioSummary({
       <Button
         icon={<ArrowLeft size={14} />}
         className="h-8 !text-[12px]"
-        title={biTitle('Edit boundary conditions in Screen 06', T07.action.backTo06)}
+        title={biTitle('Edit boundary conditions in Screen 05', T07.action.backTo06)}
         onClick={onEditBoundary}
       >
         Edit Boundary Conditions / 編輯邊界條件

@@ -165,8 +165,8 @@ export function runPreSolveChecks(input: SolveInput): PreSolveReport {
         'error',
         'ambient_not_configured',
         'boundary',
-        'The scenario has no ambient temperature. Screen 06 must define it before a solve.',
-        '此情境尚未定義環境溫度，請先於 06 設定。',
+        'The scenario has no ambient temperature. Screen 01 must define it before a solve.',
+        '此情境尚未定義環境溫度，請先在 01 的情境設定。',
         { fix_in: '06' },
       ),
     );
@@ -192,8 +192,8 @@ export function runPreSolveChecks(input: SolveInput): PreSolveReport {
           'error',
           'boundary_rth_unresolved',
           'boundary',
-          `Boundary edge "${assignment.edge_id}" has no resolved resistance for this scenario. Complete h, area or emissivity in Screen 06.`,
-          `邊界連線 "${assignment.edge_id}" 在此情境沒有可用熱阻，請於 06 補齊 h、面積或放射率。`,
+          `Boundary edge "${assignment.edge_id}" has no resolved resistance for this scenario. Complete h, area or emissivity in 05 散熱表面.`,
+          `邊界連線 "${assignment.edge_id}" 在此情境沒有可用熱阻，請在 05 的散熱表面補齊 h、面積或放射率。`,
           {
             edge_id: assignment.edge_id,
             boundary_port_id: assignment.boundary_port_id,

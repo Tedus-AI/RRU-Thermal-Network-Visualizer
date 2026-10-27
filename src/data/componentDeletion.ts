@@ -55,7 +55,7 @@ export function deletedComponentsInGraph(
 
 export function describePrune(result: PruneResult): string {
   const parts = [`${result.nodes} 個節點`];
-  if (result.boundary > 0) parts.push(`06 的 ${result.boundary} 個邊界設定`);
+  if (result.boundary > 0) parts.push(`05 的 ${result.boundary} 個邊界設定`);
   return `已從熱路徑移除 04 刪除的 ${result.components} 個元件（${parts.join('、')}）。`;
 }
 

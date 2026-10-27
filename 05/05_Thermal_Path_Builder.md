@@ -1617,3 +1617,53 @@ Scenario-specific boundary parameters
 # 64. Final Principle
 
 **05_Thermal_Path_Builder 的工作是正確描述「熱可以怎麼走」。在 06 邊界條件完成以前，它不應假裝知道「每條路實際走多少 W」或「每個節點最後幾 °C」。**
+
+# 65. 05＋06 合併：熱網路與邊界（`ThermalPathBuilderView`）
+
+使用者決定（2026-10，提案 D1–D4）：06 邊界條件併入 05，頁名「熱網路與邊界」。06 要填的只剩散熱表面，
+環溫、風速、日照、功耗倍率都在 01；05 的熱網路幾乎都是依 04 一鍵產生。合在一頁後，04 → 07 只經過一個畫面。
+**存檔格式不變**：熱網路與各情境的邊界集照舊分開存（`networkStore`／`boundaryStore`），既有專案打開就是新版面，07 的求解結果相同。
+
+## 65.1 版面
+
+左欄（`ResizableSidebar`，預設 420 px，可拖曳／收合）四張卡，右邊是熱網路畫布（`BuilderCanvasArea`，與原本 05 相同）。
+
+| 卡片 | 內容 | 原本在 |
+|---|---|---|
+| ① 熱網路（`NetworkCard`）| 元件種類／節點／連線／未接的埠／未解熱阻；「依 04 產生／重新產生」（`GenerateNetworkPreview`）；04 改過的提醒（`requiresReview`）；熱阻已過期的提醒（`staleLinkedEdges`）；「進階編修」 | 05 的步驟條、KPI、動作列 |
+| ② 散熱表面（`SurfaceCard`）| 散熱表面清單（不只一個時）；選取的表面的邊界條件（`BoundaryInspector`，含鰭片：06 §21）；「建立缺少的邊界條件」「套用到同方位的表面」；表面性質（收合）| 06 的表面性質、邊界條件 |
+| ③ 環境（`EnvironmentCard`）| 情境一覽（環溫、功耗倍率、風速、日照，唯讀）；點一列切換情境；「到 01 修改情境」| 06 的情境、環境與場址步驟 |
+| ④ 檢查（`ChecksCard`＋`checksModel.ts`）| 五項就緒條件＋熱網路與邊界的訊息合成一份清單（錯誤在前）；點一列 → 熱網路物件或 ② 的表面；固定溫度（選填，收合）| 05 的驗證面板、06 的驗證與固定溫度 |
+
+- 頁首徽章：唯讀、「04 有改過」、整頁狀態（還沒有熱網路／N 個錯誤／可求解・N 個警告／可求解）。
+- 動作列：返回 04、重新檢查、儲存（熱網路＋目前情境的邊界集，同一顆）、前往 07 求解（有錯誤時停用；有警告時先確認）。
+- 全螢幕時左欄收起，畫布右下角改顯示熱網路的驗證清單。
+
+## 65.2 進階編修（`AdvancedEditor`）
+
+模板、共用結構、從空白開始（原本 05 的步驟 2–4）收在 ① 的「進階編修」裡，**預設收起**。打開時：
+- 畫布工具列的「連接埠、新增節點、新增連線、依建議連接」才能按（`GraphToolbar structureLocked`；收起時 tooltip 寫「請先打開『進階編修』」）；
+- 右鍵選單的複製／停用／刪除／反轉方向、**Delete／Backspace 刪除選取的物件**才有作用（原本點一下鰭片表面再按 Backspace 就把它刪了）；
+- 點邊界表面的節點也會開出節點檢視器（拓樸工具）。
+復原／重做、拖曳節點、檢視器裡的連線參數（08「到 05 修改」會開到這裡）不受影響。
+
+## 65.3 點畫布
+
+- 散熱表面的節點 → ② 打開並選取那個表面（不開節點檢視器）；環境參考節點 → ③。
+- 其他節點、連線 → 浮動檢視器（與原本 05 相同）。
+
+## 65.4 舊網址與連結
+
+- `/project/:id/boundary` → 導到 `thermal-path`，**帶著 query string**（`RetiredScreen`）。
+- `focusHref({ screen: '06', node_id, field })` → `thermal-path?focusNode=…&focusField=…`：`useBoundaryWorkspace` 選取那個表面、
+  `revealField` 聚焦欄位；`focusEdge` 由 `useThermalPathBuilder` 處理（只在有 edge 參數時才吃掉 `focusField`）。
+- 程式裡仍有 `'06'` 的地方（07 求解訊息的 `fix_in`、08 調整槓桿的 `screen`）意思是「05 的散熱表面」，畫面一律顯示 05。
+
+## 65.5 程式
+
+- `ThermalPathBuilderView.tsx`（頁面）、`useThermalPathBuilder.ts`（熱網路；新增 `editing`、`handleSave(silent)`，不再自己註冊頁首的儲存）、
+  `useBoundaryWorkspace.ts`（邊界：原本 `BoundaryConditionsView` 的狀態與動作）、`NetworkCard`／`SurfaceCard`／`EnvironmentCard`／`ChecksCard`／
+  `WorkspaceCard`／`AdvancedEditor`、`checksModel.ts`。
+- 移除：`BuilderStepper`、`BuilderSidebar`（→ `AdvancedEditor`）、`BuilderActionBar`、06 的 `BoundaryConditionsView`、`BoundaryStepper`、
+  `BoundaryGraphToolbar`、`BoundarySummaryCard`、`BoundaryValidationOverlay`、`BoundaryValidationPanel`。06 資料夾留下表面檢視器與欄位元件。
+- 測試：`checksModel.test.ts`、`focusLink.test.ts`、`BoundaryInspector.test.tsx`（文字改成中文）。

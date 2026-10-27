@@ -109,6 +109,7 @@ export function GraphToolbar({
   canUndo,
   canRedo,
   readOnly,
+  structureLocked = false,
   onTool,
   onLayoutMode,
   onAutoLayout,
@@ -134,6 +135,11 @@ export function GraphToolbar({
   canUndo: boolean;
   canRedo: boolean;
   readOnly: boolean;
+  /**
+   * The tools that change the topology (connect, add, auto-connect) wait for
+   * the advanced editor; undo, redo and the view tools do not.
+   */
+  structureLocked?: boolean;
   onTool: (tool: CanvasTool) => void;
   onLayoutMode: (mode: string) => void;
   onAutoLayout: () => void;
@@ -163,32 +169,32 @@ export function GraphToolbar({
         />
         <ToolButton
           active={tool === 'connect'}
-          disabled={readOnly}
-          label="Connect Port"
-          zh="連接埠"
+          disabled={readOnly || structureLocked}
+          label={structureLocked ? 'Connect Port (open the advanced editor)' : 'Connect Port'}
+          zh={structureLocked ? '連接埠（請先打開「進階編修」）' : '連接埠'}
           icon={<Share2 size={14} />}
           onClick={() => onTool(toggleTool(tool, 'connect'))}
         />
         <ToolButton
           active={tool === 'add-node'}
-          disabled={readOnly}
-          label="Add Node"
-          zh="新增節點"
+          disabled={readOnly || structureLocked}
+          label={structureLocked ? 'Add Node (open the advanced editor)' : 'Add Node'}
+          zh={structureLocked ? '新增節點（請先打開「進階編修」）' : '新增節點'}
           icon={<Plus size={14} />}
           onClick={() => onTool(toggleTool(tool, 'add-node'))}
         />
         <ToolButton
           active={tool === 'add-edge'}
-          disabled={readOnly}
-          label="Add Edge (manual)"
-          zh="新增連線（手動）"
+          disabled={readOnly || structureLocked}
+          label={structureLocked ? 'Add Edge (open the advanced editor)' : 'Add Edge (manual)'}
+          zh={structureLocked ? '新增連線（請先打開「進階編修」）' : '新增連線（手動）'}
           icon={<Spline size={14} />}
           onClick={() => onTool(toggleTool(tool, 'add-edge'))}
         />
         <ToolButton
-          disabled={readOnly}
-          label="Auto Connect"
-          zh="依建議連接"
+          disabled={readOnly || structureLocked}
+          label={structureLocked ? 'Auto Connect (open the advanced editor)' : 'Auto Connect'}
+          zh={structureLocked ? '依建議連接（請先打開「進階編修」）' : '依建議連接'}
           icon={<Waypoints size={14} />}
           onClick={onAutoConnect}
         />

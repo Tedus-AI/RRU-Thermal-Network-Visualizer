@@ -330,7 +330,7 @@ const METHOD_LEVERS: Record<EdgeMethod, Spec[]> = {
       direction: 'up',
       exponent: null,
       screen: '06',
-      note: 'h and the wetted area both come from Screen 06, not from this edge.',
+      note: 'h and the wetted area both come from 05 散熱表面, not from this edge.',
     },
   ],
   radiation_hA: [
@@ -785,7 +785,7 @@ export function segmentLevers(
         target: null,
         screen: '06',
         destination: { screen: '06', node_id: edge.to },
-        note: 'Also sets the convection area and the Bi behind it — a Screen 06 change, not this edge alone.',
+        note: 'Also sets the convection area and the Bi behind it — a 05 散熱表面 change, not this edge alone.',
       };
     }
 

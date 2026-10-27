@@ -7,9 +7,10 @@
  *
  * `code` is the screen's POSITION in the sidebar, and the numbers closed up
  * when Temperature Distribution was removed: Results Overview, Report Preview
- * and Export Center moved from 10/11/12 to 09/10/11, so the list reads 01–11
- * with no gap. The specification documents keep their original numbers, which
- * is why a `12 §32` citation in this codebase still says 12.
+ * and Export Center moved from 10/11/12 to 09/10/11. The specification
+ * documents keep their original numbers, which is why a `12 §32` citation in
+ * this codebase still says 12. 06 Boundary Conditions merged into 05 and left
+ * its number empty rather than shifting 07–11 again.
  */
 
 import {
@@ -22,7 +23,6 @@ import {
   Layers,
   Network,
   Share2,
-  Thermometer,
   TriangleAlert,
   Upload,
 } from 'lucide-react';
@@ -96,21 +96,14 @@ export const SCREENS: ScreenDef[] = [
   {
     code: '05',
     path: 'thermal-path',
-    label: '熱路徑建立',
-    labelEn: 'Thermal Path Builder',
+    label: '熱網路與邊界',
+    labelEn: 'Network & Boundary',
     icon: Share2,
     group: '熱網路建立',
     implemented: true,
   },
-  {
-    code: '06',
-    path: 'boundary',
-    label: '邊界條件',
-    labelEn: 'Boundary Conditions',
-    icon: Thermometer,
-    group: '熱網路建立',
-    implemented: true,
-  },
+  // 06 Boundary Conditions became the surface half of 05; its number is not
+  // reused, so 07 onwards keep theirs (like 03). `/boundary` redirects to 05.
   {
     code: '07',
     path: 'network',

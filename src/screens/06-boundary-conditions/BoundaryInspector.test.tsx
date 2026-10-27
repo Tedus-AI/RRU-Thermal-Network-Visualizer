@@ -126,7 +126,7 @@ describe('why a filled-in port still says Assumption', () => {
       suppressSsrLayoutWarning.mockRestore();
     }
 
-    expect(html).toContain('Calculated Preview');
+    expect(html).toContain('計算預覽');
     expect(html).not.toContain('pre-solve guess');
   });
 });
@@ -158,7 +158,7 @@ describe('BoundaryInspector simplification', () => {
     expect(html).toContain('Inherited from Screen 01 Scenario Settings');
     expect(html).toContain('Edit Scenario Settings in 01');
     expect(html).not.toContain('Add Boundary Type');
-    expect(html).not.toContain('Calculated Preview');
+    expect(html).not.toContain('計算預覽');
     expect(html).not.toContain('FloTHERM');
   });
 
@@ -184,14 +184,15 @@ describe('BoundaryInspector simplification', () => {
       suppressSsrLayoutWarning.mockRestore();
     }
 
-    expect(html).toContain('Boundary Setup / 邊界條件設定');
-    expect(html).toContain('Required Inputs');
-    expect(html).toContain('Calculated Preview');
+    expect(html).toContain('data-boundary-inspector');
+    expect(html).toContain('data-active-profile');
+    expect(html).toContain('計算預覽');
     expect(html).toContain('0.1323 °C/W');
     // Rendered through the shared `Bi` helper, which shows the Chinese.
-    expect(html).toContain('此邊界端口沒有問題。');
-    expect(html).toContain('Advanced Details');
-    expect(html).toContain('由SCR04/05 邊界幾何同步');
+    // No messages for this surface: nothing is listed (card ④ says the page is clean).
+    expect(html).not.toContain('border-danger-500/40 bg-danger-100');
+    expect(html).toContain('進階資訊');
+    expect(html).toContain('取自04 的元件幾何');
     expect(html).not.toMatch(/<input[^>]+id="bc-param-area_m2"/);
     expect(html).not.toContain('External Mapping');
     expect(html).not.toContain('FloTHERM Surface Alias');
@@ -218,7 +219,7 @@ describe('BoundaryInspector simplification', () => {
     }
 
     expect(html).toMatch(/<input[^>]+id="bc-param-area_m2"/);
-    expect(html).not.toContain('由SCR04/05 邊界幾何同步');
+    expect(html).not.toContain('取自04 的元件幾何');
   });
 
   // A fin stack has no h of its own to state, so the manual description is not
@@ -243,9 +244,9 @@ describe('BoundaryInspector simplification', () => {
       suppressSsrLayoutWarning.mockRestore();
     }
 
-    expect(html).toContain('Described as a fin array');
+    expect(html).toContain('鰭片表面以幾何描述');
     // No toggle: it is not a choice on this surface.
-    expect(html).not.toContain('Describe as a fin array');
+    expect(html).not.toContain('以鰭片幾何描述');
     expect(html).toMatch(/<input[^>]+id="bc-fin-finGap_mm"/);
     expect(html).not.toMatch(/<input[^>]+id="bc-param-h_W_m2K"/);
     expect(html).not.toMatch(/<input[^>]+id="bc-param-area_m2"/);
@@ -286,8 +287,8 @@ describe('BoundaryInspector simplification', () => {
       suppressSsrLayoutWarning.mockRestore();
     }
 
-    expect(flat).toContain('Compute h from the plate');
-    expect(finned).not.toContain('Compute h from the plate');
+    expect(flat).toContain('由平板幾何計算 h');
+    expect(finned).not.toContain('由平板幾何計算 h');
   });
 
   it('replaces the h field with the plate readout once enabled', () => {
@@ -386,7 +387,7 @@ describe('BoundaryInspector simplification', () => {
       suppressSsrLayoutWarning.mockRestore();
     }
 
-    expect(html).toContain('由表面性質同步');
+    expect(html).toContain('取自表面性質');
     expect(html).toContain('0.91');
     expect(html).not.toMatch(/<input[^>]+id="bc-param-emissivity"/);
   });
@@ -428,7 +429,7 @@ describe('BoundaryInspector simplification', () => {
     }
 
     expect(html).toContain('（停用）');
-    expect(html).toContain('SCR01 日照負載為 0 W/m²');
+    expect(html).toContain('01 的日照是 0 W/m²');
     expect(html).not.toContain('value="solar_load"');
     expect(html).not.toContain('bc-param-irradiance_W_m2');
   });
@@ -461,7 +462,7 @@ describe('BoundaryInspector simplification', () => {
     }
 
     expect(html).toContain('理由（選填）');
-    expect(html).toContain('does not block the solver');
+    expect(html).toContain('不會阻擋求解');
     expect(html).not.toContain('required=""');
   });
 });

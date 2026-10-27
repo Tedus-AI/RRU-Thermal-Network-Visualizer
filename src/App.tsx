@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Navigate, Route, Routes, useNavigate, useParams } from 'react-router-dom';
+import { Navigate, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { AppShell } from '@/app/AppShell';
 import { SCREENS, projectPath } from '@/app/navigation';
 import { PlaceholderScreen } from '@/screens/PlaceholderScreen';
@@ -7,7 +7,6 @@ import { EmptyProjectState, ProjectInfoView } from '@/project/ProjectInfoView';
 import { ImportComponentsView } from '@/screens/02-import-components/ImportComponentsView';
 import { ComponentManagerView } from '@/screens/04-component-manager/ComponentManagerView';
 import { ThermalPathBuilderView } from '@/screens/05-thermal-path-builder/ThermalPathBuilderView';
-import { BoundaryConditionsView } from '@/screens/06-boundary-conditions/BoundaryConditionsView';
 import { ThermalNetworkView } from '@/screens/07-thermal-network/ThermalNetworkView';
 import { BottleneckAnalysisView } from '@/screens/08-bottleneck-analysis/BottleneckAnalysisView';
 import { ResultsOverviewView } from '@/screens/10-results-overview/ResultsOverviewView';
@@ -15,10 +14,14 @@ import { ReportPreviewView } from '@/screens/11-report-preview/ReportPreviewView
 import { ExportCenterView } from '@/screens/12-export-center/ExportCenterView';
 import { useProjectStore } from '@/data/projectStore';
 
-/** A path that no longer has a screen, sent to the one that took its job over. */
+/**
+ * A path that no longer has a screen, sent to the one that took its job over.
+ * The query string goes along: an "Edit in" link carries what to select.
+ */
 function RetiredScreen({ to }: { to: string }) {
   const { projectId } = useParams();
-  return <Navigate to={projectId ? projectPath(projectId, to) : '/'} replace />;
+  const { search } = useLocation();
+  return <Navigate to={projectId ? `${projectPath(projectId, to)}${search}` : '/'} replace />;
 }
 
 /** Opens the most recently updated project, or shows the empty state (01 §20). */
@@ -52,7 +55,8 @@ export default function App() {
         />
         <Route path="/project/:projectId/components" element={<ComponentManagerView />} />
         <Route path="/project/:projectId/thermal-path" element={<ThermalPathBuilderView />} />
-        <Route path="/project/:projectId/boundary" element={<BoundaryConditionsView />} />
+        {/* 06 Boundary Conditions is the surface half of 05 now (06 §22). */}
+        <Route path="/project/:projectId/boundary" element={<RetiredScreen to="thermal-path" />} />
         <Route path="/project/:projectId/network" element={<ThermalNetworkView />} />
         <Route path="/project/:projectId/bottleneck" element={<BottleneckAnalysisView />} />
         <Route path="/project/:projectId/results" element={<ResultsOverviewView />} />
