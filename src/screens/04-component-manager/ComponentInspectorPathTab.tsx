@@ -59,7 +59,7 @@ import {
 } from '@/domain/materials';
 import { aiValueOf, formatAiValue, isAiLocked } from '@/domain/aiThermalLink';
 import { tip } from '@/i18n/componentManagerCopy';
-import { AiLockLine, AiOwned, AiUnlockedNote, timNameOf } from './AiLocked';
+import { AI_HEAT_PATH_UNSTATED, AiLockLine, AiOwned, AiUnlockedNote, aiNotStated, timNameOf } from './AiLocked';
 import {
   DerivedField,
   GeometryField,
@@ -358,6 +358,8 @@ export function PathTab({ component, readOnly, onPatch, derived, view, hotCard }
           <AiLockLine {...ai} field="heat_path">
             取自 AI-Thermal 的主散熱路徑（{HEAT_PATH_SHORT[heatPath].name}）
           </AiLockLine>
+        ) : aiNotStated(component, 'heat_path') ? (
+          <p className="mt-1.5 text-[11px] text-ink-400">{AI_HEAT_PATH_UNSTATED}</p>
         ) : (
           <div className="mt-1.5">
             <AiUnlockedNote {...ai} field="heat_path" />

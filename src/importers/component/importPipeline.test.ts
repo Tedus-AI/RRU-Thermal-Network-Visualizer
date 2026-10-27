@@ -189,6 +189,8 @@ describe('enum normalization', () => {
     // LEGACY_HEAT_PATHS. The alias table folds both onto DirectMetal.
     expect(normalizeHeatPath('Module Baseplate')).toBe('DirectMetal');
     expect(normalizeHeatPath('Integrated HSK')).toBe('DirectMetal');
+    // AI-Thermal's 主散熱路徑 and 5G-RRU's 導熱方式.
+    expect(normalizeHeatPath('Metal Face')).toBe('DirectMetal');
     // `None` is top-surface cooling in the Volume Tool, not an absent path.
     expect(normalizeHeatPath('None')).toBe('TopSurface');
   });

@@ -25,7 +25,8 @@
  *                                     surface/body source model, never an Rjc of 0
  *                                     (Screen 07 rejects a zero-resistance edge)
  *   heatDirection / Board_Type      → heat path (Copper Coin → Coin, Thermal Via →
- *                                     Board, IC top → TopSurface; None → inferred)
+ *                                     Board, IC top → TopSurface, Metal Face →
+ *                                     DirectMetal; None → inferred)
  *   heatSourceSize / Height         → package L × W × H
  *   epadSize (or Pad_L/W from it)   → E-PAD, the source face of a board path
  *   pcb_thickness[RF|Digital|PWR]   → board thickness of a board path; else the
@@ -178,6 +179,8 @@ const HEAT_DIRECTIONS: Record<string, HeatPathType> = {
   'Copper Coin': 'Coin',
   'Thermal Via': 'Board',
   'IC top': 'TopSurface',
+  // A baseplate, flange or filter body on the housing (AI-Thermal's 金屬散熱面).
+  'Metal Face': 'DirectMetal',
 };
 
 /** θJC for the face heat leaves through, as AI-Thermal's `sgRjcFromRth` picks it. */

@@ -5,7 +5,8 @@
  * text with an "AI-Thermal" tag, and a ✂ to take it over. Taken over, it is the
  * ordinary editor again with one line under it saying what AI-Thermal has and
  * offering to go back. The table shows the same reference, with the ✂ left to
- * the inspector so a row stays one line.
+ * the inspector so a row stays one line; a field taken over carries a small
+ * corner mark there, or it would look exactly like one AI-Thermal never gave.
  */
 
 import type { ReactNode } from 'react';
@@ -53,12 +54,30 @@ function unlock(component: Component, field: AiField, onPatch: PatchFn) {
   onPatch(component.id, { provenance: unlockAiField(component, field).provenance }, ['provenance']);
 }
 
-function relock(component: Component, field: AiField, onPatch: PatchFn) {
+/** Back to AI-Thermal's values and locked; only a value that moves invalidates. */
+function relock(component: Component, fields: AiField[], onPatch: PatchFn) {
   const link = aiLinkOf(component);
-  const differs = !!link && !sameAiValue(aiValueOf(component, field), link.values[field]);
-  const next = relockAiField(component, field);
-  onPatch(component.id, next, differs ? [...AI_PATCH_FIELDS[field], 'provenance'] : ['provenance']);
+  const touched = new Set<string>(['provenance']);
+  let next = component;
+  for (const field of fields) {
+    if (link && !sameAiValue(aiValueOf(next, field), link.values[field])) {
+      for (const path of AI_PATCH_FIELDS[field]) touched.add(path);
+    }
+    next = relockAiField(next, field);
+  }
+  onPatch(component.id, next, [...touched]);
 }
+
+/** Linked, but AI-Thermal said nothing for this field at the last sync: it is this tool's. */
+export function aiNotStated(component: Component, field: AiField): boolean {
+  const link = aiLinkOf(component);
+  return !!link && !(field in link.values);
+}
+
+/** Why a linked part's heat path is not locked when AI-Thermal left it open. */
+export const AI_HEAT_PATH_UNSTATED =
+  'AI-Thermal 沒有指定主散熱路徑（None 或未選），由本工具決定。' +
+  '要由 AI-Thermal 管：到 AI-Thermal 的 TH/ME 頁選「主散熱路徑」，再按 04 的「從 AI-Thermal 更新」。';
 
 /** A table cell's locked value: plain text and a small AI tag. */
 export function AiCellRef({
@@ -91,6 +110,57 @@ function AiTag() {
     >
       AI
     </span>
+  );
+}
+
+/**
+ * The table's mark on a field that was taken over (`fields` share one cell):
+ * a small corner button saying what AI-Thermal has, that puts it back. The
+ * cell must be `relative`. Amber when the values differ.
+ */
+export function AiCellUnlocked({
+  component,
+  fields,
+  readOnly,
+  onPatch,
+  timName,
+}: {
+  component: Component;
+  fields: AiField[];
+  readOnly: boolean;
+  onPatch: PatchFn;
+  timName?: (id: string) => string;
+}) {
+  const link = aiLinkOf(component);
+  if (!link) return null;
+  const open = fields.filter((field) => field in link.values && !isAiLocked(component, field));
+  if (open.length === 0) return null;
+  const differs = open.some((field) => !sameAiValue(aiValueOf(component, field), link.values[field]));
+  const title = [
+    '已解開：用的是本工具的值。',
+    ...open.map(
+      (field) => `AI-Thermal 的${AI_FIELD_LABEL[field]}是 ${formatAiValue(field, link.values[field], timName)}。`,
+    ),
+    differs ? '點一下改回 AI-Thermal 的值並鎖定。' : '目前與 AI-Thermal 相同，點一下鎖回。',
+  ].join('\n');
+  return (
+    <button
+      type="button"
+      data-ai-unlocked={open.join(' ')}
+      aria-label={`${open.map((field) => AI_FIELD_LABEL[field]).join('、')}已解開，${differs ? '改回 AI-Thermal' : '鎖回'}`}
+      title={title}
+      disabled={readOnly}
+      onClick={(event) => {
+        event.stopPropagation();
+        relock(component, open, onPatch);
+      }}
+      className={`absolute top-0 right-0.5 z-[1] inline-flex items-center gap-px rounded-sm border bg-surface px-0.5 text-[9px] leading-[11px] font-bold hover:bg-accent-50 hover:text-accent-700 disabled:cursor-not-allowed disabled:opacity-60 ${
+        differs ? 'border-warn-500 text-warn-600' : 'border-accent-600/60 text-accent-700'
+      }`}
+    >
+      <Scissors size={8} aria-hidden />
+      AI
+    </button>
   );
 }
 
@@ -182,7 +252,7 @@ export function AiUnlockedNote({
       <button
         type="button"
         disabled={readOnly}
-        onClick={() => relock(component, field, onPatch)}
+        onClick={() => relock(component, [field], onPatch)}
         className="inline-flex items-center gap-0.5 font-semibold text-accent-700 hover:underline disabled:cursor-not-allowed disabled:opacity-40"
       >
         <RotateCcw size={11} aria-hidden />

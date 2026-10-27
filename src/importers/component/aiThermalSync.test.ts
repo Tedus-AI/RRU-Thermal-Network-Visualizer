@@ -454,3 +454,34 @@ describe('TIMs linked to the TIM Management Tool on both sides', () => {
     });
   });
 });
+
+describe("AI-Thermal's Metal Face (金屬散熱面)", () => {
+  const filterName = 'Cavity Filter(SC12L)';
+  const metalFace = () =>
+    db((raw) => {
+      const specs = raw.projects[PROJECT].thermal_specs as Record<string, Record<string, unknown>>;
+      specs['Cavity_Filter(SC12L)'].heatDirection = 'Metal Face';
+    });
+
+  it('locks the filter path that "None" left to this tool', () => {
+    const before = importFrom(db());
+    expect(isAiLocked(by(before, filterName), 'heat_path')).toBe(false);
+    expect(isAiLocked(by(importFrom(metalFace()), filterName), 'heat_path')).toBe(true);
+  });
+
+  it('a filter path confirmed by hand is locked by the next update, its value unchanged', () => {
+    const before = importFrom(db()).map((c) =>
+      c.name === filterName ? { ...c, thermal_spec: { ...c.thermal_spec, heat_path_confirmed: true } } : c,
+    );
+    const next = freshAiThermalComponents(metalFace(), PROJECT, materials, [], 'test').components;
+    const plan = planAiUpdate(before, next, PROJECT, materials);
+    expect(plan.relock.find((entry) => entry.name === filterName)?.fields).toEqual(['heat_path']);
+    expect(plan.updates.find((u) => u.name === filterName)).toBeUndefined();
+
+    const result = applyAiPlan(before, plan, { fields: {}, add: [], disable: [] }, PROJECT, null);
+    const filter = by(result.components, filterName);
+    expect(filter.thermal_spec.heat_path.type).toBe('DirectMetal');
+    expect(isAiLocked(filter, 'heat_path')).toBe(true);
+    expect(result.fields).toEqual([]);
+  });
+});
