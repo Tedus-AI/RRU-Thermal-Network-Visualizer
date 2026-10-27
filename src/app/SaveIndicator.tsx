@@ -505,7 +505,7 @@ function StoragePanel({
       {cacheFull && (
         <div className="flex flex-col gap-1.5 rounded border border-warn-500/40 bg-warn-100/70 px-2 py-1.5 text-[11px] leading-relaxed text-warn-600">
           <p>
-            瀏覽器儲存空間已滿（同網站的工具共用一份空間）。不影響存檔：修改暫存在記憶體並照常寫入
+            瀏覽器儲存空間不夠放目前的專案（同網站的工具共用一份空間）。不影響存檔：修改暫存在記憶體並照常寫入
             SharePoint／資料夾；寫入中請勿關閉分頁。
           </p>
           <span>

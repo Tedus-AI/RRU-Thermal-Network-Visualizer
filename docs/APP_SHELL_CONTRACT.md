@@ -49,6 +49,11 @@ only — not the screen name, which would be a third copy.
 - 清空＝刪掉 `tnv.*`（建置戳記除外）再重新載入，專案從 SharePoint／資料夾讀回來 —— 跟每次部署新版本時一樣。
   儲存位置設定（`tnv-storage-*`）、Microsoft 登入、面板大小（`tnvui.*`）與其他工具的資料都不動。
 - 瀏覽器可能是唯一一份時不給清：SharePoint／資料夾都沒有連上、還有修改沒寫入、有專案不在任何一個連上的位置。
+- **空間不夠時先騰位置**（`persistence.ts` 的 `parked`）：工作副本包含資料夾／SharePoint 裡的**每一個**專案，專案一多就超過配額；
+  只清空沒用，重新載入又會全部讀回來（使用者回報：按了清空還是滿的）。現在瀏覽器拒絕寫入時，先把**其他專案**的工作副本
+  移到記憶體（大的先移；不移正在寫的專案、目前開著的專案 `setPreferredCacheProject`、有修改還沒寫進資料夾的專案），再寫一次。
+  移出去的這次照樣讀得到，下次從資料夾／SharePoint 讀回來。連目前的專案都放不下時，才會出現「空間不夠」的提示。
+  契約測試：`src/data/persistenceQuota.test.ts`、`workspace.test.ts`（五個專案、配額只放得下兩個）。
 
 ### Kept from 00 / 01
 

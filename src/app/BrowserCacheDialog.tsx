@@ -15,6 +15,7 @@ import {
   formatCacheSize,
 } from '@/data/browserCache';
 import { useSaveStatus } from '@/data/saveStatus';
+import { parkedCacheEntries } from '@/data/persistence';
 
 export function BrowserCacheDialog({ onClose }: { onClose: () => void }) {
   const cacheFull = useSaveStatus((s) => Boolean(s.cacheFailure));
@@ -26,6 +27,7 @@ export function BrowserCacheDialog({ onClose }: { onClose: () => void }) {
     }
   }, []);
   const [blocker, setBlocker] = useState<string | null>(() => browserCacheClearBlocker());
+  const parked = useMemo(() => parkedCacheEntries(), []);
   const [clearing, setClearing] = useState(false);
 
   const clear = async () => {
@@ -73,7 +75,15 @@ export function BrowserCacheDialog({ onClose }: { onClose: () => void }) {
         <ul className="list-disc pl-5 text-[12px] text-ink-600">
           <li>保留：儲存位置設定、Microsoft 登入、面板大小與欄寬。</li>
           <li>AI-Thermal、5G-RRU 等同網站工具的資料不會動。</li>
-          {cacheFull && <li>「瀏覽器儲存空間已滿」的提示會在清空後消失。</li>}
+          <li>
+            空間不夠時，瀏覽器只留目前開著的專案；其他專案的工作副本放在記憶體，下次開啟從 SharePoint／資料夾讀。
+            {parked > 0 && `（目前有 ${parked} 份放在記憶體）`}
+          </li>
+          {cacheFull && (
+            <li>
+              「空間不夠」的提示若在清空後還在，表示同網站其他工具佔了大部分空間，或目前的專案本身就超過可用空間；不影響存檔。
+            </li>
+          )}
         </ul>
         {blocker && (
           <p className="rounded-md border border-warn-500/40 bg-warn-100/70 px-2.5 py-2 text-[12px] text-warn-600">

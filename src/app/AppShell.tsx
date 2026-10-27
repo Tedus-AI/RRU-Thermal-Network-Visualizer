@@ -31,6 +31,7 @@ import { useProjectStore } from '@/data/projectStore';
 import { setSyncProject, startFolderAutoSync, useFolderStore } from '@/data/folderStore';
 import { WorkspaceGate } from './WorkspaceGate';
 import { startAutoPersist } from '@/data/autoPersist';
+import { setPreferredCacheProject } from '@/data/persistence';
 import { startUnloadGuard } from '@/data/unloadGuard';
 import { describePrune, startComponentDeletionSync } from '@/data/componentDeletion';
 import { useComponentStore } from '@/data/componentStore';
@@ -102,6 +103,8 @@ export function AppShell() {
   // Only a created project can be mirrored — a new one has no file yet.
   useEffect(() => {
     setSyncProject(isNewProject ? null : projectId);
+    // When the browser runs out of room, the open project is the one kept there.
+    setPreferredCacheProject(projectId);
   }, [projectId, isNewProject]);
 
   // A save found the open project changed on SharePoint by someone else: this

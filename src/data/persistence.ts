@@ -63,7 +63,13 @@ import type {
   ThermalReportConfig,
 } from '@/report/reportTypes';
 import { compressToUTF16, decompressFromUTF16 } from 'lz-string';
-import { UNSYNCED_SP_STORAGE_KEY, UNSYNCED_STORAGE_KEY, clearOwnedStorage } from './buildStamp';
+import {
+  UNSYNCED_SP_STORAGE_KEY,
+  UNSYNCED_STORAGE_KEY,
+  clearOwnedStorage,
+  unsyncedProjectIds,
+  type StorageLike,
+} from './buildStamp';
 import { migrateComponents } from './componentMigration';
 
 const PROJECTS_KEY = 'tnv.projects';
@@ -188,6 +194,83 @@ export interface PersistenceWriteFailure {
 
 /** Values the browser refused to store, held here so nothing is lost. */
 const overlay = new Map<string, string>();
+
+/**
+ * Other projects' working copies, moved out of localStorage to make room.
+ *
+ * The cache holds every project in the folder or on SharePoint, and a folder
+ * of many projects outgrows the browser's quota (shared, on GitHub Pages, with
+ * every tool on the site). Clearing it did not help: the next load read them
+ * all back. Now a refused write first moves other projects' slices here —
+ * largest first, never the project being written, the open project, or one
+ * with edits the folder has not received — and tries again. They stay
+ * readable for the session; the next session reads them back from the folder
+ * or SharePoint, which hold them already. Only when even that is not enough
+ * does the value go to the overlay and the header say the browser is full.
+ */
+const parked = new Map<string, string>();
+
+/** The project open on screen: its working copy is the last thing moved out. */
+let preferredProjectId: string | null = null;
+
+/** Called with the open project, so making room never moves its working copy. */
+export function setPreferredCacheProject(projectId: string | null): void {
+  preferredProjectId = projectId;
+}
+
+/** How many slices are held in memory to make room (for the storage dialog). */
+export function parkedCacheEntries(): number {
+  return parked.size;
+}
+
+function bucketProject(storageKey: string): string | null {
+  const at = storageKey.indexOf(BUCKET_SEPARATOR);
+  return at < 0 ? null : storageKey.slice(at + BUCKET_SEPARATOR.length);
+}
+
+/**
+ * Moves other projects' slices out of localStorage until `storageKey` fits.
+ * Returns whether the value is now stored.
+ */
+function makeRoomFor(storageKey: string, text: string): boolean {
+  const own = bucketProject(storageKey);
+  // The markers themselves may be held in the overlay, so read them the way every read does.
+  const unsynced = new Set(unsyncedProjectIds({ getItem: rawGet } as unknown as StorageLike));
+  const candidates: Array<{ key: string; size: number }> = [];
+  for (let index = 0; index < localStorage.length; index += 1) {
+    const key = localStorage.key(index);
+    if (key == null || !key.startsWith('tnv.') || key === storageKey) continue;
+    const project = bucketProject(key);
+    if (project == null || project === own || project === preferredProjectId || unsynced.has(project)) {
+      continue;
+    }
+    candidates.push({ key, size: key.length + (localStorage.getItem(key) ?? '').length });
+  }
+  candidates.sort((a, b) => b.size - a.size);
+  for (const candidate of candidates) {
+    const value = localStorage.getItem(candidate.key);
+    if (value == null) continue;
+    parked.set(candidate.key, value);
+    localStorage.removeItem(candidate.key);
+    try {
+      localStorage.setItem(storageKey, text);
+      return true;
+    } catch {
+      // Still too big: move the next one.
+    }
+  }
+  return false;
+}
+
+/** `localStorage.setItem`, making room once on a quota refusal. Throws what the browser threw. */
+function storeOrMakeRoom(storageKey: string, text: string): void {
+  try {
+    localStorage.setItem(storageKey, text);
+  } catch (error) {
+    if (!isQuotaError(error) || !makeRoomFor(storageKey, text)) throw error;
+  }
+  parked.delete(storageKey);
+}
 let writeFailure: PersistenceWriteFailure | null = null;
 const failureListeners = new Set<(failure: PersistenceWriteFailure | null) => void>();
 
@@ -234,7 +317,7 @@ function flushOverlay(): void {
   if (!storageAvailable()) return;
   for (const [key, text] of [...overlay]) {
     try {
-      localStorage.setItem(key, text);
+      storeOrMakeRoom(key, text);
       overlay.delete(key);
     } catch {
       return;
@@ -247,7 +330,7 @@ function flushOverlay(): void {
 
 interface Transaction {
   /** What each touched key held before, so a failure can put it back. */
-  originals: Map<string, { stored: string | null; held: string | undefined }>;
+  originals: Map<string, { stored: string | null; held: string | undefined; parked: string | undefined }>;
   /** Write notifications, sent once on commit. */
   notifications: Array<{ key: string; projectId?: string }>;
 }
@@ -259,6 +342,7 @@ function recordOriginal(storageKey: string): void {
   transaction.originals.set(storageKey, {
     stored: storageAvailable() ? localStorage.getItem(storageKey) : null,
     held: overlay.get(storageKey),
+    parked: parked.get(storageKey),
   });
 }
 
@@ -292,6 +376,8 @@ export function withPersistenceTransaction<T>(body: () => T): T {
     for (const [key, original] of current.originals) {
       if (original.held !== undefined) overlay.set(key, original.held);
       else overlay.delete(key);
+      if (original.parked !== undefined) parked.set(key, original.parked);
+      else parked.delete(key);
       if (!storageAvailable()) continue;
       try {
         if (original.stored == null) localStorage.removeItem(key);
@@ -309,7 +395,7 @@ export function withPersistenceTransaction<T>(body: () => T): T {
 // --- raw access ------------------------------------------------------------
 
 function rawGet(storageKey: string): string | null {
-  const held = overlay.get(storageKey);
+  const held = overlay.get(storageKey) ?? parked.get(storageKey);
   if (held !== undefined) return held;
   if (!storageAvailable()) return null;
   return localStorage.getItem(storageKey);
@@ -322,7 +408,7 @@ function rawSet(storageKey: string, text: string): void {
     return;
   }
   try {
-    localStorage.setItem(storageKey, text);
+    storeOrMakeRoom(storageKey, text);
     overlay.delete(storageKey);
     if (overlay.size > 0) flushOverlay();
     else if (writeFailure) publishFailure(null);
@@ -340,6 +426,7 @@ function rawSet(storageKey: string, text: string): void {
 function rawRemove(storageKey: string): void {
   recordOriginal(storageKey);
   overlay.delete(storageKey);
+  parked.delete(storageKey);
   if (storageAvailable()) localStorage.removeItem(storageKey);
   if (overlay.size === 0 && writeFailure) publishFailure(null);
 }
@@ -389,6 +476,7 @@ function guardCorrupt(storageKey: string): void {
 /** Explicit recovery only; callers may export the raw issue before discarding. */
 export function discardCorruptCollection(key: string): void {
   overlay.delete(key);
+  parked.delete(key);
   if (storageAvailable()) localStorage.removeItem(key);
   recoveryIssues.delete(key);
 }
@@ -513,6 +601,7 @@ function readMap(key: string, projectId: string): Record<string, unknown> {
  */
 export function clearWorkingCache(options: { keepSyncState?: boolean } = {}): string[] {
   overlay.clear();
+  parked.clear();
   recoveryIssues.clear();
   if (writeFailure) publishFailure(null);
   if (!storageAvailable()) return [];
