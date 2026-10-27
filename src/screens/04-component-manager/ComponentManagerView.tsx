@@ -204,6 +204,7 @@ export function ComponentManagerView() {
     const done = [
       result.updated > 0 ? `更新 ${result.updated} 顆` : null,
       result.linked > 0 ? `連結 ${result.linked} 顆` : null,
+      result.relocked > 0 ? `鎖定 ${result.relocked} 顆與 AI-Thermal 相同的欄位` : null,
       result.added > 0 ? `加入 ${result.added} 顆` : null,
       result.removed > 0 ? `${result.removed} 顆改由本工具維護` : null,
     ].filter(Boolean);

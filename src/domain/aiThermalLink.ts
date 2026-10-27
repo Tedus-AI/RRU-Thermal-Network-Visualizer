@@ -30,6 +30,7 @@
 
 import { HEAT_PATH_LABELS, heatPathPatch, type Component, type HeatPathType, type LimitType } from './component';
 import { withValue } from './sourcedValue';
+import type { MaterialDefaults } from './materials';
 
 /** The fields AI-Thermal owns, in the order the update dialog lists them. */
 export const AI_FIELDS = [
@@ -170,6 +171,22 @@ function supplied(component: Component, field: AiField): boolean {
 
 export function sameAiValue(a: AiValue | undefined, b: AiValue | undefined): boolean {
   return JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+}
+
+/**
+ * The same, judged by what the solve reads: a TIM whose bond line is stated as
+ * its material's own default is the TIM inheriting it. An import that did not
+ * find the material stated the gap outright; one that did leaves it to the
+ * material — the same 0.5 mm, which a plain comparison calls a difference.
+ */
+function sameFor(field: AiField, a: AiValue | undefined, b: AiValue | undefined, materials?: MaterialDefaults): boolean {
+  if (field !== 'tim' || !materials) return sameAiValue(a, b);
+  const effective = (value: AiValue | undefined) => {
+    const v = (value ?? { id: null, blt: null }) as { id: string | null; blt: number | null };
+    const own = v.id ? (materials.tim.find((m) => m.id === v.id)?.blt_mm.value ?? null) : null;
+    return { id: v.id, blt: v.blt ?? own };
+  };
+  return JSON.stringify(effective(a)) === JSON.stringify(effective(b));
 }
 
 /** The link for a component just built from an AI-Thermal record. */
@@ -425,14 +442,14 @@ export interface AiComponentUpdate {
  * differs may have moved on either side: it starts unticked. A blank here that
  * AI-Thermal now fills starts ticked — filling it overwrites nothing.
  */
-export function aiChangesFor(current: Component, fresh: Component): AiFieldChange[] {
+export function aiChangesFor(current: Component, fresh: Component, materials?: MaterialDefaults): AiFieldChange[] {
   const link = aiLinkOf(current);
   const changes: AiFieldChange[] = [];
   for (const field of AI_FIELDS) {
     if (!supplied(fresh, field)) continue;
     const incoming = aiValueOf(fresh, field);
     const now = aiValueOf(current, field);
-    if (sameAiValue(now, incoming)) continue;
+    if (sameFor(field, now, incoming, materials)) continue;
     if (!link) {
       const filled = supplied(current, field);
       changes.push({
@@ -460,7 +477,7 @@ export function aiChangesFor(current: Component, fresh: Component): AiFieldChang
       note = '本工具已解開並改過';
     } else if (!had && supplied(current, field)) {
       pick = false;
-      note = '本工具填過（AI-Thermal 原本沒有）';
+      note = '本工具填過（匯入時沒有帶進來）';
     }
     changes.push({ field, current: now, incoming, pick, note });
   }
@@ -530,6 +547,12 @@ export interface AiUpdatePlan {
   same: number;
   /** Not linked yet and identical to AI-Thermal: linked, and locked, as they are. */
   link: Array<{ componentId: string; name: string; fresh: Component }>;
+  /**
+   * Linked, nothing differs, but AI-Thermal now states fields the link does not
+   * hold — a TIM that did not match at import and was then picked by hand to
+   * the very material AI-Thermal names. Applying locks them; nothing changes value.
+   */
+  relock: Array<{ componentId: string; name: string; fresh: Component; fields: AiField[] }>;
   /** Components this update links for the first time (in `updates` and `link`). */
   firstLinks: number;
 }
@@ -547,6 +570,8 @@ export function planAiUpdate(
   components: readonly Component[],
   fresh: readonly Component[],
   projectId: string,
+  /** The project's materials, so a TIM's inherited bond line compares as the value it is. */
+  materials?: MaterialDefaults,
 ): AiUpdatePlan {
   const linked = components.filter((component) => aiProjectOf(component) === projectId);
   const taken = new Set<number>();
@@ -575,6 +600,7 @@ export function planAiUpdate(
   const updates: AiComponentUpdate[] = [];
   const removed: Component[] = [];
   const link: AiUpdatePlan['link'] = [];
+  const relock: AiUpdatePlan['relock'] = [];
   let same = 0;
   let firstLinks = 0;
   for (const component of linked) {
@@ -585,7 +611,7 @@ export function planAiUpdate(
     }
     const first = isAiFirstLink(component);
     if (first) firstLinks++;
-    const changes = aiChangesFor(component, incoming);
+    const changes = aiChangesFor(component, incoming, materials);
     if (changes.length > 0) {
       updates.push({
         componentId: component.id,
@@ -595,7 +621,11 @@ export function planAiUpdate(
         fresh: incoming,
       });
     } else if (first) link.push({ componentId: component.id, name: component.name, fresh: incoming });
-    else same++;
+    else {
+      const fields = newlyStated(component, incoming, materials);
+      if (fields.length > 0) relock.push({ componentId: component.id, name: component.name, fresh: incoming, fields });
+      else same++;
+    }
   }
 
   const here = new Set(components.map((component) => nameKey(component.name)));
@@ -606,7 +636,21 @@ export function planAiUpdate(
     if (here.has(nameKey(component.name))) sameName.push(component.name);
     else added.push(component);
   });
-  return { updates, added, sameName, removed, same, link, firstLinks };
+  return { updates, added, sameName, removed, same, link, relock, firstLinks };
+}
+
+/** Fields AI-Thermal states now, equal to this tool's, that the link does not hold yet (and nobody took over). */
+function newlyStated(current: Component, fresh: Component, materials?: MaterialDefaults): AiField[] {
+  const link = aiLinkOf(current);
+  if (!link) return [];
+  return AI_FIELDS.filter(
+    (field) =>
+      AI_LOCKABLE.has(field) &&
+      supplied(fresh, field) &&
+      !(field in link.values) &&
+      !(link.unlocked ?? []).includes(field) &&
+      sameFor(field, aiValueOf(current, field), aiValueOf(fresh, field), materials),
+  );
 }
 
 /** How many changes an update would make as offered (the ticked ones) — what the reminder counts. */
@@ -645,9 +689,12 @@ export function applyAiPlan(
   removed: number;
   /** Linked for the first time. */
   linked: number;
+  /** Linked components that gained locked fields with no value changing. */
+  relocked: number;
 } {
   const byId = new Map(plan.updates.map((update) => [update.componentId, update]));
   const linking = new Map(plan.link.map((entry) => [entry.componentId, entry.fresh]));
+  const relocking = new Map(plan.relock.map((entry) => [entry.componentId, entry]));
   const removedIds = new Set(plan.removed.map((component) => component.id));
   const touched = new Set<string>();
   let updated = 0;
@@ -661,6 +708,9 @@ export function applyAiPlan(
     }
     const fresh = linking.get(component.id);
     if (fresh) return applyAiChanges(component, fresh, [], projectId, savedAt);
+    // Written in AI-Thermal's form — the same value the solve reads, so nothing is invalidated.
+    const relock = relocking.get(component.id);
+    if (relock) return applyAiChanges(component, relock.fresh, relock.fields, projectId, savedAt);
     if (removedIds.has(component.id)) {
       const kept = unlinkAi(component);
       if (!choice.disable.includes(component.id)) return kept;
@@ -687,5 +737,6 @@ export function applyAiPlan(
     added: adding.length,
     removed: plan.removed.length,
     linked: plan.firstLinks,
+    relocked: plan.relock.length,
   };
 }
