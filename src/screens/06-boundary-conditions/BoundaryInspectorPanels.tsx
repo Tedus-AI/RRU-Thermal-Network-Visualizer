@@ -8,6 +8,7 @@
  */
 
 import { CheckCircle2, Thermometer, TriangleAlert } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 import { Badge, Button, NumberInput, Select } from '@/ui/primitives';
 import { Bi, FieldLabel } from '@/ui/FieldLabel';
@@ -31,15 +32,23 @@ import {
 import {
   FIN_ASPECT_RATIO_BAND,
   FIN_TECHNOLOGIES,
+  FIN_TECHNOLOGY_DEFAULT_DRAFT_DEG,
   FIN_TECHNOLOGY_LABELS,
+  defaultFinConductivity,
   finAspectRatioVerdict,
   type FinArrayResult,
   type FinTechnology,
 } from '@/thermal/boundary/finArray';
+import { projectFinTechnology, singleFinSurfacePort } from '@/thermal/boundary/finSpec';
+import { useBoundaryStore } from '@/data/boundaryStore';
+import { useNetworkStore } from '@/data/networkStore';
+import { useProjectStore } from '@/data/projectStore';
+import { projectPath } from '@/app/navigation';
 
 import { T06 } from './tooltips';
 import { PORT_STATUS_LABELS, formatNumber, formatRth, type PortStatus } from './boundaryViewModel';
 import { FIN_GEOMETRY_FIELDS } from './boundaryInspectorFields';
+import { ProjectFinField, RruDesignCompare } from './ProjectFinFields';
 
 export function Row({
   label,
@@ -427,26 +436,56 @@ export function AmbientReferenceSummary({
  * engineer check the mode against whatever they were copying from before.
  */
 export function FinGeometryPanel({
+  port,
   profile,
   result,
   readOnly,
   onPatch,
   onTechnologyChange,
 }: {
+  port: BoundaryPort;
   profile: BoundaryConditionProfile;
   result: FinArrayResult | null;
   readOnly: boolean;
   onPatch: (key: string, value: number | string | null) => void;
   onTechnologyChange: (technology: FinTechnology) => void;
 }) {
+  const navigate = useNavigate();
+  const ports = useBoundaryStore((s) => s.ports);
+  const network = useNetworkStore((s) => s.network);
+  const draft = useProjectStore((s) => s.draft);
   const technology: FinTechnology =
     profile.parameters[FIN_GEOMETRY_KEYS.technology] === 'DieCasting' ? 'DieCasting' : 'Embedded';
   const verdict = finAspectRatioVerdict(result?.aspect_ratio);
   const number = (value: number | null | undefined, digits: number) =>
     value == null ? 'N/A' : value.toFixed(digits);
 
+  // The fins are the project's when this is the design's one fin surface
+  // (`finSpec.ts`); two heat sinks keep theirs per scenario.
+  const projectFins = draft != null && singleFinSurfacePort(ports, network)?.id === port.id;
+  const finSurfaces = network
+    ? ports.filter((entry) => network.nodes[entry.connected_node_id]?.type === 'fin_surface').length
+    : 0;
+  const projectTechnology =
+    projectFins && draft ? projectFinTechnology(draft.project_context.cooling_architecture) : null;
+  const baseK = draft?.materials.hsk_base_k_W_mK?.value ?? null;
+  const toInfo = () => draft && navigate(projectPath(draft.project_id, 'info'));
+
   return (
-    <div className="mb-2 rounded-md border border-line bg-surface p-2.5">
+    <div className="mb-2 rounded-md border border-line bg-surface p-2.5" data-fin-panel>
+      {projectFins ? (
+        <p className="mb-2 text-[10.5px] leading-relaxed text-ink-500" data-fin-shared>
+          散熱器只有一組，鰭片是<b className="text-ink-700">專案共用</b>的：每個情境都用這一組，改這裡＝所有情境一起改。
+          連結 AI-Thermal 時，5G-RRU 有的值會鎖定，✂ 可以解開自己填。
+        </p>
+      ) : (
+        finSurfaces > 1 && (
+          <p className="mb-2 text-[10.5px] leading-relaxed text-ink-500" data-fin-per-scenario>
+            這個設計有 {finSurfaces} 組散熱器，鰭片各自在這裡填、每個情境分開存；5G-RRU 只設計一組散熱器，不連動。
+          </p>
+        )
+      )}
+
       <div className="mb-2">
         <FieldLabel
           label="Fin Technology"
@@ -454,19 +493,47 @@ export function FinGeometryPanel({
           htmlFor="bc-fin-technology"
           tooltip="決定鰭片導熱係數與拔模角的預設值。"
         />
-        <Select
-          id="bc-fin-technology"
-          className="mt-1 h-8 !text-[12px]"
-          value={technology}
-          disabled={readOnly}
-          items={FIN_TECHNOLOGIES.map((value) => ({
-            value,
-            label: `${FIN_TECHNOLOGY_LABELS[value].en} / ${FIN_TECHNOLOGY_LABELS[value].zh}`,
-          }))}
-          onChange={(event) =>
-            onTechnologyChange(event.target.value === 'DieCasting' ? 'DieCasting' : 'Embedded')
-          }
-        />
+        {projectTechnology ? (
+          <div
+            id="bc-fin-technology"
+            className="mt-1 flex h-8 items-center gap-1.5 rounded-md border border-line bg-surface px-2 text-[12px]"
+            title="鰭片製程取自 01 專案資訊 → 冷卻元素（Embedded Fin／Die-casting Fin）。到 01 修改。"
+            data-fin-tech-ref
+          >
+            <span className="flex-1 text-ink-900">
+              {FIN_TECHNOLOGY_LABELS[projectTechnology].en} / {FIN_TECHNOLOGY_LABELS[projectTechnology].zh}
+            </span>
+            <button
+              type="button"
+              className="shrink-0 text-[10.5px] font-semibold text-accent-700 hover:underline"
+              onClick={toInfo}
+            >
+              取自 01
+            </button>
+          </div>
+        ) : (
+          <>
+            <Select
+              id="bc-fin-technology"
+              className="mt-1 h-8 !text-[12px]"
+              value={technology}
+              disabled={readOnly}
+              items={FIN_TECHNOLOGIES.map((value) => ({
+                value,
+                label: `${FIN_TECHNOLOGY_LABELS[value].en} / ${FIN_TECHNOLOGY_LABELS[value].zh}`,
+              }))}
+              onChange={(event) =>
+                onTechnologyChange(event.target.value === 'DieCasting' ? 'DieCasting' : 'Embedded')
+              }
+            />
+            {projectFins && (
+              <p className="mt-1 text-[10px] leading-relaxed text-ink-400">
+                01 的冷卻元素沒有指定一種鰭片製程，這裡選的只用在這個情境。在 01 勾 Embedded Fin 或 Die-casting
+                Fin（只勾一個），所有情境就會一起用。
+              </p>
+            )}
+          </>
+        )}
       </div>
 
       <div className="grid grid-cols-2 gap-2">
@@ -474,6 +541,38 @@ export function FinGeometryPanel({
           (field) => !field.dieCastingOnly || technology === 'DieCasting',
         ).map((field) => {
           const value = profile.parameters[field.key];
+          const required =
+            field.key !== FIN_GEOMETRY_KEYS.countOverride &&
+            field.key !== FIN_GEOMETRY_KEYS.draftAngle &&
+            field.key !== FIN_GEOMETRY_KEYS.processEfficiency &&
+            field.key !== FIN_GEOMETRY_KEYS.conductivity;
+          const placeholder =
+            field.key === FIN_GEOMETRY_KEYS.countOverride
+              ? result != null
+                ? `${result.fin_count}（自動）`
+                : '自動'
+              : field.key === FIN_GEOMETRY_KEYS.processEfficiency
+                ? '1.00'
+                : field.key === FIN_GEOMETRY_KEYS.conductivity
+                  ? `${defaultFinConductivity(technology, baseK)}（製程預設）`
+                  : field.key === FIN_GEOMETRY_KEYS.draftAngle
+                    ? `${FIN_TECHNOLOGY_DEFAULT_DRAFT_DEG.DieCasting}（預設）`
+                    : undefined;
+          if (projectFins) {
+            return (
+              <ProjectFinField
+                key={field.key}
+                field={field}
+                profile={profile}
+                placeholder={placeholder}
+                readOnly={readOnly}
+                required={required}
+                onClearProfile={(key) =>
+                  draft && useBoundaryStore.getState().clearProjectFin(draft.project_id, [key])
+                }
+              />
+            );
+          }
           return (
             <div key={field.key}>
               <FieldLabel
@@ -482,25 +581,13 @@ export function FinGeometryPanel({
                 unit={field.unit || undefined}
                 htmlFor={`bc-fin-${field.key}`}
                 tooltip={field.tip}
-                required={
-                  field.key !== FIN_GEOMETRY_KEYS.countOverride &&
-                  field.key !== FIN_GEOMETRY_KEYS.draftAngle &&
-                  field.key !== FIN_GEOMETRY_KEYS.processEfficiency
-                }
+                required={required}
               />
               <NumberInput
                 id={`bc-fin-${field.key}`}
                 className="mt-1 h-8 !text-[12px]"
                 step="any"
-                placeholder={
-                  field.key === FIN_GEOMETRY_KEYS.countOverride
-                    ? result != null
-                      ? String(result.fin_count)
-                      : 'auto'
-                    : field.key === FIN_GEOMETRY_KEYS.processEfficiency
-                      ? '1.00'
-                      : undefined
-                }
+                placeholder={placeholder}
                 value={typeof value === 'number' ? value : ''}
                 disabled={readOnly}
                 onChange={(event) =>
@@ -590,6 +677,7 @@ export function FinGeometryPanel({
           </p>
         )}
       </div>
+      {projectFins && <RruDesignCompare result={result} />}
     </div>
   );
 }

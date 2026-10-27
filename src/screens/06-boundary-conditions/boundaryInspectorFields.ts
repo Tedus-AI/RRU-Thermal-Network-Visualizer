@@ -46,7 +46,7 @@ export const FIN_GEOMETRY_FIELDS: Array<{
     label: 'Base L',
     zh: '底座長',
     unit: 'mm',
-    tip: '散熱器底座沿鰭片長度方向的尺寸；切換到鰭片模式時會由 SCR01 帶入。',
+    tip: '散熱器底座沿鰭片長度方向的尺寸，取自 01 的散熱器底座。',
   },
   {
     key: FIN_GEOMETRY_KEYS.baseWidth,
@@ -64,10 +64,10 @@ export const FIN_GEOMETRY_FIELDS: Array<{
   },
   {
     key: FIN_GEOMETRY_KEYS.gap,
-    label: 'Channel Gap',
-    zh: '通道間距',
+    label: 'Air Gap',
+    zh: '鰭片間隙 Air gap',
     unit: 'mm',
-    tip: '相鄰兩鰭片之間的淨間距。h 的對流項與輻射項都由它決定。',
+    tip: '相鄰兩片鰭片之間的空氣間隙（淨間距，不是 fin pitch；pitch＝厚度＋air gap）。h 的對流項與輻射項都由它決定。',
   },
   {
     key: FIN_GEOMETRY_KEYS.thickness,
@@ -81,7 +81,7 @@ export const FIN_GEOMETRY_FIELDS: Array<{
     label: 'Fin k',
     zh: '鰭片導熱係數',
     unit: 'W/mK',
-    tip: '鰭片本身的導熱係數，決定鰭片效率。預設由製程帶入：埋入/擠型純鋁 200；壓鑄鰭片與基座一體成形，取 01 的散熱器基座材料 k（ADC12 為 96）。',
+    tip: '鰭片本身的導熱係數，決定鰭片效率。連結 AI-Thermal 時取 5G-RRU 的 K_FIN（出廠預設 Embedded 200、Die-casting 150）；沒有連結時留白＝製程預設：埋入/擠型純鋁 200；壓鑄鰭片與基座一體成形，取 01 的散熱器基座材料 k（ADC12 為 96）。',
   },
   {
     key: FIN_GEOMETRY_KEYS.draftAngle,

@@ -13,7 +13,7 @@
  */
 
 import { BUILTIN_TIM_IDS } from '@/domain/materials';
-import type { AiMatField } from '@/domain/projectAiLink';
+import type { AiMatField, RruDesign } from '@/domain/projectAiLink';
 
 type Raw = Record<string, unknown>;
 
@@ -111,6 +111,94 @@ export function rruFin(project: Raw): 'Die-casting Fin' | 'Embedded Fin' | null 
   if (/die-?casting/i.test(value)) return 'Die-casting Fin';
   if (/embedded/i.test(value)) return 'Embedded Fin';
   return null;
+}
+
+/**
+ * 5G-RRU's K_FIN when no custom value is ticked (its `FIN_PROCESS_DEFAULTS`;
+ * Die-casting went from 160 to 150 in 2026-10). Only used for a project 5G-RRU
+ * has not saved since it started writing `rru_result`, which carries the K_FIN
+ * it actually used. Keep in step with 5G-RRU's index.html.
+ */
+export const RRU_FIN_K_DEFAULT = { Embedded: 200, 'Die-casting': 150 } as const;
+
+function resultOf(project: Raw): Raw | null {
+  const r = project.rru_result;
+  return r && typeof r === 'object' && !Array.isArray(r) ? (r as Raw) : null;
+}
+
+const stamp = (at: unknown) => (typeof at === 'string' && at.length >= 10 ? `，${at.slice(0, 10)} 存檔` : '');
+
+/**
+ * The heat sink's fin array as 5G-RRU has it.
+ *
+ * The geometry it is given (air gap, thickness, draft) is in the parameter
+ * console. The geometry it works out (fin height, fin count) only exists in
+ * the design result it writes on save, and only a design it could complete
+ * (`ok`) — a fin height from a design that failed its own rules is no design.
+ * K_FIN: what that design used, else the console's custom value, else 5G-RRU's
+ * default for the process (the user asked for it to be linked by default).
+ */
+export function rruFinValues(project: Raw): RruValue[] {
+  const gp = globalParamsOf(project);
+  const result = resultOf(project);
+  const fin = rruFin(project);
+  const out: RruValue[] = [];
+  const gap = positive(gp.Gap);
+  if (gap != null) out.push({ field: 'hsk_fin_gap_mm', value: gap, from: '鰭片 Air Gap（Gap）' });
+  const t = positive(gp.Fin_t);
+  if (t != null) out.push({ field: 'hsk_fin_thickness_mm', value: t, from: '鰭片厚度 Fin_t' });
+  if (fin === 'Die-casting Fin') {
+    const draft = positive(gp.Draft_Angle);
+    if (draft != null) out.push({ field: 'hsk_fin_draft_deg', value: draft, from: '拔模角 Draft_Angle' });
+  }
+  if (result && result.ok === true) {
+    const height = positive(result.fin_height);
+    const count = positive(result.fin_count);
+    if (height != null) {
+      out.push({ field: 'hsk_fin_height_mm', value: height, from: `設計結果：鰭片高度${stamp(result.at)}` });
+    }
+    if (count != null && Number.isInteger(count)) {
+      out.push({ field: 'hsk_fin_count', value: count, from: `設計結果：鰭片數${stamp(result.at)}` });
+    }
+  }
+  const resultK = result ? positive(result.k_fin) : null;
+  const process = fin === 'Die-casting Fin' ? 'dc' : fin === 'Embedded Fin' ? 'emb' : null;
+  const customK = process && gp[`fin_custom_${process}`] === true ? positive(gp[`fin_kfin_${process}`]) : null;
+  if (resultK != null) {
+    out.push({ field: 'hsk_fin_k_W_mK', value: resultK, from: `設計結果：K_FIN${stamp(result!.at)}` });
+  } else if (customK != null) {
+    out.push({ field: 'hsk_fin_k_W_mK', value: customK, from: 'K_FIN（自訂）' });
+  } else if (fin) {
+    const value = fin === 'Die-casting Fin' ? RRU_FIN_K_DEFAULT['Die-casting'] : RRU_FIN_K_DEFAULT.Embedded;
+    out.push({ field: 'hsk_fin_k_W_mK', value, from: `K_FIN（預設 ${value}）` });
+  }
+  return out;
+}
+
+/** 5G-RRU's saved design result, as the heat-sink surface compares with it. Null when it has saved none. */
+export function rruDesignOf(project: Raw): RruDesign | null {
+  const r = resultOf(project);
+  if (!r || typeof r.at !== 'string' || typeof r.ok !== 'boolean') return null;
+  const design: RruDesign = { at: r.at, ok: r.ok };
+  if (typeof r.why === 'string' && r.why) design.why = r.why;
+  if (r.fin_tech === 'Embedded' || r.fin_tech === 'Die-casting') design.fin_tech = r.fin_tech;
+  const pairs: [keyof RruDesign, string][] = [
+    ['fin_height_mm', 'fin_height'],
+    ['fin_count', 'fin_count'],
+    ['h_W_m2K', 'h'],
+    ['h_conv_W_m2K', 'h_conv'],
+    ['h_rad_W_m2K', 'h_rad'],
+    ['eta_fin', 'eta_fin'],
+    ['eta_process', 'eta_process'],
+    ['k_fin_W_mK', 'k_fin'],
+    ['heat_W', 'heat_W'],
+    ['volume_L', 'volume_L'],
+  ];
+  for (const [to, from] of pairs) {
+    const value = num(r[from]);
+    if (value != null) (design as unknown as Record<string, number>)[to] = value;
+  }
+  return design;
 }
 
 export { positive as rruPositive };

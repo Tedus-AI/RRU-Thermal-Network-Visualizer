@@ -11,6 +11,10 @@
  *                                   → the Baseline scenario's ambient
  *   5G-RRU fin_tech_selector_v2     → the fin process among the cooling elements
  *   5G-RRU coin / solder / via / base → the material constants (`aiThermalMaterials.ts`)
+ *   5G-RRU fin array: air gap, thickness, draft from its console; fin height
+ *     and count from its saved design result (`rru_result`); K_FIN from that
+ *     design, else its custom value, else its process default → the heat-sink
+ *     surface's fins (`hsk_fin_*`)
  *   TIM, per 01 material: AI-Thermal's TIM model library first — a material
  *     linked to the TIM Management Tool by the model linked to the same entry
  *     (its BLT only: the k is the TIM Management Tool's), any other by name (k
@@ -28,6 +32,8 @@ import {
   RRU_TIM_FALLBACKS,
   rruAmbient,
   rruFin,
+  rruDesignOf,
+  rruFinValues,
   rruMaterialValues,
   rruPositive,
 } from './aiThermalMaterials';
@@ -76,6 +82,7 @@ export function projectAiFresh(db: AiThermalDb, projectId: string, materials: Ma
   if (fin) values[AI_KEY.fin] = rru('鰭片製程', fin);
 
   for (const entry of rruMaterialValues(project)) values[matKey(entry.field)] = rru(entry.from, entry.value);
+  for (const entry of rruFinValues(project)) values[matKey(entry.field)] = rru(entry.from, entry.value);
 
   const library = Object.values(db.tim_library).filter(isObj);
   const gp = globalParamsOf(project);
@@ -106,5 +113,6 @@ export function projectAiFresh(db: AiThermalDb, projectId: string, materials: Ma
     saved_at: text(meta.timestamp) || null,
     values,
     rru_ambient_C: rruT,
+    rru_design: rruDesignOf(project),
   };
 }

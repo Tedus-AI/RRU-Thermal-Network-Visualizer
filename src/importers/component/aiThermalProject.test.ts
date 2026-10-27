@@ -148,6 +148,111 @@ describe('what AI-Thermal says about a project', () => {
   });
 });
 
+describe('the heat sink fins from 5G-RRU', () => {
+  // StarKcore-12L as 5G-RRU designs it (2026-10): Embedded, air gap 11.6, fin
+  // 1.2 thick, 22 fins 59.646 mm tall, h 8.544 (6.144 + 2.4), η 0.922.
+  const RESULT = {
+    at: '2026-10-20T08:00:00.000Z',
+    version: 1,
+    ok: true,
+    fin_tech: 'Embedded',
+    L_hsk: 339,
+    W_hsk: 272,
+    fin_height: 59.646,
+    fin_count: 22,
+    fin_t: 1.2,
+    gap: 11.6,
+    h: 8.544,
+    h_conv: 6.144,
+    h_rad: 2.4,
+    eta_fin: 0.922,
+    eta_process: 1.06,
+    k_fin: 200,
+    coef_custom: false,
+    heat_W: 353.716,
+    margin: 1.1,
+    T_amb: 45,
+    volume_L: 11.2,
+  };
+  const withFins = (edit?: (project: Record<string, unknown>) => void) =>
+    projectAiFresh(
+      db((p) => {
+        Object.assign(p.global_params as object, { Gap: 11.6, Fin_t: 1.2, Draft_Angle: 1.25 });
+        edit?.(p);
+      }),
+      ID,
+      defaultMaterials(),
+    )!;
+  const v = (fresh: ReturnType<typeof withFins>, field: string) => fresh.values[matKey(field as never)]?.value;
+
+  it('takes the air gap and thickness from the console, and K_FIN on its process default', () => {
+    const fresh = withFins();
+    expect(v(fresh, 'hsk_fin_gap_mm')).toBe(11.6);
+    expect(v(fresh, 'hsk_fin_thickness_mm')).toBe(1.2);
+    // Embedded: no draft. Never saved a design: no height or count.
+    expect(v(fresh, 'hsk_fin_draft_deg')).toBeUndefined();
+    expect(v(fresh, 'hsk_fin_height_mm')).toBeUndefined();
+    expect(v(fresh, 'hsk_fin_count')).toBeUndefined();
+    expect(fresh.values[matKey('hsk_fin_k_W_mK')]).toMatchObject({ value: 200, source: '5G-RRU', from: 'K_FIN（預設 200）' });
+    expect(fresh.rru_design).toBeNull();
+  });
+
+  it('takes the fin height, count and K_FIN of the design 5G-RRU saved', () => {
+    const fresh = withFins((p) => (p.rru_result = { ...RESULT }));
+    expect(v(fresh, 'hsk_fin_height_mm')).toBe(59.646);
+    expect(v(fresh, 'hsk_fin_count')).toBe(22);
+    expect(fresh.values[matKey('hsk_fin_height_mm')].from).toBe('設計結果：鰭片高度，2026-10-20 存檔');
+    expect(fresh.values[matKey('hsk_fin_k_W_mK')].from).toContain('設計結果');
+    expect(fresh.rru_design).toMatchObject({
+      ok: true,
+      fin_tech: 'Embedded',
+      fin_height_mm: 59.646,
+      fin_count: 22,
+      h_conv_W_m2K: 6.144,
+      h_rad_W_m2K: 2.4,
+      eta_fin: 0.922,
+      eta_process: 1.06,
+      k_fin_W_mK: 200,
+      heat_W: 353.716,
+    });
+    // The process factor is never linked.
+    expect(fresh.values[matKey('hsk_fin_process_factor' as never)]).toBeUndefined();
+  });
+
+  it('a design 5G-RRU could not complete gives no height or count', () => {
+    const fresh = withFins((p) => (p.rru_result = { at: RESULT.at, ok: false, why: 'DRC 不通過', fin_height: 120, fin_count: 22 }));
+    expect(v(fresh, 'hsk_fin_height_mm')).toBeUndefined();
+    expect(v(fresh, 'hsk_fin_count')).toBeUndefined();
+    expect(fresh.rru_design).toMatchObject({ ok: false, why: 'DRC 不通過' });
+  });
+
+  it('Die-casting: the draft, and K_FIN custom else 150', () => {
+    const dc = (edit?: (gp: Record<string, unknown>) => void) =>
+      withFins((p) => {
+        const gp = p.global_params as Record<string, unknown>;
+        gp.fin_tech_selector_v2 = 'Die-casting Fin (0.90)';
+        edit?.(gp);
+      });
+    expect(v(dc(), 'hsk_fin_draft_deg')).toBe(1.25);
+    expect(v(dc(), 'hsk_fin_k_W_mK')).toBe(150);
+    expect(v(dc((gp) => Object.assign(gp, { fin_custom_dc: true, fin_kfin_dc: 140 })), 'hsk_fin_k_W_mK')).toBe(140);
+    // A custom value not ticked is not in force.
+    expect(v(dc((gp) => Object.assign(gp, { fin_custom_dc: false, fin_kfin_dc: 140 })), 'hsk_fin_k_W_mK')).toBe(150);
+  });
+
+  it('links the fins like any other value and keeps the design for the comparison', () => {
+    const p = project('StarKcore-12L');
+    const fresh = withFins((raw) => (raw.rru_result = { ...RESULT }));
+    const linked = applyProjectAiPlan(p, fresh, planProjectAiUpdate(p, baseline(), fresh)).project;
+    expect(linked.materials.hsk_fin_height_mm?.value).toBe(59.646);
+    expect(linked.materials.hsk_fin_k_W_mK?.value).toBe(200);
+    expect(isProjectAiLocked(linked, matKey('hsk_fin_gap_mm'))).toBe(true);
+    expect(linked.ai_link?.rru_design?.heat_W).toBe(353.716);
+    saveProject(linked);
+    expect(loadProject('P')!.ai_link?.rru_design).toEqual(linked.ai_link?.rru_design);
+  });
+});
+
 describe('linking a project the first time', () => {
   it('replaces what this tool only started with, and leaves a stated value unticked', () => {
     const materials = defaultMaterials();

@@ -1580,9 +1580,13 @@ default scenario
 | `ambient` | Baseline 情境的環境溫度 | AI-Thermal `param_temp`（`custom` → `param_temp_custom`）→ 5G-RRU `T_amb` |
 | `fin` | 散熱方式的 Die-casting／Embedded 鰭片 | 5G-RRU `fin_tech_selector_v2` |
 | `mat.coin_L_mm`…`mat.hsk_base_W_mm` | 材料與製程：銅塊、焊料、導熱孔通用值、散熱器底座 | 5G-RRU `Coin_*`、`K_Coin`、`K_Solder`／`t_Solder`／`Voiding`、`K_Via`／`Via_Eff`、`t_base`、`L_pcb+Top+Btm`／`W_pcb+Left+Right` |
+| `mat.hsk_fin_gap_mm`／`mat.hsk_fin_thickness_mm`／`mat.hsk_fin_draft_deg` | 散熱器鰭片（在 06 的鰭片表面顯示與編輯，見 06 §21）| 5G-RRU `Gap`、`Fin_t`、`Draft_Angle`（拔模角只有 Die-casting 才帶）|
+| `mat.hsk_fin_height_mm`／`mat.hsk_fin_count` | 鰭片高度、鰭片數 | 5G-RRU 存檔時寫的設計結果 `rru_result.fin_height`／`fin_count`（**只有 `ok: true`**；沒存過或設計不成立就不帶）|
+| `mat.hsk_fin_k_W_mK` | 鰭片 k | `rru_result.k_fin` → 參數控制台勾了自訂的 `fin_kfin_emb`／`fin_kfin_dc` → 5G-RRU 製程預設（Embedded 200／Die-casting 150，使用者要求預設就連動）|
 | `tim.<材料 id>.k`／`.blt` | TIM 材料的 k／BLT | AI-Thermal `tim_library`（連結 TIM 管理工具的材料只取 BLT＝`gapThickness`；其餘以型號名比對取 k＋BLT）→ 內建 Grease／Pad／Putty 退回 5G-RRU 的 `K_<Type>`／`t_<Type>` |
 
-不連結：功率倍率（各工具的工況不同）、常溫情境（之後在 06 處理）、客戶／負責人／階段等本工具自己的欄位。
+不連結：功率倍率（各工具的工況不同）、常溫情境（之後在 06 處理）、客戶／負責人／階段等本工具自己的欄位、
+5G-RRU 的 η_process（製程係數：它校正自己 h 經驗式用的，本工具另外算擴散熱阻，再乘一次會重複計入）。
 
 ## 50.2 畫面
 
@@ -1613,7 +1617,9 @@ default scenario
 
 ## 50.4 儲存
 
-`Project.ai_link = { project_id, project_name, linked_at, synced_at, saved_at, values, sources, unlocked, rru_ambient_C }`，
+`Project.ai_link = { project_id, project_name, linked_at, synced_at, saved_at, values, sources, unlocked, rru_ambient_C, rru_design }`，
+`rru_design` ＝ 同步當時 5G-RRU 的設計結果（`rru_result` 的 at／ok／why／fin_tech／鰭片高與片數／h／h_conv／h_rad／η_fin／η_process／K_FIN／熱負載／體積），
+06 的鰭片表面拿它對照（不參與計算）；
 跟著專案存（`OWNED_PROJECT_KEYS` 含 `ai_link`，updateDoc merge），解除連結時整個 key 拿掉。「複製專案」帶著連結（專案名稱改成新名稱時，`name` 記成已解開）。
 
 - domain：`src/domain/projectAiLink.ts`；讀資料庫：`src/importers/component/aiThermalProject.ts`、`aiThermalMaterials.ts`。

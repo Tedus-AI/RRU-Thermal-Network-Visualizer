@@ -1396,3 +1396,33 @@ Screen 06 is complete when:
 - FloTHERM compatibility metadata is preserved without implementing a parser.
 - The screen can save a valid boundary set and pass it to Screen 07.
 
+## 21. 散熱器鰭片：專案共用、連動 5G-RRU（`thermal/boundary/finSpec.ts`）
+
+鰭片是整台機器的一個壓鑄件，不是情境的條件。原本每個情境的鰭片表面 profile 各自填一份，常溫情境可能填成跟高溫不一樣的鰭片，
+5G-RRU 的設計也沒有地方放。現在：
+
+- **鰭片存在專案**（`MaterialDefaults.hsk_fin_height_mm`／`hsk_fin_count`／`hsk_fin_gap_mm`／`hsk_fin_thickness_mm`／`hsk_fin_draft_deg`／
+  `hsk_fin_k_W_mK`／`hsk_fin_process_factor`；空白＝沒填）；底座長寬是 01 的 `hsk_base_L_mm`／`hsk_base_W_mm`；
+  鰭片製程是 01 冷卻元素裡的 Embedded Fin／Die-casting Fin（只勾一個時）。
+- 邊界集載入、以及專案的這些值改了時，`boundaryStore` 把它們複製進鰭片表面的 profile（`synchronizeInheritedProfileInputs`，
+  與環境溫度、發射率同一套）。所有情境用同一組；profile 上的值只是給求解與匯出用的副本。
+  - 專案沒填的欄位 → profile 保留原本的值；**鰭片 k 例外**：專案沒填就用製程預設（Embedded 200、Die-casting＝01 基座材料 k），
+    畫面上的預設與求解用的永遠一致。
+  - 還在用「先前輸入的 h」求解的表面（舊資料），專案要描述**完整的鰭片陣列**（底座長寬＋鰭片高＋air gap＋厚度）才換成鰭片幾何；
+    只有幾欄時維持舊的 h，不會變成「幾何不完整」。
+  - 只在設計**只有一組鰭片表面**時：兩組獨立散熱器（RF／數位）各自的鰭片仍存在各自的 profile，每個情境分開（畫面寫出原因）。
+- **舊專案遷移**：情境載入時，profile 上有填、專案還沒有的鰭片欄位寫進專案（`finFieldsToSeed`，reference 寫「06 邊界條件（鰭片改為專案共用前填的值）」）；
+  專案已經有的不覆蓋；鰭片 k 還是當初開啟鰭片模式時帶入的製程預設（或舊的 160）不算量到的值、不帶。
+  清空一個欄位時同時清掉**所有情境**（存著的與載入中的）profile 上的值（`clearProjectFin`），下一個載入的情境才不會把它帶回來。
+- **畫面**（`FinGeometryPanel` ＋ `ProjectFinFields.tsx`）：頂端一行寫「散熱器只有一組，鰭片是專案共用的」。
+  - 鰭片製程：01 有指定 → 白底純文字「取自 01」；沒有 → 照舊下拉，並說明這裡選的只用在這個情境、到 01 勾一個就所有情境共用。
+  - 底座長寬：白底純文字＋「01」鈕（到 01 改；01 沒填 → 「到 01 填」）。
+  - 鰭片高度、air gap、厚度、拔模角、k、鰭片數：連結 AI-Thermal 時 5G-RRU 有的值鎖定（白底＋5G-RRU 標籤＋✂，與 01 同一套 `ProjectAiBox`），
+    ✂ 解開後是一般輸入欄（下面一行「已解開・5G-RRU 是 X ↺ 改回」）；沒有連結 → 一般輸入欄。製程係數永遠自己填（預設 1.00）。
+  - 「鰭片間隙 Air gap」（原本叫「通道間距」）：相鄰兩片之間的空氣間隙，不是 fin pitch（pitch＝厚度＋air gap），與 5G-RRU 同一個意思。
+  - 由幾何算出的區塊下面多一張「對照 5G-RRU 的設計」（`RruDesignCompare`，有 `ai_link.rru_design` 才出現，不參與計算）：
+    h 對流／輻射、η、製程係數、鰭片數、熱負載（04 的總功耗 vs 5G-RRU 存檔時的 `heat_W`，差超過 1% 琥珀色提醒回 5G-RRU 重算並到 01 更新）；
+    5G-RRU 的設計不成立（`ok: false`）→ 只寫原因、說明鰭片高與片數沒有連動。
+  - 實測 StarKcore-12L（全部欄位連結）：h 8.54（6.14＋2.40）、η 0.922、22 片、0.982 m²、R 0.129 °C/W，與 5G-RRU 一致。
+- 測試：`src/thermal/boundary/finSpec.test.ts`、`src/data/boundaryProjectFins.test.ts`（示範專案：舊 h 不動、完整陣列取代、所有情境一致、k 預設、
+  遷移、清空不復活、兩組散熱器不連動）、`src/importers/component/aiThermalProject.test.ts`（從 5G-RRU 帶鰭片）。

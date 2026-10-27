@@ -398,7 +398,7 @@ export function BoundaryInspector({
                       Described as a fin array / 以鰭片幾何描述
                     </span>
                     <span className="mt-0.5 block text-[10px] text-ink-400">
-                      鰭片表面沒有可獨立成立的 h：對流係數由通道間距與鰭片高度決定，散熱面積由鰭片數決定，
+                      鰭片表面沒有可獨立成立的 h：對流係數由 air gap 與鰭片高度決定，散熱面積由鰭片數決定，
                       鰭片效率又折扣其中一部分。這四個數字要等幾何存在才存在，所以此表面只以幾何描述。
                     </span>
                   </p>
@@ -464,6 +464,7 @@ export function BoundaryInspector({
                     does not back up. */}
                 {finPanelShown && (
                   <FinGeometryPanel
+                    port={port}
                     profile={activeProfile}
                     result={finResult}
                     readOnly={readOnly}
