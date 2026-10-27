@@ -21,6 +21,7 @@ import {
   LogIn,
   RotateCcw,
   UserRound,
+  Eraser,
 } from 'lucide-react';
 
 import { Badge, Button, Modal, type Tone } from '@/ui/primitives';
@@ -32,6 +33,7 @@ import { useProjectStore } from '@/data/projectStore';
 import { useFolderStore, type SyncTarget } from '@/data/folderStore';
 import { sharePoint } from '@/data/sharepoint';
 import { useStorageView, type LightTone } from './storageView';
+import { BrowserCacheDialog } from './BrowserCacheDialog';
 import type { FolderEntry } from '@/data/folderBinding';
 import { SCHEMA_VERSION } from '@/domain/project';
 import {
@@ -426,12 +428,15 @@ export function SettingsDialog({
   canExport: boolean;
 }) {
   const [confirmingReset, setConfirmingReset] = useState(false);
+  const [clearingCache, setClearingCache] = useState(false);
 
   // Read once per open: this is a snapshot of storage, not a live subscription.
   const usage = useMemo(
     () => (typeof localStorage === 'undefined' ? null : storageUsage(localStorage)),
     [],
   );
+
+  if (clearingCache) return <BrowserCacheDialog onClose={() => setClearingCache(false)} />;
 
   if (confirmingReset) {
     return (
@@ -542,6 +547,15 @@ export function SettingsDialog({
               <Row label="Total" zh="合計" value={size(usage.total_characters)} />
             </div>
           )}
+          <div>
+            <Button
+              variant="secondary"
+              icon={<Eraser className="size-3.5" aria-hidden />}
+              onClick={() => setClearingCache(true)}
+            >
+              清空瀏覽器暫存…
+            </Button>
+          </div>
         </Section>
 
         <Section icon={Info} title="Build" zh="版本資訊">

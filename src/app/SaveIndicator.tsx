@@ -21,6 +21,7 @@ import {
   Check,
   ChevronDown,
   Circle,
+  Eraser,
   Cloud,
   ExternalLink,
   FolderOpen,
@@ -37,6 +38,7 @@ import { useSaveStatus } from '@/data/saveStatus';
 import { sharePoint } from '@/data/sharepoint';
 import { toast } from '@/ui/toast';
 import { longTime, useStorageView, type LightTone, type TargetView } from './storageView';
+import { BrowserCacheDialog } from './BrowserCacheDialog';
 
 const TONE_TEXT: Record<LightTone, string> = {
   ok: 'text-ok-500',
@@ -138,6 +140,7 @@ export function SaveIndicator({ onOpenSettings }: { onOpenSettings?: () => void 
   const cacheFailure = useSaveStatus((s) => s.cacheFailure);
 
   const [open, setOpen] = useState(false);
+  const [clearCache, setClearCache] = useState(false);
   const [working, setWorking] = useState<SyncTarget | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
 
@@ -213,10 +216,15 @@ export function SaveIndicator({ onOpenSettings }: { onOpenSettings?: () => void 
           cacheFull={Boolean(cacheFailure)}
           onClose={() => setOpen(false)}
           onOpenSettings={onOpenSettings}
+          onClearCache={() => {
+            setOpen(false);
+            setClearCache(true);
+          }}
           onAction={(target) => void act(target)}
           working={working}
         />
       )}
+      {clearCache && <BrowserCacheDialog onClose={() => setClearCache(false)} />}
     </div>
   );
 }
@@ -268,6 +276,7 @@ function StoragePanel({
   cacheFull,
   onClose,
   onOpenSettings,
+  onClearCache,
   onAction,
   working,
 }: {
@@ -275,6 +284,7 @@ function StoragePanel({
   cacheFull: boolean;
   onClose: () => void;
   onOpenSettings?: () => void;
+  onClearCache: () => void;
   onAction: (target: SyncTarget) => void;
   working: SyncTarget | null;
 }) {
@@ -493,9 +503,17 @@ function StoragePanel({
       ))}
 
       {cacheFull && (
-        <p className="rounded border border-warn-500/40 bg-warn-100/70 px-2 py-1 text-[11px] leading-relaxed text-warn-600">
-          瀏覽器儲存空間已滿。修改暫存在記憶體並照常寫入；寫入中請勿關閉分頁。
-        </p>
+        <div className="flex flex-col gap-1.5 rounded border border-warn-500/40 bg-warn-100/70 px-2 py-1.5 text-[11px] leading-relaxed text-warn-600">
+          <p>
+            瀏覽器儲存空間已滿（同網站的工具共用一份空間）。不影響存檔：修改暫存在記憶體並照常寫入
+            SharePoint／資料夾；寫入中請勿關閉分頁。
+          </p>
+          <span>
+            <PanelButton icon={<Eraser className="size-3.5" aria-hidden />} onClick={onClearCache}>
+              清空瀏覽器暫存…
+            </PanelButton>
+          </span>
+        </div>
       )}
 
       <div className="flex flex-wrap gap-1.5 border-t border-line pt-2.5">

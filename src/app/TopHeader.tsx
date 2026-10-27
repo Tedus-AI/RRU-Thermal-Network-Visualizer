@@ -13,6 +13,7 @@ import { useSolverStore } from '@/data/solverStore';
 import { toast } from '@/ui/toast';
 import { Button, Modal } from '@/ui/primitives';
 import { SaveIndicator } from './SaveIndicator';
+import { APP_VERSION, displayVersion, isLatest, useUpdateStore } from './updateCheck';
 import { triggerDownload } from '@/export/download';
 import { BUILD_ID } from '@/data/bootstrapStorage';
 import {
@@ -122,6 +123,23 @@ function HeaderAction({
   );
 }
 
+/** The running version under the title, with 「最新」 once the deployed one has been read and matches. */
+function VersionBadge() {
+  const live = useUpdateStore((s) => s.live);
+  const latest = isLatest(live);
+  return (
+    <span
+      data-version-badge
+      title={`軟體版本 ${APP_VERSION}${latest ? '（已是最新版本）' : latest === false ? `（最新版本是 ${live}）` : ''}`}
+      className="tabular flex items-center gap-1 text-[10.5px] whitespace-nowrap text-white/55"
+    >
+      {displayVersion(APP_VERSION)}
+      {latest && <span className="font-semibold text-ok-500">✓ 最新</span>}
+      {latest === false && <span className="font-semibold text-warn-400">有新版本</span>}
+    </span>
+  );
+}
+
 const HEADER_SELECT_CLASS =
   "h-9 w-full appearance-none rounded-md border border-shell-600 bg-shell-700 bg-[url('data:image/svg+xml;utf8,<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"12\" height=\"12\" viewBox=\"0 0 12 12\"><path d=\"M2 4.5L6 8.5L10 4.5\" stroke=\"white\" stroke-width=\"1.5\" fill=\"none\" stroke-linecap=\"round\"/></svg>')] bg-[right_0.6rem_center] bg-no-repeat px-2.5 pr-7 text-[13px] font-medium text-white focus:border-accent-500 focus:outline-none disabled:opacity-50";
 
@@ -211,7 +229,10 @@ export function TopHeader() {
         <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-accent-600 text-[13px] font-black text-white">
           5G
         </div>
-        <div className="text-[14px] font-bold whitespace-nowrap text-white">5G 熱網路分析</div>
+        <div className="flex flex-col">
+          <div className="text-[14px] font-bold whitespace-nowrap text-white">5G 熱網路分析</div>
+          <VersionBadge />
+        </div>
       </div>
 
       <div className="w-48 shrink xl:w-72">
