@@ -26,6 +26,9 @@
  *                 unticked by default
  *   rru_ambient_C 5G-RRU's T_amb at that time, for the reminder when it differs
  *                 from AI-Thermal's ambient (the ambient itself is AI-Thermal's)
+ *   rru_design    5G-RRU's saved design result at that time (`rru_result` in the
+ *                 document): what the heat-sink surface compares its own h, η and
+ *                 heat load with. Its fin height and count are linked values too.
  *
  * Field keys: `name`, `band`, `ambient` (the Baseline scenario's ambient),
  * `fin` (the fin process among the cooling elements), `mat.<field>` (a project
@@ -43,6 +46,30 @@ import { sourced, type SourcedValue } from './sourcedValue';
 export type ProjectAiSource = 'AI-Thermal' | '5G-RRU';
 export type ProjectAiValue = string | number;
 
+/**
+ * 5G-RRU's design as it last saved it (`projects[id].rru_result`, written by
+ * 5G-RRU on every save). A reference for the heat-sink surface: this tool
+ * computes its own h and η from the same geometry and shows both.
+ */
+export interface RruDesign {
+  at: string;
+  /** False: 5G-RRU could not design it (the reason in `why`). */
+  ok: boolean;
+  why?: string;
+  fin_tech?: 'Embedded' | 'Die-casting';
+  fin_height_mm?: number;
+  fin_count?: number;
+  h_W_m2K?: number;
+  h_conv_W_m2K?: number;
+  h_rad_W_m2K?: number;
+  eta_fin?: number;
+  eta_process?: number;
+  k_fin_W_mK?: number;
+  /** Actual heat load, without the safety factor. */
+  heat_W?: number;
+  volume_L?: number;
+}
+
 export interface ProjectAiLink {
   project_id: string;
   project_name: string;
@@ -53,6 +80,7 @@ export interface ProjectAiLink {
   sources: Record<string, ProjectAiSource>;
   unlocked?: string[];
   rru_ambient_C?: number;
+  rru_design?: RruDesign;
 }
 
 /** One value the two tools state for this project now. */
@@ -71,6 +99,8 @@ export interface ProjectAiFresh {
   values: Record<string, ProjectAiFreshValue>;
   /** 5G-RRU's T_amb: the reminder when it disagrees with AI-Thermal's ambient. */
   rru_ambient_C: number | null;
+  /** 5G-RRU's saved design result, when it has saved one. */
+  rru_design?: RruDesign | null;
 }
 
 export const AI_KEY = { name: 'name', band: 'band', ambient: 'ambient', fin: 'fin' } as const;
@@ -89,6 +119,14 @@ export const AI_MAT_FIELDS = [
   'hsk_base_thickness_mm',
   'hsk_base_L_mm',
   'hsk_base_W_mm',
+  // The fin array (05 heat-sink surface). The process factor is not here: it is
+  // 5G-RRU's calibration of its own correlation, not a property of the fins.
+  'hsk_fin_height_mm',
+  'hsk_fin_count',
+  'hsk_fin_gap_mm',
+  'hsk_fin_thickness_mm',
+  'hsk_fin_draft_deg',
+  'hsk_fin_k_W_mK',
 ] as const;
 export type AiMatField = (typeof AI_MAT_FIELDS)[number];
 
@@ -105,6 +143,12 @@ export const AI_MAT_INFO: Record<AiMatField, { group: string; label: string; uni
   hsk_base_thickness_mm: { group: '散熱器底座', label: '厚度', unit: 'mm' },
   hsk_base_L_mm: { group: '散熱器底座', label: '長 L', unit: 'mm' },
   hsk_base_W_mm: { group: '散熱器底座', label: '寬 W', unit: 'mm' },
+  hsk_fin_height_mm: { group: '鰭片', label: '鰭片高度', unit: 'mm' },
+  hsk_fin_count: { group: '鰭片', label: '鰭片數', unit: '片' },
+  hsk_fin_gap_mm: { group: '鰭片', label: 'Air gap', unit: 'mm' },
+  hsk_fin_thickness_mm: { group: '鰭片', label: '鰭片厚度', unit: 'mm' },
+  hsk_fin_draft_deg: { group: '鰭片', label: '拔模角', unit: '°' },
+  hsk_fin_k_W_mK: { group: '鰭片', label: '鰭片 k', unit: 'W/m·K' },
 };
 
 export const matKey = (field: AiMatField) => `mat.${field}`;
@@ -164,8 +208,39 @@ export function normalizeProjectAiLink(raw: unknown): ProjectAiLink | undefined 
     sources,
     ...(unlocked.length ? { unlocked } : {}),
     ...(typeof r.rru_ambient_C === 'number' && Number.isFinite(r.rru_ambient_C) ? { rru_ambient_C: r.rru_ambient_C } : {}),
+    ...withRruDesign(normalizeRruDesign(r.rru_design)),
   };
 }
+
+const RRU_DESIGN_NUMBERS = [
+  'fin_height_mm',
+  'fin_count',
+  'h_W_m2K',
+  'h_conv_W_m2K',
+  'h_rad_W_m2K',
+  'eta_fin',
+  'eta_process',
+  'k_fin_W_mK',
+  'heat_W',
+  'volume_L',
+] as const;
+
+/** A stored design snapshot; anything malformed is none. */
+export function normalizeRruDesign(raw: unknown): RruDesign | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const r = raw as Record<string, unknown>;
+  if (typeof r.at !== 'string' || typeof r.ok !== 'boolean') return null;
+  const out: RruDesign = { at: r.at, ok: r.ok };
+  if (typeof r.why === 'string' && r.why) out.why = r.why;
+  if (r.fin_tech === 'Embedded' || r.fin_tech === 'Die-casting') out.fin_tech = r.fin_tech;
+  for (const key of RRU_DESIGN_NUMBERS) {
+    const value = r[key];
+    if (typeof value === 'number' && Number.isFinite(value)) out[key] = value;
+  }
+  return out;
+}
+
+const withRruDesign = (design: RruDesign | null | undefined) => (design ? { rru_design: design } : {});
 
 /** The Baseline scenario: the one the ambient link writes to. */
 export function baselineOf(scenarios: readonly Scenario[]): Scenario | null {
@@ -496,6 +571,7 @@ export function applyProjectAiPlan(
     sources,
     ...(unlocked.size ? { unlocked: [...unlocked] } : {}),
     ...(fresh.rru_ambient_C != null ? { rru_ambient_C: fresh.rru_ambient_C } : {}),
+    ...withRruDesign(fresh.rru_design),
   };
   return { project: { ...next, ai_link: link }, ambient, changed };
 }

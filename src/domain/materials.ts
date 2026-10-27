@@ -144,7 +144,41 @@ export interface MaterialDefaults {
   /** Overall base envelope, retained for placement checks and later spreading models. */
   hsk_base_L_mm: SourcedValue<number> | null;
   hsk_base_W_mm: SourcedValue<number> | null;
+
+  /**
+   * The heat sink's fin array. One casting for the whole design, so like the
+   * base it is a project fact, shared by every scenario: the boundary sets copy
+   * it into the fin surface's profile (`boundary/finSpec.ts`). Each stays empty
+   * until stated. A project linked to AI-Thermal takes them from 5G-RRU — the
+   * height and count from its saved design result, the rest from its parameter
+   * console (`domain/projectAiLink.ts`). Optional so records written before the
+   * fin array moved here still read.
+   */
+  hsk_fin_height_mm?: SourcedValue<number> | null;
+  /** Empty: derived from the base width, the gap and the thickness. */
+  hsk_fin_count?: SourcedValue<number> | null;
+  /** Clear channel between two fins. */
+  hsk_fin_gap_mm?: SourcedValue<number> | null;
+  /** At the tip; a die-cast fin thickens toward the root by the draft. */
+  hsk_fin_thickness_mm?: SourcedValue<number> | null;
+  hsk_fin_draft_deg?: SourcedValue<number> | null;
+  /** Empty: the process default (bonded aluminium, or the base casting's k). */
+  hsk_fin_k_W_mK?: SourcedValue<number> | null;
+  /** Empty: 1, nothing. Never linked — see `FinArrayInput.processEfficiency`. */
+  hsk_fin_process_factor?: SourcedValue<number> | null;
 }
+
+/** The fin-array fields, in the order the heat-sink surface shows them. */
+export const HSK_FIN_FIELDS = [
+  'hsk_fin_height_mm',
+  'hsk_fin_count',
+  'hsk_fin_gap_mm',
+  'hsk_fin_thickness_mm',
+  'hsk_fin_draft_deg',
+  'hsk_fin_k_W_mK',
+  'hsk_fin_process_factor',
+] as const;
+export type HskFinField = (typeof HSK_FIN_FIELDS)[number];
 
 const assumed = (value: number) => sourced(value, 'Assumed', { confidence: 'medium' });
 
@@ -179,6 +213,13 @@ export function defaultMaterials(): MaterialDefaults {
     hsk_base_thickness_mm: null,
     hsk_base_L_mm: null,
     hsk_base_W_mm: null,
+    hsk_fin_height_mm: null,
+    hsk_fin_count: null,
+    hsk_fin_gap_mm: null,
+    hsk_fin_thickness_mm: null,
+    hsk_fin_draft_deg: null,
+    hsk_fin_k_W_mK: null,
+    hsk_fin_process_factor: null,
   };
 }
 
@@ -310,6 +351,13 @@ export function normalizeMaterials(raw: unknown): MaterialDefaults {
     hsk_base_thickness_mm: readOptional(raw.hsk_base_thickness_mm),
     hsk_base_L_mm: readOptional(raw.hsk_base_L_mm),
     hsk_base_W_mm: readOptional(raw.hsk_base_W_mm),
+    hsk_fin_height_mm: readOptional(raw.hsk_fin_height_mm),
+    hsk_fin_count: readOptional(raw.hsk_fin_count),
+    hsk_fin_gap_mm: readOptional(raw.hsk_fin_gap_mm),
+    hsk_fin_thickness_mm: readOptional(raw.hsk_fin_thickness_mm),
+    hsk_fin_draft_deg: readOptional(raw.hsk_fin_draft_deg),
+    hsk_fin_k_W_mK: readOptional(raw.hsk_fin_k_W_mK),
+    hsk_fin_process_factor: readOptional(raw.hsk_fin_process_factor),
   };
 }
 

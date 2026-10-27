@@ -15,12 +15,24 @@ import { create } from 'zustand';
 
 import { loadBoundarySets, saveBoundarySet } from './persistence';
 import { useNetworkStore } from './networkStore';
+import { useProjectStore } from './projectStore';
 import { useScenarioStore } from './scenarioStore';
 import { useSolverStore } from './solverStore';
 
 import { deriveBoundaryPorts } from '@/thermal/boundary/boundaryPorts';
 import { buildAllPreviews, validateBoundarySet } from '@/thermal/boundary/validation';
 import { calculateSolarHeatLoad } from '@/thermal/boundary/calculations';
+import {
+  FIN_PARAMETER_SOURCE,
+  applyProjectFins,
+  finFieldsToSeed,
+  projectFinParameters,
+  singleFinSurfacePort,
+  takesProjectFins,
+  type ProjectFinSync,
+} from '@/thermal/boundary/finSpec';
+import { sourced } from '@/domain/sourcedValue';
+import type { MaterialDefaults } from '@/domain/materials';
 import {
   createBoundarySet,
   emptyValidationState,
@@ -68,6 +80,18 @@ interface BoundaryStoreState {
   resetScenario: () => void;
 
   revalidate: () => void;
+  /**
+   * Copies the project's fins into the open scenario again after they changed
+   * (`finSpec.ts`). Does nothing — no dirty mark, no stale solve — when the
+   * profile already agrees.
+   */
+  resyncProjectFins: () => void;
+  /**
+   * Clears fin fields the project no longer states (`finSpec.ts`) from the fin
+   * surface's profiles in every scenario, stored and loaded alike — otherwise
+   * the next scenario to load would seed the cleared value back.
+   */
+  clearProjectFin: (projectId: string, parameterKeys: string[]) => void;
   save: (projectId: string) => void;
   /**
    * Forgets the assignments on ports that went with deleted components
@@ -88,6 +112,7 @@ const keyOf = (networkId: string, scenarioId: string) => `${networkId}::${scenar
 function synchronizeInheritedProfileInputs(
   boundarySet: ScenarioBoundaryConditionSet,
   ports: BoundaryPort[],
+  fins: ProjectFinSync | null = null,
 ): boolean {
   const portById = new Map(ports.map((port) => [port.id, port]));
   const surfaceByGroup = new Map(
@@ -176,10 +201,75 @@ function synchronizeInheritedProfileInputs(
       }
     }
 
+    // The heat sink's fins are the project's, the same in every scenario
+    // (`finSpec.ts`).
+    if (fins && portId === fins.portId && takesProjectFins(profile, portById.get(portId), fins)) {
+      if (applyProjectFins(parameters, fins)) changed = true;
+    }
+
     if (changed) synchronized = true;
     return changed ? { ...profile, parameters } : profile;
   });
   return synchronized;
+}
+
+/** The project's fins and the one fin surface they go to; null when there is no single fin surface. */
+function projectFinSync(ports: BoundaryPort[]): ProjectFinSync | null {
+  const draft = useProjectStore.getState().draft;
+  if (!draft) return null;
+  const port = singleFinSurfacePort(ports, useNetworkStore.getState().network);
+  if (!port) return null;
+  return {
+    portId: port.id,
+    parameters: projectFinParameters(draft.materials, draft.project_context.cooling_architecture),
+    baseK_W_mK: draft.materials.hsk_base_k_W_mK?.value ?? null,
+  };
+}
+
+/**
+ * An older project typed its fins into 06's profile; the project holds them
+ * now. The first time such a set loads, what the project does not state yet is
+ * taken from it, so nothing typed is lost and every scenario then agrees.
+ */
+/** Set while `loadFor` seeds the project, so the project subscription does not resync a set being replaced. */
+let seedingProjectFins = false;
+
+function seedProjectFinsFrom(boundarySet: ScenarioBoundaryConditionSet, ports: BoundaryPort[]): void {
+  const projectStore = useProjectStore.getState();
+  const draft = projectStore.draft;
+  if (!draft || projectStore.isReadOnly()) return;
+  const port = singleFinSurfacePort(ports, useNetworkStore.getState().network);
+  if (!port) return;
+  const profileIds = new Set(
+    boundarySet.assignments
+      .filter((assignment) => assignment.boundary_port_id === port.id)
+      .flatMap((assignment) => assignment.profile_ids),
+  );
+  for (const profile of boundarySet.profiles) {
+    if (!profileIds.has(profile.id)) continue;
+    const seed = finFieldsToSeed(
+      profile,
+      port,
+      draft.materials,
+      draft.materials.hsk_base_k_W_mK?.value ?? null,
+    );
+    const fields = Object.entries(seed) as [keyof MaterialDefaults, number][];
+    if (fields.length === 0) continue;
+    seedingProjectFins = true;
+    try {
+      projectStore.patchMaterials(
+      Object.fromEntries(
+        fields.map(([field, value]) => [
+          field,
+          sourced(value, 'Manual', { reference: '06 邊界條件（鰭片改為專案共用前填的值）' }),
+        ]),
+      ) as Partial<MaterialDefaults>,
+      );
+    } finally {
+      seedingProjectFins = false;
+    }
+    return;
+  }
 }
 
 export const useBoundaryStore = create<BoundaryStoreState>((set, get) => ({
@@ -244,7 +334,12 @@ export const useBoundaryStore = create<BoundaryStoreState>((set, get) => ({
     // Persisted legacy profiles may still carry copies of the old scenario or
     // surface inputs. Reconcile those copies before validation so reloading an
     // existing project cannot revive stale solar/radiation calculations.
-    const inheritedInputsChanged = synchronizeInheritedProfileInputs(sets[key], ports);
+    seedProjectFinsFrom(sets[key], ports);
+    const inheritedInputsChanged = synchronizeInheritedProfileInputs(
+      sets[key],
+      ports,
+      projectFinSync(ports),
+    );
 
     set({
       sets,
@@ -277,7 +372,7 @@ export const useBoundaryStore = create<BoundaryStoreState>((set, get) => ({
       surface_properties: [...sets[activeKey].surface_properties],
     };
     recipe(next);
-    synchronizeInheritedProfileInputs(next, get().ports);
+    synchronizeInheritedProfileInputs(next, get().ports, projectFinSync(get().ports));
     next.updated_at = new Date().toISOString();
 
     set({ sets: { ...sets, [activeKey]: next }, dirty: true });
@@ -524,6 +619,56 @@ export const useBoundaryStore = create<BoundaryStoreState>((set, get) => ({
     return [...droppedBy.values()].reduce((sum, n) => sum + n, 0);
   },
 
+  resyncProjectFins: () => {
+    if (seedingProjectFins) return;
+    const { sets, activeKey, ports } = get();
+    const fins = projectFinSync(ports);
+    if (!activeKey || !sets[activeKey] || !fins) return;
+    const probe = { ...sets[activeKey], profiles: [...sets[activeKey].profiles] };
+    if (!synchronizeInheritedProfileInputs(probe, ports, fins)) return;
+    get().mutate(() => {});
+  },
+
+  clearProjectFin: (projectId, parameterKeys) => {
+    const keys = parameterKeys.filter((key) => key in FIN_PARAMETER_SOURCE);
+    const port = singleFinSurfacePort(get().ports, useNetworkStore.getState().network);
+    if (!port || keys.length === 0) return;
+    const clean = (entry: ScenarioBoundaryConditionSet): ScenarioBoundaryConditionSet | null => {
+      const ids = new Set(
+        entry.assignments
+          .filter((assignment) => assignment.boundary_port_id === port.id)
+          .flatMap((assignment) => assignment.profile_ids),
+      );
+      let changed = false;
+      const profiles = entry.profiles.map((profile) => {
+        if (!ids.has(profile.id) || keys.every((key) => profile.parameters[key] == null)) return profile;
+        changed = true;
+        const parameters = { ...profile.parameters };
+        for (const key of keys) parameters[key] = null;
+        return { ...profile, parameters };
+      });
+      return changed ? { ...entry, profiles, updated_at: new Date().toISOString() } : null;
+    };
+
+    for (const stored of loadBoundarySets(projectId)) {
+      const next = clean(stored);
+      if (next) saveBoundarySet(projectId, next);
+    }
+    // A loaded set may hold edits not written yet; clean it too, keeping them.
+    const { sets, activeKey } = get();
+    const nextSets = { ...sets };
+    let activeChanged = false;
+    for (const [key, entry] of Object.entries(sets)) {
+      if (entry.project_id !== projectId) continue;
+      const next = clean(entry);
+      if (!next) continue;
+      nextSets[key] = next;
+      if (key === activeKey) activeChanged = true;
+    }
+    set({ sets: nextSets, ...(activeChanged ? { dirty: true } : {}) });
+    if (activeChanged) get().revalidate();
+  },
+
   revalidate: () => {
     const { sets, activeKey, ports } = get();
     if (!activeKey || !sets[activeKey]) return;
@@ -607,3 +752,18 @@ export const useBoundaryStore = create<BoundaryStoreState>((set, get) => ({
     get().loadFor(projectId, current.scenario_id);
   },
 }));
+
+// The fins live on the project. When they change there — typed on the heat-sink
+// surface, or brought in by 01's AI-Thermal link — the open scenario follows.
+useProjectStore.subscribe((state, previous) => {
+  const next = state.draft;
+  const prev = previous.draft;
+  if (!next || !prev || next.project_id !== prev.project_id) return;
+  if (
+    next.materials === prev.materials &&
+    next.project_context.cooling_architecture === prev.project_context.cooling_architecture
+  ) {
+    return;
+  }
+  useBoundaryStore.getState().resyncProjectFins();
+});

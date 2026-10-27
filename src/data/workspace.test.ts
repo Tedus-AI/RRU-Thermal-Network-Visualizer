@@ -5,6 +5,7 @@ import { DEMO_PROJECT_ID } from '@/mock/demoProject';
 import {
   PERSISTENCE_COMPRESSION_PREFIX,
   projectStorageKey,
+  getPersistenceWriteFailure,
   loadComponents,
   loadProject,
   loadProjects,
@@ -154,6 +155,36 @@ describe('hydrateFromFolder', () => {
       new RegExp(`^${PERSISTENCE_COMPRESSION_PREFIX}`),
     );
     expect(loadProject(DEMO_PROJECT_ID)?.project_id).toBe(DEMO_PROJECT_ID);
+  });
+
+  it('a folder bigger than the quota still loads, without reporting the browser full', async () => {
+    const text = await demoFileText();
+    // How much one project takes in the cache.
+    const probe = new QuotaStorage(Number.MAX_SAFE_INTEGER);
+    vi.stubGlobal('localStorage', probe as unknown as Storage);
+    await hydrateFromFolder(fakeFolder({ [mirrorFilename(DEMO_PROJECT_ID)]: text }));
+    let one = 0;
+    for (let index = 0; index < probe.length; index += 1) {
+      const k = probe.key(index)!;
+      one += k.length + (probe.getItem(k) ?? '').length;
+    }
+
+    // Five projects in a quota that holds about two (the user's folder of copies).
+    const ids = ['COPY_1', 'COPY_2', 'COPY_3', 'COPY_4', 'COPY_5'];
+    const files = Object.fromEntries(
+      ids.map((id) => [mirrorFilename(id), text.split(DEMO_PROJECT_ID).join(id)]),
+    );
+    const storage = new QuotaStorage(Math.round(one * 2.2));
+    vi.stubGlobal('localStorage', storage as unknown as Storage);
+
+    const result = await hydrateFromFolder(fakeFolder(files));
+
+    expect([...result.projectIds].sort()).toEqual(ids);
+    expect(getPersistenceWriteFailure()).toBeNull();
+    for (const id of ids) {
+      expect(loadProject(id)?.project_id).toBe(id);
+      expect(loadComponents(id).length).toBeGreaterThan(0);
+    }
   });
 
   // An empty folder is an empty project list — that is the whole contract.

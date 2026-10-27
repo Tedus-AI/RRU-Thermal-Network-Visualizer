@@ -277,7 +277,7 @@ export function usesFinGeometry(
 }
 
 /** Boundary types whose surface the fin geometry can describe. */
-const FIN_CAPABLE_TYPES = new Set<BoundaryConditionProfile['type']>([
+export const FIN_CAPABLE_TYPES = new Set<BoundaryConditionProfile['type']>([
   'convection_to_ambient',
   'combined_convection_radiation',
 ]);

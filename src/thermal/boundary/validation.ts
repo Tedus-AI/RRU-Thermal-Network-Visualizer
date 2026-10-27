@@ -317,7 +317,7 @@ export function validateBoundarySet(input: BoundaryValidationInput): BoundaryVal
                 'error',
                 `PROFILE_FIN_GEOMETRY_${id}`,
                 `"${profile.name}": the fin geometry is incomplete, so no boundary resistance can be computed. Base L and W, fin height, channel gap and fin thickness are all required.`,
-                `「${profile.name}」的鰭片幾何不完整，無法計算邊界熱阻。底座長寬、鰭片高度、通道間距與鰭片厚度皆為必填。`,
+                `「${profile.name}」的鰭片幾何不完整，無法計算邊界熱阻。底座長寬、鰭片高度、air gap 與鰭片厚度皆為必填。`,
                 { profile_id: id },
               ),
             );

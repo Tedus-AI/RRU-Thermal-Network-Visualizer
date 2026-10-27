@@ -1,4 +1,6 @@
+import type { ReactElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 
 import type {
@@ -8,6 +10,10 @@ import type {
 } from '@/thermal/boundary/types';
 
 import { BoundaryInspector } from './BoundaryInspector';
+
+// The fin panel links to 01, so it renders inside a router.
+const renderInRouter = (node: ReactElement) =>
+  renderToStaticMarkup(<MemoryRouter>{node}</MemoryRouter>);
 
 const validation = { status: 'ready_for_07' as const, errors: [], warnings: [], infos: [] };
 const callbacks = {
@@ -63,7 +69,7 @@ describe('why a filled-in port still says Assumption', () => {
     const suppressSsrLayoutWarning = vi.spyOn(console, 'error').mockImplementation(() => {});
     let html: string;
     try {
-      html = renderToStaticMarkup(
+      html = renderInRouter(
         <BoundaryInspector
           port={port({ orientation: 'housing_wall' })}
           status="warning"
@@ -104,7 +110,7 @@ describe('why a filled-in port still says Assumption', () => {
     const suppressSsrLayoutWarning = vi.spyOn(console, 'error').mockImplementation(() => {});
     let html: string;
     try {
-      html = renderToStaticMarkup(
+      html = renderInRouter(
         <BoundaryInspector
           port={port({ orientation: 'housing_wall' })}
           status="ok"
@@ -127,7 +133,7 @@ describe('why a filled-in port still says Assumption', () => {
 
 describe('BoundaryInspector simplification', () => {
   it('renders Ambient Reference as one inherited-temperature summary without setup tabs', () => {
-    const html = renderToStaticMarkup(
+    const html = renderInRouter(
       <BoundaryInspector
         port={port({
           id: 'BP_AMBIENT',
@@ -160,7 +166,7 @@ describe('BoundaryInspector simplification', () => {
     const suppressSsrLayoutWarning = vi.spyOn(console, 'error').mockImplementation(() => {});
     let html: string;
     try {
-      html = renderToStaticMarkup(
+      html = renderInRouter(
         <BoundaryInspector
           // A flat housing wall. The effective-area field this asserts belongs
           // to the manual description, which a fin stack no longer offers.
@@ -195,7 +201,7 @@ describe('BoundaryInspector simplification', () => {
     const suppressSsrLayoutWarning = vi.spyOn(console, 'error').mockImplementation(() => {});
     let html: string;
     try {
-      html = renderToStaticMarkup(
+      html = renderInRouter(
         <BoundaryInspector
           port={port({ area_m2: null, orientation: 'housing_wall' })}
           status="ok"
@@ -221,7 +227,7 @@ describe('BoundaryInspector simplification', () => {
     const suppressSsrLayoutWarning = vi.spyOn(console, 'error').mockImplementation(() => {});
     let html: string;
     try {
-      html = renderToStaticMarkup(
+      html = renderInRouter(
         <BoundaryInspector
           port={port({ orientation: 'vertical_fins' })}
           status="ok"
@@ -252,7 +258,7 @@ describe('BoundaryInspector simplification', () => {
     let flat: string;
     let finned: string;
     try {
-      flat = renderToStaticMarkup(
+      flat = renderInRouter(
         <BoundaryInspector
           port={port({ orientation: 'housing_wall' })}
           status="ok"
@@ -264,7 +270,7 @@ describe('BoundaryInspector simplification', () => {
           {...callbacks}
         />,
       );
-      finned = renderToStaticMarkup(
+      finned = renderInRouter(
         <BoundaryInspector
           port={port({ orientation: 'vertical_fins' })}
           status="ok"
@@ -288,7 +294,7 @@ describe('BoundaryInspector simplification', () => {
     const suppressSsrLayoutWarning = vi.spyOn(console, 'error').mockImplementation(() => {});
     let html: string;
     try {
-      html = renderToStaticMarkup(
+      html = renderInRouter(
         <BoundaryInspector
           port={port({ orientation: 'housing_wall', area_m2: 0.1405 })}
           status="ok"
@@ -333,7 +339,7 @@ describe('BoundaryInspector simplification', () => {
     const suppressSsrLayoutWarning = vi.spyOn(console, 'error').mockImplementation(() => {});
     let html: string;
     try {
-      html = renderToStaticMarkup(
+      html = renderInRouter(
         <BoundaryInspector
           port={port()}
           status="ok"
@@ -358,7 +364,7 @@ describe('BoundaryInspector simplification', () => {
     const suppressSsrLayoutWarning = vi.spyOn(console, 'error').mockImplementation(() => {});
     let html: string;
     try {
-      html = renderToStaticMarkup(
+      html = renderInRouter(
         <BoundaryInspector
           port={port({ allowed_boundary_types: ['radiation_to_surroundings'] })}
           status="ok"
@@ -389,7 +395,7 @@ describe('BoundaryInspector simplification', () => {
     const suppressSsrLayoutWarning = vi.spyOn(console, 'error').mockImplementation(() => {});
     let html: string;
     try {
-      html = renderToStaticMarkup(
+      html = renderInRouter(
         <BoundaryInspector
           port={port({
             allowed_boundary_types: ['convection_to_ambient', 'solar_load'],
@@ -431,7 +437,7 @@ describe('BoundaryInspector simplification', () => {
     const suppressSsrLayoutWarning = vi.spyOn(console, 'error').mockImplementation(() => {});
     let html: string;
     try {
-      html = renderToStaticMarkup(
+      html = renderInRouter(
         <BoundaryInspector
           port={port({ allowed_boundary_types: ['adiabatic_symmetry'] })}
           status="adiabatic"
