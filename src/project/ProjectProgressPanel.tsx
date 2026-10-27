@@ -94,7 +94,7 @@ export function ProjectProgressPanel() {
     },
     {
       key: 'network',
-      label: '熱路徑',
+      label: '熱網路與邊界',
       state: health.thermalNetwork ? 'done' : 'todo',
       detail: health.thermalNetwork ? `${kpi.nodeCount} 節點 · ${kpi.edgeCount} 段` : undefined,
       code: '05',
@@ -105,8 +105,7 @@ export function ProjectProgressPanel() {
       label: '情境',
       state: health.baselineScenario ? 'done' : 'todo',
       detail: `${kpi.scenarioCount} 個`,
-      code: '06',
-      targetPath: 'boundary',
+      code: '01',
     },
     {
       key: 'solve',
@@ -122,7 +121,7 @@ export function ProjectProgressPanel() {
     <PanelCard title="專案進度" icon={<ListChecks size={15} />}>
       <ul className="flex flex-col">
         {rows.map((row) => {
-          const isNext = row.code === next.screenCode;
+          const isNext = next.rowKey ? row.key === next.rowKey : row.code === next.screenCode && row.key !== 'scenario';
           const clickable = Boolean(row.targetPath && created && row.state !== 'done');
           const content = (
             <>

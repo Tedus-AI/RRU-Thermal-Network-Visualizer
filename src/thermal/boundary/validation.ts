@@ -598,8 +598,8 @@ export function validateBoundarySet(input: BoundaryValidationInput): BoundaryVal
           message(
             'error',
             `PROFILE_SOLVED_VALUE_${id}_${key}`,
-            `"${profile.name}" carries a solved value ("${key}"). Screen 06 stores boundary inputs only.`,
-            `「${profile.name}」含有求解結果（${key}），06 只儲存邊界輸入。`,
+            `"${profile.name}" carries a solved value ("${key}"). Boundary sets store inputs only.`,
+            `「${profile.name}」含有求解結果（${key}），邊界只儲存輸入值。`,
             { profile_id: id },
           ),
         );

@@ -18,10 +18,10 @@
  */
 
 import { useEffect, useState } from 'react';
-import { Thermometer, Trash2 } from 'lucide-react';
+import { Trash2 } from 'lucide-react';
 
-import { Badge, Button, NumberInput, Select, TextInput } from '@/ui/primitives';
-import { Bi, FieldLabel, biTitle } from '@/ui/FieldLabel';
+import { Badge, NumberInput, Select, TextInput } from '@/ui/primitives';
+import { FieldLabel } from '@/ui/FieldLabel';
 import { dataSourceItemsZh } from '@/ui/dataSourceLabels';
 
 import {
@@ -264,483 +264,357 @@ export function BoundaryInspector({
   const legacyManualInUse = finCapable && finGeometryForced && !finGeometryActive;
 
   const statusLabel = PORT_STATUS_LABELS[status];
+  const addableTypes = port.allowed_boundary_types.filter(
+    (type) =>
+      type !== 'ambient_reservoir' &&
+      type !== 'external_cfd_placeholder' &&
+      (solarEnabled || type !== 'solar_load'),
+  );
+  const shownParameters = activeProfile
+    ? finPanelShown
+      ? TYPE_PARAMETERS[activeProfile.type].filter(
+          (parameter) => !FIN_DERIVED_PARAMETER_KEYS.has(parameter.key),
+        )
+      : plateGeometryActive
+        ? TYPE_PARAMETERS[activeProfile.type].filter((parameter) => parameter.key !== 'h_W_m2K')
+        : TYPE_PARAMETERS[activeProfile.type]
+    : [];
 
   return (
-    <div className="flex min-h-0 flex-col">
-      <header className="border-b border-line px-3.5 py-2.5">
-        <div className="flex items-start gap-2">
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-[13px] font-bold text-ink-900" title={port.name}>
-              {port.name}
-            </p>
-            <p className="mt-0.5 text-[11px] text-ink-500">
-              Boundary Setup / 邊界條件設定
-            </p>
-          </div>
-          <Badge tone={statusLabel.tone as 'ok'}>{statusLabel.label}</Badge>
-        </div>
-      </header>
+    <div className="flex flex-col gap-2.5" data-boundary-inspector>
+      <div className="flex items-center gap-2">
+        <p className="min-w-0 flex-1 truncate text-[12.5px] font-bold text-ink-900" title={port.name}>
+          {port.name.replace(/ (Boundary|Reference)$/, '')}
+        </p>
+        <Badge tone={statusLabel.tone as 'ok'}>{statusLabel.zh}</Badge>
+      </div>
 
-      <div className="min-h-0 flex-1 overflow-auto p-3.5">
-        <section>
-          <div className="flex items-center justify-between gap-2">
-            <p className="text-[11px] font-bold text-ink-700">
-              Boundary Profiles <span className="font-normal text-ink-400">/ 邊界條件</span>
-            </p>
-            <span className="text-[10px] text-ink-400">{profiles.length} assigned / 已指派</span>
-          </div>
-
-          <ul className="mt-1 flex flex-col gap-1">
-            {profiles.map((profile) => (
-              <li
-                key={profile.id}
-                className={`flex items-center gap-2 rounded border px-2 py-1.5 ${
-                  activeProfile?.id === profile.id
-                    ? 'border-accent-500 bg-accent-100'
-                    : 'border-line hover:bg-surface-muted'
-                }`}
+      {/* The conditions on this surface, as chips; the open one is edited below. */}
+      <div className="flex flex-wrap items-center gap-1.5" data-profiles>
+        <span className="text-[10.5px] text-ink-400">邊界條件</span>
+        {profiles.map((profile) => {
+          const active = activeProfile?.id === profile.id;
+          return (
+            <span
+              key={profile.id}
+              className={`inline-flex items-center rounded-full border text-[11px] ${
+                active ? 'border-accent-500 bg-accent-100 font-semibold text-accent-700' : 'border-line text-ink-700'
+              }`}
+            >
+              <button
+                type="button"
+                className="py-0.5 pr-1 pl-2"
+                aria-pressed={active}
+                title={profile.name}
+                onClick={() => setActiveProfileId(profile.id)}
               >
-                <button
-                  type="button"
-                  onClick={() => setActiveProfileId(profile.id)}
-                  className="min-w-0 flex-1 text-left"
-                >
-                  <span className="block truncate text-[11px] font-semibold text-ink-900">
-                    {BOUNDARY_TYPE_LABELS[profile.type].label}
-                    <span className="font-normal text-ink-400"> / {BOUNDARY_TYPE_LABELS[profile.type].zh}</span>
-                    {profile.type === 'solar_load' && !solarEnabled && (
-                      <span className="ml-1 font-semibold text-ink-400">（停用）</span>
-                    )}
-                  </span>
-                  <span className="block truncate text-[10px] text-ink-400">{profile.name}</span>
-                </button>
-                <button
-                  type="button"
-                  disabled={readOnly}
-                  title={biTitle('Remove profile', '移除此條件')}
-                  aria-label={biTitle(`Remove ${profile.name}`, '移除此條件')}
-                  onClick={() => onRemoveProfile(profile.id)}
-                  className="shrink-0 text-ink-400 hover:text-danger-600 disabled:opacity-40"
-                >
-                  <Trash2 size={13} />
-                </button>
-              </li>
-            ))}
-            {profiles.length === 0 && (
-              <li className="rounded border border-dashed border-line-strong px-2 py-3 text-center text-[11px] text-ink-400">
-                <Bi
-                  en="No boundary condition assigned. Add the physical heat-rejection mode below."
-                  zh="尚未指定邊界條件，請在下方新增實際散熱方式。"
-                  inline
-                />
-              </li>
-            )}
-          </ul>
+                {BOUNDARY_TYPE_LABELS[profile.type].zh}
+                {profile.type === 'solar_load' && !solarEnabled && '（停用）'}
+              </button>
+              <button
+                type="button"
+                disabled={readOnly}
+                title="移除此條件"
+                aria-label={`移除 ${BOUNDARY_TYPE_LABELS[profile.type].zh}`}
+                onClick={() => onRemoveProfile(profile.id)}
+                className="py-0.5 pr-1.5 text-ink-400 hover:text-danger-600 disabled:opacity-40"
+              >
+                <Trash2 size={11} aria-hidden />
+              </button>
+            </span>
+          );
+        })}
+        {profiles.length === 0 && (
+          <span className="text-[11px] text-warn-600">還沒有，請加入實際的散熱方式</span>
+        )}
+        <Select
+          id="bc-add-type"
+          aria-label="加入邊界條件"
+          title={T06.field.boundaryType}
+          className="h-7 !w-auto !py-0 !text-[11px]"
+          value=""
+          disabled={readOnly}
+          items={[
+            { value: '', label: '＋ 加入條件' },
+            ...addableTypes.map((type) => ({ value: type, label: BOUNDARY_TYPE_LABELS[type].zh })),
+          ]}
+          onChange={(event) => {
+            if (!event.target.value) return;
+            onAddProfile(event.target.value as BoundaryConditionType);
+          }}
+        />
+      </div>
 
-          <div className="mt-2">
-            <FieldLabel
-              label="Add Boundary Type"
-              zh="新增邊界型別"
-              htmlFor="bc-add-type"
-              tooltip={T06.field.boundaryType}
-            />
-            <Select
-              id="bc-add-type"
-              className="mt-1 h-8 !text-[12px]"
-              value=""
-              disabled={readOnly}
-              items={[
-                { value: '', label: '— Select a boundary type —' },
-                ...port.allowed_boundary_types
-                  .filter(
-                    (type) =>
-                      type !== 'ambient_reservoir' &&
-                      type !== 'external_cfd_placeholder' &&
-                      (solarEnabled || type !== 'solar_load'),
-                  )
-                  .map((type) => ({
-                    value: type,
-                    label: `${BOUNDARY_TYPE_LABELS[type].label} / ${BOUNDARY_TYPE_LABELS[type].zh}`,
-                  })),
-              ]}
-              onChange={(event) => {
-                if (!event.target.value) return;
-                onAddProfile(event.target.value as BoundaryConditionType);
+      {activeProfile && (
+        <div className="flex flex-col gap-2" data-active-profile>
+          {solarProfileInactive ? (
+            <p className="rounded border border-line bg-surface-muted p-2 text-[10.5px] leading-relaxed text-ink-500">
+              01 的日照是 0 W/m²：這個太陽熱負載與它的設定會保留，但不參與檢查、預覽或 07 的熱負載。
+            </p>
+          ) : (
+            <>
+              <p className="text-[10.5px] leading-relaxed text-ink-400">
+                {finCapable && finGeometryForced
+                  ? '鰭片表面以幾何描述：h、輻射項、鰭片效率與散熱面積都由下面的鰭片算出，不必另外填或從其他工具抄。'
+                  : TYPE_REQUIREMENT[activeProfile.type].zh}
+              </p>
+
+              {/* Named rather than silently replaced: the stored numbers are
+                  still what the solve uses, until the geometry is complete. */}
+              {legacyManualInUse && (
+                <p className="rounded-md border border-warn-500/40 bg-warn-100/40 p-2 text-[11px] leading-relaxed text-warn-600" data-legacy-h>
+                  <span className="font-bold">目前仍以先前輸入的 h 求解</span>
+                  <span className="mt-0.5 block text-[10.5px]">
+                    這個表面在鰭片幾何之前就設定好了：h ={' '}
+                    {formatNumber(activeProfile.parameters.h_W_m2K as number | null, 2)} W/m²K、面積 ={' '}
+                    {formatNumber((activeProfile.parameters.area_m2 as number | null) ?? port.area_m2, 3)} m²。
+                    下面的鰭片幾何填齊後就改用幾何計算。
+                  </span>
+                </p>
+              )}
+
+              {finCapable && !finGeometryForced && (
+                <label className="flex cursor-pointer items-start gap-2 rounded-md border border-line bg-surface-muted p-2">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5 size-3.5 accent-[var(--color-accent-600)]"
+                    checked={finGeometryActive}
+                    disabled={readOnly}
+                    onChange={(event) => setFinGeometryEnabled(event.target.checked)}
+                  />
+                  <span className="text-[11px] leading-relaxed">
+                    <span className="font-bold text-ink-800">以鰭片幾何描述</span>
+                    <span className="mt-0.5 block text-[10px] text-ink-400">
+                      h、輻射項、鰭片效率與散熱面積由幾何算出，不必手動填寫。
+                    </span>
+                  </span>
+                </label>
+              )}
+
+              {/* A flat wall states its own area, emissivity and view factor;
+                  only h is offered as a computed value. */}
+              {finCapable && !finGeometryForced && !finGeometryActive && (
+                <label className="flex cursor-pointer items-start gap-2 rounded-md border border-line bg-surface-muted p-2">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5 size-3.5 accent-[var(--color-accent-600)]"
+                    checked={plateGeometryActive}
+                    disabled={readOnly}
+                    onChange={(event) => setPlateGeometryEnabled(event.target.checked)}
+                  />
+                  <span className="text-[11px] leading-relaxed">
+                    <span className="font-bold text-ink-800">由平板幾何計算 h</span>
+                    <span className="mt-0.5 block text-[10px] text-ink-400">
+                      自然對流係數由特徵長度、方位與表面溫度假設算出（Churchill–Chu 等標準關聯式）；面積、發射率、視角因子仍由你填。
+                    </span>
+                  </span>
+                </label>
+              )}
+
+              {plateGeometryActive && !finGeometryActive && (
+                <PlateGeometryPanel
+                  profile={activeProfile}
+                  result={plateResult}
+                  ambientTemperature_C={ambientTemperature_C}
+                  readOnly={readOnly}
+                  onPatch={patchParameter}
+                />
+              )}
+
+              {/* On a finned port the panel is always here, even while a stored
+                  h is still doing the solving. */}
+              {finPanelShown && (
+                <FinGeometryPanel
+                  port={port}
+                  profile={activeProfile}
+                  result={finResult}
+                  readOnly={readOnly}
+                  onPatch={patchParameter}
+                  onTechnologyChange={setFinTechnology}
+                />
+              )}
+
+              {shownParameters.map((parameter) => {
+                const inheritedOwner =
+                  parameter.key === 'irradiance_W_m2'
+                    ? '01 情境'
+                    : parameter.key === 'emissivity' || parameter.key === 'absorptivity'
+                      ? '表面性質'
+                      : (parameter.key === 'area_m2' || parameter.key === 'receivingArea_m2') &&
+                          port.area_m2 != null
+                        ? '04 的元件幾何'
+                        : null;
+                const value = activeProfile.parameters[parameter.key];
+                return (
+                  <div key={parameter.key}>
+                    <FieldLabel
+                      label={parameter.label}
+                      zh={parameter.zh}
+                      unit={parameter.unit || undefined}
+                      htmlFor={`bc-param-${parameter.key}`}
+                      tooltip={parameter.tip}
+                      required={parameter.key !== 'surfaceReferenceTemperatureGuess_C'}
+                    />
+                    {inheritedOwner ? (
+                      <div
+                        id={`bc-param-${parameter.key}`}
+                        className="mt-1 flex h-8 items-center justify-between rounded-md border border-line bg-surface px-2.5 text-[11px] text-ink-900"
+                      >
+                        <span className="tabular font-semibold">{typeof value === 'number' ? value : '—'}</span>
+                        <span className="text-[10px] text-ink-400">取自{inheritedOwner}</span>
+                      </div>
+                    ) : (
+                      <NumberInput
+                        id={`bc-param-${parameter.key}`}
+                        className="mt-1 h-8 !text-[12px]"
+                        step="any"
+                        max={parameter.max}
+                        value={typeof value === 'number' ? value : ''}
+                        disabled={readOnly}
+                        onChange={(event) =>
+                          patchParameter(
+                            parameter.key,
+                            event.target.value === '' ? null : Number(event.target.value),
+                          )
+                        }
+                      />
+                    )}
+                  </div>
+                );
+              })}
+            </>
+          )}
+
+          {activeProfile.type === 'adiabatic_symmetry' && (
+            <div>
+              <FieldLabel
+                label="Reason (optional)"
+                zh="理由（選填）"
+                htmlFor="bc-adiabatic-reason"
+                tooltip={T06.field.adiabaticReason}
+              />
+              <TextInput
+                id="bc-adiabatic-reason"
+                className="mt-1 h-8 !text-[12px]"
+                placeholder="例如：對稱面"
+                value={(activeProfile.parameters.reason as string) ?? ''}
+                disabled={readOnly}
+                onChange={(event) => patchParameter('reason', event.target.value)}
+              />
+            </div>
+          )}
+
+          {activeProfile.type === 'external_cfd_placeholder' && (
+            <p className="rounded border border-warn-500/40 bg-warn-100 p-2 text-[10.5px] leading-relaxed text-warn-600">
+              03 還沒有做：這個佔位不會匯入 CFD 資料，也不影響求解。
+            </p>
+          )}
+
+          {!solarProfileInactive && (
+            <ApplicablePreview
+              preview={preview}
+              activeProfile={activeProfile}
+              assumptionCheck={assumptionCheck}
+              readOnly={readOnly}
+              onApplySolvedSurface={(surface_C) => {
+                // The profile that OWNS the assumption, which is not
+                // necessarily the one that happens to be open.
+                const owner = profiles.find((entry) => entry.id === assumptionCheck?.profile_id) ?? null;
+                if (!owner) return;
+                onUpsertProfile({
+                  ...owner,
+                  parameters: { ...owner.parameters, surfaceReferenceTemperatureGuess_C: surface_C },
+                  // A STATED input the engineer chose, not a solved value: the
+                  // source says so, and 07 re-solves from it.
+                  source: 'manual',
+                });
               }}
             />
-          </div>
-        </section>
+          )}
 
-        {activeProfile && (
-          <section className="mt-3 border-t border-line pt-3">
-            <p className="mb-1.5 text-[11px] font-bold text-ink-700">
-              Required Inputs <span className="font-normal text-ink-400">/ 必要輸入</span>
-            </p>
-            {solarProfileInactive ? (
-              <p className="mb-2 rounded border border-line bg-surface-muted p-2 text-[10px] leading-relaxed text-ink-500">
-                Solar load is 0 W/m² in Screen 01. This profile and its saved setup are retained but
-                do not participate in validation, preview or the Screen 07 heat load.
-                <span className="block text-ink-400">
-                  SCR01 日照負載為 0 W/m²；此 profile 與既有設定會保留，但不參與驗證、預覽或
-                  Screen 07 熱負載。
-                </span>
-              </p>
-            ) : (
-              <>
-                <p className="mb-2 rounded border border-line bg-surface-muted p-2 text-[10px] leading-relaxed text-ink-500">
-                  {TYPE_REQUIREMENT[activeProfile.type].en}
-                  <span className="block text-ink-400">{TYPE_REQUIREMENT[activeProfile.type].zh}</span>
-                </p>
-
-                {finCapable && finGeometryForced && (
-                  <p className="mb-2 rounded-md border border-line bg-surface-muted p-2 text-[11px] leading-relaxed">
-                    <span className="font-bold text-ink-800">
-                      Described as a fin array / 以鰭片幾何描述
-                    </span>
-                    <span className="mt-0.5 block text-[10px] text-ink-400">
-                      鰭片表面沒有可獨立成立的 h：對流係數由 air gap 與鰭片高度決定，散熱面積由鰭片數決定，
-                      鰭片效率又折扣其中一部分。這四個數字要等幾何存在才存在，所以此表面只以幾何描述。
-                    </span>
-                  </p>
-                )}
-
-                {finCapable && !finGeometryForced && (
-                  <label className="mb-2 flex cursor-pointer items-start gap-2 rounded-md border border-line bg-surface-muted p-2">
-                    <input
-                      type="checkbox"
-                      className="mt-0.5 size-3.5 accent-[var(--color-accent-600)]"
-                      checked={finGeometryActive}
-                      disabled={readOnly}
-                      onChange={(event) => setFinGeometryEnabled(event.target.checked)}
-                    />
-                    <span className="text-[11px] leading-relaxed">
-                      <span className="font-bold text-ink-800">
-                        Describe as a fin array / 以鰭片幾何描述
-                      </span>
-                      <span className="mt-0.5 block text-[10px] text-ink-400">
-                        h、輻射項、鰭片效率與散熱面積由幾何算出，不需手動填寫或從其他工具抄寫。
-                      </span>
-                    </span>
-                  </label>
-                )}
-
-                {/* A flat wall states its own area, emissivity and view factor
-                    — those are real properties of it. Only `h` is offered as a
-                    computed value, because it is the one nobody can state. */}
-                {finCapable && !finGeometryForced && !finGeometryActive && (
-                  <label className="mb-2 flex cursor-pointer items-start gap-2 rounded-md border border-line bg-surface-muted p-2">
-                    <input
-                      type="checkbox"
-                      className="mt-0.5 size-3.5 accent-[var(--color-accent-600)]"
-                      checked={plateGeometryActive}
-                      disabled={readOnly}
-                      onChange={(event) => setPlateGeometryEnabled(event.target.checked)}
-                    />
-                    <span className="text-[11px] leading-relaxed">
-                      <span className="font-bold text-ink-800">
-                        Compute h from the plate / 由平板幾何計算 h
-                      </span>
-                      <span className="mt-0.5 block text-[10px] text-ink-400">
-                        自然對流係數由特徵長度、方位與表面溫度假設算出（Churchill–Chu 等標準關聯式）。
-                        面積、發射率、視角因子仍由你填 —— 平面表面的這三項是可以量、可以畫的。
-                      </span>
-                    </span>
-                  </label>
-                )}
-
-                {plateGeometryActive && !finGeometryActive && (
-                  <PlateGeometryPanel
-                    profile={activeProfile}
-                    result={plateResult}
-                    ambientTemperature_C={ambientTemperature_C}
-                    readOnly={readOnly}
-                    onPatch={patchParameter}
-                  />
-                )}
-
-                {/* On a finned port the panel is always here, even while a
-                    stored h is still doing the solving. Showing the notice
-                    without the fields it refers to would be a claim the screen
-                    does not back up. */}
-                {finPanelShown && (
-                  <FinGeometryPanel
-                    port={port}
-                    profile={activeProfile}
-                    result={finResult}
-                    readOnly={readOnly}
-                    onPatch={patchParameter}
-                    onTechnologyChange={setFinTechnology}
-                  />
-                )}
-
-                {/* Named rather than silently replaced. The stored numbers were
-                    solved with, so they are reported as what is still in force
-                    — but not offered for editing, because editing them would be
-                    extending a description this surface is not supposed to
-                    have. Completing the geometry above retires them. */}
-                {legacyManualInUse && (
-                  <p className="mb-2 rounded-md border border-warn-500/40 bg-warn-100/40 p-2 text-[11px] leading-relaxed text-warn-600">
-                    <span className="font-bold">
-                      Still solving from a stored h / 目前仍以先前輸入的 h 求解
-                    </span>
-                    <span className="mt-0.5 block text-[10px]">
-                      此表面在鰭片幾何存在之前就已設定，目前仍使用 h ={' '}
-                      {formatNumber(activeProfile.parameters.h_W_m2K as number | null, 2)} W/m²K、面積 ={' '}
-                      {formatNumber(
-                        (activeProfile.parameters.area_m2 as number | null) ?? port.area_m2,
-                        3,
-                      )}{' '}
-                      m²。改以另一套模型重新解讀這些數字並不比留著它們誠實，所以它們維持有效，
-                      直到上方幾何填齊後由幾何取代。
-                    </span>
-                  </p>
-                )}
-
-                {(finPanelShown
-                  ? TYPE_PARAMETERS[activeProfile.type].filter(
-                      (parameter) => !FIN_DERIVED_PARAMETER_KEYS.has(parameter.key),
-                    )
-                  : plateGeometryActive
-                    ? TYPE_PARAMETERS[activeProfile.type].filter(
-                        (parameter) => parameter.key !== 'h_W_m2K',
-                      )
-                    : TYPE_PARAMETERS[activeProfile.type]
-                ).map((parameter) => {
-                  const inheritedOwner =
-                    parameter.key === 'irradiance_W_m2'
-                      ? 'SCR01 情境設定'
-                      : parameter.key === 'emissivity' || parameter.key === 'absorptivity'
-                        ? '表面性質'
-                        : (parameter.key === 'area_m2' || parameter.key === 'receivingArea_m2') &&
-                            port.area_m2 != null
-                          ? 'SCR04/05 邊界幾何'
-                          : null;
-                  const value = activeProfile.parameters[parameter.key];
-                  return (
-                    <div key={parameter.key} className="mb-2">
-                      <FieldLabel
-                        label={parameter.label}
-                        zh={parameter.zh}
-                        unit={parameter.unit || undefined}
-                        htmlFor={`bc-param-${parameter.key}`}
-                        tooltip={parameter.tip}
-                        required={parameter.key !== 'surfaceReferenceTemperatureGuess_C'}
-                      />
-                      {inheritedOwner ? (
-                        <div
-                          id={`bc-param-${parameter.key}`}
-                          className="mt-1 flex h-8 items-center justify-between rounded-md border border-line bg-surface-muted px-2.5 text-[11px] text-ink-700"
-                        >
-                          <span className="font-semibold tabular">
-                            {typeof value === 'number' ? value : 'N/A'}
-                          </span>
-                          <span className="text-[10px] text-ink-400">
-                            由{inheritedOwner}同步
-                          </span>
-                        </div>
-                      ) : (
-                        <NumberInput
-                          id={`bc-param-${parameter.key}`}
-                          className="mt-1 h-8 !text-[12px]"
-                          step="any"
-                          max={parameter.max}
-                          value={typeof value === 'number' ? value : ''}
-                          disabled={readOnly}
-                          onChange={(event) =>
-                            patchParameter(
-                              parameter.key,
-                              event.target.value === '' ? null : Number(event.target.value),
-                            )
-                          }
-                        />
-                      )}
-                    </div>
-                  );
-                })}
-              </>
-            )}
-
-            {activeProfile.type === 'adiabatic_symmetry' && (
-              <div className="mb-2">
-                <FieldLabel
-                  label="Reason (optional)"
-                  zh="理由（選填）"
-                  htmlFor="bc-adiabatic-reason"
-                  tooltip={T06.field.adiabaticReason}
-                />
-                <TextInput
-                  id="bc-adiabatic-reason"
-                  className="mt-1 h-8 !text-[12px]"
-                  placeholder="e.g. symmetry plane / 例如：對稱面"
-                  value={(activeProfile.parameters.reason as string) ?? ''}
-                  disabled={readOnly}
-                  onChange={(event) => patchParameter('reason', event.target.value)}
-                />
-              </div>
-            )}
-
-            {activeProfile.type === 'external_cfd_placeholder' && (
-              <p className="rounded border border-warn-500/40 bg-warn-100 p-2 text-[10px] leading-relaxed text-warn-600">
-                Screen 03 is deferred. This placeholder does not import CFD data or affect the solver.
-                <span className="block">Screen 03 尚未完成，此佔位不會匯入 CFD 資料，也不影響求解。</span>
-              </p>
-            )}
-
-            {!solarProfileInactive && (
-              <ApplicablePreview
-                preview={preview}
-                activeProfile={activeProfile}
-                assumptionCheck={assumptionCheck}
-                readOnly={readOnly}
-                onApplySolvedSurface={(surface_C) => {
-                  // The profile that OWNS the assumption, which is not
-                  // necessarily the tab that happens to be open. Writing to the
-                  // open one put the temperature on a profile that never reads
-                  // it and left the real assumption exactly as it was.
-                  const owner =
-                    profiles.find((entry) => entry.id === assumptionCheck?.profile_id) ?? null;
-                  if (!owner) return;
-                  onUpsertProfile({
-                    ...owner,
-                    parameters: {
-                      ...owner.parameters,
-                      surfaceReferenceTemperatureGuess_C: surface_C,
-                    },
-                    // What gets written is a STATED input the engineer chose,
-                    // not a solved value the set carries around: the source
-                    // says so, and Screen 07 will re-solve from it.
-                    source: 'manual',
-                  });
-                }}
+          <details className="rounded border border-line bg-surface-muted px-2.5 py-2 text-[10px] text-ink-500">
+            <summary className="cursor-pointer font-semibold text-ink-600">進階資訊（名稱、來源、信心度）</summary>
+            <div className="mt-2">
+              <FieldLabel label="Profile Name" zh="條件名稱" htmlFor="bc-profile-name" />
+              <TextInput
+                id="bc-profile-name"
+                className="mt-1 mb-2 h-8 !text-[12px]"
+                value={activeProfile.name}
+                disabled={readOnly}
+                onChange={(event) => patchProfile({ name: event.target.value })}
               />
-            )}
 
-            <details className="mt-3 rounded border border-line bg-surface-muted px-2.5 py-2 text-[10px] text-ink-500">
-              <summary className="cursor-pointer font-semibold text-ink-600">
-                Advanced Details / 進階資訊
-              </summary>
-              <div className="mt-2">
-                <FieldLabel label="Profile Name" zh="條件名稱" htmlFor="bc-profile-name" />
-                <TextInput
-                  id="bc-profile-name"
-                  className="mt-1 mb-2 h-8 !text-[12px]"
-                  value={activeProfile.name}
-                  disabled={readOnly}
-                  onChange={(event) => patchProfile({ name: event.target.value })}
-                />
+              <FieldLabel
+                label="Data Source"
+                zh="資料來源"
+                htmlFor="bc-profile-source"
+                tooltip={T06.field.dataSource}
+              />
+              <Select
+                id="bc-profile-source"
+                className="mt-1 mb-2 h-8 !text-[12px]"
+                value={activeProfile.source}
+                disabled={readOnly}
+                items={dataSourceItemsZh(SOURCES)}
+                onChange={(event) => patchProfile({ source: event.target.value as BoundaryDataSource })}
+              />
 
-                <FieldLabel
-                  label="Data Source"
-                  zh="資料來源"
-                  htmlFor="bc-profile-source"
-                  tooltip={T06.field.dataSource}
-                />
-                <Select
-                  id="bc-profile-source"
-                  className="mt-1 mb-2 h-8 !text-[12px]"
-                  value={activeProfile.source}
-                  disabled={readOnly}
-                  items={dataSourceItemsZh(SOURCES)}
-                  onChange={(event) =>
-                    patchProfile({ source: event.target.value as BoundaryDataSource })
-                  }
-                />
+              <FieldLabel
+                label="Confidence"
+                zh="信心度"
+                htmlFor="bc-profile-confidence"
+                tooltip={T06.field.confidence}
+              />
+              <Select
+                id="bc-profile-confidence"
+                className="mt-1 mb-2 h-8 !text-[12px]"
+                value={activeProfile.confidence}
+                disabled={readOnly}
+                items={[
+                  { value: 'high', label: '高' },
+                  { value: 'medium', label: '中' },
+                  { value: 'low', label: '低' },
+                ]}
+                onChange={(event) => patchProfile({ confidence: event.target.value as Confidence })}
+              />
 
-                <FieldLabel
-                  label="Confidence"
-                  zh="信心度"
-                  htmlFor="bc-profile-confidence"
-                  tooltip={T06.field.confidence}
-                />
-                <Select
-                  id="bc-profile-confidence"
-                  className="mt-1 mb-2 h-8 !text-[12px]"
-                  value={activeProfile.confidence}
-                  disabled={readOnly}
-                  options={['high', 'medium', 'low']}
-                  onChange={(event) =>
-                    patchProfile({ confidence: event.target.value as Confidence })
-                  }
-                />
+              <FieldLabel label="Reference" zh="依據" htmlFor="bc-profile-reference" />
+              <TextInput
+                id="bc-profile-reference"
+                className="mt-1 mb-2 h-8 !text-[12px]"
+                placeholder="例如：風洞報告 rev B"
+                value={activeProfile.provenance?.reference ?? ''}
+                disabled={readOnly}
+                onChange={(event) =>
+                  patchProfile({
+                    provenance: {
+                      source_label: activeProfile.provenance?.source_label ?? 'Thermal engineer input',
+                      reference: event.target.value,
+                    },
+                  })
+                }
+              />
 
-                <FieldLabel label="Reference" zh="依據" htmlFor="bc-profile-reference" />
-                <TextInput
-                  id="bc-profile-reference"
-                  className="mt-1 mb-2 h-8 !text-[12px]"
-                  placeholder="e.g. wind tunnel report rev B"
-                  value={activeProfile.provenance?.reference ?? ''}
-                  disabled={readOnly}
-                  onChange={(event) =>
-                    patchProfile({
-                      provenance: {
-                        source_label:
-                          activeProfile.provenance?.source_label ?? 'Thermal engineer input',
-                        reference: event.target.value,
-                      },
-                    })
-                  }
-                />
+              <Row label="Representation" zh="求解表示">
+                <span title={T06.field.representation}>{activeProfile.representation}</span>
+              </Row>
+              <Row label="Boundary Port" zh="邊界端口">{port.id}</Row>
+              <Row label="Connected Node" zh="連接節點">{port.connected_node_id}</Row>
+              <Row label="Surface Group" zh="表面群組">{port.surface_group_id}</Row>
+              <Row label="Orientation" zh="方位">{port.orientation}</Row>
+              <Row label="Topology Area" zh="拓樸面積">
+                {port.area_m2 == null
+                  ? '未提供'
+                  : port.area_m2 < 0.01
+                    ? `${port.area_m2.toFixed(6)} m² (${(port.area_m2 * 1_000_000).toFixed(1)} mm²)`
+                    : formatNumber(port.area_m2, 3, 'm²')}
+              </Row>
+            </div>
+          </details>
+        </div>
+      )}
 
-                <Row label="Representation" zh="求解表示">
-                  <span title={T06.field.representation}>{activeProfile.representation}</span>
-                </Row>
-                <Row label="Boundary Port">{port.id}</Row>
-                <Row label="Connected Node">{port.connected_node_id}</Row>
-                <Row label="Surface Group">{port.surface_group_id}</Row>
-                <Row label="Orientation" zh="方位">{port.orientation}</Row>
-                <Row label="Topology Area" zh="拓撲面積">
-                  {port.area_m2 == null
-                    ? 'Not provided'
-                    : port.area_m2 < 0.01
-                      ? `${port.area_m2.toFixed(6)} m² (${(port.area_m2 * 1_000_000).toFixed(1)} mm²)`
-                      : formatNumber(port.area_m2, 3, 'm²')}
-                </Row>
-              </div>
-            </details>
-          </section>
-        )}
-
-        <section className="mt-3 border-t border-line pt-3">
-          <p className="mb-1.5 text-[11px] font-bold text-ink-700">
-            Validation <span className="font-normal text-ink-400">/ 驗證</span>
-          </p>
-          <InlineChecks messages={portMessages} />
-        </section>
-      </div>
+      <InlineChecks messages={portMessages} />
     </div>
-  );
-}
-
-/** Shown when nothing on the canvas is selected. */
-export function BoundaryInspectorEmpty() {
-  return (
-    <div className="p-6 text-center">
-      <Thermometer size={22} className="mx-auto mb-2 text-ink-400" />
-      <p className="text-[13px] font-semibold text-ink-700">Nothing selected</p>
-      <p className="mt-1 text-[12px] leading-relaxed text-ink-400">
-        Select a boundary port on the canvas or in the list to edit its scenario boundary
-        conditions.
-        <span className="block">請於畫布或清單選擇邊界端口，以編輯此情境的邊界條件。</span>
-      </p>
-    </div>
-  );
-}
-
-export function AddProfileButton({
-  disabled,
-  onClick,
-}: {
-  disabled: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <Button
-      className="h-8"
-      disabled={disabled}
-      title={biTitle('Apply to similar surfaces', '套用到相似表面')}
-      onClick={onClick}
-    >
-      Apply to Similar
-    </Button>
   );
 }

@@ -574,7 +574,7 @@ export function ThermalNetworkView() {
     <ScreenWorkspace
       title="熱網路求解"
       titleZh=""
-      descriptionZh="執行熱網路求解，以取得節點溫度、熱流與能量平衡。拓樸來自 05、邊界條件來自 06，在此皆為唯讀。"
+      descriptionZh="執行熱網路求解，以取得節點溫度、熱流與能量平衡。熱網路與邊界條件都來自 05，在此皆為唯讀。"
       badge={
         <div className="flex flex-wrap items-center gap-2">
           {readOnly && <Badge tone="accent">READ ONLY / 唯讀</Badge>}
@@ -599,8 +599,8 @@ export function ThermalNetworkView() {
         <div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-line bg-surface px-6 py-3">
           <Button
             icon={<ArrowLeft size={15} />}
-            title={biTitle('Back to 06 Boundary Conditions', T07.action.backTo06)}
-            onClick={() => navigate(projectPath(projectId, 'boundary'))}
+            title={biTitle('Back to 05 Network & Boundary', T07.action.backTo06)}
+            onClick={() => navigate(projectPath(projectId, 'thermal-path'))}
           >
             Back to 06
           </Button>
@@ -670,11 +670,11 @@ export function ThermalNetworkView() {
           <XCircle size={16} className="mt-0.5 shrink-0 text-danger-600" />
           <p className="text-[12px] leading-relaxed font-semibold text-danger-600">
             Boundary conditions are incomplete. Complete Screen 06 first.
-            <span className="block font-normal text-ink-500">邊界條件尚未完成，請先完成 06。</span>
+            <span className="block font-normal text-ink-500">邊界條件尚未完成，請先到 05 完成散熱表面。</span>
           </p>
           <Button
             className="ml-auto h-7 shrink-0 !text-[12px]"
-            onClick={() => navigate(projectPath(projectId, 'boundary'))}
+            onClick={() => navigate(projectPath(projectId, 'thermal-path'))}
           >
             Go to 06
           </Button>
@@ -726,7 +726,7 @@ export function ThermalNetworkView() {
               boundaryCount={boundarySet?.assignments.filter((entry) => entry.enabled).length ?? 0}
               portCount={boundaryPortCount}
               solarLoadCount={boundarySet?.external_loads.length ?? 0}
-              onEditBoundary={() => navigate(projectPath(projectId, 'boundary'))}
+              onEditBoundary={() => navigate(projectPath(projectId, 'thermal-path'))}
             />
           </Section>
         </ResizableSidebar>
@@ -744,7 +744,7 @@ export function ThermalNetworkView() {
                 <span className="font-semibold text-ink-400">/ 已求解熱網路</span>
               </h2>
               <Badge tone="neutral">
-                <span title="拓樸來自 05、邊界條件來自 06，此畫面不修改任何一項。">
+                <span title="熱網路與邊界條件都來自 05，此畫面不修改任何一項。">
                   From 05 + 06
                 </span>
               </Badge>
@@ -839,9 +839,7 @@ export function ThermalNetworkView() {
               issues={issues}
               hasRun={Boolean(checks || solution)}
               onFocus={issue => explorer.showFull(() => focusIssue(issue))}
-              onNavigate={(screen) =>
-                navigate(projectPath(projectId, screen === '05' ? 'thermal-path' : 'boundary'))
-              }
+              onNavigate={() => navigate(projectPath(projectId, 'thermal-path'))}
             />
 
             {solving && (

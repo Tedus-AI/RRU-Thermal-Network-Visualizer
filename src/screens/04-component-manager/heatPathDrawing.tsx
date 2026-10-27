@@ -761,7 +761,7 @@ export function draw2D(view: HeatPathView, ids: SvgIds): Drawing {
         y: at.pkgTop - 14,
         xr: pkgX + pkgW * 0.8 + 4,
         t: '暴露表面',
-        s: '對流＋輻射（06 設定）',
+        s: '對流＋輻射（05 設定）',
       });
     }
     timW = pkgW;
@@ -1017,7 +1017,7 @@ export function draw2D(view: HeatPathView, ids: SvgIds): Drawing {
     y: y + finH * 0.45,
     xr: bx + baseW,
     t: '鰭片',
-    s: '對流到環境（06 設定）',
+    s: '對流到環境（05 設定）',
     r: '07 計算',
     rc: 'later',
   });
@@ -1580,7 +1580,7 @@ function layerTitle3D(sl: Slab, view: HeatPathView): Omit<LabelItem, 'layer' | '
         rc: 'later',
       };
     case 'fins':
-      return { t: '鰭片', s: '06 設定', r: '07 計算', rc: 'later' };
+      return { t: '鰭片', s: '05 設定', r: '07 計算', rc: 'later' };
     default:
       return null;
   }

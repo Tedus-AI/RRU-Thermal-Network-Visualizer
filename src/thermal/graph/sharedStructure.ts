@@ -31,7 +31,7 @@ import type { BaseZone, NodeType, ThermalEdge, ThermalNetwork, ThermalNode } fro
  */
 export const ISOTHERMAL_FIN_LINK_RTH_C_PER_W = 1e-6;
 const ISOTHERMAL_FIN_LINK_REFERENCE =
-  'Isothermal fin-root link; carries the fin’s own conduction once Screen 06 states fin geometry.';
+  'Isothermal fin-root link; carries the fin’s own conduction once 05 散熱表面 states fin geometry.';
 
 export const STRUCTURE_PRESETS = ['SINGLE_MAIN_BASE', 'DUAL_HSK_BASE'] as const;
 export type StructurePreset = (typeof STRUCTURE_PRESETS)[number];
@@ -125,7 +125,7 @@ function structuralEdge(
       ? ISOTHERMAL_FIN_LINK_REFERENCE
       : options.unresolvedNote ??
         (boundaryDerived
-          ? 'Boundary derived — resolved in Screen 06 once ambient, h and radiation are defined.'
+          ? 'Boundary derived — resolved in 05 散熱表面 once ambient, h and radiation are defined.'
           : 'Resistance not yet defined.'),
     enabled: true,
     origin: { kind: 'shared_structure' },

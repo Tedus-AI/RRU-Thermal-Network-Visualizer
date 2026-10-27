@@ -11,7 +11,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
 import { FOCUS_PARAM, consumeFocus } from '@/app/focusLink';
-import { useShellActions } from '@/app/shellActions';
 import { toast } from '@/ui/toast';
 
 import { useProjectStore } from '@/data/projectStore';
@@ -39,7 +38,6 @@ import {
 import { manualId, structureEdgeId } from '@/thermal/graph/idFactory';
 import type { NodeType, ThermalEdge } from '@/thermal/types';
 
-import type { BuilderStep } from './BuilderStepper';
 import { defaultPrefFor, type BuilderPref } from './ComponentPalette';
 import type { NewSpreadingDraft, NewZoneDraft } from './SharedStructurePanel';
 import type { CanvasTool } from './GraphToolbar';
@@ -47,6 +45,14 @@ import { useGraphExplorer } from '@/ui/GraphExplorer';
 import type { CanvasHandle, GraphSelection } from './ThermalGraphCanvas';
 import { applyBoundaryValidationOverlay } from './boundaryValidationOverlay';
 import { projectScenarioBoundaryEdges } from './scenarioBoundaryProjection';
+
+/**
+ * Which tool group of the advanced editor is open. There is no stepper any
+ * more (05 and 06 became one page); the step only decides which palette the
+ * advanced editor shows after an action — Start Blank opens the structure,
+ * Generate the connections.
+ */
+export type BuilderStep = 'components' | 'templates' | 'structure' | 'connections' | 'validate';
 
 export function useThermalPathBuilder() {
   const { projectId } = useParams();
@@ -102,6 +108,9 @@ export function useThermalPathBuilder() {
   const [focusField, setFocusField] = useState<string | null>(null);
   useEffect(() => {
     if (!network) return;
+    // A link to a boundary surface carries a node and a field instead; that
+    // field belongs to the surface panel (`useBoundaryWorkspace`).
+    if (!focusParams.get(FOCUS_PARAM.edge)) return;
     const edgeId = consumeFocus(focusParams, FOCUS_PARAM.edge, navigate);
     const field = consumeFocus(focusParams, FOCUS_PARAM.field, navigate);
     if (edgeId && network.edges[edgeId]) {
@@ -111,6 +120,17 @@ export function useThermalPathBuilder() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [network, focusParams]);
   const [tool, setTool] = useState<CanvasTool>('select');
+  /**
+   * The advanced editor: templates, shared structure, manual connections, and
+   * the canvas tools that add, connect and delete. Off by default — the network
+   * is generated from 04, and the page's everyday job is the surfaces — so a
+   * click on the fin surface followed by Backspace cannot delete it.
+   */
+  const [editing, setEditingState] = useState(false);
+  const setEditing = useCallback((next: boolean) => {
+    setEditingState(next);
+    if (!next) setTool('select');
+  }, []);
   const [layoutMode, setLayoutMode] = useState('Auto');
   const [zoom, setZoom] = useState(1);
   const [showPorts, setShowPorts] = useState(true);
@@ -316,7 +336,8 @@ export function useThermalPathBuilder() {
     });
   }, [components]);
 
-  const handleSave = () => {
+  /** Saves the network. `silent`: the page's own save reports once for everything it saved. */
+  const handleSave = (silent = false) => {
     if (!projectId || readOnly) return;
     const positions = canvasRef.current?.positions();
     if (positions && Object.keys(positions).length > 0) {
@@ -336,15 +357,8 @@ export function useThermalPathBuilder() {
     ) {
       current.setRequiresReview(false);
     }
-    toast.success('Thermal network saved / 熱網路已儲存');
+    if (!silent) toast.success('熱網路已儲存');
   };
-
-  const setSaveHandler = useShellActions((s) => s.setSaveHandler);
-  useEffect(() => {
-    setSaveHandler(handleSave);
-    return () => setSaveHandler(null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId, readOnly, layoutMode]);
 
   const enabledComponents = useMemo(
     () => components.filter((component) => component.enabled),
@@ -794,7 +808,7 @@ export function useThermalPathBuilder() {
    * one hook fewer than the next one and React tore the whole screen down.
    */
   useEffect(() => {
-    if (readOnly || !selection) return;
+    if (readOnly || !selection || !editing) return;
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Delete' && event.key !== 'Backspace') return;
@@ -820,7 +834,7 @@ export function useThermalPathBuilder() {
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [readOnly, selection]);
+  }, [readOnly, selection, editing]);
 
   return {
     projectId,
@@ -852,6 +866,8 @@ export function useThermalPathBuilder() {
     setFocusField,
     tool,
     setTool,
+    editing,
+    setEditing,
     layoutMode,
     setLayoutMode,
     zoom,

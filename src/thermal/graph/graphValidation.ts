@@ -212,8 +212,8 @@ export function validateGraph(network: ThermalNetwork): GraphValidationResult {
         severity: 'warning',
         code: 'BOUNDARY_PLACEHOLDER',
         nodeId: node.id,
-        message: `"${node.name}" is a boundary placeholder — configure it in Screen 06.`,
-        messageZh: `「${node.name}」為邊界佔位節點，請於 Screen 06 設定。`,
+        message: `"${node.name}" is a boundary placeholder — configure it under 散熱表面 / 環境.`,
+        messageZh: `「${node.name}」為邊界佔位節點，請在 ② 散熱表面／③ 環境設定。`,
       });
     }
 

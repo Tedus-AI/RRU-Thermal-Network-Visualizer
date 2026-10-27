@@ -275,20 +275,20 @@ export function BuilderModals({ builder, network, projectId }: BuilderModalsProp
 
       {warningConfirm != null && (
         <Modal
-          title="Continue with warnings? / 有警告，仍要繼續？"
-          description={`${warningConfirm} item(s) remain unresolved. They must be completed in Screen 06 or a later calibration. / 尚有 ${warningConfirm} 項未解析，需於 Screen 06 或後續校正完成。`}
+          title="還有警告，仍要前往 07？"
+          description={`還有 ${warningConfirm} 個警告（見 ④ 檢查）。07 會照目前的設定求解，警告所說的假設也會照用。`}
           onClose={() => setWarningConfirm(null)}
           footer={
             <>
-              <Button onClick={() => setWarningConfirm(null)}>Stay / 留在本頁</Button>
+              <Button onClick={() => setWarningConfirm(null)}>留在本頁</Button>
               <Button
                 variant="primary"
                 onClick={() => {
                   setWarningConfirm(null);
-                  navigate(projectPath(projectId, 'boundary'));
+                  navigate(projectPath(projectId, 'network'));
                 }}
               >
-                Continue / 繼續
+                前往 07 求解
               </Button>
             </>
           }

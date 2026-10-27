@@ -243,7 +243,7 @@ describe('segmentLevers', () => {
     const plate = result.levers.find((lever) => lever.key === 'plate_area_mm2')!;
     expect(plate.target).toBeNull();
     expect(plate.limit).toBeUndefined();
-    expect(plate.note).toMatch(/Screen 06/);
+    expect(plate.note).toMatch(/05 散熱表面/);
   });
 
   /** A footprint cannot outgrow the plate it sits on, however much it would help. */

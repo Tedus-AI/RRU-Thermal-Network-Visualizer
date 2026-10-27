@@ -230,8 +230,8 @@ export const NODE_TYPE_HINTS: Record<NodeType, { en: string; zh: string }> = {
     zh: '與空氣接觸的鰭片表面。',
   },
   ambient: {
-    en: 'The air the model ends at. Its temperature comes from the Screen 06 scenario.',
-    zh: '模型終點的空氣。溫度來自 Screen 06 的情境設定。',
+    en: 'The air the model ends at. Its temperature comes from the Screen 01 scenario.',
+    zh: '模型終點的空氣。溫度來自 01 的情境設定。',
   },
   custom: {
     en: 'Anything this list does not name — a busbar, a cable, a chassis loss. The only type that both looks structural and still accepts a source power.',

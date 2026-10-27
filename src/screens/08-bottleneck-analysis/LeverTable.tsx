@@ -26,8 +26,9 @@ import { num, rth } from './analysisViewModel';
 
 const SCREEN_NAME: Record<Lever['screen'], { label: string; zh: string }> = {
   '04': { label: '04 Component Manager', zh: '元件管理' },
-  '05': { label: '05 Thermal Path Builder', zh: '熱路徑建立' },
-  '06': { label: '06 Boundary Conditions', zh: '邊界條件' },
+  '05': { label: '05 Network & Boundary', zh: '熱網路' },
+  // The boundary half of Screen 05 (06 merged into it).
+  '06': { label: '05 Network & Boundary', zh: '散熱表面' },
 };
 
 /** Enough digits to be actionable without pretending to a precision we lack. */

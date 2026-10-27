@@ -1426,3 +1426,12 @@ Screen 06 is complete when:
   - 實測 StarKcore-12L（全部欄位連結）：h 8.54（6.14＋2.40）、η 0.922、22 片、0.982 m²、R 0.129 °C/W，與 5G-RRU 一致。
 - 測試：`src/thermal/boundary/finSpec.test.ts`、`src/data/boundaryProjectFins.test.ts`（示範專案：舊 h 不動、完整陣列取代、所有情境一致、k 預設、
   遷移、清空不復活、兩組散熱器不連動）、`src/importers/component/aiThermalProject.test.ts`（從 5G-RRU 帶鰭片）。
+
+## 22. 併入 05「熱網路與邊界」
+
+06 不再是獨立的頁面（側欄只剩 05；`/boundary` 導到 05、帶著 query string）。本規格的內容照舊有效，畫面位置搬到 05：
+表面性質與邊界條件 → ② 散熱表面；情境、環境與場址 → ③ 環境（唯讀，到 01 修改）；驗證 → ④ 檢查（與熱網路合成一份清單）；
+固定溫度 → ④ 底下的選填區。版面、進階編修與連結的細節見 05 §65。
+
+表面檢視器（`BoundaryInspector`）同時精簡：邊界條件類型改成可點的小標籤（＋加入條件）、說明改成一行、
+「仍以先前輸入的 h 求解」移到鰭片欄位上方、沒有訊息時不顯示「沒有問題」（④ 已經說了）、文字以中文為主。

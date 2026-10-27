@@ -742,7 +742,7 @@ export function ComponentManagerView() {
       {deleteTarget && (
         <Modal
           title="刪除元件？"
-          description={`「${deleteTarget.name}」會從本專案移除，05 熱路徑裡它的節點與連線、06 的邊界設定也會一起移除。`}
+          description={`「${deleteTarget.name}」會從本專案移除，05 熱網路裡它的節點、連線與邊界設定也會一起移除。`}
           onClose={() => setDeleteTarget(null)}
           footer={
             <>

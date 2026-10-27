@@ -161,7 +161,7 @@ export function directRth(params: EdgeParameters): RthComputation {
 
 export const SPREADING_UNDER_ESTIMATE_NOTE =
   'Assumption: Lee/Song/Au/Moran disc spreading, exact series, with Bi → ∞ (a ' +
-  'perfectly cooled far face). Bi needs h, which is a Screen 06 boundary ' +
+  'perfectly cooled far face). Bi needs h, which is a 05 散熱表面 boundary ' +
   'condition, and Bi → ∞ gives the smallest spreading the model can produce — so ' +
   'this UNDER-estimates. Screen 07 re-solves this edge at the finite Bi the ' +
   "scenario's own boundary implies and reports both numbers; the value here is " +
@@ -222,7 +222,7 @@ export function boundaryDerivedRth(): RthComputation {
     value: null,
     resolution: 'unresolved',
     missing: ['boundary_conditions'],
-    note: 'Resolved in Screen 06 once boundary conditions are defined.',
+    note: 'Resolved in 05 散熱表面 once boundary conditions are defined.',
   };
 }
 

@@ -796,7 +796,7 @@ export function PathTab({ component, readOnly, onPatch, derived, view, hotCard }
                   />
                   <span>
                     另有暴露表面對流／輻射散熱
-                    <span className="block text-[11px] text-ink-400">在 05 建立表面出口，供 06 設定對流與輻射</span>
+                    <span className="block text-[11px] text-ink-400">在 05 建立表面出口，並在 05 的散熱表面設定對流與輻射</span>
                   </span>
                 </label>
               </Fld>
@@ -1524,7 +1524,7 @@ export function PathTab({ component, readOnly, onPatch, derived, view, hotCard }
             </ReadRow>
           </Fld>
           <Fld layer="fins">
-            <p className="text-[11px] text-ink-400">鰭片與環境條件在 06 設定。</p>
+            <p className="text-[11px] text-ink-400">鰭片在 05 的散熱表面設定，環境在 01 的情境。</p>
           </Fld>
         </Card>
       </div>

@@ -118,7 +118,7 @@ export function EdgeResultInspector({
         >
           {toName}
         </button>
-        {boundaryDerived && <Badge tone="accent">Boundary (06)</Badge>}
+        {boundaryDerived && <Badge tone="accent">邊界（05）</Badge>}
         {biot && <Badge tone="accent">Finite Bi</Badge>}
       </div>
 
@@ -205,7 +205,7 @@ export function EdgeResultInspector({
             <Row
               label="Active Source"
               zh="作用來源"
-              value={boundaryDerived ? 'Scenario boundary (06)' : (badge?.label ?? edge.rth.active_source)}
+              value={boundaryDerived ? '情境邊界（05）' : (badge?.label ?? edge.rth.active_source)}
               tooltip={T07.field.activeRthSource}
             />
             <Row
@@ -240,7 +240,7 @@ export function EdgeResultInspector({
                 label="Scenario Rth"
                 zh="情境熱阻"
                 value={`${formatRth(override.R_C_per_W)} °C/W`}
-                tooltip="由 06 依此情境的邊界條件推導，僅作用於本次求解。"
+                tooltip="由 05 依此情境的邊界條件推導，僅作用於本次求解。"
               />
             )}
             {biot && (
