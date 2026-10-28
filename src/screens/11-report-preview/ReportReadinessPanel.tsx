@@ -31,27 +31,21 @@ export function ReportReadinessPanel({
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex flex-wrap items-center gap-2">
-        <Badge tone={READINESS_TONE[readiness]}>{readiness}</Badge>
-        <span className="text-[11px] font-semibold text-ink-700">
-          Report Readiness <span className="font-normal text-ink-400">/ 報告準備狀態</span>
-        </span>
+        <Badge tone={READINESS_TONE[readiness]}>{READINESS_ZH[readiness]}</Badge>
         <EngineeringInfo zh={T11.reportReadiness} label="Report Readiness" />
       </div>
-      <p className="text-[10.5px] text-ink-400">{READINESS_ZH[readiness]}</p>
 
       {reasons.length > 0 ? (
         <ul className="flex flex-col gap-1">
           {reasons.map((reason, index) => (
-            <li key={reason} className="text-[10.5px] leading-relaxed text-ink-500">
-              · {reason}
-              <span className="block pl-2 text-ink-400">{reasonsZh[index]}</span>
+            <li key={reason} className="text-[11px] leading-relaxed text-ink-600" title={reason}>
+              ・{reasonsZh[index] || reason}
             </li>
           ))}
         </ul>
       ) : (
         <p className="text-[10.5px] text-ink-500">
-          Nothing outstanding — the report can be prepared for export.
-          <span className="block text-ink-400">沒有待處理項目，可準備匯出。</span>
+          沒有待處理的項目，可以匯出。
         </p>
       )}
     </div>

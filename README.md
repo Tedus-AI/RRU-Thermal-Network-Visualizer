@@ -24,8 +24,8 @@ Data Provenance / Physics Correctness 原則為準。
 | 08 | Bottleneck Analysis | ✅ |
 | 09 | Temperature Distribution | ✕ 已移除（`/temperature` 導到 07） |
 | 10 | Results Overview | ↪ 併入 07（`/results` 自動導到 07） |
-| 11 | Report Preview | ⏳ 待規格 |
-| 12 | Export Center | ⏳ 待規格 |
+| 11 | 報告與匯出（Report Preview＋Export Center 合併，側欄的 10） | ✅ |
+| 12 | Export Center | ↪ 併入報告與匯出（`/export` 開 10 的「匯出設定」） |
 
 ## 技術堆疊
 

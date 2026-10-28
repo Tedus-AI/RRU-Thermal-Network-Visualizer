@@ -69,7 +69,7 @@ export function ReportOutlinePanel({
                 : 'border-transparent text-ink-500 hover:text-ink-900'
             }`}
           >
-            {entry === 'outline' ? 'Outline / 大綱' : 'Pages / 頁面'}
+            {entry === 'outline' ? '章節' : '頁面'}
           </button>
         ))}
       </div>
@@ -78,10 +78,10 @@ export function ReportOutlinePanel({
         <div className="flex min-h-0 flex-1 flex-col">
           <div className="flex items-center justify-between px-1 pb-1 text-[10px] font-semibold text-ink-500">
             <span className="flex items-center gap-1">
-              Section / 章節
+              章節順序
               <EngineeringInfo zh={T11.sectionOrder} label="Section Order" align="left" />
             </span>
-            <span>Include / 包含</span>
+            <span>放進報告</span>
           </div>
 
           <ul className="flex min-h-0 flex-1 flex-col overflow-auto">
@@ -122,14 +122,14 @@ export function ReportOutlinePanel({
                   <span className="w-4 shrink-0 text-[10.5px] text-ink-400 tabular">
                     {section.order}
                   </span>
-                  <span className="min-w-0 flex-1 truncate text-[11.5px] font-semibold text-ink-900">
-                    {definition.title}
-                    <span className="block truncate text-[10px] font-normal text-ink-400">
-                      {definition.zh}
-                      {missingData && section.included && (
-                        <span className="ml-1 text-warn-600">· Not Available</span>
-                      )}
-                    </span>
+                  <span
+                    className="min-w-0 flex-1 truncate text-[12px] font-semibold text-ink-900"
+                    title={definition.title}
+                  >
+                    {definition.zh}
+                    {missingData && section.included && (
+                      <span className="block truncate text-[10px] font-normal text-warn-600">沒有資料</span>
+                    )}
                   </span>
 
                   {definition.recommended && (
@@ -142,7 +142,7 @@ export function ReportOutlinePanel({
                     <button
                       type="button"
                       title={biTitle('Move up', '上移')}
-                      aria-label={`Move ${definition.title} up`}
+                      aria-label={`${definition.zh} 上移`}
                       disabled={readOnly || index === 0}
                       onClick={(event) => {
                         event.stopPropagation();
@@ -155,7 +155,7 @@ export function ReportOutlinePanel({
                     <button
                       type="button"
                       title={biTitle('Move down', '下移')}
-                      aria-label={`Move ${definition.title} down`}
+                      aria-label={`${definition.zh} 下移`}
                       disabled={readOnly || index === sections.length - 1}
                       onClick={(event) => {
                         event.stopPropagation();
@@ -172,7 +172,7 @@ export function ReportOutlinePanel({
                     className="size-3.5 shrink-0 accent-accent-600"
                     checked={section.included}
                     disabled={readOnly}
-                    aria-label={`Include ${definition.title}`}
+                    aria-label={`${definition.zh} 放進報告`}
                     onClick={(event) => event.stopPropagation()}
                     onChange={() => onToggle(section.id)}
                   />
@@ -224,10 +224,11 @@ export function ReportOutlinePanel({
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="block text-[11px] font-bold text-ink-900">
-                    Page {page.page_number}
+                    第 {page.page_number} 頁
                   </span>
-                  <span className="block truncate text-[10px] text-ink-500">{page.title}</span>
-                  <span className="block truncate text-[10px] text-ink-400">{page.title_zh}</span>
+                  <span className="block truncate text-[10px] text-ink-500" title={page.title}>
+                    {page.title_zh || page.title}
+                  </span>
                 </span>
               </button>
             </li>

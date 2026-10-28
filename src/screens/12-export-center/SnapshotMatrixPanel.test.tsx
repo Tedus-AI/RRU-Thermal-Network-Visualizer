@@ -83,7 +83,7 @@ describe('a matrix edit while the solve is stale', () => {
 
   it('keeps every hidden row when a cell is ticked', () => {
     const saved = edit(wholeOnly, false, (all) => {
-      const cell = all.find((el) => el.props['aria-label'] === 'Whole Thermal Network · Heat Flow');
+      const cell = all.find((el) => el.props['aria-label'] === `${wholeOnly[0].label_zh} · 熱流`);
       (cell?.props.onChange as () => void)();
     });
     expect(saved).toEqual({
@@ -99,7 +99,7 @@ describe('a matrix edit while the solve is stale', () => {
   it('keeps every hidden row when Clear All is pressed', () => {
     const saved = edit(wholeOnly, false, (all) => {
       const clear = all.find(
-        (el) => typeof el.props.onClick === 'function' && /Clear All/.test(String(el.props.children)),
+        (el) => typeof el.props.onClick === 'function' && /全不選/.test(String(el.props.children)),
       );
       (clear?.props.onClick as () => void)();
     });
@@ -112,7 +112,7 @@ describe('a matrix edit with every row on screen', () => {
 
   it('saves exactly what the grid shows', () => {
     const saved = edit(full, true, (all) => {
-      const policy = all.find((el) => el.props['aria-label'] === 'Repeated parts in RF Chain');
+      const policy = all.find((el) => el.props['aria-label'] === 'RF Chain 的重複元件');
       (policy?.props.onChange as (event: { target: { value: string } }) => void)({
         target: { value: 'representative' },
       });

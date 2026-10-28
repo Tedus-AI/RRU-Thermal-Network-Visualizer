@@ -465,7 +465,7 @@ export function SettingsDialog({
   return (
     <Modal
       title="Settings / 設定"
-      description="Application and data settings. Report and export options live on Screen 11."
+      description="Application and data settings. Report and export options live on 10 報告與匯出."
       width="max-w-lg"
       onClose={onClose}
       footer={<Button onClick={onClose}>Close / 關閉</Button>}

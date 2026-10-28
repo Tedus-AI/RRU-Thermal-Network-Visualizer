@@ -1,37 +1,28 @@
 /**
- * Screen 10 — Report Preview.
- * Specification: 11_Report_Preview.md (source of truth, per the delivery audit),
- * laid out after 11.png, whose placement this screen follows closely.
+ * Screen 10 — 報告與匯出 (Report & Export).
+ * Specification: 11_Report_Preview.md and 12_Export_Center.md (sources of
+ * truth, per the delivery audit); 12 §61 for the merge.
  *
- * The question this screen answers (11 §52): what does the current Results Overview
- * snapshot look like as a thermal engineering report, and is that report ready
- * to hand to Screen 11.
+ * The question this screen answers (11 §52, 12 §60): what does the current
+ * snapshot look like as a thermal engineering report — and give me the files.
  *
- * What it never does (11 §37, §38, §39): solve, re-solve, run a sensitivity,
- * re-bin a temperature, change Overall Status, generate a PDF/CSV/JSON/PNG/ZIP,
- * choose an export destination, or edit any thermal input. Every number on the
- * page is read from the snapshot; `Prepare for Export` produces metadata only.
+ * It was two screens. 10 previewed the report and wrote an export payload by
+ * button; 11 Export Center, a page later, turned that payload into a PDF and
+ * sent the reader back to 10 whenever it had moved. Now the outline is on the
+ * left, the preview in the middle, the four downloads on the right, and the
+ * rest of 11 (artifact list, snapshot matrix, naming, queue, history) is in
+ * the 匯出設定 drawer. The payload follows the preview on its own.
  *
- * On the mockup: 11.png and the Markdown agree, so the layout follows the PNG
- * directly — the snapshot strip and six KPI cards across the top, a left rail
- * carrying the template select and the Outline/Pages tabs, the paginated
- * preview with its page toolbar in the centre, the Section Inspector with its
- * Snapshot/Readiness/Validation stack on the right, and the five bottom actions.
+ * What it never does (11 §37–§39, 12 §38–§40): solve, re-solve, run a
+ * sensitivity, change Overall Status, or edit any thermal input. Every number
+ * on the page is read from the snapshot; every file is generated in this
+ * browser.
  */
 
 import { powerBasisOf } from '@/domain/powerBasis';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import {
-  ArrowLeft,
-  ArrowRight,
-  ListTree,
-  RefreshCw,
-  Save,
-  Send,
-  Settings2,
-  TriangleAlert,
-} from 'lucide-react';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { ArrowLeft, ArrowRight, ListTree, RefreshCw, Save, Settings2, TriangleAlert } from 'lucide-react';
 
 import { ScreenWorkspace } from '@/app/ScreenWorkspace';
 import { projectPath } from '@/app/navigation';
@@ -78,7 +69,6 @@ import {
   toggleSection,
 } from '@/report/reportConfig';
 import {
-  blocksExport,
   blocksPreview,
   evaluateSnapshot,
   snapshotToFreeze,
@@ -98,6 +88,9 @@ import { SectionInspectorWindow } from './SectionInspectorWindow';
 import { ReportReadinessPanel } from './ReportReadinessPanel';
 import type { SectionRenderInput } from './ReportSections';
 import { T11 } from './tooltips';
+import { useExportController } from '@/screens/12-export-center/useExportController';
+import { ExportColumn, type DrawerSection } from '@/screens/12-export-center/ExportColumn';
+import { ExportDialogs, ExportDrawer } from '@/screens/12-export-center/ExportDrawer';
 
 // --- building blocks --------------------------------------------------------
 
@@ -123,9 +116,8 @@ function Panel({
       className={`flex min-h-0 flex-col rounded-lg border border-line bg-surface ${className}`}
     >
       <header className="flex shrink-0 items-center gap-2 border-b border-line px-3.5 py-2.5">
-        <h2 className="flex min-w-0 items-center gap-1 truncate text-[12.5px] font-bold text-ink-900">
-          {title}
-          <span className="font-semibold text-ink-400">/ {zh}</span>
+        <h2 className="flex min-w-0 items-center gap-1 truncate text-[13px] font-bold text-ink-900" title={title}>
+          {zh}
         </h2>
         {explanation && <EngineeringInfo zh={explanation} label={title} />}
         <div className="ml-auto flex shrink-0 items-center gap-1.5">{actions}</div>
@@ -185,6 +177,14 @@ function NoSnapshot({ onSolve }: { onSolve: () => void }) {
   );
 }
 
+/** How far the report has got, in the words of the action bar. */
+const READINESS_ZH: Record<string, string> = {
+  EXPORT_READY: '可以匯出',
+  PREVIEW_READY: '可以預覽',
+  WARNING: '有警告',
+  BLOCKED: '不能匯出',
+};
+
 // --- screen -----------------------------------------------------------------
 
 export function ReportPreviewView() {
@@ -215,6 +215,15 @@ export function ReportPreviewView() {
   const lastSavedAt = useReportStore((s) => s.lastSavedAt);
 
   const [selectedId, setSelectedId] = useState<SectionId>('critical');
+  /**
+   * The 匯出設定 drawer, and which section a link asked for. `/export` (the old
+   * 11 Export Center) lands here with `?panel=export` and opens it on the
+   * artifact list, which is where 11 started.
+   */
+  const [searchParams] = useSearchParams();
+  const [drawer, setDrawer] = useState<DrawerSection | null>(() =>
+    searchParams.get('panel') === 'export' ? 'items' : null,
+  );
   /** Both are opened from something the reader clicked, never open by default. */
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const [pageSetupOpen, setPageSetupOpen] = useState(false);
@@ -497,6 +506,44 @@ export function ReportPreviewView() {
 
   const readiness = validation ? previewReadiness(validation, evaluation.state) : 'BLOCKED';
 
+  /**
+   * The export payload follows the preview (12 §61).
+   *
+   * It used to be written by "Prepare for Export (Metadata Only)", and the PDF
+   * on 11 was drawn from whatever that button last froze — a layout change
+   * made after it was pressed never reached the file. It is written now
+   * whenever what it records changes: the layout, the snapshot, the readiness,
+   * the page count and the measured section heights (less any section whose
+   * figures are still loading; see `settledHeights`).
+   */
+  const payloadKey = useRef<string | null>(null);
+  useEffect(() => {
+    if (!projectId || !config || !snapshot || !validation) return;
+    const heights = measureRef.current ? settledHeights(measureRef.current, measured) : measured;
+    const key = JSON.stringify([config, snapshot.id, validation.readiness, pages.length, heights]);
+    if (payloadKey.current === key) return;
+    payloadKey.current = key;
+    useReportStore.getState().storePayload(
+      projectId,
+      buildExportPayload({
+        config,
+        snapshot_id: snapshot.id,
+        readiness: validation.readiness,
+        estimated_page_count: pages.length,
+        measured_heights: heights,
+      }),
+    );
+  }, [projectId, config, snapshot, validation, pages.length, measured]);
+
+  /** The four downloads and the drawer behind them; see `useExportController`. */
+  const exporter = useExportController({
+    projectId,
+    scenario,
+    snapshot,
+    evaluation,
+    figureSource: source,
+  });
+
   // --- zoom -----------------------------------------------------------------
   // The canvas element exists only once there is a config to render.
   const hasConfig = config != null;
@@ -567,7 +614,6 @@ export function ReportPreviewView() {
   if (!config || !validation) return <LoadingState />;
 
   const page = pages.find((entry) => entry.page_number === currentPage) ?? pages[0] ?? null;
-  const exportBlocked = blocksExport(evaluation.state) || validation.readiness === 'BLOCKED';
 
   /**
    * Every other screen in this tool writes as you work — the header says "Saved
@@ -613,57 +659,18 @@ export function ReportPreviewView() {
     };
   };
 
-  const prepareForExport = () => {
-    if (!projectId) return;
-    if (exportBlocked) {
-      // 11 §3, AC-11-31 — a stale or missing snapshot blocks export preparation.
-      toast.error(
-        '還不能準備匯出：報告快照已過期或有阻擋項目，請先按「更新為目前結果」並處理阻擋項目。',
-      );
-      return;
-    }
-    const payload = buildExportPayload({
-      config,
-      snapshot_id: snapshot.id,
-      readiness: validation.readiness,
-      estimated_page_count: pages.length,
-      // The heights this preview measured off its own pages, so Screen 11's
-      // render breaks where the engineer just saw it break -- less any section
-      // whose figures were still loading; see `settledHeights`.
-      measured_heights: measureRef.current
-        ? settledHeights(measureRef.current, measured)
-        : measured,
-    });
-    useReportStore.getState().storePayload(projectId, payload);
-    useReportStore.getState().save(projectId);
-    toast.success(
-      `Export payload prepared for Screen 11 — metadata only, no files generated / 已為 11 準備匯出資料包（僅 metadata）`,
-    );
-  };
-
-  const continueToExport = () => {
-    if (exportBlocked) {
-      toast.error('Report Readiness is BLOCKED. Resolve the blocking items before continuing.');
-      return;
-    }
-    if (validation.readiness === 'WARNING') {
-      const proceed = window.confirm(
-        `Report Readiness is WARNING:\n\n${validation.warnings.map((reason) => `· ${reason}`).join('\n')}\n\nContinue to Screen 11 Export Center anyway?`,
-      );
-      if (!proceed) return;
-    }
-    navigate(projectPath(projectId ?? '', 'export'));
-  };
-
   return (
     <ScreenWorkspace
-      title="Report Preview"
-      titleZh="報告預覽"
-      descriptionZh="把 10 的目前快照組成可預覽的熱工程報告，包含章節選擇、順序、封面與版面；本頁不重新計算任何數值，也不產生任何檔案。"
+      title="Report & Export"
+      titleZh="報告與匯出"
       badge={
         <span className="flex flex-wrap items-center gap-1.5">
-          <Badge tone={evaluation.state === 'CURRENT' ? 'ok' : evaluation.state === 'WARNING' ? 'warn' : 'danger'}>
-            Snapshot {evaluation.state}
+          <Badge tone={evaluation.state === 'CURRENT' ? 'ok' : 'warn'}>
+            {evaluation.state === 'CURRENT'
+              ? '報告是目前結果'
+              : evaluation.state === 'WARNING'
+                ? '報告就緒・有警告'
+                : '報告用的是舊結果'}
           </Badge>
           <Badge tone="neutral">{config.template_name}</Badge>
           <Badge tone="accent">{scenario.name}</Badge>
@@ -709,62 +716,51 @@ export function ReportPreviewView() {
         />
       }
       actionBar={
-        <div className="flex w-full flex-wrap items-center gap-2">
+        <div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-line bg-surface px-6 py-3">
           <Button icon={<ArrowLeft className="size-4" />} onClick={() => go('network')}>
             返回 07 求解與結果
           </Button>
           <Button
             icon={<RefreshCw className="size-4" />}
+            title="重新讀取求解結果與報告快照，檢查報告是不是目前的結果"
             onClick={() => {
               if (!projectId) return;
               useSolutionStore.getState().refresh();
               useOverviewStore.getState().loadFor(projectId, activeScenarioId);
               setRefreshToken((token) => token + 1);
-              toast.success('Snapshot status refreshed / 已重新檢查快照狀態');
+              toast.success('已重新檢查報告快照');
             }}
           >
-            Refresh Snapshot Status
+            重新檢查
           </Button>
           <Button
             icon={<Save className="size-4" />}
             disabled={!storeDirty}
+            title="版面改了就會自動儲存；這顆是手動再存一次"
             onClick={() => {
               if (!projectId) return;
               useReportStore.getState().save(projectId);
-              toast.success('Report layout saved / 已儲存報告版面');
+              toast.success('已儲存報告版面');
             }}
           >
-            Save Report Layout
+            儲存版面
           </Button>
-          {/* The info button sits BESIDE the action, never inside it: a button
-              nested in a button is invalid HTML and swallows the outer click. */}
-          <span className="flex items-center gap-1">
-            <Button
-              icon={<Send className="size-4" />}
-              disabled={exportBlocked}
-              onClick={prepareForExport}
-            >
-              Prepare for Export (Metadata Only)
-            </Button>
-            <EngineeringInfo zh={T11.prepareForExport} label="Prepare for Export" />
-          </span>
 
           <span
-            className="ml-auto hidden shrink-0 items-center gap-1.5 text-[11px] text-ink-400 xl:flex"
-            title={`${readiness} · ${pages.length} page(s) · ${LANGUAGE_MODE_LABELS[config.language_mode].label} · ${
-              lastSavedAt ? `saved ${new Date(lastSavedAt).toLocaleTimeString()}` : 'not saved yet'
+            className="ml-auto shrink-0 text-[11px] text-ink-400"
+            title={`${LANGUAGE_MODE_LABELS[config.language_mode].label} · ${
+              lastSavedAt ? `版面儲存於 ${new Date(lastSavedAt).toLocaleTimeString()}` : '版面還沒儲存'
             }`}
           >
-            {readiness} · {pages.length}p
+            {READINESS_ZH[readiness] ?? readiness}・{pages.length} 頁
           </span>
 
           <Button
             variant="primary"
             trailingIcon={<ArrowRight className="size-4" />}
-            disabled={exportBlocked}
-            onClick={continueToExport}
+            onClick={() => setDrawer('items')}
           >
-            Continue to Export Center
+            匯出設定
           </Button>
         </div>
       }
@@ -897,10 +893,20 @@ export function ReportPreviewView() {
               />
             </div>
             <p className="shrink-0 border-t border-line px-3 py-1.5 text-[10px] text-ink-400">
-              本頁僅為 HTML 預覽與推估分頁，不產生 PDF；實際匯出由 12 負責。
+              匯出的 PDF 與這裡的分頁相同；下載在右邊。
             </p>
           </section>
+
+          {/* --- the downloads, beside what they will contain (12 §61) ---- */}
+          <div className="flex w-full shrink-0 flex-col xl:w-[15.5rem]">
+            <ExportColumn controller={exporter} onOpenDrawer={setDrawer} />
+          </div>
         </div>
+
+        {drawer && (
+          <ExportDrawer controller={exporter} focus={drawer} onClose={() => setDrawer(null)} />
+        )}
+        <ExportDialogs controller={exporter} />
 
         {/* The inspector floats, fits its content and closes on Escape: it is
             opened from the header, read, and dismissed — not a column held open
