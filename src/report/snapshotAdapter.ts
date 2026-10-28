@@ -29,8 +29,8 @@ export interface SnapshotEvaluation extends SnapshotSummary {
 }
 
 /**
- * 11 §3 — STALE is decided by the same signature Results Overview freezes, so the two
- * screens cannot disagree about whether the world moved. A snapshot that is
+ * 11 §3 — STALE is decided by the same signature the snapshot was frozen with, so
+ * 07 and 10 cannot disagree about whether the world moved. A snapshot that is
  * current but whose source Report Readiness was WARNING reports WARNING, which
  * is a statement about the analyses behind it, not about the freeze.
  */

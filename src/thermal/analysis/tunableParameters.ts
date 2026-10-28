@@ -98,7 +98,7 @@ export interface Lever {
   destination?: LeverDestination;
   /** Set when `target` is null because this input alone cannot get there. */
   limit?: LeverLimit;
-  /** Why this one moves the number, in one line. */
+  /** Why this one moves the number, in one line — shown on 08, so in Chinese. */
   note?: string;
 }
 
@@ -129,7 +129,7 @@ export interface SegmentLevers {
    */
   rth_calculated_C_per_W: number | null;
   levers: Lever[];
-  /** Set when the method offers no editable input at all. */
+  /** Set when the method offers no editable input at all (Chinese, shown on 08). */
   message?: string;
 }
 
@@ -169,10 +169,10 @@ const METHOD_LEVERS: Record<EdgeMethod, Spec[]> = {
       direction: 'down',
       exponent: 1,
       screen: '05',
-      note: 'A shorter conduction path.',
+      note: '縮短傳導路徑。',
     },
-    { ...K, note: 'A better material for the same shape.' },
-    { ...AREA, label: 'Cross-section', zh: '截面積', note: 'A wider path for the same length.' },
+    { ...K, note: '同樣外形，換導熱更好的材料。' },
+    { ...AREA, label: 'Cross-section', zh: '截面積', note: '同樣長度，加大截面。' },
   ],
   tim_thickness_k: [
     {
@@ -183,10 +183,10 @@ const METHOD_LEVERS: Record<EdgeMethod, Spec[]> = {
       direction: 'down',
       exponent: 1,
       screen: '05',
-      note: 'A thinner bond line — usually the cheapest move.',
+      note: '壓薄介面層，通常是最便宜的做法。',
     },
-    { ...K, note: 'A higher-k pad, grease or gap filler.' },
-    { ...AREA, label: 'Effective area', zh: '有效面積', note: 'More real contact, not more nominal.' },
+    { ...K, note: '換 k 值更高的導熱墊、導熱膏或填隙材料。' },
+    { ...AREA, label: 'Effective area', zh: '有效面積', note: '增加實際接觸面積，不是標稱面積。' },
   ],
   via_array: [
     {
@@ -206,7 +206,7 @@ const METHOD_LEVERS: Record<EdgeMethod, Spec[]> = {
       direction: 'up',
       exponent: -1,
       screen: '05',
-      note: 'More vias, bigger barrels, or filled vias.',
+      note: '加孔數、加大孔徑，或改成塞孔。',
     },
     { ...AREA, label: 'Via region area', zh: '導熱孔區面積' },
     {
@@ -241,7 +241,7 @@ const METHOD_LEVERS: Record<EdgeMethod, Spec[]> = {
       exponent: -1,
       screen: '05',
       max: 1,
-      note: 'Less voiding: profile, preform, or vacuum reflow.',
+      note: '降低空洞率：調整回焊曲線、用預成型焊片或真空回焊。',
     },
   ],
   contact_hc: [
@@ -253,7 +253,7 @@ const METHOD_LEVERS: Record<EdgeMethod, Spec[]> = {
       direction: 'up',
       exponent: -1,
       screen: '05',
-      note: 'Flatter, smoother, or more clamping force.',
+      note: '表面更平、更光滑，或加大鎖附力。',
     },
     { ...AREA, label: 'Contact area', zh: '接觸面積' },
   ],
@@ -266,7 +266,7 @@ const METHOD_LEVERS: Record<EdgeMethod, Spec[]> = {
       direction: 'down',
       exponent: 1,
       screen: '05',
-      note: 'A quoted number: it changes when the joint does.',
+      note: '給定的數值，接合方式改了才會變。',
     },
   ],
   direct_rth: [
@@ -278,7 +278,7 @@ const METHOD_LEVERS: Record<EdgeMethod, Spec[]> = {
       direction: 'down',
       exponent: 1,
       screen: '05',
-      note: 'Quoted, not derived — a different part or a vendor number.',
+      note: '給定值，不是算出來的：換料，或改用廠商提供的數值。',
     },
   ],
   spreading_disc: [
@@ -290,7 +290,7 @@ const METHOD_LEVERS: Record<EdgeMethod, Spec[]> = {
       direction: 'up',
       exponent: null,
       screen: '05',
-      note: 'A bigger footprint on the plate: less fan-out to do.',
+      note: '加大貼在底座上的面積，熱要擴散的距離就短。',
     },
     {
       key: 'k_W_mK',
@@ -309,7 +309,7 @@ const METHOD_LEVERS: Record<EdgeMethod, Spec[]> = {
       direction: 'up',
       exponent: null,
       screen: '05',
-      note: 'Spreads further sideways, but adds 1-D drop — the two compete.',
+      note: '橫向擴散得更開，但厚度方向的溫降也變大，兩者互相抵消。',
     },
     {
       key: 'plate_area_mm2',
@@ -330,7 +330,7 @@ const METHOD_LEVERS: Record<EdgeMethod, Spec[]> = {
       direction: 'up',
       exponent: null,
       screen: '06',
-      note: 'h and the wetted area both come from 05 散熱表面, not from this edge.',
+      note: 'h 和散熱面積都在 05 散熱表面設定，不在這條連線上。',
     },
   ],
   radiation_hA: [
@@ -342,7 +342,7 @@ const METHOD_LEVERS: Record<EdgeMethod, Spec[]> = {
       direction: 'up',
       exponent: null,
       screen: '06',
-      note: 'Set with the boundary condition, not on this edge.',
+      note: '跟著邊界條件設定，不在這條連線上。',
     },
   ],
   imported: [],
@@ -372,7 +372,7 @@ const FIN_LEVERS: ReadonlyArray<Omit<Lever, 'value' | 'target' | 'limit' | 'dest
     direction: 'up',
     exponent: null,
     screen: '06',
-    note: 'More wetted area — but a longer path to the tip, so the fin efficiency falls.',
+    note: '散熱面積變大，但鰭片變長，鰭片效率會下降。',
   },
   {
     key: FIN_GEOMETRY_KEYS.gap,
@@ -382,7 +382,7 @@ const FIN_LEVERS: ReadonlyArray<Omit<Lever, 'value' | 'target' | 'limit' | 'dest
     direction: 'down',
     exponent: null,
     screen: '06',
-    note: 'Narrower channels fit more fins; too narrow and the air stops moving.',
+    note: '間距變窄可以多排幾片；太窄空氣就流不動。',
   },
   {
     key: FIN_GEOMETRY_KEYS.thickness,
@@ -392,7 +392,7 @@ const FIN_LEVERS: ReadonlyArray<Omit<Lever, 'value' | 'target' | 'limit' | 'dest
     direction: 'up',
     exponent: null,
     screen: '06',
-    note: 'A thicker fin carries heat to its tip better, at the cost of a channel.',
+    note: '鰭片加厚，熱比較容易傳到鰭尖，但會少一條風道。',
   },
   {
     key: FIN_GEOMETRY_KEYS.conductivity,
@@ -402,7 +402,7 @@ const FIN_LEVERS: ReadonlyArray<Omit<Lever, 'value' | 'target' | 'limit' | 'dest
     direction: 'up',
     exponent: null,
     screen: '06',
-    note: 'Raises the fin efficiency without touching a dimension.',
+    note: '不改尺寸就能提高鰭片效率。',
   },
   {
     key: FIN_GEOMETRY_KEYS.baseLength,
@@ -643,7 +643,7 @@ export function segmentLevers(
       rth_after_C_per_W: null,
       rth_calculated_C_per_W: null,
       levers: [],
-      message: 'This segment is no longer in the network.',
+      message: '這一段已經不在熱網路裡。',
     };
   }
 
@@ -677,7 +677,7 @@ export function segmentLevers(
           target: targetValue(before, 1, reductionPct),
           screen: '04',
           destination: { screen: '04', component_id: componentId, field: 'ins-rjc' },
-          note: 'A part-level number: a different package, die attach, or vendor figure.',
+          note: '元件本身的數值：換封裝、換黏晶方式，或改用廠商數值。',
         },
       ],
     };
@@ -707,7 +707,7 @@ export function segmentLevers(
     return {
       ...base,
       levers: [],
-      message: 'This segment carries a value with no editable inputs behind it.',
+      message: '這一段是給定的數值，沒有可以調整的參數。',
     };
   }
 
@@ -785,7 +785,7 @@ export function segmentLevers(
         target: null,
         screen: '06',
         destination: { screen: '06', node_id: edge.to },
-        note: 'Also sets the convection area and the Bi behind it — a 05 散熱表面 change, not this edge alone.',
+        note: '也決定對流面積和 Bi，要到 05 散熱表面改，不只是這條連線。',
       };
     }
 

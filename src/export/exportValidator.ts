@@ -42,12 +42,12 @@ export interface ReadinessInput {
   distribution_stale?: boolean;
   boundary: ScenarioBoundaryConditionSet | null;
   snapshot: ResultsOverviewSnapshot | null;
-  /** True when the Screen 09 snapshot no longer matches the live overview. */
+  /** True when the report snapshot no longer matches the live overview. */
   snapshot_stale: boolean;
   payload: ReportExportPayload | null;
   /** Number of components with no thermal limit, for the §31 warning list. */
   components_without_limits: number;
-  /** Low-confidence edges on the critical path, from the Screen 09 snapshot. */
+  /** Low-confidence edges on the critical path, from the report snapshot. */
   low_confidence_edges: number;
   /** How many pictures the snapshot matrix is currently ticked for. */
   snapshot_count?: number;

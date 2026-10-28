@@ -21,7 +21,7 @@ Data Provenance / Physics Correctness 原則為準。
 | 05 | 熱網路與邊界（Thermal Path Builder＋Boundary Conditions 合併） | ✅ |
 | 06 | Boundary Conditions | ↪ 併入 05（`/boundary` 自動導到 05） |
 | 07 | 求解與結果（Thermal Network＋Results Overview 合併） | ✅ |
-| 08 | Bottleneck Analysis | ✅ |
+| 08 | 瓶頸分析（Bottleneck Analysis；元件依餘裕排序的下拉，08 §35） | ✅ |
 | 09 | Temperature Distribution | ✕ 已移除（`/temperature` 導到 07） |
 | 10 | Results Overview | ↪ 併入 07（`/results` 自動導到 07） |
 | 11 | 報告與匯出（Report Preview＋Export Center 合併，側欄的 10） | ✅ |

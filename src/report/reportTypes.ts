@@ -1,10 +1,10 @@
 /**
  * Report composition contracts — 11 §4, §8, §9, §29, §32.
  *
- * Screen 10 arranges the report snapshot into a previewable report. It never
- * recalculates a thermal value (§37) and never writes a file (§38): the config
- * below describes LAYOUT and INCLUSION only, and the export payload carries
- * metadata for Screen 11 rather than bytes.
+ * Screen 10 arranges the report snapshot into a previewable report. The preview
+ * never recalculates a thermal value (§37) and never writes a file (§38): the
+ * config below describes LAYOUT and INCLUSION only, and the export payload
+ * carries metadata for 10's export column (12 §61) rather than bytes.
  *
  * Naming note, as in 06–10: the specification sketches these in camelCase and
  * the codebase settled on snake_case in Screen 02. Field semantics are followed
@@ -315,7 +315,7 @@ export interface ReportExportPayload {
 
   readiness: Extract<ReportReadiness, 'EXPORT_READY' | 'WARNING' | 'BLOCKED'>;
   generated_at: string;
-  /** Page count the preview estimated, so Screen 11 can sanity-check its render. */
+  /** Page count the preview estimated, so the export can sanity-check its render. */
   estimated_page_count: number;
   /**
    * The heights the preview MEASURED off its own rendered pages.

@@ -25,9 +25,10 @@
 import { FilePlus2, LogOut, RotateCcw, Save } from 'lucide-react';
 
 import { Button } from '@/ui/primitives';
-import { biTitle } from '@/ui/FieldLabel';
 import type { ChainSegment } from '@/thermal/analysis/whatIf';
 import type { MarginRank } from '@/thermal/analysis/marginRanking';
+
+import { EDGE_TYPE_ZH } from '@/screens/07-thermal-network/resultViewModel';
 
 import { num, rth, signed, studyButtons } from './analysisViewModel';
 
@@ -85,15 +86,13 @@ export function SegmentTuner({
         </p>
         <div className="mt-1 grid grid-cols-2 gap-x-3">
           <Reading
-            label="Temperature"
-            zh="溫度"
+            label="溫度"
             before={num(target.temperature_C, 1, '°C')}
             after={projected ? num(projected.temperature_C, 1, '°C') : null}
             good={projected ? projected.temperature_C < target.temperature_C : false}
           />
           <Reading
-            label={`Margin vs ${target.limit_C} °C`}
-            zh={target.limit_type ? `餘裕（${target.limit_type}）` : '餘裕'}
+            label={`餘裕（限溫 ${target.limit_C} °C${target.limit_type ? ` ${target.limit_type}` : ''}）`}
             before={num(target.margin_C, 1, '°C')}
             after={projected ? num(projected.margin_C, 1, '°C') : null}
             good={gain > 0}
@@ -103,10 +102,7 @@ export function SegmentTuner({
           <p
             className={`mt-1 text-[11px] font-bold ${gain > 0 ? 'text-ok-600' : 'text-danger-600'}`}
           >
-            {signed(gain, 1, '°C')} margin
-            <span className="ml-1 font-semibold text-ink-500">
-              / 餘裕{gain > 0 ? '增加' : '減少'}
-            </span>
+            餘裕{gain > 0 ? '增加' : '減少'} {signed(gain, 1, '°C')}
           </p>
         )}
       </div>
@@ -114,8 +110,7 @@ export function SegmentTuner({
       <div className="min-h-0 flex-1 overflow-y-auto pr-0.5">
         {segments.length === 0 ? (
           <p className="py-6 text-center text-[11px] text-ink-400">
-            This part has no adjustable segment on its path.
-            <span className="block">此元件的熱路徑上沒有可調整的區段。</span>
+            這顆元件的熱路徑上沒有可以調整的區段。
           </p>
         ) : (
           <ul className="grid min-w-0 grid-cols-1 gap-2">
@@ -151,20 +146,16 @@ export function SegmentTuner({
         {editingName && (
           <div className="mb-1 flex items-center gap-1.5">
             <p className="min-w-0 flex-1 truncate text-[10px] text-ink-400" title={editingName}>
-              Editing a saved study
-              <span className="ml-1">／正在編輯已儲存的紀錄</span>
+              正在編輯已儲存的調整分析
             </p>
             <button
               type="button"
               onClick={onExit}
-              title={biTitle(
-                'Stop editing this study — these values stay, as a new one',
-                '結束編輯，目前數值保留為全新的一筆',
-              )}
+              title="結束編輯；目前的數值留著，可以另存成新的一筆"
               className="flex shrink-0 items-center gap-1 rounded border border-line-strong px-1.5 py-0.5 text-[10px] font-semibold text-ink-500 hover:bg-surface-muted hover:text-ink-900"
             >
               <LogOut size={11} />
-              Exit / 結束編輯
+              結束編輯
             </button>
           </div>
         )}
@@ -174,28 +165,24 @@ export function SegmentTuner({
             icon={<FilePlus2 size={14} />}
             className="h-8 !text-[12px]"
             disabled={!gate.add}
-            title={biTitle(
+            title={
               editingName
-                ? 'Already a saved study — Save writes over it'
-                : 'Add this what-if as a new study',
-              editingName ? '目前正在編輯已儲存的紀錄，請用「儲存」覆蓋' : '將此次調整新增為一筆紀錄',
-            )}
+                ? '正在編輯已儲存的紀錄，請用「儲存」覆蓋；要另存新的一筆先按「結束編輯」'
+                : '把這次的調整存成一筆新的調整分析'
+            }
             onClick={onAdd}
           >
-            Add / 新增
+            新增
           </Button>
           <Button
             variant={editingName ? 'primary' : 'secondary'}
             icon={<Save size={14} />}
             className="h-8 !text-[12px]"
             disabled={!gate.save}
-            title={biTitle(
-              editingName ? 'Write over the study being edited' : 'Nothing to write over yet',
-              editingName ? '覆蓋目前編輯中的紀錄' : '尚未有可覆蓋的紀錄',
-            )}
+            title={editingName ? '覆蓋正在編輯的這一筆' : '還沒有可以覆蓋的紀錄；先按「新增」'}
             onClick={onSave}
           >
-            Save / 儲存
+            儲存
           </Button>
           {/* Two meanings, one for each state, and each is the useful one:
               on a fresh draft "reset" is back to the solve; on a record it is
@@ -204,13 +191,10 @@ export function SegmentTuner({
             icon={<RotateCcw size={14} />}
             className="h-8 !text-[12px]"
             disabled={!gate.reset}
-            title={biTitle(
-              editingName ? 'Back to the saved values' : 'Back to the solved values',
-              editingName ? '回到已儲存的數值' : '回到求解結果',
-            )}
+            title={editingName ? '回到這一筆存的數值' : '全部歸零，回到 07 的求解結果'}
             onClick={onReset}
           >
-            {editingName ? 'Revert / 還原' : 'Reset / 歸零'}
+            {editingName ? '還原' : '歸零'}
           </Button>
         </div>
       </div>
@@ -220,21 +204,19 @@ export function SegmentTuner({
 
 function Reading({
   label,
-  zh,
   before,
   after,
   good,
 }: {
   label: string;
-  zh: string;
   before: string;
   after: string | null;
   good: boolean;
 }) {
   return (
     <div className="min-w-0">
-      <span className="block truncate text-[10px] text-ink-400">
-        {label} <span className="text-ink-400">/ {zh}</span>
+      <span className="block truncate text-[10px] text-ink-400" title={label}>
+        {label}
       </span>
       <span className="flex items-baseline gap-1 text-[13px] font-bold tabular">
         <span className={after ? 'text-ink-400 line-through' : 'text-ink-900'}>{before}</span>
@@ -279,19 +261,16 @@ function SegmentRow({
         </span>
         {segment.shared && (
           <span
-            title={biTitle(
-              'Carries more than this component',
-              '此區段承載的不只這顆元件的熱',
-            )}
+            title="這一段還承載其他元件的熱"
             className="shrink-0 rounded bg-accent-100 px-1 py-0.5 text-[9px] leading-none font-bold text-accent-700"
           >
-            shared
+            共用
           </span>
         )}
       </span>
 
       <span className="mt-0.5 flex min-w-0 flex-wrap items-baseline gap-x-2 text-[10px] text-ink-400">
-        <span>{segment.edge_type}</span>
+        <span>{EDGE_TYPE_ZH[segment.edge_type] ?? segment.edge_type}</span>
         <span className="tabular">ΔT {num(segment.delta_T_C, 1, '°C')}</span>
         <span className="tabular">Q {num(segment.heat_flow_W, 1, 'W')}</span>
         <span className="tabular">
@@ -314,7 +293,7 @@ function SegmentRow({
           step={REDUCTION_STEP}
           value={reduction}
           disabled={readOnly}
-          aria-label={`Reduce ${segment.label} by percent`}
+          aria-label={`${segment.label} 熱阻降低百分比`}
           onChange={(event) => onReduction(Number(event.target.value))}
           className="h-1.5 min-w-0 flex-1 accent-orange-600"
         />
@@ -325,16 +304,15 @@ function SegmentRow({
           step={REDUCTION_STEP}
           value={reduction}
           disabled={readOnly}
-          aria-label={`Reduce ${segment.label} by percent, typed`}
+          aria-label={`${segment.label} 熱阻降低百分比（輸入）`}
           onChange={(event) => onReduction(Number(event.target.value))}
           className="h-6 w-14 shrink-0 rounded border border-line-strong bg-surface px-1 text-right text-[11px] font-bold tabular text-ink-900"
         />
         <span className="shrink-0 text-[10px] text-ink-400">%</span>
       </span>
 
-      <span className="mt-0.5 block text-[10px] text-ink-400">
-        Alone: <span className="font-bold tabular text-ink-700">{signed(soloGain, 2, '°C')}</span>
-        <span className="ml-1">/ 單獨調整此段的效果</span>
+      <span className="mt-0.5 block text-[10px] text-ink-400" title="只調這一段、其他段不動時，這顆元件的餘裕變化">
+        單獨調這段：餘裕 <span className="font-bold tabular text-ink-700">{signed(soloGain, 2, '°C')}</span>
       </span>
     </li>
   );

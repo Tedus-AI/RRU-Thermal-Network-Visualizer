@@ -1,5 +1,5 @@
 /**
- * Presentation helpers for Screen 11.
+ * Presentation helpers for the export in 10 報告與匯出 (12 §61).
  *
  * Formatting only. Nothing here decides readiness or produces a file — that all
  * lives in `src/export`, per 12 §39's rule that serialization and logic do not

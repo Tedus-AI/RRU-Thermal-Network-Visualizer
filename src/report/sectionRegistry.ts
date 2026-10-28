@@ -29,7 +29,7 @@ export interface SectionDefinition {
    */
   recommended: boolean;
   /** 11 §26 — where this section's data originally came from. */
-  source_screen: '01' | '05' | '07' | '08' | '09' | '10' | '11';
+  source_screen: '01' | '05' | '07' | '08' | '10';
   source_zh: string;
   /** What the section needs from the snapshot; absence makes it unavailable. */
   defaultContent: SectionContentOptions;
@@ -73,8 +73,8 @@ export const SECTION_DEFINITIONS: SectionDefinition[] = [
     title: 'Cover',
     zh: '封面',
     recommended: true,
-    source_screen: '11',
-    source_zh: '報告設定',
+    source_screen: '10',
+    source_zh: '10 報告設定',
     defaultContent: {},
     // A cover always owns its page.
     base_height: 1,

@@ -47,8 +47,8 @@ export const NEAR_LIMIT_MARGIN_C = 5;
 /**
  * Default "runs hot" threshold for the Nodes Above Warning count (09 §5).
  *
- * Temperature Distribution let the engineer move it; Results Overview has no controls at all
- * (10 §24) and reads this default. Both take it from here so the two screens
+ * Temperature Distribution let the engineer move it; the overview behind 07 and
+ * the report has no controls at all (10 §24) and reads this default. Both take it from here so the two screens
  * cannot quietly disagree about which nodes are above warning.
  */
 export const WARNING_TEMPERATURE_C = 90;

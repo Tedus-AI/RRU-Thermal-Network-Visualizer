@@ -17,10 +17,8 @@ export const T11 = {
   keepTableTogether:
     '避免此章節被分割到兩頁：放不下時整段移到下一頁。長表格與圖表章節（關鍵元件、熱網路摘要、瓶頸元件熱網分析）本來就會自動接續分頁，因此不受此設定影響，會從目前頁面剩餘空間開始排。',
   snapshotSource: '此報告章節所引用的報告快照與來源分析版本。',
-  sourceScreen: '此章節數據最初來自哪個分析頁，例如 Screen 07、08、09 或 10。',
+  sourceScreen: '此章節數據最初來自哪一頁，例如 07 求解與結果或 08 瓶頸分析。',
   languageMode: '設定報告內容使用英文或中英雙語；不影響應用程式 UI 的語言規則。',
-  prepareForExport:
-    '建立給 Screen 11 使用的 report export payload；本頁不會真正生成 PDF 或其他檔案。',
   exportPayload:
     '包含報告配置、snapshot ID、section order、page setting 等匯出必要 metadata，不包含實際檔案 bytes。',
   analyticalOnly:
@@ -31,7 +29,7 @@ export const T11 = {
   // --- supporting explanations for the other compact fields on this screen ---
   overallStatus:
     '來自報告快照的整體熱狀態；本頁只引用，不重新判定（超限也不會阻擋報告產出）。',
-  pageCount: '依目前章節與版面設定推估的頁數；實際頁數以 11 Export Center 的輸出為準。',
+  pageCount: '依目前章節與版面設定推估的頁數；匯出的 PDF 用同一套分頁。',
   pageSize: '報告紙張尺寸與方向；只影響報告版面，不影響任何熱分析數值。',
   reportTemplate:
     '報告版型：決定預設章節組合與順序。V1 只提供 Thermal Engineering Summary。',
@@ -59,7 +57,6 @@ export const REQUIRED_TOOLTIP_LABELS: Array<{ label: string; zh: string }> = [
   { label: 'Snapshot Source', zh: T11.snapshotSource },
   { label: 'Source Screen', zh: T11.sourceScreen },
   { label: 'Language Mode', zh: T11.languageMode },
-  { label: 'Prepare for Export', zh: T11.prepareForExport },
   { label: 'Export Payload', zh: T11.exportPayload },
   { label: 'Analytical-only', zh: T11.analyticalOnly },
   { label: 'External CFD Validation', zh: T11.externalCfdValidation },

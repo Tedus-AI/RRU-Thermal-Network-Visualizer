@@ -214,7 +214,7 @@ export function renderReport(input: ReportRenderInput): RenderedReport {
     project: input.project,
     scenario: input.scenario,
     unavailable: input.unavailable.includes(section.id),
-    // Screen 11's export renders the same page components, so it must supply
+    // The export renders the same page components, so it must supply
     // the same inputs. It is given the network context when it has one; the
     // figures then draw exactly as they do in the preview.
     network_context: input.network_context ?? null,

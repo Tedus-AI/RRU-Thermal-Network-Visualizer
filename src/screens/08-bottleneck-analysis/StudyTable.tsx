@@ -3,12 +3,12 @@
  *
  * A study is a record of an assumption (08 §23): it never wrote a resistance
  * back into the network, which is why the table says what was assumed, not what
- * was changed. The real edit goes through 04 / 05 / 06.
+ * was changed. The real edit goes through 04 / 05.
  */
 
 import { Trash2 } from 'lucide-react';
 
-import { ColumnLabel, biTitle } from '@/ui/FieldLabel';
+import { ColumnLabel } from '@/ui/FieldLabel';
 import type { ImprovementStudy } from '@/thermal/analysis/analysisTypes';
 
 import { num, rth, signed, timeOf } from './analysisViewModel';
@@ -30,8 +30,7 @@ export function StudyTable({
   if (studies.length === 0) {
     return (
       <p className="text-[11px] text-ink-400">
-        No study saved for this scenario yet — adjust a segment and save it.
-        <span className="ml-1">此情境尚未儲存任何調整；調整區段後按儲存。</span>
+        這個情境還沒有存過調整分析；在右邊拉動區段後按「新增」。
       </p>
     );
   }
@@ -75,7 +74,7 @@ export function StudyTable({
               <tr
                 key={study.id}
                 onClick={() => onSelect(study)}
-                title={biTitle('Open this study for editing', '開啟此紀錄以繼續編輯')}
+                title="開啟這一筆繼續編輯"
                 className={`cursor-pointer border-b border-line/60 align-top ${
                   study.id === editingId
                     ? 'bg-accent-100 ring-1 ring-accent-600/40'
@@ -88,11 +87,11 @@ export function StudyTable({
                   </span>
                   {study.id === editingId && (
                     <span className="mb-0.5 inline-block rounded bg-accent-600 px-1 text-[9px] leading-tight font-bold text-white">
-                      editing / 編輯中
+                      編輯中
                     </span>
                   )}
                   <span className="text-[10px] text-ink-400 tabular">
-                    limit {study.limit_C} °C {study.limit_type ?? ''}
+                    限溫 {study.limit_C} °C {study.limit_type ?? ''}
                   </span>
                 </td>
                 <td className="py-1.5 pr-2">
@@ -126,14 +125,15 @@ export function StudyTable({
                 <td className="py-1.5 pr-2 text-ink-400">
                   {timeOf(study.updated_at ?? study.created_at)}
                   {study.updated_at && (
-                    <span className="block text-[10px]">edited / 已修改</span>
+                    <span className="block text-[10px]">修改過</span>
                   )}
                 </td>
                 <td className="py-1.5 text-right">
                   <button
                     type="button"
                     disabled={readOnly}
-                    title={biTitle('Delete this study', '刪除此紀錄')}
+                    title="刪除這一筆"
+                    aria-label={`刪除 ${study.target_node_name} 的調整分析`}
                     onClick={(event) => {
                       event.stopPropagation();
                       onDelete(study.id);
