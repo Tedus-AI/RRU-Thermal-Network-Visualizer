@@ -15,7 +15,13 @@ import { createRth } from '@/thermal/rth';
 import { DEFAULT_SOLVER_SETTINGS, type ThermalEdge, type ThermalNetwork, type ThermalNode } from '@/thermal/types';
 import type { ThermalSolution } from '@/thermal/solver/solverTypes';
 
-import { nodeRows, resultTree, SHARED_STRUCTURE_GROUP_ID } from './resultViewModel';
+import {
+  componentResultOrder,
+  nodeRows,
+  resultTree,
+  SHARED_STRUCTURE_GROUP_ID,
+  type ResultTreeGroupRow,
+} from './resultViewModel';
 
 function node(id: string, overrides: Partial<ThermalNode> = {}): ThermalNode {
   return {
@@ -157,6 +163,27 @@ describe('result tree', () => {
     expect(fpga.status).toBe('over');
   });
 
+  it('judges a Tc part at its case: T, limit and margin agree on one row', () => {
+    // A DDR-like part: the limit is on the case, the junction above it is hotter.
+    const graph = network();
+    graph.nodes.NODE_J = { ...graph.nodes.NODE_J, limit_C: undefined };
+    graph.nodes.NODE_C = { ...graph.nodes.NODE_C, limit_C: 95, limit_type: 'Tc' };
+    const solution = {
+      node_temperatures_C: { NODE_J: 96.6, NODE_C: 89, NODE_BASE: 80, NODE_AMB: 45 },
+      edge_results: {},
+      energy_balance: { generated_W: 35 },
+    } as unknown as ThermalSolution;
+    const rows = nodeRows(graph, solution, { ambient_C: 45, powerScale: 1 });
+    const part = resultTree(graph, solution, rows, COMPONENTS)[0];
+
+    expect(part.peak_C).toBe(96.6);
+    expect(part.judged_C).toBe(89);
+    expect(part.judged_node_id).toBe('NODE_C');
+    expect(part.limit_C).toBe(95);
+    expect(part.margin_C).toBeCloseTo(part.limit_C! - part.judged_C!, 10);
+    expect(part.status).toBe('pass');
+  });
+
   it('reads Rth from the topology before a solve, so the tree is not empty', () => {
     const fpga = build()[0];
     const rjc = fpga.nodes
@@ -173,5 +200,57 @@ describe('result tree', () => {
       .nodes.flatMap((entry) => entry.edges)
       .find((entry) => entry.id === 'E_RJC')!;
     expect(rjc.name).toBe('Conduction / 熱傳導');
+  });
+});
+
+describe('componentResultOrder', () => {
+  const group = (
+    id: string,
+    margin_C: number | null,
+    judged_C: number | null,
+    name = id,
+  ): ResultTreeGroupRow => ({
+    kind: 'group',
+    id,
+    name,
+    subtitle: '',
+    peak_C: judged_C,
+    power_W: 1,
+    limit_C: margin_C == null || judged_C == null ? null : margin_C + judged_C,
+    limit_type: null,
+    margin_C,
+    judged_C,
+    judged_node_id: null,
+    status: 'pass',
+    nodes: [],
+  });
+
+  it('puts the tightest margin first and the unjudged parts last', () => {
+    const order = componentResultOrder([
+      group('CIRC', 30, 95),
+      group('NOLIMIT_COOL', null, 60),
+      group('PM', 1.4, 93.6),
+      group('NOLIMIT_HOT', null, 120),
+      group('FPGA', 2.9, 97.1),
+    ]).map((entry) => entry.id);
+    expect(order).toEqual(['PM', 'FPGA', 'CIRC', 'NOLIMIT_HOT', 'NOLIMIT_COOL']);
+  });
+
+  it('leaves the shared structure and manual nodes to the full table', () => {
+    const order = componentResultOrder([
+      group(SHARED_STRUCTURE_GROUP_ID, null, 88),
+      group('__manual__', null, 70),
+      group('PA', 40, 184),
+    ]).map((entry) => entry.id);
+    expect(order).toEqual(['PA']);
+  });
+
+  it('breaks a tie on the hotter part, then the name', () => {
+    const order = componentResultOrder([
+      group('B', 5, 80, 'Beta'),
+      group('A', 5, 80, 'Alpha'),
+      group('C', 5, 90, 'Gamma'),
+    ]).map((entry) => entry.id);
+    expect(order).toEqual(['C', 'A', 'B']);
   });
 });

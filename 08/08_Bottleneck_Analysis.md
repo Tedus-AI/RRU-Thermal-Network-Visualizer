@@ -384,3 +384,8 @@ Project / Scenario / Solver Status / Analysis Status / Reduction % / Target Metr
 
 ## 33. Final Principle
 **08 的 Bottleneck 不是「哪個 Rth 最大」，而是「改善哪一段後，完整 General Thermal Graph 重新分配熱流並 re-solve 時，能帶來最大的實際熱風險改善」。**
+
+## 34. 從 07 開某一顆（2026-10，07 §59）
+07「求解與結果」每列的 ⌖ 開 `/bottleneck?part=<限溫節點 id>`；底部「瓶頸分析」帶最緊的元件。
+08 的清單 `partsWithRequested`：照舊列出餘裕 ≤ 5 °C 的元件，再把要求的那顆依餘裕插進它的位置（就算餘裕很大）；開一次就好，之後切換不會被拉回。
+09 併入 07 之後，08 的「繼續」改成前往 10 報告，「返回」是 07 求解與結果。

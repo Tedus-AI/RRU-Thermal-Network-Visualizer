@@ -23,12 +23,10 @@ import type { SolverState } from '@/thermal/types';
 import { SolverValidationPanel } from './SolverValidationPanel';
 import { STATUS_ZH, percent, timeOf } from './resultViewModel';
 
-function MetaRow({ label, zh, value }: { label: string; zh: string; value: string }) {
+function MetaRow({ zh, value }: { zh: string; value: string }) {
   return (
     <div className="flex items-baseline justify-between gap-3 py-0.5">
-      <span className="shrink-0 text-[10px] text-ink-500">
-        {label} <span className="text-ink-400">/ {zh}</span>
-      </span>
+      <span className="shrink-0 text-[10px] text-ink-500">{zh}</span>
       <span className="truncate text-right text-[10px] font-semibold tabular text-ink-800">
         {value}
       </span>
@@ -65,7 +63,7 @@ export function SolverStatusOverlay({
         type="button"
         onClick={() => setOpen((value) => !value)}
         aria-expanded={open}
-        aria-label="Solver status and messages / 求解狀態與訊息"
+        aria-label="求解狀態與訊息"
         className="flex w-full shrink-0 items-center gap-2 px-2.5 py-1.5 text-left"
       >
         <span
@@ -79,7 +77,8 @@ export function SolverStatusOverlay({
                   : 'text-ink-700'
           }`}
         >
-          {shown} <span className="font-semibold text-ink-400">/ {STATUS_ZH[shown] ?? ''}</span>
+          {STATUS_ZH[shown] ?? shown}
+          <span className="ml-1 font-semibold text-ink-400">求解訊息</span>
         </span>
         <span className="ml-auto flex items-center gap-2 text-[10px] font-bold">
           <span className="flex items-center gap-1 text-danger-600">
@@ -97,28 +96,24 @@ export function SolverStatusOverlay({
 
       {open && (
         <div className="min-h-0 overflow-y-auto border-t border-line px-2.5 py-1.5">
-          <MetaRow label="Last Run" zh="上次求解" value={timeOf(solution?.solved_at)} />
+          <MetaRow zh="上次求解" value={timeOf(solution?.solved_at)} />
           <MetaRow
-            label="Solve Time"
             zh="求解時間"
             value={solution ? `${solution.metadata.solve_time_ms.toFixed(1)} ms` : '—'}
           />
           <MetaRow
-            label="Matrix"
             zh="矩陣"
             value={
               solution
-                ? `${solution.metadata.matrix_size} × ${solution.metadata.matrix_size} · ${solution.metadata.solved_nodes} nodes / ${solution.metadata.solved_edges} edges`
+                ? `${solution.metadata.matrix_size} × ${solution.metadata.matrix_size}・${solution.metadata.solved_nodes} 個節點／${solution.metadata.solved_edges} 條連線`
                 : '—'
             }
           />
           <MetaRow
-            label="Max Node Residual"
             zh="最大節點失衡"
             value={solution ? `${solution.metadata.max_node_residual_W.toExponential(1)} W` : '—'}
           />
           <MetaRow
-            label="Energy Residual"
             zh="能量殘差"
             value={solution ? percent(solution.energy_balance.error_pct) : '—'}
           />

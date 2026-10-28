@@ -191,7 +191,7 @@ function NoArtifacts({
           <Button variant="primary" onClick={onReport}>
             Go to Report Preview / 前往 10 報告預覽
           </Button>
-          <Button onClick={onNetwork}>Go to Thermal Network / 前往 07 熱網路圖</Button>
+          <Button onClick={onNetwork}>前往 07 求解與結果</Button>
         </div>
       </div>
     </div>
@@ -970,8 +970,9 @@ export function ExportCenterView() {
 
           <Button
             icon={<Flag className="size-4" />}
-            // 12 §50, AC-12-45 — Finish returns to Results Overview.
-            onClick={() => navigate(projectPath(projectId ?? '', 'results'))}
+            // 12 §50, AC-12-45 — Finish returns to the results, which are on
+            // 07 now (07 §59).
+            onClick={() => navigate(projectPath(projectId ?? '', 'network'))}
           >
             Finish
           </Button>

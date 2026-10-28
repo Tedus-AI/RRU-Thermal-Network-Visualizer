@@ -20,10 +20,10 @@ Data Provenance / Physics Correctness 原則為準。
 | 04 | Component Manager | ✅ |
 | 05 | 熱網路與邊界（Thermal Path Builder＋Boundary Conditions 合併） | ✅ |
 | 06 | Boundary Conditions | ↪ 併入 05（`/boundary` 自動導到 05） |
-| 07 | Thermal Network | ⏳ 待規格 |
-| 08 | Bottleneck Analysis | ⏳ 待規格 |
-| 09 | Temperature Distribution | ⏳ 待規格 |
-| 10 | Results Overview | ⏳ 待規格 |
+| 07 | 求解與結果（Thermal Network＋Results Overview 合併） | ✅ |
+| 08 | Bottleneck Analysis | ✅ |
+| 09 | Temperature Distribution | ✕ 已移除（`/temperature` 導到 07） |
+| 10 | Results Overview | ↪ 併入 07（`/results` 自動導到 07） |
 | 11 | Report Preview | ⏳ 待規格 |
 | 12 | Export Center | ⏳ 待規格 |
 

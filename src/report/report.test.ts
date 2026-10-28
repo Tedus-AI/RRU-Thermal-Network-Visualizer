@@ -30,6 +30,7 @@ import { REPORT_LAYOUT_REVISION } from './reportConfig';
 import { createReportConfig } from './defaultTemplate';
 import {
   evaluateSnapshot,
+  snapshotToFreeze,
   blocksExport,
   blocksPreview,
   withTranslatedActions,
@@ -189,7 +190,7 @@ describe('Test A — current snapshot with WARNING (11 §50 A)', () => {
     expect(blocksExport(evaluation.state)).toBe(false);
     expect(validation.readiness).toBe('WARNING');
     expect(validation.blocking).toEqual([]);
-    expect(validation.warnings.join(' ')).toMatch(/Report Readiness from Screen 09 is WARNING/);
+    expect(validation.warnings.join(' ')).toMatch(/Report Readiness of the frozen results is WARNING/);
   });
 });
 
@@ -218,6 +219,27 @@ describe('Test B — stale snapshot (11 §50 B)', () => {
   it('treats a snapshot from another scenario as stale', () => {
     const evaluation = evaluateSnapshot(snapshot(), live('sig-1', 'SCN_B'), 'Cold 25C');
     expect(evaluation.state).toBe('STALE');
+  });
+});
+
+// --- 10 freezes its own snapshot (07 §59) ----------------------------------
+
+describe('snapshotToFreeze', () => {
+  const ready = { ...live(), report_readiness: 'READY' } as ResultsOverview;
+  const blocked = { ...live(), report_readiness: 'BLOCKED' } as ResultsOverview;
+
+  it('freezes the current results when the scenario has no snapshot yet', () => {
+    expect(snapshotToFreeze({ stored: null, live: ready, asked: false })).toBe(ready);
+  });
+
+  it('never moves an existing snapshot unless the reader asks', () => {
+    expect(snapshotToFreeze({ stored: snapshot(), live: ready, asked: false })).toBeNull();
+    expect(snapshotToFreeze({ stored: snapshot(), live: ready, asked: true })).toBe(ready);
+  });
+
+  it('never freezes a blocked or missing result, even when asked', () => {
+    expect(snapshotToFreeze({ stored: null, live: blocked, asked: true })).toBeNull();
+    expect(snapshotToFreeze({ stored: null, live: null, asked: true })).toBeNull();
   });
 });
 

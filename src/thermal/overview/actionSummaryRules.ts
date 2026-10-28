@@ -141,7 +141,7 @@ export function recommendNextAction(input: ActionSummaryInput): RecommendedNextA
       zh: '檢視超限元件',
       reason: `${failing.component_name} is over its limit at ${one(failing.temperature_C)} °C.`,
       reason_zh: `${failing.component_name} 溫度 ${one(failing.temperature_C)} °C，已超出限制。`,
-      goto: '09',
+      goto: '07',
     };
   }
 
@@ -168,7 +168,7 @@ export function recommendNextAction(input: ActionSummaryInput): RecommendedNextA
       zh: '檢視接近限制的元件',
       reason: `${nearLimit.component_name} has only ${one(nearLimit.margin_C ?? 0)} °C of margin.`,
       reason_zh: `${nearLimit.component_name} 只剩 ${one(nearLimit.margin_C ?? 0)} °C 餘裕。`,
-      goto: '09',
+      goto: '07',
     };
   }
 

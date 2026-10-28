@@ -21,7 +21,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft,
   ArrowRight,
@@ -57,7 +57,7 @@ import { useAnalysisStore } from '@/data/analysisStore';
 import { DEFAULT_SOLVER_SETTINGS } from '@/thermal/types';
 import { solveNetwork } from '@/thermal/networkSolver';
 import { projectComponentLimits } from '@/thermal/graph/componentProjection';
-import { marginRanking, partsNeedingAttention } from '@/thermal/analysis/marginRanking';
+import { marginRanking, partsWithRequested } from '@/thermal/analysis/marginRanking';
 import {
   chainSegments,
   solutionWithWhatIf,
@@ -294,13 +294,33 @@ export function BottleneckAnalysisView() {
     return worst && worst.delta_C > 0.05 ? worst : null;
   }, [solveGraph, scenarioId, solverSettings, baselineTemperatures]);
 
+  /**
+   * The part 07's list sent this screen to (`?part=<node id>`). It joins the
+   * deck even with plenty of margin, and is opened once — choosing another
+   * rank afterwards is not undone by the link.
+   */
+  const [searchParams] = useSearchParams();
+  const requestedPart = searchParams.get('part');
   const ranked = useMemo(
     () =>
       solveGraph && baselineTemperatures
-        ? partsNeedingAttention(marginRanking(solveGraph, baselineTemperatures, 0))
+        ? partsWithRequested(marginRanking(solveGraph, baselineTemperatures, 0), requestedPart)
         : [],
-    [solveGraph, baselineTemperatures],
+    [solveGraph, baselineTemperatures, requestedPart],
   );
+  // State rather than a ref: the scenario effect above resets the deck to its
+  // first rank, and it runs again whenever React re-runs effects. A ref marked
+  // "done" on the first run let the second reset win; the pending state is
+  // still there in that same render, so the link is applied after it again.
+  const [pendingPart, setPendingPart] = useState<string | null>(requestedPart);
+  useEffect(() => {
+    if (!pendingPart) return;
+    const position = ranked.findIndex((entry) => entry.node_id === pendingPart);
+    if (position < 0) return;
+    setRankIndex(position);
+    setSelectedNodeId(pendingPart);
+    setPendingPart(null);
+  }, [pendingPart, ranked]);
   const target = ranked[Math.min(rankIndex, Math.max(ranked.length - 1, 0))] ?? null;
 
   /** The focused part's own nodes, and everything its heat passes through. */
@@ -876,10 +896,10 @@ export function BottleneckAnalysisView() {
         <div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-line bg-surface px-6 py-3">
           <Button
             icon={<ArrowLeft size={15} />}
-            title={biTitle('Back to 07 Thermal Network', '返回 07')}
+            title="返回 07 求解與結果"
             onClick={() => navigate(projectPath(projectId, 'network'))}
           >
-            Back to Thermal Network
+            返回 07 求解與結果
           </Button>
           <span className="text-[11px] text-ink-400">
             {ranked.length} part(s) ranked by margin · {segments.length} segment(s) on this
@@ -889,10 +909,10 @@ export function BottleneckAnalysisView() {
             variant="primary"
             className="ml-auto"
             icon={<ArrowRight size={15} />}
-            title={biTitle('Continue to 09 Results Overview', '前往 09 結果總覽')}
-            onClick={() => navigate(projectPath(projectId, 'results'))}
+            title="前往 10 整理報告"
+            onClick={() => navigate(projectPath(projectId, 'report'))}
           >
-            Continue to Results Overview
+            前往 10 報告
           </Button>
         </div>
       }

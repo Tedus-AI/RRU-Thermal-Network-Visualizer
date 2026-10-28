@@ -32,10 +32,10 @@ export function GraphLegend({
         type="button"
         onClick={onToggle}
         aria-expanded={open}
-        title="Legend / 圖例"
+        title="圖例"
         className="flex w-full items-center gap-1.5 text-[10px] font-bold text-ink-700"
       >
-        Legend <span className="font-normal text-ink-400">/ 圖例</span>
+        圖例
         <ChevronDown size={12} className={`ml-auto text-ink-400 ${open ? '' : '-rotate-90'}`} />
       </button>
       <ul className={`mt-1 flex-col gap-0.5 ${open ? 'flex' : 'hidden'}`}>

@@ -1,11 +1,12 @@
 /**
  * Snapshot adapter — 11 §3, §12, §28, §37.
  *
- * The one place Screen 10 touches Screen 09's snapshot. It answers two
+ * The one place Screen 10 touches the report snapshot. It answers three
  * questions and nothing else:
  *
  *   1. is the snapshot CURRENT / WARNING / STALE / MISSING (§3);
- *   2. which report sections have data behind them, and which do not (§17, §18).
+ *   2. which report sections have data behind them, and which do not (§17, §18);
+ *   3. whether 10 may freeze one itself (`snapshotToFreeze`).
  *
  * It never recalculates anything (§37). Where the snapshot has no bottleneck
  * ranking or no distribution summary, the section is reported as unavailable so
@@ -111,8 +112,8 @@ export function evaluateSnapshot(
  * A snapshot that already carries Chinese is returned untouched, so this only
  * ever reaches the snapshots that are broken.
  *
- * `solution_stale` is false by construction: Prepare Report Snapshot refuses a
- * stale solve, so a snapshot that exists was frozen from a current one.
+ * `solution_stale` is false by construction: a snapshot is only ever frozen
+ * from a current solve (`snapshotToFreeze`), so one that exists was.
  */
 export function withTranslatedActions(snapshot: ResultsOverviewSnapshot): ResultsOverviewSnapshot {
   if (snapshot.action_summary_zh && snapshot.action_summary_zh.length > 0) return snapshot;
@@ -140,4 +141,30 @@ export function blocksExport(state: SnapshotState): boolean {
 /** 11 §3, §45 — a missing snapshot has nothing to preview at all. */
 export function blocksPreview(state: SnapshotState): boolean {
   return state === 'MISSING';
+}
+
+/**
+ * What 10 may freeze into a report snapshot by itself, if anything.
+ *
+ * The snapshot used to be prepared only on 09, by a button — and 10 sent the
+ * reader back there for it, every time a result changed. 09 is part of 07 now
+ * (07 §59), so 10 freezes the snapshot itself, on two occasions only:
+ *
+ *   - there is none for this scenario yet (`stored` is what is on disk, not the
+ *     store, which may not have loaded): the report opens on the current
+ *     results instead of an empty page;
+ *   - the reader asked, with 更新為目前結果 (`asked`).
+ *
+ * Never silently over an existing one: a snapshot is what the report says, and
+ * it stays what it was frozen as until someone chooses to move it. And never
+ * from a result Report Readiness blocks (a stale or failed solve).
+ */
+export function snapshotToFreeze(input: {
+  stored: ResultsOverviewSnapshot | null;
+  live: ResultsOverview | null;
+  asked: boolean;
+}): ResultsOverview | null {
+  if (!input.live || input.live.report_readiness === 'BLOCKED') return null;
+  if (input.stored && !input.asked) return null;
+  return input.live;
 }

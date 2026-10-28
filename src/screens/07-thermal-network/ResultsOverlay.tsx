@@ -22,7 +22,6 @@
 import { useEffect } from 'react';
 import { FileText, Loader2 } from 'lucide-react';
 
-import { biTitle } from '@/ui/FieldLabel';
 import { FloatingPanel } from '@/ui/FloatingPanel';
 
 import { ResultTree } from './ResultTree';
@@ -67,8 +66,8 @@ export function ResultsOverlay({
 
   return (
     <FloatingPanel
-      title="Results / 求解結果"
-      subtitle={`${groups.length} groups · ${nodeCount} nodes · ${edgeCount} edges · Esc 關閉`}
+      title="完整結果表"
+      subtitle={`${groups.length} 組・${nodeCount} 個節點・${edgeCount} 條連線・Esc 關閉`}
       storageKey="tnvui.panel.07.results"
       // Wide by default: five columns and a component name that can carry a
       // manufacturer's part number.
@@ -79,8 +78,8 @@ export function ResultsOverlay({
           type="button"
           onClick={onExportPdf}
           disabled={exporting}
-          aria-label="Export results as PDF / 輸出求解結果 PDF"
-          title={biTitle('Export the whole table as PDF', '將完整表格輸出為 PDF')}
+          aria-label="輸出完整結果表 PDF"
+          title="把整張表（全部展開）輸出成 PDF"
           className="flex items-center gap-1.5 rounded-md border border-line-strong px-2 py-1 text-[11px] font-semibold text-ink-700 transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-40"
         >
           {exporting ? <Loader2 size={13} className="animate-spin" /> : <FileText size={13} />}

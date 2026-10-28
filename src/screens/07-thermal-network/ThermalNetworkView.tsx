@@ -1,14 +1,19 @@
 /**
- * Screen 07 — Thermal Network (Solver).
- * Specification: 07_Thermal_Network.md (source of truth), laid out after 07.png.
+ * Screen 07 — 求解與結果 (Solve & Results).
+ * Specification: 07_Thermal_Network.md (source of truth), §59 for the merge.
  *
- * What this screen does: takes the Screen 05 topology and the Screen 06
- * scenario boundary set, solves [G][T] = [P], back-calculates every edge's Q and
- * ΔT, checks the energy balance, and stores one solution per scenario.
+ * What this screen does: takes the Screen 05 topology and the scenario
+ * boundary set, solves [G][T] = [P], back-calculates every edge's Q and ΔT,
+ * checks the energy balance, stores one solution per scenario — and shows what
+ * the solve found: every component's temperature at its limit, the limit and
+ * the margin, tightest first, beside the solved graph.
  *
- * What it never does (07 §44–§46): rank bottlenecks, score sensitivity, draw a
- * temperature distribution, or write an executive summary. Those belong to
- * Screens 08, 09 and 10.
+ * It used to stop at the graph and leave the verdict to Screen 09, which read
+ * the same solution into the same table behind a second button. 09 is part of
+ * this screen now (07 §59): the bar on top carries the four numbers 09 led
+ * with, the list on the left is the table both screens opened, and a row opens
+ * Screen 08 on that part. Still no bottleneck chain, no sensitivity and no
+ * summary prose — those stay on 08 and in the report.
  *
  * Two deliberate departures from the mockup, both required by 07 §57 ("anything
  * in the PNG that the MD does not define must not be built"):
@@ -16,37 +21,23 @@
  *   1. The mockup's Solver Settings panel and status card describe an ITERATIVE
  *      solver — convergence tolerance, max iterations, under-relaxation,
  *      "converged in 27 iterations". This engine solves the matrix directly, so
- *      those numbers do not exist and are not fabricated. See SolveControlPanel.
+ *      those numbers do not exist and are not fabricated. See SolveBar.
  *   2. The mockup's "Key Results" card (Tj Max across all sources, Tcase Max,
- *      Bottom Case Max) is not defined anywhere in the MD, and a maximum across
- *      all heat sources is the first step of the worst-component ranking that
- *      §44 reserves for Screen 08. Per-node temperature, limit and margin are
- *      shown instead — in the results table and in the inspector, where §16 and
- *      §31 put them.
+ *      Bottom Case Max) is not defined anywhere in the MD. Per-component
+ *      temperature, limit and margin are shown instead, in the component list.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { ComponentVisibilityPanel } from '@/ui/ComponentVisibilityPanel';
 import { useRememberedFlag, useRememberedValue } from '@/ui/rememberedFlag';
 import { useNavigate, useParams } from 'react-router-dom';
-import {
-  ArrowLeft,
-  ArrowRight,
-  Network,
-  Play,
-  RefreshCw,
-  Save,
-  ShieldCheck,
-  TriangleAlert,
-  XCircle,
-} from 'lucide-react';
+import { ArrowLeft, ArrowRight, Crosshair, Network, Save, TriangleAlert, XCircle } from 'lucide-react';
 
 import { ScreenWorkspace } from '@/app/ScreenWorkspace';
-import { projectPath } from '@/app/navigation';
+import { projectPath, screenByCode } from '@/app/navigation';
 import { useShellActions } from '@/app/shellActions';
 import { Badge, Button, Modal, Skeleton } from '@/ui/primitives';
-import { biTitle } from '@/ui/FieldLabel';
 import { ResizableSidebar } from '@/ui/ResizableSidebar';
 import { toast } from '@/ui/toast';
 
@@ -59,15 +50,18 @@ import { useBoundaryStore } from '@/data/boundaryStore';
 import { useSolutionStore } from '@/data/solutionStore';
 
 import { projectComponentLimits } from '@/thermal/graph/componentProjection';
-import { powerBasisOf } from '@/domain/powerBasis';
+import { POWER_BASIS_LABEL, powerBasisOf } from '@/domain/powerBasis';
+import { windRecordedOnly } from '@/thermal/boundary/wind';
+import { powerByCategory } from '@/thermal/overview/powerByCategory';
+import type { Scenario } from '@/domain/project';
+import type { ScenarioBoundaryConditionSet } from '@/thermal/boundary/types';
 import { triggerDownload } from '@/export/download';
 import { exportFilename } from '@/export/exportNetworkGraph';
 import { DEFAULT_SOLVER_SETTINGS, type SolverSettings } from '@/thermal/types';
 import type { SolverIssue } from '@/thermal/solver/solverTypes';
 
-import { SolverKpiBar } from './SolverKpiBar';
-import { SolveControlPanel } from './SolveControlPanel';
-import { ScenarioSummary } from './ScenarioSummary';
+import { SolveBar } from './SolveBar';
+import { ComponentResultsPanel } from './ComponentResultsPanel';
 import { ResultModeToolbar } from './ResultModeToolbar';
 import { GraphExplorerControls, GraphGroupOverview, GraphToolbarBridge, useGraphExplorer } from '@/ui/GraphExplorer';
 import {
@@ -79,7 +73,6 @@ import {
   type SolvedGraphHandle,
 } from './SolvedGraphCanvas';
 import { isLayoutMode } from '@/screens/05-thermal-path-builder/GraphToolbar';
-import { EnergyBalancePanel } from './EnergyBalancePanel';
 import { GraphLegend } from './GraphLegend';
 import { useGraphExports } from './useGraphExports';
 import { ResultInspectorWindow } from './ResultInspectorWindow';
@@ -89,49 +82,42 @@ import { ResultTree } from './ResultTree';
 import {
   allowedModes,
   COMBINED_MODE,
+  componentResultOrder,
   isResultMode,
   migrateResultMode,
   edgeRows,
   nodeRows,
+  num,
   resultTree,
   type ResultMode,
+  type ResultTreeGroupRow,
 } from './resultViewModel';
 import { ambientHeadroom } from '@/thermal/analysis/ambientHeadroom';
 import { T07 } from './tooltips';
 
 // --- building blocks --------------------------------------------------------
 
-function Section({
-  index,
-  title,
-  zh,
-  actions,
-  className = '',
-  bodyClassName = 'p-3',
-  children,
-}: {
-  index: number;
-  title: string;
-  zh: string;
-  actions?: ReactNode;
-  className?: string;
-  bodyClassName?: string;
-  children: ReactNode;
-}) {
-  return (
-    <section className={`flex min-h-0 flex-col rounded-lg border border-line bg-surface ${className}`}>
-      <header className="flex shrink-0 items-center gap-2 border-b border-line px-3.5 py-2.5">
-        <span className="flex size-5 shrink-0 items-center justify-center rounded bg-accent-600 text-[11px] font-bold text-white tabular">
-          {index}
-        </span>
-        <h2 className="min-w-0 truncate text-[13px] font-bold text-ink-900">
-          {title} <span className="font-semibold text-ink-400">/ {zh}</span>
-        </h2>
-        <div className="ml-auto flex shrink-0 items-center gap-1.5">{actions}</div>
-      </header>
-      <div className={`min-h-0 flex-1 overflow-auto ${bodyClassName}`}>{children}</div>
-    </section>
-  );
+/**
+ * The scenario in one line — 07 §10 — where a card of seven rows used to be.
+ *
+ * Every value here is set in 01 (the scenario table) or 05 (the surfaces), and
+ * this screen changes none of them, so the line links to where they are set.
+ */
+export function scenarioLine(
+  scenario: Scenario | null,
+  set: ScenarioBoundaryConditionSet | null,
+): string {
+  if (!scenario) return '尚未選擇情境';
+  const ambient = set?.ambient.external_ambient_C ?? scenario.ambient_C;
+  const wind = set?.site.wind_speed_m_s ?? scenario.wind_mps;
+  const solar = set?.site.solar_irradiance_W_m2 ?? scenario.solar_W_m2;
+  const solarOn = set?.site.solar_enabled !== false && typeof solar === 'number' && solar > 0;
+  return [
+    `環溫 ${num(ambient, 1)} °C`,
+    windRecordedOnly(wind) ? `風速 ${(wind as number).toFixed(1)} m/s（未套用）` : '無風',
+    solarOn ? `日照 ${(solar as number).toFixed(0)} W/m²` : '無日照',
+    `${POWER_BASIS_LABEL[powerBasisOf(scenario)]} × ${(scenario.power_scale ?? 1).toFixed(2)}`,
+  ].join('・');
 }
 
 function LoadingState() {
@@ -229,7 +215,11 @@ export function ThermalNetworkView() {
   // the solved heat directions, so it stops at the node feeding the part
   // instead of running on through the heatsink it never uses.
   const solution = solutionKey ? (solutions[solutionKey] ?? null) : null;
-  const explorer = useGraphExplorer(network, components, hiddenComponentIds, solution);
+  // The group overview first (07 §59): one card a component reads at any
+  // width, where 85 nodes at 17 % zoom read as nothing until zoomed.
+  const explorer = useGraphExplorer(network, components, hiddenComponentIds, solution, 'groups');
+  /** Where the graph was before a row focused it, so a second click goes back. */
+  const viewBeforeFocus = useRef<'full' | 'groups'>('groups');
   const toggleComponentVisible = useCallback((componentId: string) => {
     setHiddenComponentIds((current) => {
       const next = new Set(current);
@@ -353,6 +343,24 @@ export function ThermalNetworkView() {
     [limited, solution, stale, rows, components],
   );
 
+  /** The component list: tightest margin first (07 §59). */
+  const ordered = useMemo(() => componentResultOrder(tree), [tree]);
+  const tightest = ordered.find((group) => group.margin_C != null) ?? null;
+
+  /** The heat by category, for the total on the bar. */
+  const powerSplit = useMemo(
+    () =>
+      limited && hasResult
+        ? powerByCategory({
+            network: limited,
+            components,
+            powerScale,
+            solar_W: solution?.energy_balance.solar_W ?? 0,
+          }).slices
+        : [],
+    [limited, hasResult, components, powerScale, solution],
+  );
+
   const issues: SolverIssue[] = useMemo(() => {
     if (checks) return [...checks.errors, ...checks.warnings, ...checks.infos];
     return solution?.warnings ?? [];
@@ -382,11 +390,11 @@ export function ThermalNetworkView() {
     if (!projectId || readOnly) return;
     const store = useSolutionStore.getState();
     if (!store.current()) {
-      toast.warning('Nothing to save — solve the network first / 尚無結果可儲存');
+      toast.warning('還沒有結果可以儲存，請先求解');
       return;
     }
     store.save(projectId);
-    toast.success('Solution saved / 求解結果已儲存');
+    toast.success('求解結果已儲存');
   };
 
   const setSaveHandler = useShellActions((s) => s.setSaveHandler);
@@ -399,15 +407,15 @@ export function ThermalNetworkView() {
   const runPreSolveCheck = () => {
     const report = useSolutionStore.getState().runPreSolveCheck();
     if (!report) {
-      toast.warning('Select a scenario first / 請先選擇情境');
+      toast.warning('請先選擇情境');
       return;
     }
     if (report.errors.length > 0) {
-      toast.error(`${report.errors.length} blocking issue(s) / 有 ${report.errors.length} 項阻擋問題`);
+      toast.error(`求解前檢查：有 ${report.errors.length} 項錯誤，要先修正`);
     } else if (report.warnings.length > 0) {
-      toast.warning(`Ready with ${report.warnings.length} warning(s) / 可求解，有警告`);
+      toast.warning(`可以求解，有 ${report.warnings.length} 項警告`);
     } else {
-      toast.success('Pre-solve checks passed / 求解前檢查通過');
+      toast.success('求解前檢查通過');
     }
   };
 
@@ -415,21 +423,44 @@ export function ThermalNetworkView() {
     if (readOnly) return;
     const result = useSolutionStore.getState().solve();
     if (!result) {
-      toast.warning('Select a scenario first / 請先選擇情境');
+      toast.warning('請先選擇情境');
       return;
     }
     if (result.status === 'FAILED') {
-      toast.error('Solve failed — see Solver Messages / 求解失敗，請見求解訊息');
+      toast.error('求解失敗，原因在熱網路左下角的求解訊息');
       return;
     }
     if (result.status === 'WARNING') {
-      toast.warning('Solved with warnings / 求解完成，但有警告');
+      toast.warning('求解完成，但有警告');
     } else {
-      toast.success(
-        `Solved in ${result.metadata.solve_time_ms.toFixed(1)} ms / 求解完成`,
-      );
+      toast.success(`求解完成（${result.metadata.solve_time_ms.toFixed(1)} ms）`);
     }
     if (projectId) useSolutionStore.getState().save(projectId);
+  };
+
+  /**
+   * A row of the component list: show that part's path on the graph — the
+   * instance holding the tightest limit — or, clicked again, go back.
+   */
+  const focusedComponentId = explorer.view === 'focus' ? (explorer.focused?.componentId ?? null) : null;
+  const selectComponent = (group: ResultTreeGroupRow) => {
+    if (focusedComponentId === group.id) {
+      explorer.setView(viewBeforeFocus.current);
+      return;
+    }
+    const path =
+      explorer.paths.find(
+        (entry) => group.judged_node_id != null && entry.nodeIds.includes(group.judged_node_id),
+      ) ?? explorer.paths.find((entry) => entry.componentId === group.id);
+    if (!path) return;
+    if (explorer.view !== 'focus') viewBeforeFocus.current = explorer.view;
+    explorer.focus(path.key);
+  };
+
+  const openBottleneck = (nodeId: string | null) => {
+    if (!projectId) return;
+    const base = projectPath(projectId, 'bottleneck');
+    navigate(nodeId ? `${base}?part=${encodeURIComponent(nodeId)}` : base);
   };
 
   const focusIssue = (issue: SolverIssue) => {
@@ -475,17 +506,15 @@ export function ThermalNetworkView() {
             forceExpanded
           />
         ),
-        title: `${draft?.project_name || 'Thermal network'} — solved results`,
-        subtitle: `${rows.length} nodes · ${flows.length} edges · ${scenario?.name ?? ''}`.trim(),
+        title: `${draft?.project_name || '熱網路'} — 求解結果`,
+        subtitle: `${rows.length} 個節點・${flows.length} 條連線・${scenario?.name ?? ''}`,
       });
       const url = URL.createObjectURL(blob);
       triggerDownload(url, exportFilename(draft?.project_name ?? '', 'pdf', { subject: 'results' }));
       setTimeout(() => URL.revokeObjectURL(url), 60_000);
-      toast.success('Result table exported / 已輸出求解結果 PDF');
+      toast.success('已輸出求解結果 PDF');
     } catch (error) {
-      toast.error(
-        `Export failed: ${error instanceof Error ? error.message : 'unknown error'} / 輸出失敗`,
-      );
+      toast.error(`輸出失敗：${error instanceof Error ? error.message : '未知的錯誤'}`);
     } finally {
       setExportingTable(false);
     }
@@ -519,10 +548,9 @@ export function ThermalNetworkView() {
       <div className="flex h-full items-center justify-center p-8">
         <div className="max-w-md rounded-lg border border-danger-500/30 bg-surface p-7 text-center">
           <XCircle size={22} className="mx-auto mb-3 text-danger-600" />
-          <h1 className="text-[15px] font-bold text-ink-900">Unable to load the thermal network.</h1>
-          <p className="mt-1 text-[13px] text-ink-500">無法載入熱網路。</p>
+          <h1 className="text-[15px] font-bold text-ink-900">無法載入熱網路</h1>
           <Button variant="primary" className="mt-4" onClick={() => navigate('/')}>
-            Return to Project Info
+            回到專案列表
           </Button>
         </div>
       </div>
@@ -536,23 +564,18 @@ export function ThermalNetworkView() {
   // 07 §49 — no network at all.
   if (!hasTopology || !network) {
     return (
-      <ScreenWorkspace
-        title="Thermal Network Solver"
-        titleZh="熱網路求解"
-        description="Solve the thermal network to obtain node temperatures, heat flows and energy balance."
-        descriptionZh="執行熱網路求解，以取得節點溫度、熱流與能量平衡。"
-      >
+      <ScreenWorkspace title="Solve & Results" titleZh="求解與結果">
         <div className="flex h-full items-center justify-center">
           <div className="max-w-md rounded-lg border border-dashed border-line-strong bg-surface px-6 py-10 text-center">
             <Network size={24} className="mx-auto mb-3 text-ink-400" />
-            <p className="text-[14px] font-semibold text-ink-700">No thermal network found.</p>
-            <p className="mt-1 text-[12px] text-ink-400">找不到熱網路，請先完成 05。</p>
+            <p className="text-[14px] font-semibold text-ink-700">還沒有熱網路</p>
+            <p className="mt-1 text-[12px] text-ink-400">到 05 依 04 的散熱路徑產生熱網路，再回來求解。</p>
             <Button
               variant="primary"
               className="mt-4"
               onClick={() => navigate(projectPath(projectId, 'thermal-path'))}
             >
-              Open 05 Thermal Path Builder / 前往 05
+              前往 05 熱網路與邊界
             </Button>
           </div>
         </div>
@@ -568,84 +591,138 @@ export function ThermalNetworkView() {
     stale ||
     solution.status === 'FAILED' ||
     solution.energy_balance.error_pct > settings.energy_error_pct;
-
+  const continueWhy = !solution
+    ? '先求解'
+    : stale
+      ? '結果已失效，請重新求解'
+      : solution.status === 'FAILED'
+        ? '求解失敗'
+        : solution.energy_balance.error_pct > settings.energy_error_pct
+          ? `能量平衡誤差 ${solution.energy_balance.error_pct.toFixed(2)} % 超過 ${settings.energy_error_pct} %`
+          : '';
 
   const legend = legendFor(mode, stale ? null : solution);
+  const report = screenByCode('10');
+
+  // How many parts the verdict is about, for the chip beside the title.
+  const over = hasResult ? ordered.filter((group) => group.status === 'over').length : 0;
+  const near = hasResult ? ordered.filter((group) => group.status === 'warn').length : 0;
+  const judged = hasResult ? ordered.filter((group) => group.status !== 'na').length : 0;
+
+  const statusBadge = !solution
+    ? { tone: 'neutral' as const, text: '尚未求解' }
+    : stale
+      ? { tone: 'warn' as const, text: '結果已失效' }
+      : solution.status === 'FAILED'
+        ? { tone: 'danger' as const, text: '求解失敗' }
+        : solution.status === 'WARNING'
+          ? { tone: 'warn' as const, text: '已求解・有警告' }
+          : { tone: 'ok' as const, text: '已求解' };
 
   return (
     <ScreenWorkspace
-      title="熱網路求解"
-      titleZh=""
-      descriptionZh="執行熱網路求解，以取得節點溫度、熱流與能量平衡。熱網路與邊界條件都來自 05，在此皆為唯讀。"
+      title="Solve & Results"
+      titleZh="求解與結果"
       badge={
         <div className="flex flex-wrap items-center gap-2">
-          {readOnly && <Badge tone="accent">READ ONLY / 唯讀</Badge>}
-          <Badge
-            tone={
-              stale
-                ? 'warn'
-                : solverState === 'SOLVED'
-                  ? 'ok'
-                  : solverState === 'FAILED'
-                    ? 'danger'
-                    : 'neutral'
-            }
+          {readOnly && <Badge tone="accent">唯讀</Badge>}
+          <span title={T07.kpi.solverStatus}>
+            <Badge tone={statusBadge.tone}>{statusBadge.text}</Badge>
+          </span>
+          {over > 0 ? (
+            <Badge tone="danger">{over} 種超限</Badge>
+          ) : near > 0 ? (
+            <Badge tone="warn">{near} 種餘裕 ≤ 5 °C</Badge>
+          ) : judged > 0 ? (
+            <Badge tone="ok">全部通過</Badge>
+          ) : null}
+          <span
+            className="text-[12px] text-ink-500"
+            title={`散熱表面條件 ${boundarySet?.assignments.filter((entry) => entry.enabled).length ?? 0} / ${boundaryPortCount}${
+              boundarySet?.external_loads.length ? `・日照負載 ${boundarySet.external_loads.length} 個` : ''
+            }`}
           >
-            Solver {stale ? 'DIRTY' : solverState}
-          </Badge>
-          {scenario && <Badge tone="neutral">{scenario.name}</Badge>}
+            {scenarioLine(scenario, boundarySet)}
+          </span>
+          <button
+            type="button"
+            className="text-[12px] font-semibold text-accent-700 hover:underline"
+            onClick={() => navigate(`${projectPath(projectId, 'info')}#scenario-settings`)}
+            title="環溫、風速、日照、功耗與倍率在 01 的情境表設定"
+          >
+            到 01 修改
+          </button>
         </div>
       }
-      metrics={<SolverKpiBar solution={solution} stale={stale} headroom={headroom} />}
+      metrics={
+        <SolveBar
+          solution={solution}
+          stale={stale}
+          tightest={hasResult ? tightest : null}
+          headroom={headroom}
+          power={powerSplit}
+          settings={settings}
+          powerScale={powerScale}
+          readOnly={readOnly}
+          canSolve={canSolve}
+          blocking={blocking}
+          solving={solving}
+          onSolve={runSolve}
+          onPreSolveCheck={runPreSolveCheck}
+          onReset={() => setConfirmReset(true)}
+          onSettings={(patch) => {
+            useNetworkStore.getState().updateSolverSettings(patch);
+            useSolutionStore.getState().refresh();
+          }}
+        />
+      }
       actionBar={
         <div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-line bg-surface px-6 py-3">
           <Button
             icon={<ArrowLeft size={15} />}
-            title={biTitle('Back to 05 Network & Boundary', T07.action.backTo06)}
+            title={T07.action.backTo06}
             onClick={() => navigate(projectPath(projectId, 'thermal-path'))}
           >
-            Back to 05
-          </Button>
-          <Button
-            icon={<ShieldCheck size={15} />}
-            title={biTitle('Pre-Solve Check', T07.action.preSolveCheck)}
-            onClick={runPreSolveCheck}
-          >
-            Pre-Solve Check
-          </Button>
-          <Button
-            variant="primary"
-            icon={solution ? <RefreshCw size={15} /> : <Play size={15} />}
-            disabled={readOnly || solving}
-            title={biTitle(solution ? 'Re-solve' : 'Run the solver', T07.action.solve)}
-            onClick={runSolve}
-          >
-            {solving ? 'Solving…' : solution ? 'Re-Solve / 重新求解' : 'Run Solver / 執行求解'}
+            返回 05
           </Button>
 
           {blocking > 0 && (
             <span className="text-[12px] font-medium text-danger-600">
-              {blocking} blocking issue{blocking > 1 ? 's' : ''} / 有 {blocking} 項阻擋問題
+              求解前檢查有 {blocking} 項錯誤，修正後才能求解
             </span>
           )}
 
-          <div className="ml-auto flex gap-2">
+          <div className="ml-auto flex flex-wrap gap-2">
             <Button
               icon={<Save size={15} />}
               disabled={readOnly || !solution}
-              title={biTitle('Save solution', T07.action.saveSolution)}
+              title={T07.action.saveSolution}
               onClick={handleSave}
             >
-              Save Solution
+              儲存結果
+            </Button>
+            <Button
+              icon={<Crosshair size={15} />}
+              disabled={continueBlocked}
+              title={
+                continueBlocked
+                  ? continueWhy
+                  : tightest
+                    ? `到 08 看最緊的元件 ${tightest.name} 的熱阻鏈`
+                    : '到 08 瓶頸分析'
+              }
+              onClick={() => openBottleneck(tightest?.judged_node_id ?? null)}
+            >
+              瓶頸分析
             </Button>
             <Button
               variant="primary"
               trailingIcon={<ArrowRight size={15} />}
               disabled={continueBlocked}
-              title={biTitle('Continue to 08 Bottleneck Analysis', T07.action.continue)}
-              onClick={() => navigate(projectPath(projectId, 'bottleneck'))}
+              title={continueBlocked ? continueWhy : T07.action.continue}
+              onClick={() => navigate(projectPath(projectId, report?.path ?? 'report'))}
             >
-              Continue to 08
+              前往 10 {report?.label ?? '報告'}
             </Button>
           </div>
         </div>
@@ -656,12 +733,8 @@ export function ThermalNetworkView() {
         <div className="flex items-start gap-2 rounded-lg border border-warn-500/40 bg-warn-100 px-3.5 py-2.5">
           <TriangleAlert size={16} className="mt-0.5 shrink-0 text-warn-600" />
           <p className="text-[12px] leading-relaxed font-semibold text-warn-600">
-            Results are stale. Network or scenario inputs changed after the last
-            solve. Re-solve required.
-            <span className="block font-normal text-ink-500">
-              結果已失效：拓樸或情境輸入在上次求解後被修改，請重新求解。
-              {T07.field.staleResults}
-            </span>
+            結果已失效：熱網路或情境在上次求解後改過，請重新求解。
+            <span className="block font-normal text-ink-500">{T07.field.staleResults}</span>
           </p>
         </div>
       )}
@@ -671,67 +744,44 @@ export function ThermalNetworkView() {
         <div className="flex items-start gap-2 rounded-lg border border-danger-500/40 bg-danger-100 px-3.5 py-2.5">
           <XCircle size={16} className="mt-0.5 shrink-0 text-danger-600" />
           <p className="text-[12px] leading-relaxed font-semibold text-danger-600">
-            Boundary conditions are incomplete. Complete Screen 06 first.
-            <span className="block font-normal text-ink-500">邊界條件尚未完成，請先到 05 完成散熱表面。</span>
+            散熱表面條件還沒完成，請先到 05 完成。
           </p>
           <Button
             className="ml-auto h-7 shrink-0 !text-[12px]"
             onClick={() => navigate(projectPath(projectId, 'thermal-path'))}
           >
-            Go to 06
+            前往 05
           </Button>
         </div>
       )}
 
-      {/* Row 1 — controls, solved graph, inspector */}
+      {/* The component list on the left, the solved graph on the right. */}
       <div
-        // 27rem of that reservation was the result table sitting underneath.
-        // It is a panel now, so the graph takes the height back — which was
-        // the whole point of moving it.
-        className={`flex h-[calc(100vh-21rem)] min-h-[30rem] flex-col gap-3 lg:flex-row ${
+        className={`flex h-[calc(100vh-20rem)] min-h-[30rem] flex-col gap-3 lg:flex-row ${
           fullscreen ? 'fixed inset-0 z-30 h-auto min-h-0 bg-canvas p-3' : ''
         }`}
       >
         {!fullscreen && (
-        <ResizableSidebar
-          id="07"
-          defaultWidth={304}
-          labelEn="solver panels"
-          labelZh="求解面板"
-          shortEn="Solver"
-          shortZh="求解"
-        >
-          <Section index={1} title="Solver Settings" zh="求解設定" className="shrink-0">
-            <SolveControlPanel
-              state={stale ? 'DIRTY' : solverState}
-              settings={settings}
-              matrixSize={solution && !stale ? solution.metadata.matrix_size : null}
-              powerScale={powerScale}
-              readOnly={readOnly}
-              canSolve={canSolve}
-              hasSolution={Boolean(solution)}
-              solving={solving}
-              onSettings={(patch) => {
-                useNetworkStore.getState().updateSolverSettings(patch);
-                useSolutionStore.getState().refresh();
-              }}
-              onPreSolveCheck={runPreSolveCheck}
-              onSolve={runSolve}
-              onReset={() => setConfirmReset(true)}
+          <ResizableSidebar
+            id="07.results"
+            defaultWidth={460}
+            labelEn="component results"
+            labelZh="元件結果"
+            shortEn="Parts"
+            shortZh="元件"
+          >
+            <ComponentResultsPanel
+              groups={ordered}
+              hasSolution={hasResult}
+              stale={stale}
+              failed={solution?.status === 'FAILED'}
+              selectedId={focusedComponentId}
+              onSelect={selectComponent}
+              onOpenBottleneck={(group) => openBottleneck(group.judged_node_id)}
+              canOpenBottleneck={!continueBlocked}
+              onOpenFullTable={() => setResultsOpen(true)}
             />
-          </Section>
-
-          <Section index={2} title="Scenario Summary" zh="情境摘要" className="shrink-0">
-            <ScenarioSummary
-              scenario={scenario}
-              set={boundarySet}
-              boundaryCount={boundarySet?.assignments.filter((entry) => entry.enabled).length ?? 0}
-              portCount={boundaryPortCount}
-              solarLoadCount={boundarySet?.external_loads.length ?? 0}
-              onEditBoundary={() => navigate(projectPath(projectId, 'thermal-path'))}
-            />
-          </Section>
-        </ResizableSidebar>
+          </ResizableSidebar>
         )}
 
         <section
@@ -741,16 +791,14 @@ export function ThermalNetworkView() {
         >
           <header className="shrink-0 border-b border-line px-3.5 py-2.5">
             <div className="mb-2 flex items-center gap-2">
-              <h2 className="text-[13px] font-bold text-ink-900">
-                Solved Thermal Network{' '}
-                <span className="font-semibold text-ink-400">/ 已求解熱網路</span>
-              </h2>
-              <Badge tone="neutral">
-                <span title="熱網路與邊界條件都來自 05，此畫面不修改任何一項。">
-                  From 05
-                </span>
-              </Badge>
-              {stale && <Badge tone="warn">Stale / 已失效</Badge>}
+              <h2 className="text-[13px] font-bold text-ink-900">熱網路</h2>
+              <span
+                className="text-[11px] text-ink-400"
+                title="熱網路與邊界條件都來自 05，這一頁不修改任何一項。"
+              >
+                來自 05・唯讀
+              </span>
+              {stale && <Badge tone="warn">已失效</Badge>}
             </div>
             <GraphToolbarBridge explorer={explorer}>
             <ResultModeToolbar
@@ -763,6 +811,9 @@ export function ThermalNetworkView() {
               fullscreen={fullscreen}
               componentVisibilityOpen={componentVisibilityOpen}
               hiddenComponentCount={hiddenModeledComponentIds.size}
+              // The list is beside the graph; only fullscreen hides it, so only
+              // fullscreen needs a way to the full table from here.
+              showResultsButton={fullscreen}
               resultsSummary={`${rows.length} · ${flows.length}`}
               exporting={exporting}
               onOpenResults={() => setResultsOpen(true)}
@@ -846,17 +897,10 @@ export function ThermalNetworkView() {
 
             {solving && (
               <div className="absolute inset-0 z-20 flex items-center justify-center bg-surface/70">
-                <p className="text-[13px] font-semibold text-ink-700">Solving… / 求解中…</p>
+                <p className="text-[13px] font-semibold text-ink-700">求解中…</p>
               </div>
             )}
           </div>
-
-          <EnergyBalancePanel
-            balance={solution?.energy_balance ?? null}
-            warnPct={settings.energy_warn_pct}
-            errorPct={settings.energy_error_pct}
-            stale={stale}
-          />
         </section>
 
       </div>
@@ -874,13 +918,13 @@ export function ThermalNetworkView() {
             setSelectedNodeId(nodeId);
             // Centring happens behind the panel, so the node is already framed
             // when the reader closes it — which is what they opened the table
-            // to find.
-            canvasRef.current?.center(nodeId);
+            // to find. On the whole graph, since a focus may have hidden it.
+            explorer.showFull(() => canvasRef.current?.center(nodeId));
           }}
           onSelectEdge={(edgeId) => {
             setSelectedNodeId(null);
             setSelectedEdgeId(edgeId);
-            canvasRef.current?.center(edgeId);
+            explorer.showFull(() => canvasRef.current?.center(edgeId));
           }}
           onExportPdf={handleExportTablePdf}
           exporting={exportingTable}
@@ -888,8 +932,7 @@ export function ThermalNetworkView() {
         />
       )}
 
-      {/* The same window Screen 09's network opens — see
-          `ResultInspectorWindow`. */}
+      {/* A node or edge clicked on the graph — see `ResultInspectorWindow`. */}
       <ResultInspectorWindow
         storageKey="tnv.07.inspector"
         network={network}
@@ -911,12 +954,12 @@ export function ThermalNetworkView() {
 
       {confirmReset && (
         <Modal
-          title="Reset results? / 清除求解結果？"
-          description="This clears the analytical solution for the active scenario only. Topology, boundary conditions, Rth definitions and measurement data are kept. / 只會清除目前情境的解析解，拓樸、邊界條件、熱阻定義與量測資料都會保留。"
+          title="清除求解結果？"
+          description="只會清除目前情境的求解結果，熱網路、邊界條件、熱阻定義與量測資料都會保留。"
           onClose={() => setConfirmReset(false)}
           footer={
             <>
-              <Button onClick={() => setConfirmReset(false)}>Cancel / 取消</Button>
+              <Button onClick={() => setConfirmReset(false)}>取消</Button>
               <Button
                 variant="danger"
                 onClick={() => {
@@ -925,10 +968,10 @@ export function ThermalNetworkView() {
                   setSelectedNodeId(null);
                   setSelectedEdgeId(null);
                   setMode('node_type');
-                  toast.success('Results cleared / 已清除求解結果');
+                  toast.success('已清除求解結果');
                 }}
               >
-                Reset Results / 清除結果
+                清除結果
               </Button>
             </>
           }

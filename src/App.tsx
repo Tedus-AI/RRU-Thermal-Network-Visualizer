@@ -9,7 +9,6 @@ import { ComponentManagerView } from '@/screens/04-component-manager/ComponentMa
 import { ThermalPathBuilderView } from '@/screens/05-thermal-path-builder/ThermalPathBuilderView';
 import { ThermalNetworkView } from '@/screens/07-thermal-network/ThermalNetworkView';
 import { BottleneckAnalysisView } from '@/screens/08-bottleneck-analysis/BottleneckAnalysisView';
-import { ResultsOverviewView } from '@/screens/10-results-overview/ResultsOverviewView';
 import { ReportPreviewView } from '@/screens/11-report-preview/ReportPreviewView';
 import { ExportCenterView } from '@/screens/12-export-center/ExportCenterView';
 import { useProjectStore } from '@/data/projectStore';
@@ -59,7 +58,8 @@ export default function App() {
         <Route path="/project/:projectId/boundary" element={<RetiredScreen to="thermal-path" />} />
         <Route path="/project/:projectId/network" element={<ThermalNetworkView />} />
         <Route path="/project/:projectId/bottleneck" element={<BottleneckAnalysisView />} />
-        <Route path="/project/:projectId/results" element={<ResultsOverviewView />} />
+        {/* 09 Results Overview is part of 07 求解與結果 now (07 §59). */}
+        <Route path="/project/:projectId/results" element={<RetiredScreen to="network" />} />
         <Route path="/project/:projectId/report" element={<ReportPreviewView />} />
         <Route path="/project/:projectId/export" element={<ExportCenterView />} />
         {/* The Temperature Distribution screen was removed: it binned NODES,

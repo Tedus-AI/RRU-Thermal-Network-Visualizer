@@ -22,7 +22,7 @@ import { solveScenario } from '../solver/solveScenario';
 
 import { runAnalysis, AnalysisCancelled, type AnalysisInput } from './bottleneckScore';
 import { selectCandidates } from './candidateSelector';
-import { partsNeedingAttention, type MarginRank } from './marginRanking';
+import { partsNeedingAttention, partsWithRequested, type MarginRank } from './marginRanking';
 import { NEAR_LIMIT_MARGIN_C } from './temperatureDataset';
 import { normalizeAgainstMax, normalizeMagnitude } from './normalization';
 import { analysisKey, isAnalysisCurrent } from './analysisCache';
@@ -764,8 +764,8 @@ describe('Improvements are measured against the network being modified', () => {
  *
  * A fixed top three is wrong in both directions: it hides a fourth part over
  * its limit, and on a healthy design it promotes two parts with 30 °C of room
- * into a list that reads like a problem. The line is the one Screen 09 judges
- * by, so the two screens cannot disagree about what is worth listing.
+ * into a list that reads like a problem. The line is the one 07's component
+ * list colours by, so the two screens cannot disagree about what is worth listing.
  */
 describe('partsNeedingAttention', () => {
   const part = (name: string, margin_C: number): MarginRank => ({
@@ -802,5 +802,32 @@ describe('partsNeedingAttention', () => {
 
     expect(partsNeedingAttention(ranked).map((entry) => entry.name)).toEqual(['A']);
     expect(partsNeedingAttention([])).toEqual([]);
+  });
+});
+
+/** 07's list opens 08 on any row, including one with plenty of room. */
+describe('partsWithRequested', () => {
+  const part = (name: string, margin_C: number): MarginRank => ({
+    node_id: name,
+    name,
+    component_id: name,
+    temperature_C: 100 - margin_C,
+    limit_C: 100,
+    limit_type: 'Tj',
+    margin_C,
+    power_W: 1,
+  });
+  const ranked = [part('PM', 1.4), part('FPGA', 2.9), part('DDR', 6), part('PA', 40.6)];
+
+  it('adds the requested part in its place by margin', () => {
+    expect(partsWithRequested(ranked, 'DDR').map((entry) => entry.name)).toEqual(['PM', 'FPGA', 'DDR']);
+    expect(partsWithRequested(ranked, 'PA').map((entry) => entry.name)).toEqual(['PM', 'FPGA', 'PA']);
+  });
+
+  it('changes nothing for a part already listed, an unknown one, or none', () => {
+    const flagged = ['PM', 'FPGA'];
+    expect(partsWithRequested(ranked, 'FPGA').map((entry) => entry.name)).toEqual(flagged);
+    expect(partsWithRequested(ranked, 'NOPE').map((entry) => entry.name)).toEqual(flagged);
+    expect(partsWithRequested(ranked, null).map((entry) => entry.name)).toEqual(flagged);
   });
 });

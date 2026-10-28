@@ -1,9 +1,12 @@
 /**
  * Presentation helpers for Screen 07.
  *
- * Everything here reads a solution; nothing computes physics. The one rule it
- * enforces on the way out is 07 §44–§46: no ranking, no score, no distribution
- * statistic. Rows are ordered by node id or by the graph, never by "worst".
+ * Everything here reads a solution; nothing computes physics.
+ *
+ * 07 §44 kept ranking off this screen while Screen 09 existed to do it. 09 is
+ * part of 07 now (07 §59), so the component list IS ordered by margin, tightest
+ * first — see `componentResultOrder`. Still no score and no distribution
+ * statistic: the order is the margin itself, nothing weighted.
  */
 
 import type { LimitType } from '@/domain/component';
@@ -505,6 +508,14 @@ export interface ResultTreeGroupRow {
   /** Which temperature the limit is stated against — Tj, Tc, Tb or Ts. */
   limit_type: LimitType | null;
   margin_C: number | null;
+  /**
+   * The temperature the margin is judged at: the node holding the tightest
+   * limit, so limit − judged = margin on one row. `peak_C` is the hottest node,
+   * which for a Tc part is the junction — 96.6 against a 95 °C case limit read
+   * as over-limit beside a passing margin.
+   */
+  judged_C: number | null;
+  judged_node_id: string | null;
   status: MarginStatus;
   nodes: ResultTreeNodeRow[];
 }
@@ -582,6 +593,8 @@ export function resultTree(
         limit_C: null,
         limit_type: null,
         margin_C: null,
+        judged_C: null,
+        judged_node_id: null,
         status: 'na' as MarginStatus,
         nodes: [],
       };
@@ -605,6 +618,8 @@ export function resultTree(
       group.margin_C = row.margin_C;
       group.limit_C = row.limit_C;
       group.limit_type = row.node.limit_type ?? null;
+      group.judged_C = row.temperature_C;
+      group.judged_node_id = row.node.id;
       group.status = row.status;
     }
   }
@@ -622,6 +637,35 @@ export function resultTree(
     const rankA = order.get(a.id) ?? (a.id === SHARED_STRUCTURE_GROUP_ID ? 1e6 : 1e6 + 1);
     const rankB = order.get(b.id) ?? (b.id === SHARED_STRUCTURE_GROUP_ID ? 1e6 : 1e6 + 1);
     return rankA - rankB || a.name.localeCompare(b.name);
+  });
+}
+
+/** Whether a group is one of Screen 04's components rather than structure. */
+export function isComponentGroup(group: Pick<ResultTreeGroupRow, 'id'>): boolean {
+  return group.id !== SHARED_STRUCTURE_GROUP_ID && group.id !== UNGROUPED_GROUP_ID;
+}
+
+/**
+ * The components, tightest margin first — the list 07 opens on.
+ *
+ * Least margin first; a part without a limit cannot be judged and goes last,
+ * hottest first. Ties break on the hotter part and then the name, so the order
+ * holds still between solves. Shared structure and manual nodes are not
+ * components and stay in the full result table.
+ */
+export function componentResultOrder(groups: readonly ResultTreeGroupRow[]): ResultTreeGroupRow[] {
+  const hottest = (group: ResultTreeGroupRow) => group.judged_C ?? group.peak_C ?? -Infinity;
+  return groups.filter(isComponentGroup).sort((a, b) => {
+    if (a.margin_C != null && b.margin_C != null) {
+      return (
+        a.margin_C - b.margin_C ||
+        hottest(b) - hottest(a) ||
+        a.name.localeCompare(b.name, undefined, { numeric: true })
+      );
+    }
+    if (a.margin_C != null) return -1;
+    if (b.margin_C != null) return 1;
+    return hottest(b) - hottest(a) || a.name.localeCompare(b.name, undefined, { numeric: true });
   });
 }
 

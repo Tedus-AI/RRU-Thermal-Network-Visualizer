@@ -2,15 +2,14 @@
  * The metric switch — the one control that decides what the graph is a picture
  * of.
  *
- * Extracted from `ResultModeToolbar` because Screen 09's network window carries
- * this and nothing else from that toolbar: the rest of it (exports, layout,
- * component visibility, the Results button) is Screen 07's workshop, and a
- * window opened to look at a conclusion does not need the workshop. The pills
- * themselves must not drift between the two, which is why they live here rather
- * than being written twice.
+ * Extracted from `ResultModeToolbar` so the pills read the same wherever a
+ * solved graph is drawn: the rest of that toolbar (exports, layout, component
+ * visibility) is 07's workshop, and the pills themselves must not drift between
+ * the screens that share them.
+ *
+ * The face is the Chinese name (07 §59); `label` stays English for filenames
+ * and exports.
  */
-
-import { biTitle } from '@/ui/FieldLabel';
 
 import type { ResultMode } from './resultViewModel';
 import { T07 } from './tooltips';
@@ -37,7 +36,8 @@ export function ResultModePills({
     <div
       className="flex items-center gap-0.5 rounded-md border border-line-strong p-0.5"
       role="group"
-      aria-label={biTitle('Result mode', T07.field.resultMode)}
+      aria-label="圖面著色"
+      title={T07.field.resultMode}
     >
       {modes.map((entry) => {
         const disabled = entry.needsSolution && !hasResult;
@@ -47,11 +47,7 @@ export function ResultModePills({
             type="button"
             disabled={disabled}
             aria-pressed={mode === entry.id}
-            title={
-              disabled
-                ? biTitle(`${entry.label} — solve first`, `${entry.zh}：請先求解`)
-                : biTitle(entry.label, entry.zh)
-            }
+            title={disabled ? `${entry.zh}：請先求解` : entry.zh}
             onClick={() => onMode(entry.id as ResultMode)}
             className={`rounded px-2 py-1 text-[11px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
               mode === entry.id
@@ -59,7 +55,7 @@ export function ResultModePills({
                 : 'text-ink-500 hover:bg-surface-muted hover:text-ink-900'
             }`}
           >
-            {entry.label}
+            {entry.zh}
           </button>
         );
       })}

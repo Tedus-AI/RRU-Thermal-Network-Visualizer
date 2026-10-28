@@ -1,15 +1,14 @@
 /**
- * The metric switch Screen 09's network window offers.
+ * The result views a solved graph offers outside 07's workshop.
  *
- * The window used to be locked to Temperature. It now carries the result views
- * — the combined Temperature + ΔT, Heat Flow and Rth — and must not quietly
- * grow the two input-only ones back: Node Type and Rth Source say how the model
- * was BUILT, which is 04/05/06's question, not a question anyone opens the
- * overview to ask.
+ * Only the views that colour by a solved number — the combined Temperature +
+ * ΔT, Heat Flow and Rth — and never the two input-only ones: Node Type and Rth
+ * Source say how the model was BUILT, which is 04/05's question.
  *
  * It is the same list Screens 08 and 12 read, which is the point: one answer to
  * "which views does this tool have", so the same network cannot say different
- * things depending on which screen you are standing on.
+ * things depending on which screen you are standing on. (It began as the test
+ * for 09's network window; 09 is part of 07 now, 07 §59.)
  */
 
 import { describe, expect, it } from 'vitest';
