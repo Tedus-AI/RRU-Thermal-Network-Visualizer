@@ -11,28 +11,28 @@ export const T06 = {
   pageSubtitle: '這一頁只設定情境相關的邊界條件，不建立新的熱網路拓撲，也不執行求解。',
 
   step: {
-    scenario: '選擇目前要設定邊界條件的情境。不同情境可以共用 05 的拓撲，但邊界條件彼此獨立。',
+    scenario: '選擇目前要設定邊界條件的情境。不同情境可以共用 04 的拓撲，但邊界條件彼此獨立。',
     ambientSite: '檢查由 Screen 01 情境設定帶入的環境溫度、風速與太陽條件。',
-    surfaceMapping: '將 05 建立的 boundary port 對應到此情境的對流、輻射、太陽或固定溫度條件。',
+    surfaceMapping: '將 04 建立的 boundary port 對應到此情境的對流、輻射、太陽或固定溫度條件。',
     convection: '設定表面到空氣的對流係數 h 與有效面積，用於推導邊界熱阻。',
     radiationSolar: '設定輻射參數與太陽熱輸入。太陽負載是外部熱源，不是熱阻。',
-    validate: '檢查所有必要邊界條件是否完整，確認可以交給 07 進行熱網路求解。',
+    validate: '檢查所有必要邊界條件是否完整，確認可以交給 05 進行熱網路求解。',
   },
 
   kpi: {
     boundarySet: '顯示目前情境的邊界條件集合狀態，例如草稿、需檢查或可求解。',
-    boundaryPorts: '顯示 05 拓撲中的邊界端口有多少已完成此情境的條件指定。',
+    boundaryPorts: '顯示 04 拓撲中的邊界端口有多少已完成此情境的條件指定。',
     ambient: '顯示此情境的環境溫度狀態。這不是求解後的節點溫度。',
     convection: '顯示對流 profile 的數量與是否缺少 h 或面積資料。',
     radiationSolar: '顯示輻射與太陽負載是否已設定完成。',
-    solveReadiness: '檢查此情境是否已具備交給 07 求解所需的邊界輸入。',
+    solveReadiness: '檢查此情境是否已具備交給 05 求解所需的邊界輸入。',
   },
 
   field: {
     scenarioName: '情境名稱，例如 Baseline Hot Day、Solar Peak 或 Lab Chamber。',
     copyFromScenario: '從另一個情境複製邊界條件，複製後會成為目前情境的獨立資料。',
-    externalAmbient: '外部環境溫度由 Screen 01 情境設定統一管理，06 僅引用此值。',
-    internalAir: '內部空氣溫度。目前只作情境記錄，不會自動加入 07 的熱網路求解。',
+    externalAmbient: '外部環境溫度由 Screen 01 情境設定統一管理，散熱表面僅引用此值。',
+    internalAir: '內部空氣溫度。目前只作情境記錄，不會自動加入 05 的熱網路求解。',
     radiationSurrounding:
       '周圍輻射溫度。產生新的輻射 profile 時用來預填參數；求解以已指派 profile 的參數為準。',
     altitude:
@@ -44,7 +44,7 @@ export const T06 = {
     convectionMethod:
       '設定對流輸入方式。目前正式計算輸入為 profile 內的手動 h，尚未實作自動相關式。',
     solarEnabled:
-      '啟用太陽負載設定。只有當表面已指派完整的 solar profile 時，才會成為 07 的外部熱輸入。',
+      '啟用太陽負載設定。只有當表面已指派完整的 solar profile 時，才會成為 05 的外部熱輸入。',
     solarIrradiance:
       '太陽輻照度，單位 W/m²。產生新的 solar profile 時用來預填；求解以已指派 profile 的值為準。',
     solarIncidence: '太陽入射角用於記錄安裝方位，目前不會自動轉換為投影面積係數。',
@@ -55,18 +55,18 @@ export const T06 = {
     viewFactor: '視角因子，代表表面與周圍環境之間的輻射交換比例。',
     hConv: '對流熱傳係數 h，單位 W/m²K。V1 由工程師手動輸入。',
     area:
-      '參與此邊界條件的有效表面積，單位 m²。封裝已建立「頂面＋四側面」暴露幾何時由 04／05 自動同步；HSK Fin Surface 則請輸入已包含 fin efficiency 的有效翅片面積，不是未修正的總幾何面積。',
+      '參與此邊界條件的有效表面積，單位 m²。封裝已建立「頂面＋四側面」暴露幾何時由 03／04 自動同步；HSK Fin Surface 則請輸入已包含 fin efficiency 的有效翅片面積，不是未修正的總幾何面積。',
     fixedTemperature: '固定溫度邊界的溫度值，例如恆溫槽或受控冷板。',
     adiabaticReason: '絕熱邊界不需要數值；理由僅供稽核，可留白且不會阻擋求解。',
     boundaryType: '此邊界端口採用的邊界條件型別。',
-    representation: '此 profile 在 07 求解時的表示方式，例如並聯邊界或外部熱負載。',
+    representation: '此 profile 在 05 求解時的表示方式，例如並聯邊界或外部熱負載。',
     dataSource:
-      '資料來源可選手動輸入、解析計算、規格書、工程假設、實測值或原廠資料。FloTHERM 來源需等 Screen 03 完成後再啟用。',
+      '資料來源可選手動輸入、解析計算、規格書、工程假設、實測值或原廠資料。FloTHERM 來源需等 FloTHERM 匯入完成後再啟用。',
     confidence: '此邊界輸入的信心度。低信心度會顯示警告，但不會改變數值求解結果。',
   },
 
   derived: {
-    disclaimer: '求解前的邊界輸入預覽。節點溫度與連線熱流由 07 計算。',
+    disclaimer: '求解前的邊界輸入預覽。節點溫度與連線熱流由 05 計算。',
     rconv: '對流邊界熱阻預覽 = 1 / (h × A)。',
     rrad: '輻射邊界熱阻預覽 = 1 / (h_rad × A)，其中 h_rad 為線性化輻射係數。',
     rcombined: '對流與輻射為並聯，因此以導熱率相加後取倒數，不是熱阻相加。',
@@ -74,7 +74,7 @@ export const T06 = {
   },
 
   mapping:
-    '預留給 FloTHERM 等外部模擬的對照別名；Screen 03 的解析功能尚未實作，此處僅儲存中繼資料。',
+    '預留給 FloTHERM 等外部模擬的對照別名；FloTHERM 匯入的解析功能尚未實作，此處僅儲存中繼資料。',
   floThermDeferred: 'FloTHERM 匯入延後中，別名僅供未來對照使用。',
-  readOnlyTopology: '拓撲由 05 建立，於此畫面唯讀：06 不新增或刪除任何節點與連線。',
+  readOnlyTopology: '拓撲由 04 建立，於此畫面唯讀：散熱表面不新增或刪除任何節點與連線。',
 } as const;

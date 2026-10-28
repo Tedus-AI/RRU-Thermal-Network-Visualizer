@@ -192,7 +192,7 @@ export function RruDesignCompare({ result }: { result: FinArrayResult | null }) 
     ['η 鰭片效率', f(result?.eta_fin, 3), f(design.eta_fin, 3)],
     ['製程係數', f(result ? result.effectiveness / result.eta_fin : undefined, 2), f(design.eta_process, 2)],
     ['鰭片數', result ? String(result.fin_count) : '—', design.fin_count != null ? String(design.fin_count) : '—'],
-    ['熱負載', `${heat04.toFixed(1)} W（04）`, design.heat_W != null ? `${design.heat_W.toFixed(1)} W` : '—'],
+    ['熱負載', `${heat04.toFixed(1)} W（03）`, design.heat_W != null ? `${design.heat_W.toFixed(1)} W` : '—'],
   ];
   return (
     <div className="mt-2 rounded border border-line bg-surface" data-rru-compare>

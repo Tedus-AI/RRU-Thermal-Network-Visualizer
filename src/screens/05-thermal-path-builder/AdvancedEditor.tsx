@@ -53,7 +53,7 @@ export function AdvancedEditor({
     <div className="flex flex-col gap-2" data-advanced-editor>
       <p className="text-[10.5px] leading-relaxed text-ink-400">
         畫布上的「連接埠、新增節點、新增連線、依建議連接」與 Delete 鍵現在可以用。一般專案不必動這裡：
-        改 04 之後回到上面按「依 04 重新產生」即可。
+        改 03 之後回到上面按「依 03 重新產生」即可。
       </p>
       <CardDisclosure name="components" title="元件與模板" hint="選一顆元件，換它的散熱架構模板" defaultOpen>
         <ComponentPalette

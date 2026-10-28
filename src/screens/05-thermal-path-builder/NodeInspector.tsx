@@ -247,15 +247,15 @@ export function NodeInspector({
             {mode === 'boundary' ? (
               /*
                 A boundary is where the model stops. Its temperature comes from
-                the Screen 06 scenario and it dissipates nothing, so there is no
+                the Screen 05 surface scenario and it dissipates nothing, so there is no
                 role to author — showing empty Power and Limit boxes here only
                 invited someone to fill them.
               */
               <p className="mb-3 rounded-md border border-line bg-surface-muted p-2.5 text-[11px] leading-relaxed text-ink-500">
-                This is a boundary node. Its temperature is set by the scenario in Screen 06, and
+                This is a boundary node. Its temperature is set by the scenario in Screen 04's surface section, and
                 nothing dissipates here, so it has neither a source power nor a limit of its own.
                 <span className="mt-0.5 block">
-                  此為邊界節點。溫度由 Screen 06 的情境設定，本身不發熱，
+                  此為邊界節點。溫度由 Screen 04 散熱表面的情境設定，本身不發熱，
                   因此沒有節點功耗，也沒有自己的溫度上限。
                 </span>
               </p>
@@ -330,12 +330,12 @@ export function NodeInspector({
             ) : mode === 'derived_source' ? (
               <div className="mb-3">
                 <p className="mb-2 rounded-md border border-line bg-surface-muted p-2.5 text-[10px] leading-relaxed text-ink-500">
-                  These come from the component in Screen 04 and are read-only here — editing them
-                  would put a second answer where Screen 04 cannot see it, and the next template
+                  These come from the component in Screen 03 and are read-only here — editing them
+                  would put a second answer where Screen 03 cannot see it, and the next template
                   rebuild would overwrite it.
                   <span className="mt-0.5 block">
-                    以下數值來自 Screen 04 的元件資料，此處唯讀。在這裡改會產生 Screen 04
-                    不知道的第二份數值，且下次重建模板時會被覆蓋。請至 Screen 04 修改。
+                    以下數值來自 Screen 03 的元件資料，此處唯讀。在這裡改會產生 Screen 03
+                    不知道的第二份數值，且下次重建模板時會被覆蓋。請至 Screen 03 修改。
                   </span>
                 </p>
                 <Row label="Source Power" zh="節點功耗">
@@ -424,17 +424,17 @@ export function NodeInspector({
             <div className="mt-3 rounded-md border border-line bg-surface-muted p-2.5">
               <p className="text-[11px] font-bold text-ink-700">Temperature results</p>
               <Row label="Analytical">
-                <span className="text-ink-400">Not solved (Screen 07)</span>
+                <span className="text-ink-400">Not solved (Screen 05)</span>
               </Row>
               <Row label="FloTHERM">
-                <span className="text-ink-400">Not imported (Screen 03)</span>
+                <span className="text-ink-400">Not imported (FloTHERM import)</span>
               </Row>
               <Row label="Measurement">
                 <span className="text-ink-400">Reserved</span>
               </Row>
               <p className="mt-1.5 text-[10px] leading-relaxed text-ink-400">
-                Screen 05 defines topology only. Temperatures need boundary conditions from Screen
-                06 and a solve in Screen 07. / 05 僅定義拓樸，溫度需 06 邊界條件與 07 求解。
+                Screen 04 defines topology only. Temperatures need the surface boundary conditions in
+                Screen 04 and a solve in Screen 05. / 04 僅定義拓樸，溫度需 04 散熱表面的邊界條件與 05 求解。
               </p>
             </div>
           </div>
@@ -566,8 +566,8 @@ export function NodeInspector({
               }}
             />
             <p className="mt-1.5 text-[10px] leading-relaxed text-ink-400">
-              Alias text is stored only. Screen 03 is deferred: nothing here parses a FloTHERM file
-              or imports a result. / 僅儲存別名文字，Screen 03 尚未實作解析。
+              Alias text is stored only. FloTHERM import is deferred: nothing here parses a FloTHERM file
+              or imports a result. / 僅儲存別名文字，FloTHERM 匯入尚未實作解析。
             </p>
           </div>
         )}

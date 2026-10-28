@@ -156,7 +156,7 @@ export function nextStepFor(health: ProjectHealth): NextStep {
     description,
     screenCode: code,
     screenPath: screen(code).path,
-    cta: `${code} ${screen(code).label}`,
+    cta: `${screen(code).no} ${screen(code).label}`,
     blockedHere,
   });
 
@@ -186,7 +186,7 @@ export function nextStepFor(health: ProjectHealth): NextStep {
     );
   }
   if (!health.thermalNetwork) {
-    return step('05', '建立熱網路', '依 04 的散熱路徑產生熱網路，並設定散熱表面。');
+    return step('05', '建立熱網路', '依 03 的散熱路徑產生熱網路，並設定散熱表面。');
   }
   if (!health.baselineScenario) {
     return { ...step('01', '建立情境', '求解前需要一個有環境溫度的情境，在 01 的情境表建立。'), rowKey: 'scenario' };
@@ -194,5 +194,5 @@ export function nextStepFor(health: ProjectHealth): NextStep {
   if (!health.solved) {
     return step('07', '求解熱網路', '執行求解，檢查溫度與熱流。');
   }
-  return step('10', '出報告', '07 已有每顆元件的溫度與餘裕；確認後到 10 整理報告並匯出。');
+  return step('10', '出報告', '05 已有每顆元件的溫度與餘裕；確認後到 07 整理報告並匯出。');
 }

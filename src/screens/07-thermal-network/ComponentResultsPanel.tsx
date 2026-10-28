@@ -254,8 +254,8 @@ export function ComponentResultsPanel({
                           aria-label={`${group.name} 瓶頸分析`}
                           title={
                             group.judged_node_id == null
-                              ? '沒有限溫，08 沒有可分析的餘裕'
-                              : `到 08 看 ${group.name} 的熱阻鏈`
+                              ? '沒有限溫，06 沒有可分析的餘裕'
+                              : `到 06 看 ${group.name} 的熱阻鏈`
                           }
                           className="inline-flex size-6 items-center justify-center rounded text-ink-400 hover:bg-accent-50 hover:text-accent-700 disabled:cursor-not-allowed disabled:opacity-30"
                         >
@@ -304,7 +304,7 @@ export function ComponentResultsPanel({
       <p className="shrink-0 border-t border-line px-3 py-1.5 text-[10.5px] leading-relaxed text-ink-400">
         溫度是限溫位置（Tj／Tc／Ts）的溫度，所以溫度、限溫、餘裕三格對得起來。點一列，右邊熱網路只看它的路徑；
         <Crosshair size={10} className="mx-0.5 inline" aria-hidden />
-        到 08 瓶頸分析。
+        到 06 瓶頸分析。
       </p>
     </section>
   );

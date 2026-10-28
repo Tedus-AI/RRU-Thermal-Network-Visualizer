@@ -232,7 +232,7 @@ export function buildSolveInput(options: BuildSolveInputOptions): SolveInput {
           'rt_power_missing',
           'pre_solve',
           `${missing.length} component(s) have no room-temperature power; this ${POWER_BASIS_LABEL.rt} scenario uses their hot power instead: ${names.join(', ')}.`,
-          `${missing.length} 顆元件沒有常溫功耗，這個「${POWER_BASIS_LABEL.rt}」情境暫用它們的高溫功耗：${shown}。有的元件常溫時功耗反而較高（濾波器、環形器），請到 04 填「常溫功耗」，或從 AI-Thermal 更新。`,
+          `${missing.length} 顆元件沒有常溫功耗，這個「${POWER_BASIS_LABEL.rt}」情境暫用它們的高溫功耗：${shown}。有的元件常溫時功耗反而較高（濾波器、環形器），請到 03 填「常溫功耗」，或從 AI-Thermal 更新。`,
           { fix_in: '04' },
         ),
       );

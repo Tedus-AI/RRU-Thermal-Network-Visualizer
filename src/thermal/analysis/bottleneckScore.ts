@@ -148,8 +148,8 @@ export async function runAnalysis(
       issue(
         'error',
         'baseline_resolve_failed',
-        `The baseline could not be re-solved (${baselineSolve.message ?? 'unknown reason'}). Ranking against the stored Screen 07 temperatures would compare two different networks, so nothing was ranked. Re-solve Screen 07 and run the analysis again.`,
-        `無法重新求解 baseline（${baselineSolve.message ?? '原因不明'}）。若改用 07 儲存的溫度排名，等於拿兩個不同的網路比較，因此本次不做排名。請回 07 重新求解後再執行分析。`,
+        `The baseline could not be re-solved (${baselineSolve.message ?? 'unknown reason'}). Ranking against the stored Screen 05 temperatures would compare two different networks, so nothing was ranked. Re-solve Screen 05 and run the analysis again.`,
+        `無法重新求解 baseline（${baselineSolve.message ?? '原因不明'}）。若改用 05 儲存的溫度排名，等於拿兩個不同的網路比較，因此本次不做排名。請回 05 重新求解後再執行分析。`,
       ),
     );
   }
@@ -166,8 +166,8 @@ export async function runAnalysis(
       issue(
         'warning',
         'baseline_input_drift',
-        `The stored Screen 07 solution and a re-solve of its own inputs differ by ${drift.delta_C.toFixed(1)} °C at ${drift.node_id}. This analysis is measured against the re-solve, so improvements stay honest; re-solve Screen 07 to make both screens agree.`,
-        `07 的既有解與「以其輸入重新求解」的結果在 ${drift.node_id} 相差 ${drift.delta_C.toFixed(1)} °C。本分析以重新求解為基準，改善量才不會被灌水；請回 07 重新求解使兩畫面一致。`,
+        `The stored Screen 05 solution and a re-solve of its own inputs differ by ${drift.delta_C.toFixed(1)} °C at ${drift.node_id}. This analysis is measured against the re-solve, so improvements stay honest; re-solve Screen 05 to make both screens agree.`,
+        `05 的既有解與「以其輸入重新求解」的結果在 ${drift.node_id} 相差 ${drift.delta_C.toFixed(1)} °C。本分析以重新求解為基準，改善量才不會被灌水；請回 05 重新求解使兩畫面一致。`,
       ),
     );
   }

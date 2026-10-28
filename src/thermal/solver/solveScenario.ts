@@ -229,8 +229,8 @@ export function solveScenario(options: SolveScenarioOptions): SolveScenarioOutco
         'info',
         'spreading_biot_applied',
         'boundary',
-        `${spreadingRefinements.length} spreading edge(s) re-solved at finite Bi from the scenario's own boundary — ${figuresEn} on the largest change, which rose from ${worst.R_before_C_per_W.toFixed(3)} to ${worst.R_after_C_per_W.toFixed(3)} °C/W. Screen 05 shows the Bi → ∞ value, which is always the lower of the two.`,
-        `已依本情境的邊界條件，以有限 Bi 重新計算 ${spreadingRefinements.length} 條擴散邊；變化最大的一條 ${figuresZh}，熱阻由 ${worst.R_before_C_per_W.toFixed(3)} 升至 ${worst.R_after_C_per_W.toFixed(3)} °C/W。畫面 05 顯示的是 Bi → ∞ 的值，恆為兩者中的較小者。`,
+        `${spreadingRefinements.length} spreading edge(s) re-solved at finite Bi from the scenario's own boundary — ${figuresEn} on the largest change, which rose from ${worst.R_before_C_per_W.toFixed(3)} to ${worst.R_after_C_per_W.toFixed(3)} °C/W. Screen 04 shows the Bi → ∞ value, which is always the lower of the two.`,
+        `已依本情境的邊界條件，以有限 Bi 重新計算 ${spreadingRefinements.length} 條擴散邊；變化最大的一條 ${figuresZh}，熱阻由 ${worst.R_before_C_per_W.toFixed(3)} 升至 ${worst.R_after_C_per_W.toFixed(3)} °C/W。畫面 04 顯示的是 Bi → ∞ 的值，恆為兩者中的較小者。`,
         { emphasis: [figuresEn, figuresZh] },
       ),
     );
@@ -592,8 +592,8 @@ export function heatPipeLimitIssues(
         'info',
         'heat_pipe_qmax_unchecked',
         'result_integrity',
-        `${unchecked.length} heat pipe / vapour chamber edge(s) have no stated Qmax, so the heat routed through them was not checked against a dry-out limit. State Qmax in Screen 04.`,
-        `有 ${unchecked.length} 條熱管／均熱板連線未標示 Qmax，未檢查其承載熱量是否超過乾涸極限。請於 04 填寫 Qmax。`,
+        `${unchecked.length} heat pipe / vapour chamber edge(s) have no stated Qmax, so the heat routed through them was not checked against a dry-out limit. State Qmax in Screen 03.`,
+        `有 ${unchecked.length} 條熱管／均熱板連線未標示 Qmax，未檢查其承載熱量是否超過乾涸極限。請於 03 填寫 Qmax。`,
         { edge_id: unchecked[0], fix_in: '04' },
       ),
     );

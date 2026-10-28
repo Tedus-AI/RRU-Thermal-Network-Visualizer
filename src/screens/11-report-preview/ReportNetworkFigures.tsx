@@ -296,8 +296,8 @@ export function ReportNetworkFigures({
             <p className="text-[8.5px] text-[#68748a]">
               {reportLabel(
                 mode,
-                'No improvement study saved for this part in Screen 08.',
-                '此元件在 08 尚未儲存調整分析。',
+                'No improvement study saved for this part in Screen 06.',
+                '此元件在 06 尚未儲存調整分析。',
               )}
             </p>
           )}
@@ -371,7 +371,7 @@ function LeverTable({
   return (
     <div className="border border-[#d7dde5] bg-[#f7f9fc] px-2 py-1.5">
       <p className="mb-1 text-[8.5px] font-bold tracking-wide text-[#68748a] uppercase">
-        {reportLabel(mode, 'Planned Improvement · from Screen 08', '預計改善段 · 來自 08')}
+        {reportLabel(mode, 'Planned Improvement · from Screen 06', '預計改善段 · 來自 06')}
       </p>
       <ul className="flex flex-col gap-1">
         {levers.map((segment) => (

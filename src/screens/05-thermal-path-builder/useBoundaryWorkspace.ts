@@ -241,7 +241,7 @@ export function useBoundaryWorkspace() {
       parameters,
       source: 'manual',
       confidence: 'medium',
-      provenance: { source_label: 'Screen 05 boundary input' },
+      provenance: { source_label: 'Screen 04 boundary input' },
       external_mappings: { import_status: 'deferred' },
     };
 

@@ -194,7 +194,7 @@ describe('BoundaryInspector simplification', () => {
     // No messages for this surface: nothing is listed (card ④ says the page is clean).
     expect(html).not.toContain('border-danger-500/40 bg-danger-100');
     expect(html).toContain('進階資訊');
-    expect(html).toContain('取自04 的元件幾何');
+    expect(html).toContain('取自03 的元件幾何');
     expect(html).not.toMatch(/<input[^>]+id="bc-param-area_m2"/);
     expect(html).not.toContain('External Mapping');
     expect(html).not.toContain('FloTHERM Surface Alias');
@@ -221,7 +221,7 @@ describe('BoundaryInspector simplification', () => {
     }
 
     expect(html).toMatch(/<input[^>]+id="bc-param-area_m2"/);
-    expect(html).not.toContain('取自04 的元件幾何');
+    expect(html).not.toContain('取自03 的元件幾何');
   });
 
   // A fin stack has no h of its own to state, so the manual description is not
@@ -469,7 +469,7 @@ describe('BoundaryInspector simplification', () => {
   });
 });
 
-describe('the surface temperature 07 solved', () => {
+describe('the surface temperature 05 solved', () => {
   const check = (patch: Partial<SurfaceAssumptionCheck> = {}): SurfaceAssumptionCheck => ({
     boundary_port_id: 'BP_FIN',
     profile_id: 'BCP_RAD',
@@ -484,10 +484,10 @@ describe('the surface temperature 07 solved', () => {
     ...patch,
   });
 
-  it('says in Chinese what 07 found, in °C, and offers to fill it in even when the assumption holds', () => {
+  it('says in Chinese what 05 found, in °C, and offers to fill it in even when the assumption holds', () => {
     const html = renderToStaticMarkup(<SurfaceAssumptionResult check={check()} readOnly={false} onApply={() => {}} />);
-    expect(html).toContain('已對照 07：假設成立');
-    expect(html).toContain('假設 80.0 °C → 07 解出 82.1 °C（+2.1 °C）');
+    expect(html).toContain('已對照 05：假設成立');
+    expect(html).toContain('假設 80.0 °C → 05 解出 82.1 °C（+2.1 °C）');
     expect(html).toContain('把 82.1 °C 帶入「表面溫度假設」');
     expect(html).not.toMatch(/Checked against|assumed|solved|SCR07| K\)/);
   });
@@ -501,6 +501,6 @@ describe('the surface temperature 07 solved', () => {
       />,
     );
     expect(html).toContain('表面解出 95.0 °C，不是假設的 80.0 °C');
-    expect(html).toContain('帶入後請回 07 重新求解');
+    expect(html).toContain('帶入後請回 05 重新求解');
   });
 });

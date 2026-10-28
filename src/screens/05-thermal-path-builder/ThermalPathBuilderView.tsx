@@ -232,13 +232,13 @@ export function ThermalPathBuilderView() {
     <ScreenWorkspace
       title="Thermal Network & Boundary"
       titleZh="熱網路與邊界"
-      descriptionZh="依 04 的散熱路徑產生熱網路，設定散熱表面；環境跟著 01 的情境。完成後到 07 求解。"
+      descriptionZh="依 03 的散熱路徑產生熱網路，設定散熱表面；環境跟著 01 的情境。完成後到 05 求解。"
       badge={
         <div className="flex flex-wrap items-center gap-2">
           {readOnly && <Badge tone="accent">唯讀</Badge>}
           {requiresReview && !isEmpty && (
-            <span title="04 改了會影響熱網路的欄位。到 ① 按「依 04 重新產生」，或檢查後儲存，這個提醒就會消失。">
-              <Badge tone="warn">04 有改過</Badge>
+            <span title="03 改了會影響熱網路的欄位。到 ① 按「依 03 重新產生」，或檢查後儲存，這個提醒就會消失。">
+              <Badge tone="warn">03 有改過</Badge>
             </span>
           )}
           <Badge tone={blocking ? 'warn' : checks.warnings > 0 ? 'warn' : 'ok'}>
@@ -255,7 +255,7 @@ export function ThermalPathBuilderView() {
       actionBar={
         <div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-line bg-surface px-6 py-3">
           <Button icon={<ArrowLeft size={15} />} onClick={() => navigate(projectPath(projectId, 'components'))}>
-            返回 04
+            返回 03
           </Button>
           <Button icon={<CircleCheck size={15} />} onClick={handleValidate} title="重新檢查熱網路與邊界">
             重新檢查
@@ -288,7 +288,7 @@ export function ThermalPathBuilderView() {
               disabled={blocking}
               onClick={handleContinue}
             >
-              前往 07 求解
+              前往 05 求解
             </Button>
           </div>
         </div>

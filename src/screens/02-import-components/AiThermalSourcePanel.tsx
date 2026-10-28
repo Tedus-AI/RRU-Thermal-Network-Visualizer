@@ -51,7 +51,7 @@ const CARRIES = [
   'PCB 板厚（板級導熱孔）',
   'Thermal Via 計算的等效 k（該元件自訂；沒有 via 設計的用 01 通用值）',
   'TIM 材料與壓合厚度、備註',
-  '凸台大小（在 04 選「凸台」時自動帶入）',
+  '凸台大小（在 03 選「凸台」時自動帶入）',
 ];
 const STILL_04 = ['封裝型式', '接合方式', '擴散範圍', '本體型元件的量測位置'];
 
@@ -279,7 +279,7 @@ export function AiThermalSourcePanel() {
           {/* One line; the lists only on request. */}
           <details className="group text-[12px] text-ink-500">
             <summary className="w-fit cursor-pointer list-none text-ink-600 hover:text-accent-700">
-              會帶入 {CARRIES.length} 項・04 還要補 {STILL_04.length} 項
+              會帶入 {CARRIES.length} 項・03 還要補 {STILL_04.length} 項
               <span className="ml-1 text-ink-400 group-open:hidden">（展開）</span>
             </summary>
             <div className="mt-2 grid gap-3 rounded-md border border-line bg-surface p-3 leading-relaxed sm:grid-cols-2">
@@ -292,11 +292,11 @@ export function AiThermalSourcePanel() {
                 </ul>
               </div>
               <div>
-                <p className="font-semibold text-ink-700">還要在 04 補</p>
+                <p className="font-semibold text-ink-700">還要在 03 補</p>
                 <p className="mt-1">{STILL_04.join('、')}，以及 AI-Thermal 沒有指定的散熱路徑。</p>
                 <p className="mt-2 text-ink-400">
-                  AI-Thermal 管的欄位在 04 顯示成參照值、要改回 AI-Thermal 改；04 的「從 AI-Thermal 更新」會帶回之後的修改。
-                  常溫功耗（Pd@25°C）帶進 04 的「常溫功耗」，給 01 的常溫情境用。元件類型、限溫對象的判定、TIM 型號、Thermal Via 孔徑、數量與等效 k 的說明保留在「來源」分頁。
+                  AI-Thermal 管的欄位在 03 顯示成參照值、要改回 AI-Thermal 改；03 的「從 AI-Thermal 更新」會帶回之後的修改。
+                  常溫功耗（Pd@25°C）帶進 03 的「常溫功耗」，給 01 的常溫情境用。元件類型、限溫對象的判定、TIM 型號、Thermal Via 孔徑、數量與等效 k 的說明保留在「來源」分頁。
                 </p>
               </div>
             </div>

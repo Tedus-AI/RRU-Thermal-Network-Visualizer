@@ -216,10 +216,10 @@ export function SolverValidationPanel({
                         <button
                           type="button"
                           onClick={() => onNavigate(entry.fix_in as '05' | '06')}
-                          title={entry.fix_in === '06' ? '前往 05 的散熱表面' : '前往 05 熱網路'}
+                          title={entry.fix_in === '06' ? '前往 04 的散熱表面' : '前往 04 熱網路'}
                           className="text-[10px] font-bold text-accent-600 hover:underline"
                         >
-                          前往 05
+                          前往 04
                         </button>
                       )}
                     </div>

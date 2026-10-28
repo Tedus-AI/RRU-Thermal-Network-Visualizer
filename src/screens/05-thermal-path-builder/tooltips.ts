@@ -18,17 +18,17 @@ export const TOOLTIPS_ZH = {
   spreadingResistance:
     '代表 3D heat spreading 的等效熱阻；除非假設合理，不能直接以 L/kA 取代。',
   boundaryPlaceholder:
-    '預留給 Screen 06 設定 Ambient、Convection、Radiation 等邊界條件。',
+    '預留給 Screen 04 散熱表面設定 Ambient、Convection、Radiation 等邊界條件。',
   unresolvedRth:
     '拓樸已定義，但此段熱阻尚未知、參數不足或需由 Boundary / CFD / Measurement 校正。',
   activeRthSource:
     '決定 solver 未來使用哪個 Rth 來源；Analytical、FloTHERM、Measurement、Manual 必須各自保留。',
   externalMapping:
-    '預留給 FloTHERM 等外部模擬物件 / interface 的映射資料；Screen 03 尚未實作 parser。',
+    '預留給 FloTHERM 等外部模擬物件 / interface 的映射資料；FloTHERM 匯入尚未實作 parser。',
   validate:
     '檢查 orphan heat source、未連接 ports、invalid Rth、missing nodes 與 topology readiness。',
   generateFromPreferences:
-    '依 Screen 04 的 Template / Qty / Base Zone preference 產生 network preview，確認後才建立。',
+    '依 Screen 03 的 Template / Qty / Base Zone preference 產生 network preview，確認後才建立。',
   totalPower:
     '元件總功耗可作 source node aggregation，但不可直接視為任何 Thermal Edge 的 Heat Flow Q。',
 } as const;

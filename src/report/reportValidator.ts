@@ -97,8 +97,8 @@ export function validateReport(input: ValidationInput): ReportValidation {
 
   if (evaluation.state === 'MISSING') {
     block(
-      'Snapshot missing — solve in 07, then open 10 Report & Export; it is created there.',
-      '缺少快照：07 求解後開啟 10 報告與匯出，會自動建立。',
+      'Snapshot missing — solve in 05, then open 07 Report & Export; it is created there.',
+      '缺少快照：05 求解後開啟 07 報告與匯出，會自動建立。',
     );
   } else if (evaluation.state === 'STALE') {
     block(

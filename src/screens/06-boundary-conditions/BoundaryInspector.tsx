@@ -350,7 +350,7 @@ export function BoundaryInspector({
         <div className="flex flex-col gap-2" data-active-profile>
           {solarProfileInactive ? (
             <p className="rounded border border-line bg-surface-muted p-2 text-[10.5px] leading-relaxed text-ink-500">
-              01 的日照是 0 W/m²：這個太陽熱負載與它的設定會保留，但不參與檢查、預覽或 07 的熱負載。
+              01 的日照是 0 W/m²：這個太陽熱負載與它的設定會保留，但不參與檢查、預覽或 05 的熱負載。
             </p>
           ) : (
             <>
@@ -443,7 +443,7 @@ export function BoundaryInspector({
                       ? '表面性質'
                       : (parameter.key === 'area_m2' || parameter.key === 'receivingArea_m2') &&
                           port.area_m2 != null
-                        ? '04 的元件幾何'
+                        ? '03 的元件幾何'
                         : null;
                 const value = activeProfile.parameters[parameter.key];
                 return (
@@ -514,7 +514,7 @@ export function BoundaryInspector({
 
           {activeProfile.type === 'external_cfd_placeholder' && (
             <p className="rounded border border-warn-500/40 bg-warn-100 p-2 text-[10.5px] leading-relaxed text-warn-600">
-              03 還沒有做：這個佔位不會匯入 CFD 資料，也不影響求解。
+              FloTHERM 匯入還沒有做：這個佔位不會匯入 CFD 資料，也不影響求解。
             </p>
           )}
 

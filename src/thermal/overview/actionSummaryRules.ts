@@ -67,8 +67,8 @@ export function buildActionSummary(input: ActionSummaryInput): ActionSummary {
   // 1 — the state of the result itself, before anything is concluded from it.
   if (input.solution_stale) {
     add(
-      'The thermal inputs changed after this solve, so every value below describes a superseded design. Re-solve in Screen 07 before acting on any of it.',
-      '熱網路輸入在此次求解之後已變更，以下數值對應的是舊設計。請先回到 07 重新求解，再依據結果行動。',
+      'The thermal inputs changed after this solve, so every value below describes a superseded design. Re-solve in Screen 05 before acting on any of it.',
+      '熱網路輸入在此次求解之後已變更，以下數值對應的是舊設計。請先回到 05 重新求解，再依據結果行動。',
     );
   }
 

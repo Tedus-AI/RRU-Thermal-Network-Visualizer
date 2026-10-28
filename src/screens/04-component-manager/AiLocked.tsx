@@ -45,7 +45,7 @@ export function aiLockTitle(component: Component, field: AiField, table = false)
   const date = syncedDate(component);
   return [
     `${AI_FIELD_LABEL[field]}取自 AI-Thermal${date ? `（${date} 帶入）` : ''}。`,
-    '要改：到 AI-Thermal 改，再按 04 的「從 AI-Thermal 更新」；',
+    '要改：到 AI-Thermal 改，再按 03 的「從 AI-Thermal 更新」；',
     table ? '或在右側檢視面板按 ✂ 解開，改用本工具的值。' : '或按 ✂ 解開，改用本工具的值。',
   ].join('\n');
 }
@@ -77,7 +77,7 @@ export function aiNotStated(component: Component, field: AiField): boolean {
 /** Why a linked part's heat path is not locked when AI-Thermal left it open. */
 export const AI_HEAT_PATH_UNSTATED =
   'AI-Thermal 沒有指定主散熱路徑（None 或未選），由本工具決定。' +
-  '要由 AI-Thermal 管：到 AI-Thermal 的 TH/ME 頁選「主散熱路徑」，再按 04 的「從 AI-Thermal 更新」。';
+  '要由 AI-Thermal 管：到 AI-Thermal 的 TH/ME 頁選「主散熱路徑」，再按 03 的「從 AI-Thermal 更新」。';
 
 /** A table cell's locked value: plain text and a small AI tag. */
 export function AiCellRef({

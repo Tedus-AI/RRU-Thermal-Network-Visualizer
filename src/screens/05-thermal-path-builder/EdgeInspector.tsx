@@ -354,13 +354,13 @@ function SpreadingDomainRow({ edge }: { edge: ThermalEdge }) {
       </Row>
       {domain.mode === 'HeatShare' && (
         <p className="mt-1 text-[10px] leading-relaxed text-ink-400">
-          The share is a solved heat flow, so it is sized in Screen 07; this panel shows the whole
-          base until then. / 分配面積來自求解熱流，由 07 決定；求解前此處顯示整片基座。
+          The share is a solved heat flow, so it is sized in Screen 05; this panel shows the whole
+          base until then. / 分配面積來自求解熱流，由 05 決定；求解前此處顯示整片基座。
         </p>
       )}
       {domain.mode !== 'WholeBase' && (
         <p className="mt-1 text-[10px] leading-relaxed text-ink-400">
-          Set in Screen 04 for the component. / 在 04 的元件設定中選擇。
+          Set in Screen 03 for the component. / 在 03 的元件設定中選擇。
         </p>
       )}
     </div>
@@ -384,7 +384,7 @@ function BoundaryParametersPanel({ view }: { view?: ScenarioBoundaryEdgeView }) 
     <section className="mt-2 rounded-md border border-line bg-surface-muted p-2.5">
       <p className="flex items-center gap-1 text-[11px] font-bold text-ink-700">
         {finConduction ? 'Fin Conduction / 鰭片導熱' : 'Boundary Parameters / 邊界參數'}
-        <span className="font-semibold text-ink-400">(Screen 06)</span>
+        <span className="font-semibold text-ink-400">(Screen 04 surfaces)</span>
       </p>
 
       {finConduction ? (
@@ -448,7 +448,7 @@ function BoundaryParametersPanel({ view }: { view?: ScenarioBoundaryEdgeView }) 
           {view.source === 'fin_geometry'
             ? '由鰭片幾何計算，不是直接填入的 h 與面積；鰭片效率不併入 h，而是以鰭片本體導熱掛在根部連結上。'
             : view.source === 'plate_convection'
-              ? 'h 由平板幾何與表面溫度假設算出；07 求解後若實際表面溫度不同，會再變動。'
+              ? 'h 由平板幾何與表面溫度假設算出；05 求解後若實際表面溫度不同，會再變動。'
               : 'h 與面積是「② 散熱表面」直接填入的值。'}
         </p>
       )}
@@ -638,7 +638,7 @@ export function EdgeInspector({
               </Row>
               <Row label="Active Rth Source" zh="使用中熱阻來源">
                 {formattedRth != null ? (
-                  `${scenarioBoundary ? `Screen 06 · ${scenarioBoundary.scenario_id}` : edge.rth.active_source} · ${formattedRth}`
+                  `${scenarioBoundary ? `Screen 04 surface · ${scenarioBoundary.scenario_id}` : edge.rth.active_source} · ${formattedRth}`
                 ) : (
                   <BilingualTooltip zh={TOOLTIPS_ZH.unresolvedRth}>
                     <span className="text-warn-600">Unresolved</span>
@@ -675,8 +675,8 @@ export function EdgeInspector({
 
               <p className="mt-2 text-[10px] leading-relaxed text-ink-400">
                 {scenarioBoundary
-                  ? '這個熱阻是求解前的邊界輸入；到 07 求解目前情境後才有熱流 Q 與溫差 ΔT。'
-                  : '05 不求解，所以這裡不顯示熱流 Q 與溫差 ΔT。'}
+                  ? '這個熱阻是求解前的邊界輸入；到 05 求解目前情境後才有熱流 Q 與溫差 ΔT。'
+                  : '04 不求解，所以這裡不顯示熱流 Q 與溫差 ΔT。'}
               </p>
 
               {(scenarioBoundary != null ||
@@ -698,7 +698,7 @@ export function EdgeInspector({
                   )}
                 </Row>
                 {scenarioBoundary && (
-                  <Row label="Screen 06 Scenario Preview">
+                  <Row label="Screen 04 Surface Scenario Preview">
                     {scenarioBoundary.rth_C_per_W != null ? (
                       `${scenarioBoundary.rth_C_per_W.toFixed(4)} °C/W`
                     ) : (
@@ -717,7 +717,7 @@ export function EdgeInspector({
                   <span className="text-ink-400">Reserved</span>
                 </Row>
                 <Row label="FloTHERM (Deferred)">
-                  <span className="text-ink-400">Not Imported (Screen 03)</span>
+                  <span className="text-ink-400">Not Imported (FloTHERM import)</span>
                 </Row>
               </section>
 
@@ -817,7 +817,7 @@ export function EdgeInspector({
                   <BilingualTooltip zh={TOOLTIPS_ZH.boundaryPlaceholder} align="left">
                     <span>Boundary derived.</span>
                   </BilingualTooltip>{' '}
-                  h, emissivity and ambient temperature are configured in Screen 06 — Screen 05 must
+                  h, emissivity and ambient temperature are configured in Screen 04's surface section — Screen 04 must
                   not assume them.
                 </p>
               )}
@@ -865,7 +865,7 @@ export function EdgeInspector({
           <div>
             {METHOD_PARAMETERS[edge.method].length === 0 ? (
               <p className="text-[11px] leading-relaxed text-ink-400">
-                This method takes no geometry parameters in Screen 05. / 此方法在 05
+                This method takes no geometry parameters in Screen 04. / 此方法在 04
                 不需要幾何參數。
               </p>
             ) : (
@@ -952,7 +952,7 @@ export function EdgeInspector({
               )}
             </Row>
             {scenarioBoundary && (
-              <Row label="Screen 06 Scenario Preview">
+              <Row label="Screen 04 Surface Scenario Preview">
                 {scenarioBoundary.rth_C_per_W != null ? (
                   `${scenarioBoundary.rth_C_per_W.toFixed(4)} °C/W`
                 ) : (
@@ -971,7 +971,7 @@ export function EdgeInspector({
               <span className="text-ink-400">Reserved</span>
             </Row>
             <Row label="FloTHERM (deferred)">
-              <span className="text-ink-400">Not imported (Screen 03)</span>
+              <span className="text-ink-400">Not imported (FloTHERM import)</span>
             </Row>
 
             <div className="mt-3">

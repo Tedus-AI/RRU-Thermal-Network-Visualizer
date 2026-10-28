@@ -122,17 +122,17 @@ function solvedResultStatus(input: ReadinessInput): ArtifactStatus {
 function solvedResultReason(input: ReadinessInput): { en: string; zh: string } {
   if (!input.solution) {
     return {
-      en: 'No thermal solution. Solve the scenario in 07.',
-      zh: '還沒有求解結果，請到 07 求解。',
+      en: 'No thermal solution. Solve the scenario in 05.',
+      zh: '還沒有求解結果，請到 05 求解。',
     };
   }
   if (input.solution.status === 'FAILED') {
-    return { en: 'The last solve failed.', zh: '上次求解失敗，請到 07 重新求解。' };
+    return { en: 'The last solve failed.', zh: '上次求解失敗，請到 05 重新求解。' };
   }
   if (input.solution_stale) {
     return {
-      en: 'The solution is stale — inputs changed since the last solve. Re-solve in 07.',
-      zh: '求解結果已失效：輸入在求解後改過，請到 07 重新求解。',
+      en: 'The solution is stale — inputs changed since the last solve. Re-solve in 05.',
+      zh: '求解結果已失效：輸入在求解後改過，請到 05 重新求解。',
     };
   }
   return { en: '', zh: '' };
@@ -261,7 +261,7 @@ export function validateExport(input: ValidationInput): ExportValidation {
       '僅 analytical：尚未有 FloTHERM 或量測驗證。',
     );
     // 12 §37 — stated as Deferred, never as a validated zero.
-    warn('External CFD validation is Deferred (Screen 03).', '外部 CFD 驗證為 Deferred（Screen 03）。');
+    warn('External CFD validation is Deferred (FloTHERM import).', '外部 CFD 驗證為 Deferred（FloTHERM 匯入尚未開放）。');
   }
   if (input.components_without_limits > 0) {
     warn(

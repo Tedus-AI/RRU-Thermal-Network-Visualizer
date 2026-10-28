@@ -737,19 +737,19 @@ export function BottleneckAnalysisView() {
               {!hasTopology
                 ? '還沒有熱網路'
                 : !solution
-                  ? '這個情境在 07 還沒有求解結果'
+                  ? '這個情境在 05 還沒有求解結果'
                   : solutionStale
-                    ? '07 的求解結果已經過期'
-                    : '07 求解失敗'}
+                    ? '05 的求解結果已經過期'
+                    : '05 求解失敗'}
             </p>
             <p className="mt-1 text-[12px] text-ink-400">
               {!hasTopology
-                ? '請先到 05 熱網路與邊界建立熱網路。'
+                ? '請先到 04 熱網路與邊界建立熱網路。'
                 : !solution
-                  ? '瓶頸分析從 07 的溫度出發，請先到 07 按「求解」。'
+                  ? '瓶頸分析從 05 的溫度出發，請先到 05 按「求解」。'
                   : solutionStale
-                    ? '模型在求解之後改過了，請回 07 重新求解再分析。'
-                    : '請回 07 看求解細節，修正後重新求解。'}
+                    ? '模型在求解之後改過了，請回 05 重新求解再分析。'
+                    : '請回 05 看求解細節，修正後重新求解。'}
             </p>
             <Button
               variant="primary"
@@ -758,7 +758,7 @@ export function BottleneckAnalysisView() {
                 navigate(projectPath(projectId, hasTopology ? 'network' : 'thermal-path'))
               }
             >
-              {hasTopology ? '前往 07 求解與結果' : '前往 05 熱網路與邊界'}
+              {hasTopology ? '前往 05 求解與結果' : '前往 04 熱網路與邊界'}
             </Button>
           </div>
         </div>
@@ -873,7 +873,7 @@ export function BottleneckAnalysisView() {
             icon={<span className="text-[10px] font-bold">°C</span>}
             label="目前餘裕"
             zh={target ? `${target.limit_type ?? '限溫'} 限溫 − 溫度` : '限溫 − 溫度'}
-            tooltip="限溫 − 判定溫度，取自 07 的求解結果。"
+            tooltip="限溫 − 判定溫度，取自 05 的求解結果。"
             value={target ? num(target.margin_C, 1, '°C') : '—'}
             status={
               target
@@ -907,7 +907,7 @@ export function BottleneckAnalysisView() {
             icon={<ArrowLeft size={15} />}
             onClick={() => navigate(projectPath(projectId, 'network'))}
           >
-            返回 07 求解與結果
+            返回 05 求解與結果
           </Button>
           <span className="min-w-0 text-[11px] text-ink-400">
             {ranked.length} 顆元件依餘裕排序・這顆的熱阻鏈有 {segments.length} 段・調整只是假設，不會寫回模型
@@ -918,17 +918,17 @@ export function BottleneckAnalysisView() {
             icon={<ArrowRight size={15} />}
             onClick={() => navigate(projectPath(projectId, 'report'))}
           >
-            前往 10 報告與匯出
+            前往 07 報告與匯出
           </Button>
         </div>
       }
     >
       {drift && (
         <p className="mb-3 rounded-md border border-warn-500/40 bg-warn-100 px-3 py-2 text-[11px] leading-relaxed font-semibold text-warn-600">
-          07 存的求解結果和用同一組輸入重新求解，在 {drift.node_id} 差了 {drift.delta_C.toFixed(1)}{' '}
+          05 存的求解結果和用同一組輸入重新求解，在 {drift.node_id} 差了 {drift.delta_C.toFixed(1)}{' '}
           °C。
           <span className="block font-normal text-ink-500">
-            請回 07 重新求解，兩頁的溫度才會一致。
+            請回 05 重新求解，兩頁的溫度才會一致。
           </span>
         </p>
       )}
@@ -1195,7 +1195,7 @@ export function BottleneckAnalysisView() {
             ) : (
               <p className="py-6 text-center text-[11px] text-ink-400">
                 這個熱網路沒有任何元件設定限溫。
-                <span className="block">到 04 元件管理填限溫後，回 07 重新求解。</span>
+                <span className="block">到 03 元件管理填限溫後，回 05 重新求解。</span>
               </p>
             )}
           </Section>

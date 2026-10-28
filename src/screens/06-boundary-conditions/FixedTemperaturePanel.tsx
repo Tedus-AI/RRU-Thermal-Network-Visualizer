@@ -162,9 +162,9 @@ export function FixedTemperaturePanel({
       </div>
 
       <p className="mt-1.5 text-[10px] leading-relaxed text-ink-400">
-        A fixed temperature is applied by the Screen 07 solver as a boundary, not converted into a
+        A fixed temperature is applied by the Screen 05 solver as a boundary, not converted into a
         thermal resistance.
-        <span className="block">固定溫度由 07 求解器作為邊界套用，不會被轉成熱阻。</span>
+        <span className="block">固定溫度由 05 求解器作為邊界套用，不會被轉成熱阻。</span>
       </p>
     </div>
   );

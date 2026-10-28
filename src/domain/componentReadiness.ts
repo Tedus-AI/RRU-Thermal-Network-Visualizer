@@ -406,8 +406,8 @@ export function validateComponent(component: Component): ComponentIssue[] {
     issues.push({
       severity: 'warning',
       field: 'architecture_prep',
-      message: 'No base zone chosen — Screen 05 cannot suggest where this part attaches.',
-      message_zh: '尚未指定基座區域，05 將無法建議此元件的連接位置。',
+      message: 'No base zone chosen — Screen 04 cannot suggest where this part attaches.',
+      message_zh: '尚未指定基座區域，04 將無法建議此元件的連接位置。',
     });
   }
 

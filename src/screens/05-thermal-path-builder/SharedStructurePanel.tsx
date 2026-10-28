@@ -150,7 +150,7 @@ export function SharedStructurePanel({
             </span>
             {node.boundary_role === 'placeholder' && (
               <BilingualTooltip zh={TOOLTIPS_ZH.boundaryPlaceholder}>
-                <Badge tone="warn">Screen 06</Badge>
+                <Badge tone="warn">Screen 04 surfaces</Badge>
               </BilingualTooltip>
             )}
             <button

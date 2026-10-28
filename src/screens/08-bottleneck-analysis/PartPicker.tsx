@@ -79,7 +79,7 @@ export function PartPicker({
           ? `依餘裕排序・第 ${index + 1} / ${ranked.length}・${
               flagged > 0 ? `${flagged} 顆餘裕 ≤ ${NEAR_LIMIT_MARGIN_C} °C` : `都超過 ${NEAR_LIMIT_MARGIN_C} °C`
             }`
-          : '到 04 元件管理填限溫'}
+          : '到 03 元件管理填限溫'}
       </span>
     </div>
   );

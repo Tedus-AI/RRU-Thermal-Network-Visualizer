@@ -52,7 +52,7 @@ export function ScreenWorkspace({
   const location = useLocation();
   // The sidebar number goes in front of the title, so the page says where it
   // sits in the workflow without a breadcrumb repeating it.
-  const code = SCREENS.find((screen) => location.pathname.endsWith(`/${screen.path}`))?.code;
+  const no = SCREENS.find((screen) => location.pathname.endsWith(`/${screen.path}`))?.no;
 
   return (
     <div className="flex h-full flex-col">
@@ -61,7 +61,7 @@ export function ScreenWorkspace({
           <div className="min-w-0 xl:flex-1">
             <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
               <h1 className="text-[21px] font-bold text-ink-900">
-                {code && <span className="tabular mr-2 font-semibold text-ink-400">{code}</span>}
+                {no && <span className="tabular mr-2 font-semibold text-ink-400">{no}</span>}
                 {titleZh || title}
               </h1>
               {badge}

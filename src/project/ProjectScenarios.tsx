@@ -58,7 +58,7 @@ function format(field: NumericField, value: number): string {
 const WIND_NOTE = '風速僅記錄：目前都是自然對流，求解不套用風速。';
 
 const BASIS_TITLE =
-  '每顆元件用哪一個功耗求解：高溫 Pd＝04 的單顆功耗（AI-Thermal 的高溫條件）；常溫 Pd＝04 的常溫功耗（AI-Thermal 的 Pd@25°C），沒填的元件暫用高溫 Pd。';
+  '每顆元件用哪一個功耗求解：高溫 Pd＝03 的單顆功耗（AI-Thermal 的高溫條件）；常溫 Pd＝03 的常溫功耗（AI-Thermal 的 Pd@25°C），沒填的元件暫用高溫 Pd。';
 const BASIS_ITEMS = POWER_BASES.map((basis) => ({ value: basis, label: POWER_BASIS_LABEL[basis] }));
 
 /**

@@ -655,7 +655,7 @@ export function useThermalPathBuilder() {
       R_C_per_W: usable ? spreadDraft.rth : null,
       note:
         spreadDraft.method === 'future_flotherm'
-          ? 'Reserved for a future FloTHERM result (Screen 03 is deferred).'
+          ? 'Reserved for a future FloTHERM result (FloTHERM import is deferred).'
           : undefined,
     });
     useNetworkStore.getState().upsertEdge({

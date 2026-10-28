@@ -191,7 +191,7 @@ export function SegmentTuner({
             icon={<RotateCcw size={14} />}
             className="h-8 !text-[12px]"
             disabled={!gate.reset}
-            title={editingName ? '回到這一筆存的數值' : '全部歸零，回到 07 的求解結果'}
+            title={editingName ? '回到這一筆存的數值' : '全部歸零，回到 05 的求解結果'}
             onClick={onReset}
           >
             {editingName ? '還原' : '歸零'}

@@ -177,7 +177,7 @@ export function demoNetwork(
         null,
         'Analytical',
         'high',
-        'Resolved from the scenario profile owned by Screen 06',
+        'Resolved from the scenario profile owned by the surface half of Screen 04',
       );
       edge.confidence = 'high';
       continue;

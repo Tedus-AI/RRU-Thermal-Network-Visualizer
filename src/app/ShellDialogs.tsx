@@ -465,7 +465,7 @@ export function SettingsDialog({
   return (
     <Modal
       title="Settings / 設定"
-      description="Application and data settings. Report and export options live on 10 報告與匯出."
+      description="Application and data settings. Report and export options live on 07 報告與匯出."
       width="max-w-lg"
       onClose={onClose}
       footer={<Button onClick={onClose}>Close / 關閉</Button>}
@@ -645,12 +645,13 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
 
         <Section icon={Info} title="Screens" zh="畫面導覽">
           <ol className="grid grid-cols-2 gap-x-4">
-            {SCREENS.map((screen) => (
+            {/* Sidebar order; the deferred FloTHERM import has no number and goes last. */}
+            {[...SCREENS].sort((a, b) => Number(!a.no) - Number(!b.no)).map((screen) => (
               <li
                 key={screen.code}
                 className="flex items-baseline gap-1.5 border-b border-line py-0.5 text-[11.5px]"
               >
-                <span className="font-mono text-ink-400">{screen.code}</span>
+                <span className="font-mono text-ink-400">{screen.no || '—'}</span>
                 <span className="font-semibold text-ink-900">{screen.labelEn}</span>
                 <span className="truncate text-ink-400">{screen.label}</span>
               </li>

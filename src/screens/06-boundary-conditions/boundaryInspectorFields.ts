@@ -137,7 +137,7 @@ export const TYPE_PARAMETERS: Record<
       label: 'Surface Temperature Guess',
       zh: '表面溫度假設',
       unit: '°C',
-      tip: '線性化輻射係數 εσF(Ts²+Ta²)(Ts+Ta) 需要表面溫度假設，周圍溫度取情境環境溫度；留白時以環境溫度 + 35°C 預估，真實值由 07 求解。',
+      tip: '線性化輻射係數 εσF(Ts²+Ta²)(Ts+Ta) 需要表面溫度假設，周圍溫度取情境環境溫度；留白時以環境溫度 + 35°C 預估，真實值由 05 求解。',
     },
   ],
   combined_convection_radiation: [
@@ -150,7 +150,7 @@ export const TYPE_PARAMETERS: Record<
       label: 'Surface Temperature Guess',
       zh: '表面溫度假設',
       unit: '°C',
-      tip: '對流關聯式與輻射係數 εσF(Ts²+Ta²)(Ts+Ta) 共用此假設，周圍溫度取情境環境溫度；留白時以環境溫度 + 35°C 預估，真實表面溫度由 07 求解。',
+      tip: '對流關聯式與輻射係數 εσF(Ts²+Ta²)(Ts+Ta) 共用此假設，周圍溫度取情境環境溫度；留白時以環境溫度 + 35°C 預估，真實表面溫度由 05 求解。',
     },
   ],
   solar_load: [
@@ -206,8 +206,8 @@ export const TYPE_REQUIREMENT: Record<BoundaryConditionType, { en: string; zh: s
     zh: '環境溫度由 Screen 01「情境設定」統一提供。',
   },
   convection_to_ambient: {
-    en: 'h and effective area are required. Without either value, Rconv cannot be calculated and Screen 07 is blocked.',
-    zh: '必須提供 h 與有效面積；缺少任一值便無法計算 Rconv，並會阻擋 07 求解。',
+    en: 'h and effective area are required. Without either value, Rconv cannot be calculated and Screen 05 is blocked.',
+    zh: '必須提供 h 與有效面積；缺少任一值便無法計算 Rconv，並會阻擋 05 求解。',
   },
   radiation_to_surroundings: {
     en: 'Emissivity, view factor and effective area are required. The surface-temperature guess may use the shown assumption.',
@@ -230,7 +230,7 @@ export const TYPE_REQUIREMENT: Record<BoundaryConditionType, { en: string; zh: s
     zh: '不需要數值輸入；理由僅供稽核，可留白且不會阻擋求解。',
   },
   external_cfd_placeholder: {
-    en: 'Metadata only while Screen 03 is deferred. It does not provide solver input.',
-    zh: 'Screen 03 延後期間僅保留中繼資料，不會提供求解輸入。',
+    en: 'Metadata only while FloTHERM import is deferred. It does not provide solver input.',
+    zh: 'FloTHERM 匯入延後期間僅保留中繼資料，不會提供求解輸入。',
   },
 };

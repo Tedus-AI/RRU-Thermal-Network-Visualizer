@@ -169,7 +169,7 @@ function cardR(view: HeatPathView, ids: SegmentId[]): { text: string; tone: 'ok'
   if (list.length === 0) return { text: '', tone: 'later' };
   const missing = list.flatMap((segment) => segment.missing);
   if (missing.length > 0) return { text: `缺 ${missing[0]}`, tone: 'miss' };
-  if (list.every((segment) => segment.later)) return { text: '05 計算', tone: 'later' };
+  if (list.every((segment) => segment.later)) return { text: '04 計算', tone: 'later' };
   return {
     text: `${list
       .filter((segment) => segment.R != null)
@@ -389,7 +389,7 @@ export function PathTab({ component, readOnly, onPatch, derived, view, hotCard }
             <FieldLabel
               label="Heat Source Reference"
               zh="熱源基準"
-              tooltip="決定 05 是否建立 Junction 與 Rjc；這是物理模型，不由 Limit Type 推定。等溫本體（環形器、濾波器、模組）請選本體型，不要用 Rjc = 0 表達。"
+              tooltip="決定 04 是否建立 Junction 與 Rjc；這是物理模型，不由 Limit Type 推定。等溫本體（環形器、濾波器、模組）請選本體型，不要用 Rjc = 0 表達。"
             />
             <div className="mt-1.5 grid grid-cols-2 gap-2" role="radiogroup">
               {METAL_BASE_SOURCE_MODELS.map((model) => {
@@ -796,7 +796,7 @@ export function PathTab({ component, readOnly, onPatch, derived, view, hotCard }
                   />
                   <span>
                     另有暴露表面對流／輻射散熱
-                    <span className="block text-[11px] text-ink-400">在 05 建立表面出口，並在 05 的散熱表面設定對流與輻射</span>
+                    <span className="block text-[11px] text-ink-400">在 04 建立表面出口，並在 04 的散熱表面設定對流與輻射</span>
                   </span>
                 </label>
               </Fld>
@@ -1457,8 +1457,8 @@ export function PathTab({ component, readOnly, onPatch, derived, view, hotCard }
 
               <p className="col-span-2 text-[10px] leading-relaxed text-ink-400">
                 {mount.type === 'VaporChamber'
-                  ? '均熱板的價值在於交給底座的面積，不是它本身的導熱率——沒有比元件大就只是徒增熱阻。留空的那一段維持未解析，05 仍會畫出來。'
-                  : '銑出的塊體與散熱器同材，k 取自 01。留空的那一段維持未解析，05 仍會畫出來。'}
+                  ? '均熱板的價值在於交給底座的面積，不是它本身的導熱率——沒有比元件大就只是徒增熱阻。留空的那一段維持未解析，04 仍會畫出來。'
+                  : '銑出的塊體與散熱器同材，k 取自 01。留空的那一段維持未解析，04 仍會畫出來。'}
               </p>
             </div>
           )}
@@ -1468,7 +1468,7 @@ export function PathTab({ component, readOnly, onPatch, derived, view, hotCard }
             How much of the base the part spreads into: the same question one
             step further on — once heat is in the base, how far does this
             part's own edge carry it. */}
-        <Card id="base" colors={['var(--hp-base)']} title="散熱器底座" r={{ text: '05 計算', tone: 'later' }} hot={hot('base')}>
+        <Card id="base" colors={['var(--hp-base)']} title="散熱器底座" r={{ text: '04 計算', tone: 'later' }} hot={hot('base')}>
           <Fld layer="spread" dim="spread" className="flex flex-col gap-1.5">
             <span className="text-[12px] font-semibold text-ink-700">擴散範圍</span>
             <Segmented
@@ -1524,7 +1524,7 @@ export function PathTab({ component, readOnly, onPatch, derived, view, hotCard }
             </ReadRow>
           </Fld>
           <Fld layer="fins">
-            <p className="text-[11px] text-ink-400">鰭片在 05 的散熱表面設定，環境在 01 的情境。</p>
+            <p className="text-[11px] text-ink-400">鰭片在 04 的散熱表面設定，環境在 01 的情境。</p>
           </Fld>
         </Card>
       </div>

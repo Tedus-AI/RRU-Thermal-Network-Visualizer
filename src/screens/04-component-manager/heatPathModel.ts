@@ -458,7 +458,7 @@ export function heatPathView(component: Component, materials: MaterialDefaults):
     later: true,
     parallel: false,
     dry: false,
-    note: '整片底座、擴散範圍與 Bi 由 05／07 一起求解',
+    note: '整片底座、擴散範圍與 Bi 由 04／05 一起求解',
   });
 
   // From where the limit is judged down to the base surface, series only.

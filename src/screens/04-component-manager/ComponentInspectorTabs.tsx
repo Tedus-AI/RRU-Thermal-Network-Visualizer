@@ -234,7 +234,7 @@ export function ArchitectureTab({ component, readOnly, derived }: InspectorTabPr
           <span className="text-ink-500">架構模板</span>
           <span className="font-semibold text-ink-900">{prep.template_preference}</span>
         </div>
-        <p className="mt-1 text-[11px] text-ink-400">由散熱路徑決定，可在 05 覆寫。</p>
+        <p className="mt-1 text-[11px] text-ink-400">由散熱路徑決定，可在 04 覆寫。</p>
       </div>
     </>
   );
@@ -414,11 +414,11 @@ export function ExternalMappingTab({ component, readOnly, onPatch }: InspectorTa
 
       {/*
         04 §33 — this panel deliberately has no upload, no column detection
-        and no parser. Screen 03 is deferred until the real FloTHERM export
+        and no parser. FloTHERM import is deferred until the real FloTHERM export
         schema is validated, and guessing it here would be worse than waiting.
       */}
       <p className="rounded-md border border-line bg-surface-muted p-2.5 text-[11px] leading-relaxed text-ink-500">
-        03 FloTHERM 匯入尚未開放；別名只以純文字保存，不解析也不驗證。
+        FloTHERM 匯入尚未開放；別名只以純文字保存，不解析也不驗證。
       </p>
     </>
   );

@@ -43,8 +43,8 @@ export const SNAPSHOT_MESSAGES: Record<SnapshotState, { en: string; zh: string }
     zh: '報告快照已過期：結果在快照之後改過。正式匯出前請按「更新為目前結果」。',
   },
   MISSING: {
-    en: 'No report snapshot yet. Solve in 07, then open 10 Report & Export; it is created there.',
-    zh: '還沒有報告快照：07 求解後開啟 10 報告與匯出，會自動建立。',
+    en: 'No report snapshot yet. Solve in 05, then open 07 Report & Export; it is created there.',
+    zh: '還沒有報告快照：05 求解後開啟 07 報告與匯出，會自動建立。',
   },
 };
 

@@ -52,8 +52,8 @@ export function SurfacePropertiesPanel({
     return (
       <p className="py-4 text-center text-[11px] text-ink-400">
         <Bi
-          en="No surfaces yet — boundary ports come from the Screen 05 topology."
-          zh="尚無表面：邊界端口來自 05 的拓撲。"
+          en="No surfaces yet — boundary ports come from the Screen 04 topology."
+          zh="尚無表面：邊界端口來自 04 的拓撲。"
           inline
         />
       </p>

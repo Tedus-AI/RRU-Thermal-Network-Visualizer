@@ -163,14 +163,14 @@ function NoSnapshot({ onSolve }: { onSolve: () => void }) {
           還沒有可以出報告的結果
         </p>
         <p className="text-[12px] text-ink-700">
-          07 還沒有這個情境可用的求解結果（沒求解、求解後輸入又改過，或求解失敗）。到 07 求解後回來，
+          05 還沒有這個情境可用的求解結果（沒求解、求解後輸入又改過，或求解失敗）。到 05 求解後回來，
           報告會自動用目前的結果建立。
         </p>
         <p className="text-[11px] text-ink-500">
           報告只排版已經求出的結果，本身不重新計算，沒有結果時也不會用估算值代替。
         </p>
         <Button variant="primary" icon={<ArrowRight className="size-4" />} onClick={onSolve}>
-          前往 07 求解與結果
+          前往 05 求解與結果
         </Button>
       </div>
     </div>
@@ -718,7 +718,7 @@ export function ReportPreviewView() {
       actionBar={
         <div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-line bg-surface px-6 py-3">
           <Button icon={<ArrowLeft className="size-4" />} onClick={() => go('network')}>
-            返回 07 求解與結果
+            返回 05 求解與結果
           </Button>
           <Button
             icon={<RefreshCw className="size-4" />}
@@ -772,11 +772,11 @@ export function ReportPreviewView() {
         {evaluation.state === 'STALE' && (
           <p className="flex flex-wrap items-center gap-2 rounded-lg border border-warn-500/50 bg-warn-100 px-4 py-2 text-[12px] font-bold text-warn-600">
             <TriangleAlert className="size-4" aria-hidden />
-            報告用的是舊結果：07 的結果在快照之後改過。
+            報告用的是舊結果：05 的結果在快照之後改過。
             <span className="font-normal text-ink-700">
               {liveOverview && liveOverview.report_readiness !== 'BLOCKED'
                 ? '按右邊更新，報告就換成目前的結果。'
-                : '目前的結果還不能用（已失效或求解失敗），請先到 07 重新求解。'}
+                : '目前的結果還不能用（已失效或求解失敗），請先到 05 重新求解。'}
             </span>
             {liveOverview && liveOverview.report_readiness !== 'BLOCKED' ? (
               <Button
@@ -790,7 +790,7 @@ export function ReportPreviewView() {
               </Button>
             ) : (
               <Button className="!h-7 !px-2 !text-[11px]" onClick={() => go('network')}>
-                前往 07 重新求解
+                前往 05 重新求解
               </Button>
             )}
           </p>

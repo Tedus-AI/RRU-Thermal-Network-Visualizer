@@ -211,7 +211,7 @@ export function ComponentPalette({
                   <span
                     title={
                       overridden
-                        ? `Template this will build / 實際會建立的模板：${templateLabel}\nScreen 04 preference / Screen 04 偏好：${labelFor(preference)}`
+                        ? `Template this will build / 實際會建立的模板：${templateLabel}\nScreen 03 preference / Screen 03 偏好：${labelFor(preference)}`
                         : 'Template this will build / 實際會建立的模板'
                     }
                     className={overridden ? 'font-semibold text-warn-600' : undefined}
