@@ -1,19 +1,16 @@
 /**
- * The result table as a panel, and the button that opens it.
+ * The full result table as a window, and the way to it.
  *
- * It used to be a resizable row under the graph, and the two shared one screen:
- * measured on the STARKCORE project at 1500x950, the canvas got 260 px. With
- * the row gone it gets 416 — 60 % more of the thing the screen is named after —
- * and the table gets a panel almost as large as the window instead of 320 px.
- *
- * The button had to go in the TOOLBAR rather than on the page, because the page
- * around the graph is not rendered in fullscreen at all: the old row simply did
- * not exist there, so the results were unreachable without leaving fullscreen
- * first.
+ * 07 lists every component's temperature, limit and margin beside the graph
+ * (07 §59), and opens the full table — every node, every edge's drop, flow and
+ * resistance — from the head of that list. The graph toolbar carries a button
+ * to it only in fullscreen, where the list is not on screen: the old orange
+ * "3 Results" button on the toolbar was the only way in, and the same table
+ * sat behind a second button on 09.
  *
  * These are markup-level checks — the repo renders components with
- * `renderToStaticMarkup` and has no DOM. Escape, the X, the backdrop and the
- * fullscreen case were verified in the browser against the real project.
+ * `renderToStaticMarkup` and has no DOM. Escape, the X and the fullscreen case
+ * were verified in the browser against the real project.
  */
 
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -61,71 +58,45 @@ const GROUPS: ResultTreeGroupRow[] = [
     limit_C: 100,
     limit_type: 'Tj',
     margin_C: 3.8,
+    judged_C: 96.2,
+    judged_node_id: 'CMP_XCZU67DR_J',
     status: 'pass',
     nodes: [],
   },
 ];
 
-describe('the button that opens the results', () => {
-  it('is on the graph toolbar, so fullscreen has it too', () => {
-    const html = renderToStaticMarkup(<ResultModeToolbar {...toolbarProps} />);
+describe('the toolbar button to the full table', () => {
+  it('is not on the toolbar beside the component list', () => {
+    const html = renderToStaticMarkup(
+      <ResultModeToolbar {...toolbarProps} showResultsButton={false} />,
+    );
 
-    expect(html).toContain('aria-label="Results / 求解結果"');
+    expect(html).not.toContain('aria-label="完整結果表"');
+  });
+
+  it('is there in fullscreen, where the list is not', () => {
+    const html = renderToStaticMarkup(
+      <ResultModeToolbar {...toolbarProps} fullscreen componentVisibilityOpen showResultsButton />,
+    );
+
+    expect(html).toContain('aria-label="完整結果表"');
   });
 
   /** How much is behind it, without opening it. */
   it('says how many nodes and edges are behind it', () => {
-    const html = renderToStaticMarkup(<ResultModeToolbar {...toolbarProps} />);
+    const html = renderToStaticMarkup(<ResultModeToolbar {...toolbarProps} showResultsButton />);
 
     expect(html).toContain('85 · 85');
   });
 
-  /**
-   * "顯眼的顏色，一眼就看出來這按鈕可以按" — the toolbar is otherwise ghost icons
-   * and outline pills, so this is the one FILLED control on it. A mode pill goes
-   * accent when active, but it is not a solid button and carries no icon.
-   */
-  it('is filled, not a ghost control like everything else on the toolbar', () => {
-    const html = renderToStaticMarkup(<ResultModeToolbar {...toolbarProps} />);
-    const button = html.slice(html.indexOf('aria-label="Results'));
+  /** A neutral control now: the loud orange was there to be found, and the list is. */
+  it('is an outline control, not a filled one', () => {
+    const html = renderToStaticMarkup(<ResultModeToolbar {...toolbarProps} showResultsButton />);
+    const button = html.slice(html.indexOf('aria-label="完整結果表"'));
+    const face = button.slice(0, button.indexOf('</button>'));
 
-    expect(button).toContain('text-white');
-    expect(button).toContain('shadow-sm');
-  });
-
-  /**
-   * Orange, not the blue accent: every other filled control in the app is
-   * accent-600, so the panel's entry point was the same colour as navigation.
-   * It is deliberately NOT `warn-*`, which is amber and means an alert — a
-   * control that is always on screen must not read as one.
-   */
-  it('is orange, so it is not read as another accent control', () => {
-    const html = renderToStaticMarkup(<ResultModeToolbar {...toolbarProps} />);
-    const button = html.slice(html.indexOf('aria-label="Results'));
-
-    expect(button).toContain('bg-orange-600');
-    expect(button).not.toContain('bg-accent-600');
-    expect(button).not.toContain('bg-warn');
-  });
-
-  /**
-   * The step number belongs on the button, not inside the panel it opens: it
-   * says which step of Screen 07 this IS, which is worth knowing before opening
-   * it rather than after.
-   */
-  it('carries the step number, so it reads as step 3 before it is opened', () => {
-    const html = renderToStaticMarkup(<ResultModeToolbar {...toolbarProps} />);
-    const button = html.slice(html.indexOf('aria-label="Results'));
-
-    expect(button.slice(0, button.indexOf('</button>'))).toContain('>3<');
-  });
-
-  it('still renders in fullscreen', () => {
-    const html = renderToStaticMarkup(
-      <ResultModeToolbar {...toolbarProps} fullscreen componentVisibilityOpen />,
-    );
-
-    expect(html).toContain('aria-label="Results / 求解結果"');
+    expect(face).not.toContain('bg-orange-600');
+    expect(face).not.toContain('text-white');
   });
 });
 
@@ -188,15 +159,15 @@ describe('the panel itself', () => {
   it('carries the counts, and the rows', () => {
     const html = overlay();
 
-    expect(html).toContain('85 nodes');
-    expect(html).toContain('85 edges');
+    expect(html).toContain('85 個節點');
+    expect(html).toContain('85 條連線');
     expect(html).toContain('XCZU67DR');
   });
 
   it('offers the PDF, and says Escape closes it', () => {
     const html = overlay();
 
-    expect(html).toContain('aria-label="Export results as PDF / 輸出求解結果 PDF"');
+    expect(html).toContain('aria-label="輸出完整結果表 PDF"');
     expect(html).toContain('Esc');
   });
 

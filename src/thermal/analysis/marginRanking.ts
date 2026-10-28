@@ -73,12 +73,31 @@ export function marginRanking(
  * over its limit, and on a healthy design it promotes two parts with 30 °C of
  * room into a list that reads like a problem.
  *
- * The line is `NEAR_LIMIT_MARGIN_C`, the same one Screen 09's badge and status
- * reason use, so a part cannot be worth listing on one screen and not on the
- * other. When nothing is close, the tightest part is still returned: the screen
+ * The line is `NEAR_LIMIT_MARGIN_C`, the same one 07's component list colours
+ * by, so a part cannot be worth listing on one screen and not on the other. When nothing is close, the tightest part is still returned: the screen
  * is for working on a part, and an empty one would have nothing to work on.
  */
 export function partsNeedingAttention(ranked: readonly MarginRank[]): MarginRank[] {
   const flagged = ranked.filter((part) => part.margin_C <= NEAR_LIMIT_MARGIN_C);
   return flagged.length > 0 ? flagged : ranked.slice(0, 1);
+}
+
+/**
+ * The parts 08 opens on, plus the one 07's list sent it to.
+ *
+ * 07 求解與結果 opens 08 on any row (`?part=<node id>`), including a part with
+ * plenty of margin that `partsNeedingAttention` would leave out. It is added in
+ * its place by margin rather than appended, so the deck still reads tightest
+ * first. A request for a node that has no limit, or no solve, adds nothing.
+ */
+export function partsWithRequested(
+  ranked: readonly MarginRank[],
+  requestedNodeId: string | null | undefined,
+): MarginRank[] {
+  const flagged = partsNeedingAttention(ranked);
+  if (!requestedNodeId || flagged.some((part) => part.node_id === requestedNodeId)) return flagged;
+  const asked = ranked.find((part) => part.node_id === requestedNodeId);
+  if (!asked) return flagged;
+  const order = new Map(ranked.map((part, index) => [part.node_id, index]));
+  return [...flagged, asked].sort((a, b) => order.get(a.node_id)! - order.get(b.node_id)!);
 }

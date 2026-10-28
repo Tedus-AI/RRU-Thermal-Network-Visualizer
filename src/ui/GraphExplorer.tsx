@@ -19,8 +19,10 @@ export function useGraphExplorer(
    * stays purely topological.
    */
   solution: ThermalSolution | null = null,
+  /** 07 opens on the group overview (07 §59); the other screens on the whole graph. */
+  initialView: 'full' | 'groups' = 'full',
 ) {
-  const [view, setView] = useState<View>('full');
+  const [view, setView] = useState<View>(initialView);
   const [focusKey, setFocusKey] = useState('');
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(EMPTY);
   const paths = useMemo(() => graphPaths(network), [network]);

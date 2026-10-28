@@ -49,6 +49,7 @@ import { useSolutionStore } from '@/data/solutionStore';
 import { useComponentStore } from '@/data/componentStore';
 import { useAnalysisStore } from '@/data/analysisStore';
 import { useOverviewStore } from '@/data/overviewStore';
+import { loadSnapshots } from '@/data/persistence';
 import { useReportStore } from '@/data/reportStore';
 import { useDistributionResult } from '@/data/useDistributionResult';
 import { currentSourceRevision } from '@/data/sourceRevision';
@@ -80,6 +81,7 @@ import {
   blocksExport,
   blocksPreview,
   evaluateSnapshot,
+  snapshotToFreeze,
   withTranslatedActions,
 } from '@/report/snapshotAdapter';
 import { paginate, pageOfSection } from '@/report/pagination';
@@ -153,27 +155,30 @@ function LoadingState() {
   );
 }
 
-/** 11 §45 — the empty state, in the specification's own words. */
-function NoSnapshot({ onGoToOverview }: { onGoToOverview: () => void }) {
+/**
+ * 11 §45 — nothing to report yet.
+ *
+ * 10 freezes the snapshot itself when the scenario has none (`snapshotToFreeze`),
+ * so this is only reached when 07 has no usable result: not solved, solved
+ * against inputs that have since changed, or failed.
+ */
+function NoSnapshot({ onSolve }: { onSolve: () => void }) {
   return (
     <div className="flex flex-col gap-4 p-6">
       <div className="flex flex-col items-start gap-3 rounded-lg border border-warn-500/40 bg-warn-100 px-5 py-4">
         <p className="flex items-center gap-2 text-[14px] font-bold text-warn-600">
           <TriangleAlert className="size-5" aria-hidden />
-          No report snapshot is available. Return to Screen 09 and prepare a report snapshot.
+          還沒有可以出報告的結果
         </p>
         <p className="text-[12px] text-ink-700">
-          目前沒有報告快照，請回到 09 Results Overview 準備一份。
+          07 還沒有這個情境可用的求解結果（沒求解、求解後輸入又改過，或求解失敗）。到 07 求解後回來，
+          報告會自動用目前的結果建立。
         </p>
         <p className="text-[11px] text-ink-500">
-          Screen 10 composes a report from the Screen 09 snapshot. It never recalculates a thermal
-          result and never invents one in a snapshot's absence.
-          <span className="block">
-            11 只依 Screen 09 的快照排版報告，本身不重新計算，也不會在沒有快照時憑空產生數值。
-          </span>
+          報告只排版已經求出的結果，本身不重新計算，沒有結果時也不會用估算值代替。
         </p>
-        <Button variant="primary" icon={<ArrowRight className="size-4" />} onClick={onGoToOverview}>
-          Go to Results Overview / 前往 09 結果總覽
+        <Button variant="primary" icon={<ArrowRight className="size-4" />} onClick={onSolve}>
+          前往 07 求解與結果
         </Button>
       </div>
     </div>
@@ -231,6 +236,13 @@ export function ReportPreviewView() {
   const [currentPage, setCurrentPage] = useState(1);
   const [zoom, setZoom] = useState<ZoomMode>(DEFAULT_ZOOM);
   const [refreshToken, setRefreshToken] = useState(0);
+  /**
+   * Which project and scenario this screen has loaded its stores for. The
+   * snapshot is frozen only after that: the first render still reads what the
+   * previous screen left in the stores, and a snapshot frozen from it is stale
+   * the moment the reload lands.
+   */
+  const [loadedKey, setLoadedKey] = useState<string | null>(null);
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const [canvasBox, setCanvasBox] = useState({ width: 0, height: 0 });
 
@@ -274,6 +286,7 @@ export function ReportPreviewView() {
     useReportStore.getState().loadFor(projectId, activeScenarioId);
     setCurrentPage(1);
     setSelectedId('critical');
+    setLoadedKey(`${projectId}|${activeScenarioId ?? ''}`);
   }, [projectId, activeScenarioId]);
 
   const stale = useSolutionStore((s) => s.isStale());
@@ -312,6 +325,30 @@ export function ReportPreviewView() {
     () => evaluateSnapshot(snapshot, liveOverview, scenario?.name ?? ''),
     [snapshot, liveOverview, scenario],
   );
+
+  /**
+   * The snapshot is 10's to freeze now (07 §59). When this scenario has none,
+   * the report opens on the current results; an existing one is only moved by
+   * 更新為目前結果. What is on DISK decides "has none" — the overview store
+   * loads in an effect, and reading it here could overwrite a frozen snapshot
+   * that simply had not arrived yet.
+   */
+  const freezeSnapshot = (asked: boolean) => {
+    if (!projectId || !activeScenarioId) return null;
+    const stored = loadSnapshots(projectId).find((entry) => entry.scenario_id === activeScenarioId) ?? null;
+    const toFreeze = snapshotToFreeze({ stored, live: liveOverview, asked });
+    if (!toFreeze) {
+      if (stored && !asked) useOverviewStore.getState().loadFor(projectId, activeScenarioId);
+      return null;
+    }
+    return useOverviewStore.getState().prepare(projectId, toFreeze, draft?.project_context.owner || undefined);
+  };
+  const storesLoaded = loadedKey === `${projectId}|${activeScenarioId ?? ''}`;
+  useEffect(() => {
+    if (!storesLoaded || snapshot || !liveOverview) return;
+    freezeSnapshot(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storesLoaded, snapshot, liveOverview, projectId, activeScenarioId]);
 
   /**
    * The snapshot the report draws from, with the Chinese action lines restored
@@ -508,16 +545,21 @@ export function ReportPreviewView() {
   // as a crash card.
   if (projectStatus === 'loading' || (projectId && !draft)) return <LoadingState />;
 
+  // About to freeze one (the effect above): a frame of loading, not of
+  // "nothing to report".
+  if (!snapshot && (!storesLoaded || (liveOverview && liveOverview.report_readiness !== 'BLOCKED'))) {
+    return <LoadingState />;
+  }
+
   if (!snapshot || !scenario || blocksPreview(evaluation.state)) {
     return (
       <ScreenWorkspace
         title="Report Preview"
         titleZh="報告預覽"
-        description="Composes the current Screen 09 snapshot into a previewable thermal engineering report."
-        descriptionZh="把目前 Screen 09 的快照組成可預覽的熱工程報告；本頁不重新分析，也不匯出檔案。"
-        badge={<Badge tone="warn">NO SNAPSHOT</Badge>}
+        descriptionZh="把目前的求解結果組成可預覽的熱工程報告；本頁不重新分析，也不匯出檔案。"
+        badge={<Badge tone="warn">還沒有結果</Badge>}
       >
-        <NoSnapshot onGoToOverview={() => go('results')} />
+        <NoSnapshot onSolve={() => go('network')} />
       </ScreenWorkspace>
     );
   }
@@ -576,7 +618,7 @@ export function ReportPreviewView() {
     if (exportBlocked) {
       // 11 §3, AC-11-31 — a stale or missing snapshot blocks export preparation.
       toast.error(
-        'Export preparation is blocked. Refresh the Screen 09 snapshot and resolve the blocking items first.',
+        '還不能準備匯出：報告快照已過期或有阻擋項目，請先按「更新為目前結果」並處理阻擋項目。',
       );
       return;
     }
@@ -668,8 +710,8 @@ export function ReportPreviewView() {
       }
       actionBar={
         <div className="flex w-full flex-wrap items-center gap-2">
-          <Button icon={<ArrowLeft className="size-4" />} onClick={() => go('results')}>
-            Back to Results Overview
+          <Button icon={<ArrowLeft className="size-4" />} onClick={() => go('network')}>
+            返回 07 求解與結果
           </Button>
           <Button
             icon={<RefreshCw className="size-4" />}
@@ -729,18 +771,32 @@ export function ReportPreviewView() {
     >
       <div className="flex flex-col gap-3 px-6 pb-6">
         {/* 11 §3, AC-11-03 — a stale snapshot is warned about, strongly. */}
+        {/* Updated here rather than on another screen (07 §59): the report is
+            what the snapshot says, and moving it is one button, not a trip. */}
         {evaluation.state === 'STALE' && (
-          <p className="flex flex-wrap items-center gap-2 rounded-lg border border-danger-500/50 bg-danger-100 px-4 py-2 text-[12px] font-bold text-danger-600">
+          <p className="flex flex-wrap items-center gap-2 rounded-lg border border-warn-500/50 bg-warn-100 px-4 py-2 text-[12px] font-bold text-warn-600">
             <TriangleAlert className="size-4" aria-hidden />
-            Report snapshot is stale. Refresh the overview snapshot before final export.
-            <span className="font-normal">報告快照已過期，請於正式匯出前重新準備快照。</span>
-            <Button
-              variant="primary"
-              className="!h-7 !px-2 !text-[11px]"
-              onClick={() => go('results')}
-            >
-              Go to Results Overview
-            </Button>
+            報告用的是舊結果：07 的結果在快照之後改過。
+            <span className="font-normal text-ink-700">
+              {liveOverview && liveOverview.report_readiness !== 'BLOCKED'
+                ? '按右邊更新，報告就換成目前的結果。'
+                : '目前的結果還不能用（已失效或求解失敗），請先到 07 重新求解。'}
+            </span>
+            {liveOverview && liveOverview.report_readiness !== 'BLOCKED' ? (
+              <Button
+                variant="primary"
+                className="!h-7 !px-2 !text-[11px]"
+                onClick={() => {
+                  if (freezeSnapshot(true)) toast.success('報告已更新為目前的結果');
+                }}
+              >
+                更新為目前結果
+              </Button>
+            ) : (
+              <Button className="!h-7 !px-2 !text-[11px]" onClick={() => go('network')}>
+                前往 07 重新求解
+              </Button>
+            )}
           </p>
         )}
 

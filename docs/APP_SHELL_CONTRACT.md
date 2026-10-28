@@ -117,7 +117,8 @@ and squeezed narrow fields until they broke.)
   Boundary Conditions merged into 05 (熱網路與邊界): its number stays empty,
   `/boundary` redirects to 05 with its query string, and code that still says
   `'06'` (a solver issue's `fix_in`, an 08 lever's `screen`) means "the surface
-  half of 05" and is shown as 05.
+  half of 05" and is shown as 05. 09 Results Overview merged into 07 (求解與結果,
+  07 §59) the same way: 09 stays empty and `/results` redirects to 07.
 
 The shared helpers still take both names, because most call sites were written
 bilingual. They now show the Chinese and fall back to the English only when no

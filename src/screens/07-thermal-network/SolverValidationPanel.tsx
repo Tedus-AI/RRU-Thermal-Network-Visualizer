@@ -11,7 +11,6 @@
 import { useMemo, useState } from 'react';
 import { CircleCheck, Info, TriangleAlert, XCircle } from 'lucide-react';
 
-import { biTitle } from '@/ui/FieldLabel';
 import type { SolverIssue } from '@/thermal/solver/solverTypes';
 
 import { ISSUE_GROUPS, groupIssues } from './resultViewModel';
@@ -125,7 +124,7 @@ export function SolverValidationPanel({
           return (
             <li
               key={group.id}
-              title={biTitle(group.label, group.zh)}
+              title={group.label}
               className="flex items-center gap-1.5 text-[11px]"
             >
               {failed ? (
@@ -135,14 +134,13 @@ export function SolverValidationPanel({
               ) : (
                 <CircleCheck size={13} className="shrink-0 text-ok-600" />
               )}
-              <span className="font-semibold text-ink-700">{group.label}</span>
-              <span className="text-ink-400">/ {group.zh}</span>
+              <span className="font-semibold text-ink-700">{group.zh}</span>
               <span
                 className={`ml-auto font-bold ${
                   failed ? 'text-danger-600' : warned ? 'text-warn-600' : 'text-ok-600'
                 }`}
               >
-                {!hasRun ? 'Not run' : failed ? `${entries.filter((e) => e.severity === 'error').length} error` : warned ? `${entries.filter((e) => e.severity === 'warning').length} warning` : 'Pass'}
+                {!hasRun ? '未執行' : failed ? `${entries.filter((e) => e.severity === 'error').length} 個錯誤` : warned ? `${entries.filter((e) => e.severity === 'warning').length} 個警告` : '通過'}
               </span>
             </li>
           );
@@ -155,7 +153,6 @@ export function SolverValidationPanel({
             key={entry.id}
             type="button"
             aria-pressed={filter === entry.id}
-            title={biTitle(entry.label, entry.zh)}
             onClick={() => setFilter(entry.id)}
             className={`rounded px-2 py-1 text-[11px] font-semibold transition-colors ${
               filter === entry.id
@@ -163,7 +160,7 @@ export function SolverValidationPanel({
                 : 'bg-surface-muted text-ink-500 hover:text-ink-900'
             }`}
           >
-            {entry.label} ({counts[entry.id]})
+            {entry.zh} ({counts[entry.id]})
           </button>
         ))}
       </div>
@@ -172,8 +169,8 @@ export function SolverValidationPanel({
         {visible.length === 0 ? (
           <p className="py-4 text-center text-[11px] text-ink-400">
             {hasRun
-              ? 'No messages in this filter. / 此篩選沒有訊息。'
-              : 'Run a pre-solve check or solve the network. / 請先執行檢查或求解。'}
+              ? '這個篩選沒有訊息。'
+              : '請先執行求解前檢查或求解。'}
           </p>
         ) : (
           <ul className="flex flex-col gap-1">
@@ -185,40 +182,41 @@ export function SolverValidationPanel({
                 <div className="flex items-start gap-1.5">
                   <span className="mt-0.5 shrink-0">{SEVERITY_ICON[entry.severity]}</span>
                   <div className="min-w-0 flex-1">
+                    {/* Chinese first (07 §59); the English stays as the second,
+                        quieter line — it is what a solver message is searched by. */}
                     <Message
-                      text={entry.message}
+                      text={entry.message_zh || entry.message}
                       emphasis={entry.emphasis}
                       className="text-[11px] leading-relaxed font-medium text-ink-700"
                     />
-                    <Message
-                      text={entry.message_zh}
-                      emphasis={entry.emphasis}
-                      // Highlighted, the grey second line has to carry ink-500:
-                      // ink-400 on yellow is the one pairing in this palette
-                      // that drops under the contrast floor.
-                      className={`text-[11px] leading-relaxed ${
-                        entry.emphasis?.length ? 'text-ink-500' : 'text-ink-400'
-                      }`}
-                    />
+                    {entry.message_zh && (
+                      <Message
+                        text={entry.message}
+                        emphasis={entry.emphasis}
+                        // Highlighted, the grey second line has to carry ink-500:
+                        // ink-400 on yellow is the one pairing in this palette
+                        // that drops under the contrast floor.
+                        className={`text-[10.5px] leading-relaxed ${
+                          entry.emphasis?.length ? 'text-ink-500' : 'text-ink-400'
+                        }`}
+                      />
+                    )}
                     <div className="mt-1 flex flex-wrap gap-1.5">
                       {(entry.node_id || entry.edge_id) && (
                         <button
                           type="button"
                           onClick={() => onFocus(entry)}
-                          title={biTitle('Focus this object on the graph', '在圖上聚焦此物件')}
+                          title="在熱網路上找出這個節點或連線"
                           className="text-[10px] font-bold text-accent-600 hover:underline"
                         >
-                          Focus Issue / 定位
+                          在圖上定位
                         </button>
                       )}
                       {(entry.fix_in === '05' || entry.fix_in === '06') && (
                         <button
                           type="button"
                           onClick={() => onNavigate(entry.fix_in as '05' | '06')}
-                          title={biTitle(
-                            'Go to Screen 05',
-                            entry.fix_in === '06' ? '前往 05 的散熱表面' : '前往 05 熱網路',
-                          )}
+                          title={entry.fix_in === '06' ? '前往 05 的散熱表面' : '前往 05 熱網路'}
                           className="text-[10px] font-bold text-accent-600 hover:underline"
                         >
                           前往 05

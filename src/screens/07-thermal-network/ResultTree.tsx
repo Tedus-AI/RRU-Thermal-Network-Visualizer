@@ -7,9 +7,13 @@
  * scanning the other for the edges that mention it. Here the drop sits directly
  * under the node it produced, and both sit under the component they belong to.
  *
- * Ordering is the component order from Screen 04 and then node id — never
- * "worst first". Ranking is Screen 08's job (07 §44–§46), and a table that
- * quietly sorted by margin would be doing it here.
+ * Ordering is the component order from Screen 04 and then node id. This is
+ * the full table, opened from 07's component list — that list is the one
+ * sorted by margin (07 §59); this one stays in the order the project lists
+ * its parts, so a part is found where the reader expects it.
+ *
+ * A component's T is the temperature at its limit (Tj, Tc or Ts), so the
+ * row's T, Limit and Margin agree; the hottest node is in the rows under it.
  *
  * ---------------------------------------------------------------------------
  * Three kinds of row, and telling them apart
@@ -79,8 +83,8 @@ import {
 const COLUMNS = [
   { id: 'name', label: 'Component · Node · Path', zh: '元件・節點・路徑', align: 'text-left' },
   { id: 't', label: 'T', unit: '°C', zh: '溫度', align: 'text-right' },
-  { id: 'q', label: 'Q', unit: 'W', zh: '功率', align: 'text-right' },
-  { id: 'limit', label: 'Limit', zh: '限制值', align: 'text-right' },
+  { id: 'q', label: 'Q', unit: 'W', zh: '功耗', align: 'text-right' },
+  { id: 'limit', label: 'Limit', zh: '限溫', align: 'text-right' },
   { id: 'margin', label: 'Margin', zh: '餘裕', align: 'text-right' },
   { id: 'status', label: 'Status', zh: '狀態', align: 'text-left' },
 ] as const;
@@ -192,9 +196,8 @@ function StatusCell({ status }: { status: MarginStatus }) {
   return (
     <span
       className={`inline-block rounded border px-1.5 py-0.5 text-[10px] leading-none font-bold ${tone}`}
-      title={`${MARGIN_STATUS_LABELS[status].label} / ${MARGIN_STATUS_LABELS[status].zh}`}
     >
-      {MARGIN_STATUS_LABELS[status].label}
+      {MARGIN_STATUS_LABELS[status].zh}
     </span>
   );
 }
@@ -255,18 +258,24 @@ function EdgeRow({
             </span>
           </span>
           {edge.rth_origin === 'boundary_scenario' && (
-            <span className="shrink-0 rounded bg-accent-100 px-1 py-0.5 text-[9px] leading-none font-bold text-accent-700">
-              06
+            <span
+              className="shrink-0 rounded bg-accent-100 px-1 py-0.5 text-[9px] leading-none font-bold text-accent-700"
+              title="熱阻取自 05 這個情境的散熱表面條件"
+            >
+              05
             </span>
           )}
           {edge.rth_origin === 'spreading_biot' && (
-            <span className="shrink-0 rounded bg-warn-100 px-1 py-0.5 text-[9px] leading-none font-bold text-warn-600">
+            <span
+              className="shrink-0 rounded bg-warn-100 px-1 py-0.5 text-[9px] leading-none font-bold text-warn-600"
+              title="擴散熱阻依 Biot 數修正"
+            >
               Bi
             </span>
           )}
           <Metric
             label="ΔT"
-            value={edge.delta_T_C != null ? `${num(edge.delta_T_C, 1)} K` : 'N/A'}
+            value={edge.delta_T_C != null ? `${num(edge.delta_T_C, 1)} °C` : 'N/A'}
           />
           <Metric
             label="Q"
@@ -326,16 +335,16 @@ function NodeRows({
             <button
               type="button"
               onClick={onSelectNode}
-              title={`${row.node.id} · ${role.label} / ${role.zh}`}
+              title={`${row.node.id} · ${role.zh}`}
               className="flex min-w-0 flex-1 items-center gap-1.5 text-left hover:text-accent-700"
             >
               <span className="min-w-0 truncate text-[12px] font-semibold text-ink-800">
                 {row.node.name}
               </span>
-              <span className="shrink-0 text-[9.5px] font-medium text-ink-400">{role.label}</span>
+              <span className="shrink-0 text-[9.5px] font-medium text-ink-400">{role.zh}</span>
               {row.fixed && (
                 <span className="shrink-0 rounded bg-accent-100 px-1 py-0.5 text-[9px] leading-none font-bold text-accent-700">
-                  FIXED
+                  固定溫度
                 </span>
               )}
             </button>
@@ -412,7 +421,7 @@ export function ResultTree({
   if (groups.length === 0) {
     return (
       <p className="px-3 py-8 text-center text-[12px] text-ink-400">
-        No nodes to report. / 沒有可回報的節點。
+        沒有可列出的節點。
       </p>
     );
   }
@@ -451,7 +460,7 @@ export function ResultTree({
                 style={{ zIndex: COLUMNS.length - index + 10 }}
                 className={`sticky top-0 border-b border-line-strong bg-surface-muted px-3 py-2 text-[9.5px] font-bold tracking-wide text-ink-500 uppercase ${column.align}`}
               >
-                {column.label}
+                {column.zh}
                 {'unit' in column && column.unit && (
                   <span className="ml-1 font-semibold text-ink-400">{column.unit}</span>
                 )}
@@ -502,8 +511,17 @@ export function ResultTree({
                     </span>
                   </span>
                 </td>
-                <td className="py-2 pr-3 text-right text-[13px] font-bold tabular text-ink-900">
-                  {num(group.peak_C, 1)}
+                {/* The temperature at the limit, so T, Limit and Margin on this
+                    row add up; the hottest node is one click down. */}
+                <td
+                  className="py-2 pr-3 text-right text-[13px] font-bold tabular text-ink-900"
+                  title={
+                    group.judged_C != null && group.peak_C != null && group.peak_C !== group.judged_C
+                      ? `限溫位置 ${num(group.judged_C, 1)} °C · 最熱節點 ${num(group.peak_C, 1)} °C`
+                      : undefined
+                  }
+                >
+                  {num(group.judged_C ?? group.peak_C, 1)}
                 </td>
                 <td className="py-2 pr-3 text-right text-[12px] font-semibold tabular text-ink-700">
                   {group.power_W > 0 ? num(group.power_W, 2) : '—'}
@@ -551,7 +569,7 @@ export function ResultTree({
 
       {!hasSolution && (
         <p className="px-3 py-3 text-center text-[11px] text-ink-400">
-          Temperatures and heat flows appear after a solve. / 求解後才會顯示溫度與熱流。
+          求解後才會顯示溫度與熱流。
         </p>
       )}
     </div>

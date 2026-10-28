@@ -10,11 +10,11 @@
  * and Export Center moved from 10/11/12 to 09/10/11. The specification
  * documents keep their original numbers, which is why a `12 §32` citation in
  * this codebase still says 12. 06 Boundary Conditions merged into 05 and left
- * its number empty rather than shifting 07–11 again.
+ * its number empty rather than shifting 07–11 again; 09 Results Overview
+ * merged into 07 (07 §59) and left 09 empty the same way.
  */
 
 import {
-  BarChart3,
   Boxes,
   FileDown,
   FileText,
@@ -51,7 +51,7 @@ export interface ScreenGroup {
 export const GROUP_LABELS_EN: Record<string, string> = {
   專案與匯入: 'Project & Import',
   熱網路建立: 'Network Setup',
-  熱網路視覺化: 'Analysis',
+  求解與分析: 'Solve & Analysis',
   報告與匯出: 'Report & Export',
 };
 
@@ -107,10 +107,10 @@ export const SCREENS: ScreenDef[] = [
   {
     code: '07',
     path: 'network',
-    label: '熱網路圖',
-    labelEn: 'Thermal Network',
+    label: '求解與結果',
+    labelEn: 'Solve & Results',
     icon: Network,
-    group: '熱網路視覺化',
+    group: '求解與分析',
     implemented: true,
   },
   {
@@ -119,18 +119,10 @@ export const SCREENS: ScreenDef[] = [
     label: '瓶頸分析',
     labelEn: 'Bottleneck Analysis',
     icon: TriangleAlert,
-    group: '熱網路視覺化',
+    group: '求解與分析',
     implemented: true,
   },
-  {
-    code: '09',
-    path: 'results',
-    label: '結果總覽',
-    labelEn: 'Results Overview',
-    icon: BarChart3,
-    group: '熱網路視覺化',
-    implemented: true,
-  },
+  // 09 Results Overview is part of 07 now (07 §59); `/results` redirects there.
   {
     code: '10',
     path: 'report',
@@ -154,7 +146,7 @@ export const SCREENS: ScreenDef[] = [
 export const SCREEN_GROUPS: ScreenGroup[] = [
   '專案與匯入',
   '熱網路建立',
-  '熱網路視覺化',
+  '求解與分析',
   '報告與匯出',
 ].map((label) => ({
   label,
@@ -165,7 +157,7 @@ export const SCREEN_GROUPS: ScreenGroup[] = [
 export const GROUP_ICONS: Record<string, LucideIcon> = {
   專案與匯入: FolderInput,
   熱網路建立: Layers,
-  熱網路視覺化: Network,
+  求解與分析: Network,
   報告與匯出: FileText,
 };
 

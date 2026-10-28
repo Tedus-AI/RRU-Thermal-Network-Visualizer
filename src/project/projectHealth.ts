@@ -194,5 +194,5 @@ export function nextStepFor(health: ProjectHealth): NextStep {
   if (!health.solved) {
     return step('07', '求解熱網路', '執行求解，檢查溫度與熱流。');
   }
-  return step('09', '查看結果', '檢查最熱的元件、主要熱路徑與瓶頸排名。');
+  return step('10', '出報告', '07 已有每顆元件的溫度與餘裕；確認後到 10 整理報告並匯出。');
 }

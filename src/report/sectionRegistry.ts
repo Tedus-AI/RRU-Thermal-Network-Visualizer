@@ -7,7 +7,7 @@
  * leaving the reader to guess (11 §26).
  *
  * Nothing here computes a thermal value. A section declares WHAT it shows and
- * roughly how much room it takes; the numbers arrive from the Screen 09
+ * roughly how much room it takes; the numbers arrive from the report
  * snapshot (11 §12, §37).
  */
 
@@ -105,8 +105,8 @@ export const SECTION_DEFINITIONS: SectionDefinition[] = [
     title: 'Overall Thermal Status',
     zh: '整體熱狀態',
     recommended: true,
-    source_screen: '10',
-    source_zh: '10 結果總覽',
+    source_screen: '07',
+    source_zh: '07 求解與結果',
     defaultContent: {},
     base_height: 0.3,
   },
@@ -116,8 +116,8 @@ export const SECTION_DEFINITIONS: SectionDefinition[] = [
     zh: '關鍵元件',
     splittable: true,
     recommended: false,
-    source_screen: '10',
-    source_zh: '10 結果總覽（來源 07 / 09）',
+    source_screen: '07',
+    source_zh: '07 求解與結果',
     defaultContent: {
       // 0 is "All". It used to be 5, which meant a report of a nine-part
       // machine dropped four of them with nothing on the page to say so —
@@ -140,7 +140,7 @@ export const SECTION_DEFINITIONS: SectionDefinition[] = [
     splittable: true,
     recommended: false,
     source_screen: '07',
-    source_zh: '07 熱網路求解',
+    source_zh: '07 求解與結果',
     defaultContent: {},
     // A figure plus its caption is about a third of a page; two to a page is
     // what makes them readable. Without this the section claimed half a page
@@ -159,7 +159,7 @@ export const SECTION_DEFINITIONS: SectionDefinition[] = [
     splittable: true,
     recommended: true,
     source_screen: '08',
-    source_zh: '08 瓶頸分析 / 07 熱網路求解',
+    source_zh: '08 瓶頸分析 / 07 求解與結果',
     defaultContent: {},
     base_height: 0.06,
     row_height: 0.34,
@@ -175,8 +175,8 @@ export const SECTION_DEFINITIONS: SectionDefinition[] = [
     // followed nowhere at all. A numbered list can always say "item 9 onward".
     splittable: true,
     recommended: false,
-    source_screen: '10',
-    source_zh: '10 結果總覽',
+    source_screen: '07',
+    source_zh: '07 求解與結果',
     defaultContent: {},
     base_height: 0.06,
     row_height: 0.05,

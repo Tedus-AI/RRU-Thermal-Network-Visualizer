@@ -35,6 +35,8 @@ const GROUPS: ResultTreeGroupRow[] = [
     limit_C: 225,
     limit_type: 'Tj',
     margin_C: 43.7,
+    judged_C: 181.3,
+    judged_node_id: 'NODE_CMP_PA_1_JUNCTION',
     status: 'pass',
     nodes: [
       {
@@ -124,7 +126,7 @@ describe('the columns the table keeps', () => {
   it('heads the four a node row can actually fill', () => {
     const html = render();
 
-    for (const heading of ['Component · Node · Path', 'Limit', 'Margin']) {
+    for (const heading of ['>元件・節點・路徑<', '>限溫<', '>餘裕<']) {
       expect(html).toContain(heading);
     }
   });
@@ -147,7 +149,7 @@ describe('where an edge keeps its numbers', () => {
   it('still shows the drop, the flow and the resistance', () => {
     const html = render({ forceExpanded: true });
 
-    expect(html).toContain('79.5 K');
+    expect(html).toContain('79.5 °C');
     expect(html).toContain('53.0 W');
     expect(html).toContain('1.500 °C/W');
   });
@@ -246,7 +248,7 @@ describe('an edge is not a node', () => {
     // the browser DOM carries the real `colspan`. Both were checked.
     expect(html.toLowerCase()).toContain('colspan="7"');
     // …and its numbers sit next to its name, not at the far right.
-    expect(edge.indexOf('79.5 K')).toBeGreaterThan(-1);
+    expect(edge.indexOf('79.5 °C')).toBeGreaterThan(-1);
   });
 });
 
@@ -292,7 +294,7 @@ describe('columns the engineer sized', () => {
 describe('what the chips may not be', () => {
   it('lays the metric chips out inline, not as flex boxes', () => {
     const html = render({ forceExpanded: true });
-    const chip = html.slice(html.indexOf('79.5 K') - 400, html.indexOf('79.5 K'));
+    const chip = html.slice(html.indexOf('79.5 °C') - 400, html.indexOf('79.5 °C'));
 
     expect(chip).toContain('inline-block');
     expect(chip).not.toContain('items-baseline');
@@ -324,8 +326,8 @@ describe('the status column', () => {
   it('renders the word and its colour beside the margin', () => {
     const html = render();
 
-    expect(html).toContain('>Status<');
-    expect(html).toContain('>PASS<');
+    expect(html).toContain('>狀態<');
+    expect(html).toContain('>通過<');
     expect(html).toContain('border-ok-500 bg-ok-100 text-ok-600');
   });
 
@@ -333,13 +335,13 @@ describe('the status column', () => {
     const near = render({
       groups: [{ ...GROUPS[0], status: 'warn' as const, margin_C: 0.8 }],
     });
-    expect(near).toContain('>WARNING<');
+    expect(near).toContain('>警告<');
     expect(near).toContain('border-warn-500 bg-warn-100 text-warn-600');
     // The margin itself changes with it: green at +0.8 was the whole problem.
     expect(near).toContain('font-bold tabular text-warn-600');
 
     const over = render({ groups: [{ ...GROUPS[0], status: 'over' as const, margin_C: -1.9 }] });
-    expect(over).toContain('>FAIL<');
+    expect(over).toContain('>超限<');
     expect(over).toContain('border-danger-500 bg-danger-100 text-danger-600');
   });
 });

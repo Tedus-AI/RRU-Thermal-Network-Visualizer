@@ -52,11 +52,11 @@ export function validateReport(input: ValidationInput): ReportValidation {
    * 11 §29 vs §35 — two different lists, deliberately.
    *
    * §35 enumerates what the validation panel WARNS about. §29 defines when
-   * READINESS is WARNING, and names exactly two causes: Screen 09's own Report
-   * Readiness is WARNING, or an optional supporting section is missing. The
-   * rest — missing limits, low-confidence edges, analytical-only coverage — are
-   * shown but do not demote readiness here, because Screen 09 already weighed
-   * them when it set its own readiness, and re-deriving that judgement would
+   * READINESS is WARNING, and names exactly two causes: the frozen results' own
+   * Report Readiness is WARNING, or an optional supporting section is missing.
+   * The rest — missing limits, low-confidence edges, analytical-only coverage —
+   * are shown but do not demote readiness here, because the overview already
+   * weighed them when it set its own readiness, and re-deriving that judgement would
    * both double-count it and pin every V1 report at WARNING for as long as
    * Screen 03 stays deferred (§20: analytical-only is not a failure).
    */
@@ -79,36 +79,36 @@ export function validateReport(input: ValidationInput): ReportValidation {
     state: snapshotState,
     detail:
       evaluation.state === 'MISSING'
-        ? 'No Screen 09 snapshot exists for this scenario.'
+        ? 'No report snapshot exists for this scenario yet.'
         : evaluation.state === 'STALE'
           ? 'The snapshot no longer matches the current results.'
           : evaluation.state === 'WARNING'
-            ? 'Snapshot is current; Screen 09 reported Report Readiness WARNING.'
+            ? 'Snapshot is current; the results it froze carry Report Readiness WARNING.'
             : `Snapshot ${evaluation.snapshot_id} is current.`,
     detail_zh:
       evaluation.state === 'MISSING'
-        ? '此情境尚無 Screen 09 快照。'
+        ? '此情境還沒有報告快照。'
         : evaluation.state === 'STALE'
           ? '快照已與目前結果不一致。'
           : evaluation.state === 'WARNING'
-            ? '快照為最新；Screen 09 的 Report Readiness 為 WARNING。'
+            ? '快照為最新；凍結時的結果報告就緒狀態為「警告」。'
             : '快照為最新。',
   });
 
   if (evaluation.state === 'MISSING') {
     block(
-      'Snapshot missing — prepare one in Screen 09.',
-      '缺少快照，請先於 Screen 09 準備。',
+      'Snapshot missing — solve in 07, then open 10 Report Preview; it is created there.',
+      '缺少快照：07 求解後開啟 10 報告預覽，會自動建立。',
     );
   } else if (evaluation.state === 'STALE') {
     block(
-      'Snapshot is stale — refresh the overview snapshot before export.',
-      '快照已過期，請於匯出前重新準備快照。',
+      'Snapshot is stale — update it to the current results before export.',
+      '快照已過期，匯出前請按「更新為目前結果」。',
     );
   } else if (evaluation.state === 'WARNING') {
     warn(
-      'Source Report Readiness from Screen 09 is WARNING.',
-      'Screen 09 的 Report Readiness 為 WARNING。',
+      'Source Report Readiness of the frozen results is WARNING.',
+      '凍結時的結果報告就緒狀態為「警告」。',
       true,
     );
   }

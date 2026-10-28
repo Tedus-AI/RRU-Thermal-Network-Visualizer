@@ -1,7 +1,7 @@
 /**
  * Report composition contracts — 11 §4, §8, §9, §29, §32.
  *
- * Screen 10 arranges the Screen 09 snapshot into a previewable report. It never
+ * Screen 10 arranges the report snapshot into a previewable report. It never
  * recalculates a thermal value (§37) and never writes a file (§38): the config
  * below describes LAYOUT and INCLUSION only, and the export payload carries
  * metadata for Screen 11 rather than bytes.
@@ -35,16 +35,16 @@ export const SNAPSHOT_MESSAGES: Record<SnapshotState, { en: string; zh: string }
     zh: '快照與目前情境、求解結果與支援分析一致。',
   },
   WARNING: {
-    en: 'Snapshot is current, but Screen 09 reported Report Readiness WARNING.',
-    zh: '快照為最新，但 Screen 09 的 Report Readiness 為 WARNING。',
+    en: 'Snapshot is current, but the results it froze carry Report Readiness WARNING.',
+    zh: '快照為最新，但凍結時的結果報告就緒狀態為「警告」。',
   },
   STALE: {
-    en: 'Report snapshot is stale. Refresh the overview snapshot before final export.',
-    zh: '報告快照已過期，請先於 Screen 09 重新準備快照再進行匯出。',
+    en: 'Report snapshot is stale. Update it to the current results before final export.',
+    zh: '報告快照已過期：結果在快照之後改過。正式匯出前請按「更新為目前結果」。',
   },
   MISSING: {
-    en: 'No report snapshot is available. Return to Screen 09 and prepare a report snapshot.',
-    zh: '目前沒有報告快照，請回到 Screen 09 準備一份。',
+    en: 'No report snapshot yet. Solve in 07, then open 10 Report Preview; it is created there.',
+    zh: '還沒有報告快照：07 求解後開啟 10 報告預覽，會自動建立。',
   },
 };
 
@@ -192,7 +192,7 @@ export interface ThermalReportConfig {
   id: string;
   project_id: string;
   scenario_id: string;
-  /** The Screen 09 snapshot this configuration was composed against. */
+  /** The report snapshot this configuration was composed against. */
   snapshot_id: string;
 
   template_name: string;
