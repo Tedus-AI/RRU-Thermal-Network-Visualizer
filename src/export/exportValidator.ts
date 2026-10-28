@@ -65,37 +65,46 @@ export interface ArtifactReadiness {
 
 function reportReadiness(input: ReadinessInput): ArtifactReadiness['status'] {
   if (!input.payload) return 'NOT_AVAILABLE';
-  // 12 §43 — a BLOCKED report cannot produce a PDF. §9's whole source is the
-  // Screen 10 payload, and Screen 10 refuses to build one it cannot stand behind.
-  if (input.payload.readiness === 'BLOCKED') return 'BLOCKED';
+  // A report drawn from a superseded snapshot is not the answer, whatever its
+  // payload says; and 12 §43 — a BLOCKED report cannot produce a PDF.
   if (input.snapshot_stale) return 'BLOCKED';
+  if (input.payload.readiness === 'BLOCKED') return 'BLOCKED';
   if (input.payload.readiness === 'WARNING') return 'WARNING';
   return 'READY';
 }
 
+/**
+ * Why the report rows cannot run, in the order a reader would fix them.
+ *
+ * Staleness first: the one-button fix (更新為目前結果) is above the preview,
+ * and a stale snapshot also makes the payload BLOCKED, which would otherwise
+ * be reported instead and send the reader looking for a cause that is not
+ * there. The payload follows 10's preview on its own (12 §61), so its absence
+ * only means the preview has not finished measuring yet.
+ */
 function reportReason(input: ReadinessInput): { en: string; zh: string } {
   if (!input.payload) {
     return {
-      en: 'No export payload. Prepare one in Screen 10 Report Preview.',
-      zh: '尚無匯出資料包，請於 10 Report Preview 準備。',
-    };
-  }
-  if (input.payload.readiness === 'BLOCKED') {
-    return {
-      en: 'Screen 10 Report Readiness is BLOCKED.',
-      zh: 'Screen 10 的 Report Readiness 為 BLOCKED。',
+      en: 'The report is still being prepared — the preview has not finished measuring its pages.',
+      zh: '報告還在準備：預覽量完頁面後就可以匯出。',
     };
   }
   if (input.snapshot_stale) {
     return {
-      en: 'The report snapshot no longer matches the current results.',
-      zh: '報告快照已與目前結果不一致。',
+      en: 'The report uses superseded results. Press 更新為目前結果 above the preview first.',
+      zh: '報告用的是舊結果，先按預覽上方的「更新為目前結果」。',
+    };
+  }
+  if (input.payload.readiness === 'BLOCKED') {
+    return {
+      en: 'The report has blocking items; see Report Readiness on the left.',
+      zh: '報告有阻擋項目，看左邊的「報告就緒狀態」。',
     };
   }
   if (input.payload.readiness === 'WARNING') {
     return {
-      en: 'Screen 10 reported WARNING. Export requires confirmation.',
-      zh: 'Screen 10 為 WARNING，匯出前需確認。',
+      en: 'Report Readiness is WARNING; export asks for confirmation.',
+      zh: '報告就緒狀態為「警告」，匯出前會先確認。',
     };
   }
   return { en: '', zh: '' };
@@ -113,17 +122,17 @@ function solvedResultStatus(input: ReadinessInput): ArtifactStatus {
 function solvedResultReason(input: ReadinessInput): { en: string; zh: string } {
   if (!input.solution) {
     return {
-      en: 'No thermal solution. Solve the scenario in Screen 07.',
-      zh: '尚無求解結果，請於 07 Thermal Network 求解。',
+      en: 'No thermal solution. Solve the scenario in 07.',
+      zh: '還沒有求解結果，請到 07 求解。',
     };
   }
   if (input.solution.status === 'FAILED') {
-    return { en: 'The last solve failed.', zh: '上次求解失敗。' };
+    return { en: 'The last solve failed.', zh: '上次求解失敗，請到 07 重新求解。' };
   }
   if (input.solution_stale) {
     return {
-      en: 'The solution is stale — inputs changed since the last solve. Re-solve in Screen 07.',
-      zh: '求解結果已過期，輸入在求解後被修改，請於 07 重新求解。',
+      en: 'The solution is stale — inputs changed since the last solve. Re-solve in 07.',
+      zh: '求解結果已失效：輸入在求解後改過，請到 07 重新求解。',
     };
   }
   return { en: '', zh: '' };
@@ -157,8 +166,8 @@ export function evaluateArtifact(type: ArtifactType, input: ReadinessInput): Art
       // and come back with a FAILED artifact and no files.
       if (input.snapshot_count === 0) {
         return wrap('NOT_AVAILABLE', {
-          en: 'No snapshot is ticked. Choose at least one in the snapshot matrix.',
-          zh: '尚未勾選任何快照，請於快照矩陣至少選擇一張。',
+          en: 'No chart is ticked. Choose at least one under 選擇圖表.',
+          zh: '還沒有勾選任何圖表，到「選擇圖表…」至少勾一張。',
         });
       }
       return wrap('READY');
@@ -174,7 +183,7 @@ export function evaluateArtifact(type: ArtifactType, input: ReadinessInput): Art
       if (usable.length === 0) {
         return wrap('NOT_AVAILABLE', {
           en: 'Nothing to package — no artifact currently passes its own prerequisites.',
-          zh: '沒有可封裝的內容，目前沒有任何產出符合前置條件。',
+          zh: '沒有可以封裝的內容：目前沒有任何一項可以匯出。',
         });
       }
       return wrap('READY');
@@ -196,7 +205,7 @@ export interface ValidationInput extends ReadinessInput {
   selected: ArtifactType[];
   base_filename: string;
   readiness: Record<ArtifactType, ArtifactReadiness>;
-  /** From the Screen 09 snapshot when one exists. */
+  /** From the report snapshot when one exists. */
   analytical_only: boolean;
 }
 

@@ -18,7 +18,6 @@
  */
 
 import { Button } from '@/ui/primitives';
-import { ColumnLabel, biTitle } from '@/ui/FieldLabel';
 import type { ResultMode } from '@/screens/07-thermal-network/resultViewModel';
 import {
   SNAPSHOT_MODES,
@@ -43,8 +42,7 @@ export function SnapshotMatrixPanel({
   if (subjects.length === 0) {
     return (
       <p className="text-[11px] text-ink-500">
-        No solved network to snapshot.
-        <span className="ml-1 text-ink-400">尚無可快照的求解熱網路。</span>
+        還沒有可以畫成圖的求解結果。
       </p>
     );
   }
@@ -104,34 +102,30 @@ export function SnapshotMatrixPanel({
   return (
     <div className="flex flex-col gap-2">
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[40rem] border-collapse text-left">
+        <table className="w-full min-w-[30rem] border-collapse text-left">
           <thead>
             <tr className="border-b border-line text-[10.5px] text-ink-500">
               <th className="py-1.5 pr-2 font-semibold">
-                <ColumnLabel label="Subject" zh="快照對象" />
+                快照對象
               </th>
               {SNAPSHOT_MODES.map((mode) => {
                 const full = subjects.every((subject) => ticked(subject.key, mode.id));
                 return (
-                  <th key={mode.id} className="w-[7rem] py-1.5 text-center font-semibold">
+                  <th key={mode.id} className="w-[4.5rem] py-1.5 text-center font-semibold">
                     <button
                       type="button"
                       disabled={disabled}
                       onClick={() => toggleColumn(mode.id)}
-                      title={biTitle(
-                        `${full ? 'Clear' : 'Tick'} the whole ${mode.label} column`,
-                        `${full ? '取消' : '勾選'}整欄 ${mode.zh}`,
-                      )}
+                      title={`${full ? '取消' : '勾選'}整欄「${mode.zh}」`}
                       className="mx-auto flex flex-col items-center rounded px-1.5 py-0.5 text-center hover:bg-surface-200 disabled:cursor-not-allowed disabled:hover:bg-transparent"
                     >
-                      <span className="text-ink-700">{mode.label}</span>
-                      <span className="text-[10px] text-ink-400">{mode.zh}</span>
+                      <span className="text-ink-700">{mode.zh}</span>
                     </button>
                   </th>
                 );
               })}
               <th className="py-1.5 pl-2 text-right font-semibold">
-                <ColumnLabel label="Repeated Parts" zh="重複元件" />
+                重複元件
               </th>
             </tr>
           </thead>
@@ -150,14 +144,10 @@ export function SnapshotMatrixPanel({
                       type="button"
                       disabled={disabled}
                       onClick={() => toggleRow(subject.key)}
-                      title={biTitle(
-                        `Tick or clear every view of ${subject.label}`,
-                        `勾選或取消 ${subject.label_zh} 的所有視圖`,
-                      )}
+                      title={`勾選或取消「${subject.label_zh}」的所有視圖`}
                       className="-ml-1 flex flex-col items-start rounded px-1 py-0.5 text-left hover:bg-surface-200 disabled:cursor-not-allowed disabled:hover:bg-transparent"
                     >
-                      <span className="font-semibold text-ink-900">{subject.label}</span>
-                      <span className="text-[10px] text-ink-400">{subject.label_zh}</span>
+                      <span className="font-semibold text-ink-900">{subject.label_zh}</span>
                     </button>
                   </td>
 
@@ -168,7 +158,7 @@ export function SnapshotMatrixPanel({
                         className="size-3.5 accent-accent-600"
                         checked={ticked(subject.key, mode.id)}
                         disabled={disabled}
-                        aria-label={`${subject.label} · ${mode.label}`}
+                        aria-label={`${subject.label_zh} · ${mode.zh}`}
                         onChange={() => toggleCell(subject.key, mode.id)}
                       />
                     </td>
@@ -182,13 +172,13 @@ export function SnapshotMatrixPanel({
                         className="h-6 rounded border border-line bg-surface-0 px-1 text-[10.5px] text-ink-700"
                         value={policy}
                         disabled={disabled}
-                        aria-label={`Repeated parts in ${subject.label}`}
+                        aria-label={`${subject.label_zh} 的重複元件`}
                         onChange={(event) =>
                           setPolicy(subject.key, event.target.value as InstancePolicy)
                         }
                       >
-                        <option value="representative">One chain / 代表一路</option>
-                        <option value="all">All chains / 全部</option>
+                        <option value="representative">代表一路</option>
+                        <option value="all">全部</option>
                       </select>
                     ) : (
                       <span className="text-ink-300">—</span>
@@ -214,7 +204,7 @@ export function SnapshotMatrixPanel({
             })
           }
         >
-          Select All / 全選
+          全選
         </Button>
         <Button
           className="!h-7 !px-2 !text-[11px]"
@@ -224,11 +214,10 @@ export function SnapshotMatrixPanel({
           // chain should draw one PA or four.
           onClick={() => onChange({ ...selection, modes: {} })}
         >
-          Clear All / 全不選
+          全不選
         </Button>
         <span className="ml-auto text-[11px] font-semibold text-accent-700 tabular">
-          {total} PNG{total === 1 ? '' : 's'} will be produced
-          <span className="ml-1 font-normal text-ink-400">將產生 {total} 張 PNG</span>
+          會產生 {total} 張 PNG
         </span>
       </div>
     </div>

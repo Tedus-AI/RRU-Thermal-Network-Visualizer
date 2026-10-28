@@ -72,12 +72,11 @@ export function ReportHeaderSummary({
     <div className="grid grid-cols-1 gap-2.5 md:grid-cols-3">
       <ResultKpiTile
         icon={ShieldCheck}
-        label="Snapshot Status"
-        zh="快照狀態"
+        label="報告快照"
+        zh={summary.created_at ? `凍結於 ${timeOf(summary.created_at)}` : '報告用的結果'}
         explanation={T11.snapshotStatus}
-        value={snapshotState}
+        value={SNAPSHOT_STATE_ZH[snapshotState]}
         valueTone={SNAPSHOT_TONE[snapshotState]}
-        note={SNAPSHOT_STATE_ZH[snapshotState]}
         action={
           <button
             type="button"
@@ -111,22 +110,20 @@ export function ReportHeaderSummary({
 
       <ResultKpiTile
         icon={CircleAlert}
-        label="Overall Status"
-        zh="整體熱狀態 · 報告就緒"
+        label="整體熱狀態"
+        zh={`報告就緒：${READINESS_ZH[readiness]}`}
         explanation={T11.overallStatus}
         // 11 §14 — read from the snapshot, never recomputed here.
-        value={overallStatus ?? 'N/A'}
+        value={overallStatus ? OVERALL_STATUS_LABELS[overallStatus].zh : '—'}
         valueTone={combinedTone(overallTone, READINESS_TONE[readiness])}
-        note={`${overallStatus ? OVERALL_STATUS_LABELS[overallStatus].zh : '無快照'} · 就緒 ${READINESS_ZH[readiness]}`}
       />
 
       <ResultKpiTile
         icon={Layers}
-        label="Page Count"
-        zh="頁數"
+        label="頁數"
+        zh="依版面推估，與匯出的 PDF 相同"
         explanation={T11.pageCount}
         value={`${pageCount}`}
-        note="依版面推估"
       />
     </div>
   );

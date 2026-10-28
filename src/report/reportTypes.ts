@@ -43,8 +43,8 @@ export const SNAPSHOT_MESSAGES: Record<SnapshotState, { en: string; zh: string }
     zh: '報告快照已過期：結果在快照之後改過。正式匯出前請按「更新為目前結果」。',
   },
   MISSING: {
-    en: 'No report snapshot yet. Solve in 07, then open 10 Report Preview; it is created there.',
-    zh: '還沒有報告快照：07 求解後開啟 10 報告預覽，會自動建立。',
+    en: 'No report snapshot yet. Solve in 07, then open 10 Report & Export; it is created there.',
+    zh: '還沒有報告快照：07 求解後開啟 10 報告與匯出，會自動建立。',
   },
 };
 
@@ -88,8 +88,8 @@ export const ZOOM_LABELS: Record<ZoomMode, string> = {
   '75': '75%',
   '100': '100%',
   '125': '125%',
-  fit_width: 'Fit Width',
-  fit_page: 'Fit Page',
+  fit_width: '符合寬度',
+  fit_page: '整頁',
 };
 
 /** 11 §40 — the specification's default. */

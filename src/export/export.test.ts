@@ -394,7 +394,7 @@ describe('Test A — Engineering Package (12 §58 A)', () => {
       analytical_only: true,
     });
     expect(validation.blocking).toEqual([]);
-    expect(validation.warnings.join(' ')).toMatch(/Screen 10 reported WARNING/);
+    expect(validation.warnings.join(' ')).toMatch(/Report Readiness is WARNING/);
   });
 
   it('records the warning in the manifest', () => {

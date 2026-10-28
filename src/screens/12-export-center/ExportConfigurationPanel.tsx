@@ -15,7 +15,7 @@
 import { FolderOpen, Info } from 'lucide-react';
 
 import { Button, Select, TextInput } from '@/ui/primitives';
-import { EngineeringInfo, biTitle } from '@/ui/FieldLabel';
+import { EngineeringInfo } from '@/ui/FieldLabel';
 import {
   DESTINATIONS,
   DESTINATION_LABELS,
@@ -52,14 +52,13 @@ function Row({
     // this panel sits in a half-width column, and side by side the English half
     // was the one getting truncated ("Overwrite …").
     <div className="flex items-center justify-between gap-2 py-0.5">
-      <label htmlFor={htmlFor} className="flex min-w-0 flex-col">
-        <span className="flex items-center gap-1 text-[11px] text-ink-700">
-          <span className="truncate">{label}</span>
+      <label htmlFor={htmlFor} className="flex min-w-0 flex-col" title={label}>
+        <span className="flex items-center gap-1 text-[12px] text-ink-700">
+          <span className="truncate">{zh}</span>
           {explanation && (
             <EngineeringInfo zh={explanation} label={explanationLabel ?? label} align="left" />
           )}
         </span>
-        <span className="truncate text-[10px] text-ink-400">{zh}</span>
       </label>
       <span className="w-[9.5rem] shrink-0 text-right">{children}</span>
     </div>
@@ -207,7 +206,7 @@ export function ExportConfigurationPanel({
             (destination) => destination === 'browser_download' || folderSupported,
           ).map((destination) => ({
             value: destination,
-            label: DESTINATION_LABELS[destination].label,
+            label: DESTINATION_LABELS[destination].zh,
           }))}
           onChange={(event) => onChange({ destination: event.target.value as Destination })}
         />
@@ -215,9 +214,7 @@ export function ExportConfigurationPanel({
 
       {config.destination === 'folder' && (
         <div className="flex items-center justify-between gap-2 py-0.5">
-          <span className="flex min-w-0 flex-col text-[11px] text-ink-700">
-            Output Folder <span className="text-[10px] text-ink-400">輸出資料夾</span>
-          </span>
+          <span className="flex min-w-0 flex-col text-[12px] text-ink-700">輸出資料夾</span>
           <span className="flex min-w-0 flex-1 items-center justify-end gap-2">
             <span
               className={`min-w-0 flex-1 truncate rounded border px-2 py-1 text-[11px] ${
@@ -227,17 +224,12 @@ export function ExportConfigurationPanel({
               }`}
               title={
                 folderName && !folderGranted
-                  ? biTitle(
-                      `${folderName} — remembered, but this tab cannot write to it until it is chosen again.`,
-                      `${folderName} — 已記住，但本分頁需重新選擇才能寫入。`,
-                    )
+                  ? `${folderName} — 已記住，但這個分頁要重新選一次才能寫入。`
                   : undefined
               }
             >
-              {folderName ?? 'No folder chosen / 尚未選擇'}
-              {folderName && !folderGranted && (
-                <span className="ml-1 font-semibold">· re-select / 需重新選擇</span>
-              )}
+              {folderName ?? '尚未選擇'}
+              {folderName && !folderGranted && <span className="ml-1 font-semibold">・需重新選擇</span>}
             </span>
             <Button
               className="!h-7 !px-2 !text-[11px]"
@@ -245,7 +237,7 @@ export function ExportConfigurationPanel({
               disabled={disabled}
               onClick={onPickFolder}
             >
-              Browse
+              選擇
             </Button>
           </span>
         </div>
@@ -254,20 +246,12 @@ export function ExportConfigurationPanel({
       {!folderSupported && (
         <p className="mt-1 flex items-start gap-1.5 rounded border border-line bg-surface-muted px-2 py-1.5 text-[10px] leading-relaxed text-ink-500">
           <Info className="mt-px size-3 shrink-0" aria-hidden />
-          <span>
-            This browser has no File System Access API, so Browser Download is the only
-            destination. Files are still generated locally.
-            <span className="block text-ink-400">
-              此瀏覽器不支援 File System Access API，僅提供瀏覽器下載；檔案仍在本機產生。
-            </span>
-          </span>
+          <span>這個瀏覽器不能直接寫入資料夾，只能用瀏覽器下載；檔案一樣在本機產生。</span>
         </p>
       )}
 
-      <p className="mt-1 text-[10px] leading-relaxed text-ink-400">
-        12 §19 — overriding the base filename changes the exported file only. No project or
-        scenario master data is modified.
-        <span className="block">覆寫檔名只影響輸出檔案，不會修改專案或情境主檔。</span>
+      <p className="mt-1 text-[10.5px] leading-relaxed text-ink-400">
+        改檔名只影響輸出的檔案，不會改到專案或情境的資料。
       </p>
     </div>
   );

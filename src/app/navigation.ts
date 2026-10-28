@@ -11,12 +11,12 @@
  * documents keep their original numbers, which is why a `12 §32` citation in
  * this codebase still says 12. 06 Boundary Conditions merged into 05 and left
  * its number empty rather than shifting 07–11 again; 09 Results Overview
- * merged into 07 (07 §59) and left 09 empty the same way.
+ * merged into 07 (07 §59) and left 09 empty the same way, and 11 Export Center
+ * merged into 10 (12 §61), leaving 11 empty.
  */
 
 import {
   Boxes,
-  FileDown,
   FileText,
   FolderInput,
   Info,
@@ -126,21 +126,13 @@ export const SCREENS: ScreenDef[] = [
   {
     code: '10',
     path: 'report',
-    label: '報告預覽',
-    labelEn: 'Report Preview',
+    label: '報告與匯出',
+    labelEn: 'Report & Export',
     icon: FileText,
     group: '報告與匯出',
     implemented: true,
   },
-  {
-    code: '11',
-    path: 'export',
-    label: '匯出中心',
-    labelEn: 'Export Center',
-    icon: FileDown,
-    group: '報告與匯出',
-    implemented: true,
-  },
+  // 11 Export Center is part of 10 now (12 §61); `/export` opens 10's 匯出設定.
 ];
 
 export const SCREEN_GROUPS: ScreenGroup[] = [

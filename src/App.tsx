@@ -10,17 +10,23 @@ import { ThermalPathBuilderView } from '@/screens/05-thermal-path-builder/Therma
 import { ThermalNetworkView } from '@/screens/07-thermal-network/ThermalNetworkView';
 import { BottleneckAnalysisView } from '@/screens/08-bottleneck-analysis/BottleneckAnalysisView';
 import { ReportPreviewView } from '@/screens/11-report-preview/ReportPreviewView';
-import { ExportCenterView } from '@/screens/12-export-center/ExportCenterView';
 import { useProjectStore } from '@/data/projectStore';
 
 /**
  * A path that no longer has a screen, sent to the one that took its job over.
  * The query string goes along: an "Edit in" link carries what to select.
  */
-function RetiredScreen({ to }: { to: string }) {
+function RetiredScreen({ to, query }: { to: string; query?: string }) {
   const { projectId } = useParams();
   const { search } = useLocation();
-  return <Navigate to={projectId ? `${projectPath(projectId, to)}${search}` : '/'} replace />;
+  // `query` is what the new screen needs to open where the old one was (11
+  // Export Center → 10's drawer); the link's own query string goes along too.
+  const params = new URLSearchParams(search);
+  if (query) for (const [key, value] of new URLSearchParams(query)) params.set(key, value);
+  const tail = params.toString();
+  return (
+    <Navigate to={projectId ? `${projectPath(projectId, to)}${tail ? `?${tail}` : ''}` : '/'} replace />
+  );
 }
 
 /** Opens the most recently updated project, or shows the empty state (01 §20). */
@@ -61,7 +67,9 @@ export default function App() {
         {/* 09 Results Overview is part of 07 求解與結果 now (07 §59). */}
         <Route path="/project/:projectId/results" element={<RetiredScreen to="network" />} />
         <Route path="/project/:projectId/report" element={<ReportPreviewView />} />
-        <Route path="/project/:projectId/export" element={<ExportCenterView />} />
+        {/* 11 Export Center is part of 10 報告與匯出 now (12 §61): the old
+            address opens 10 with its 匯出設定 drawer. */}
+        <Route path="/project/:projectId/export" element={<RetiredScreen to="report" query="panel=export" />} />
         {/* The Temperature Distribution screen was removed: it binned NODES,
             which counts how finely the network was drawn rather than how hot
             the machine runs. A bookmark to it lands on Screen 07, which now

@@ -9,8 +9,8 @@
 
 import { ChevronLeft, ChevronRight, Maximize2, Minimize2, Minus, Plus } from 'lucide-react';
 
-import { Button, Select } from '@/ui/primitives';
-import { EngineeringInfo, biTitle } from '@/ui/FieldLabel';
+import { Select } from '@/ui/primitives';
+import { EngineeringInfo } from '@/ui/FieldLabel';
 import {
   ZOOM_LABELS,
   ZOOM_MODES,
@@ -60,32 +60,39 @@ export function PageToolbar({
 
   return (
     <div className="flex shrink-0 flex-wrap items-center gap-1.5 border-b border-line px-3 py-2">
-      <Button
-        className="!h-7 !px-2 !text-[11px]"
-        icon={<ChevronLeft className="size-3.5" />}
+      {/* Icons and Chinese rather than "Previous · Page 1 of 4 · Next": the
+          preview shares its width with the outline and the export column, and
+          the English toolbar wrapped onto two rows at 1280 px. */}
+      <button
+        type="button"
+        aria-label="上一頁"
+        title="上一頁"
         disabled={page <= 1}
         onClick={() => onPage(page - 1)}
+        className="flex size-7 items-center justify-center rounded border border-line-strong text-ink-500 transition-colors hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-40"
       >
-        Previous
-      </Button>
-      <span className="text-[11.5px] font-semibold text-ink-700 tabular">
-        Page {pageCount === 0 ? 0 : page} of {pageCount}
+        <ChevronLeft className="size-3.5" />
+      </button>
+      <span className="text-[11.5px] font-semibold whitespace-nowrap text-ink-700 tabular">
+        第 {pageCount === 0 ? 0 : page} / {pageCount} 頁
       </span>
-      <Button
-        className="!h-7 !px-2 !text-[11px]"
-        trailingIcon={<ChevronRight className="size-3.5" />}
+      <button
+        type="button"
+        aria-label="下一頁"
+        title="下一頁"
         disabled={page >= pageCount}
         onClick={() => onPage(page + 1)}
+        className="flex size-7 items-center justify-center rounded border border-line-strong text-ink-500 transition-colors hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-40"
       >
-        Next
-      </Button>
+        <ChevronRight className="size-3.5" />
+      </button>
 
       <span className="mx-1 h-5 w-px bg-line" aria-hidden />
 
       <button
         type="button"
-        title={biTitle('Zoom out', '縮小')}
-        aria-label={biTitle('Zoom out', '縮小')}
+        title="縮小"
+        aria-label="縮小"
         onClick={() => step(-1)}
         className="flex size-7 items-center justify-center rounded border border-line-strong text-ink-500 transition-colors hover:bg-surface-muted"
       >
@@ -93,36 +100,24 @@ export function PageToolbar({
       </button>
       {/* Every zoom mode is an option, including the two fit modes: a select
           whose value is absent from its items silently displays the first entry,
-          which would show "50%" while the page is actually fitted to width. */}
+          which would show "50%" while the page is actually fitted to width.
+          The two fit buttons that sat beside it said the same thing again. */}
       <Select
-        className="h-7 !w-[6.5rem] !text-[11px]"
-        aria-label="Zoom level"
+        className="h-7 !w-[6rem] !text-[11px]"
+        aria-label="縮放"
         value={zoom}
         items={ZOOM_MODES.map((entry) => ({ value: entry, label: ZOOM_LABELS[entry] }))}
         onChange={(event) => onZoom(event.target.value as ZoomMode)}
       />
       <button
         type="button"
-        title={biTitle('Zoom in', '放大')}
-        aria-label={biTitle('Zoom in', '放大')}
+        title="放大"
+        aria-label="放大"
         onClick={() => step(1)}
         className="flex size-7 items-center justify-center rounded border border-line-strong text-ink-500 transition-colors hover:bg-surface-muted"
       >
         <Plus className="size-3.5" />
       </button>
-
-      <Button
-        className={`!h-7 !px-2 !text-[11px] ${zoom === 'fit_width' ? '!border-accent-600 !text-accent-700' : ''}`}
-        onClick={() => onZoom('fit_width')}
-      >
-        Fit Width
-      </Button>
-      <Button
-        className={`!h-7 !px-2 !text-[11px] ${zoom === 'fit_page' ? '!border-accent-600 !text-accent-700' : ''}`}
-        onClick={() => onZoom('fit_page')}
-      >
-        Fit Page
-      </Button>
 
       <span className="ml-auto flex items-center gap-1.5 text-[10px] text-ink-400">
         <EngineeringInfo zh={T11.zoom} label="Zoom" />
@@ -131,8 +126,8 @@ export function PageToolbar({
             viewport; Escape gives it back. */}
         <button
           type="button"
-          title={biTitle(fullscreen ? 'Exit Fullscreen' : 'Fullscreen', fullscreen ? '離開全螢幕' : '全螢幕檢視')}
-          aria-label={biTitle(fullscreen ? 'Exit Fullscreen' : 'Fullscreen', fullscreen ? '離開全螢幕' : '全螢幕檢視')}
+          title={fullscreen ? '離開全螢幕' : '全螢幕檢視'}
+          aria-label={fullscreen ? '離開全螢幕' : '全螢幕檢視'}
           aria-pressed={fullscreen}
           onClick={onToggleFullscreen}
           className={`flex size-7 items-center justify-center rounded border transition-colors ${

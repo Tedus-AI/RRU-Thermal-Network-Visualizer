@@ -6,29 +6,7 @@
  * belong inside React components.
  */
 
-import type { Tone } from '@/ui/primitives';
-import type { ArtifactStatus, GlobalExportStatus } from '@/export/exportTypes';
 
-export const ARTIFACT_TONE: Record<ArtifactStatus, Tone> = {
-  READY: 'ok',
-  WARNING: 'warn',
-  BLOCKED: 'danger',
-  NOT_AVAILABLE: 'neutral',
-  EXPORTING: 'accent',
-  EXPORTED: 'ok',
-  FAILED: 'danger',
-};
-
-export const GLOBAL_TONE: Record<GlobalExportStatus, Tone> = {
-  READY: 'ok',
-  WARNING: 'warn',
-  PARTIAL: 'warn',
-  EXPORTING: 'accent',
-  COMPLETE: 'ok',
-  FAILED: 'danger',
-};
-
-/** Bytes as an engineer reads them, with the unit attached. */
 export function bytes(size: number | undefined | null): string {
   if (size == null || !Number.isFinite(size)) return 'N/A';
   if (size < 1024) return `${size} B`;
