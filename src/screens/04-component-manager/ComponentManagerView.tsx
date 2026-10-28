@@ -36,6 +36,7 @@ import {
 } from '@/data/componentLibraryStore';
 import { useNetworkStore } from '@/data/networkStore';
 import { useScenarioStore } from '@/data/scenarioStore';
+import { powerBasisOf } from '@/domain/powerBasis';
 import { useSolverStore } from '@/data/solverStore';
 
 import {
@@ -241,7 +242,11 @@ export function ComponentManagerView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId, readOnly]);
 
-  const summary = useMemo(() => summarizeReadiness(components), [components]);
+  // The active scenario's 功耗 (01): a room-temperature scenario lists and
+  // totals each part's room-temperature power, the one it solves with.
+  const scenario = useScenarioStore((s) => s.scenarios.find((entry) => entry.id === s.activeScenarioId) ?? null);
+  const powerBasis = powerBasisOf(scenario);
+  const summary = useMemo(() => summarizeReadiness(components, powerBasis), [components, powerBasis]);
   const isComplete = useMemo(
     () => (component: Component) => {
       const score = completenessScore(completenessOf(component));
@@ -405,6 +410,7 @@ export function ComponentManagerView() {
         <>
           <ComponentReadinessCards
             summary={summary}
+            scenario={scenario}
             recordCount={components.length}
             statusFilter={filters.status}
             onStatusFilter={(status) => setFilters({ ...filters, status })}
@@ -464,6 +470,7 @@ export function ComponentManagerView() {
             <CategoryTabs components={components} active={tab} onChange={setTab} />
             <ComponentTable
               components={visible}
+              powerBasis={powerBasis}
               selectedId={selectedId}
               onSelect={setSelectedId}
               onPatch={patchComponent}

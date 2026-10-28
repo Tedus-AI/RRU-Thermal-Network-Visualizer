@@ -157,7 +157,7 @@ export function SurfacePropertiesPanel({
                     ) : (
                       <span
                         className="inline-flex h-7 min-w-16 items-center justify-center rounded border border-line bg-surface-muted px-2 text-[10px] font-semibold text-ink-400"
-                        title="SCR01 日照負載為 0 W/m²；保留既有吸收率，但本情境不使用。"
+                        title="01 情境的日照為 0 W/m²：保留既有吸收率，但本情境不使用。"
                       >
                         未使用
                       </span>
@@ -193,7 +193,7 @@ export function SurfacePropertiesPanel({
         </span>
         {!solarEnabled && (
           <span className="mt-1 block font-semibold text-ink-500">
-            SCR01 日照負載為 {solarIrradiance_W_m2 ?? 0} W/m²：吸收率與太陽 profile
+            01 情境的日照為 {solarIrradiance_W_m2 ?? 0} W/m²：吸收率與太陽 profile
             暫停使用，既有資料會保留。
           </span>
         )}

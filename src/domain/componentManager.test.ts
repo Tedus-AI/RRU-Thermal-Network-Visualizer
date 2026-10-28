@@ -407,6 +407,13 @@ describe('component readiness', () => {
     expect(totalPowerW([enabled, disabled])).toBeCloseTo(208.52, 2);
   });
 
+  it('totals the room-temperature power for a room-temperature scenario, the hot one where there is none', () => {
+    const pa = { ...readyPA(), power_rt_W: sourced(50, 'Imported') };
+    const other = { ...readyPA(), id: 'CMP_OTHER', name: 'Other' };
+    expect(summarizeReadiness([pa, other]).total_power_W).toBeCloseTo(2 * 208.52, 2);
+    expect(summarizeReadiness([pa, other], 'rt').total_power_W).toBeCloseTo(4 * 50 + 208.52, 2);
+  });
+
   it('computes Total Power as Qty × Power, not edge heat flow', () => {
     expect(componentTotalPowerW(readyPA())).toBeCloseTo(208.52, 2);
   });

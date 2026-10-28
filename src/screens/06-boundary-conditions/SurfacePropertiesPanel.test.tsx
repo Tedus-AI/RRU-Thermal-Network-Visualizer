@@ -68,7 +68,7 @@ describe('SurfacePropertiesPanel', () => {
     }
 
     expect(html).toContain('未使用');
-    expect(html).toContain('SCR01 日照負載為 0 W/m²');
+    expect(html).toContain('01 情境的日照為 0 W/m²');
     expect(html).not.toContain('Absorptivity for Fin Surface');
   });
 });

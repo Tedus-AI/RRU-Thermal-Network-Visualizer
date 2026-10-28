@@ -446,10 +446,10 @@ function BoundaryParametersPanel({ view }: { view?: ScenarioBoundaryEdgeView }) 
       {view != null && (
         <p className="mt-1.5 text-[10px] leading-relaxed text-ink-400">
           {view.source === 'fin_geometry'
-            ? 'Computed from the fin geometry, not from a stated h and area. The fin efficiency is NOT folded into h here — it sits on the fin-root link as the fin’s own conduction. / 由鰭片幾何計算，非直接填入的 h 與面積；鰭片效率不併入 h，而是以鰭片本體導熱掛在根部連結上。'
+            ? '由鰭片幾何計算，不是直接填入的 h 與面積；鰭片效率不併入 h，而是以鰭片本體導熱掛在根部連結上。'
             : view.source === 'plate_convection'
-              ? 'h computed from the plate geometry and an assumed surface temperature; it will shift once Screen 07 solves. / h 由平板幾何與假設表面溫度算出，SCR07 求解後會再變動。'
-              : 'h and area as stated on the Screen 06 profile. / h 與面積為 SCR06 設定檔直接填入之值。'}
+              ? 'h 由平板幾何與表面溫度假設算出；07 求解後若實際表面溫度不同，會再變動。'
+              : 'h 與面積是「② 散熱表面」直接填入的值。'}
         </p>
       )}
     </section>
@@ -665,18 +665,18 @@ export function EdgeInspector({
                 >
                   {scenarioBoundary?.resolved
                     ? scenarioBoundary.kind === 'fin_conduction'
-                      ? 'The fin’s own conduction, from the Screen 06 fin geometry. The stored link is isothermal; the active scenario replaces it so the surface node reports the MEAN fin temperature instead of repeating the root’s. / 此為 SCR06 鰭片幾何算出的鰭片本體導熱；拓樸上仍存等溫連結，目前情境將其取代，使表面節點代表鰭片平均溫度而非根部溫度。'
-                      : `Active scenario boundary preview from Screen 06; the Screen 05 topology remains unchanged. / 已套用 SCR06 目前情境的邊界熱阻預覽，SCR05 拓樸本身未被改寫。`
+                      ? '「② 散熱表面」鰭片幾何算出的鰭片本體導熱；熱網路上仍存等溫連結，目前情境將其取代，使表面節點代表鰭片平均溫度，而不是重複根部溫度。'
+                      : '目前情境「② 散熱表面」的邊界熱阻預覽；熱網路本身沒有被改寫。'
                     : isothermal
-                      ? 'This is an intentionally near-zero solver link, not a missing resistance. It carries the fin’s conduction once Screen 06 states the fin geometry for this scenario. / 此為刻意設定的近零等溫求解連結，並非漏填熱阻；待 SCR06 於本情境填入鰭片幾何後，此連結即承載鰭片本體導熱。'
+                      ? '刻意設定的近零等溫求解連結，不是漏填熱阻；在「② 散熱表面」填入鰭片幾何後，這條連結就承載鰭片本體導熱。'
                       : edge.resolution_note}
                 </p>
               )}
 
               <p className="mt-2 text-[10px] leading-relaxed text-ink-400">
                 {scenarioBoundary
-                  ? 'This Rth is a pre-solve boundary input. Heat flow Q and ΔT remain unavailable until Screen 07 solves the active scenario. / 此熱阻僅為求解前的邊界輸入；須由 SCR07 求解目前情境後才會有 Q 與 ΔT。'
-                  : 'Heat flow Q and ΔT are not shown here: Screen 05 has not run a solve (05 §22). / SCR05 尚未求解，因此不顯示 Q 與 ΔT。'}
+                  ? '這個熱阻是求解前的邊界輸入；到 07 求解目前情境後才有熱流 Q 與溫差 ΔT。'
+                  : '05 不求解，所以這裡不顯示熱流 Q 與溫差 ΔT。'}
               </p>
 
               {(scenarioBoundary != null ||

@@ -15,7 +15,8 @@ import { createScenario } from '@/domain/project';
 import { sourced } from '@/domain/sourcedValue';
 import type { MaterialDefaults } from '@/domain/materials';
 import { deriveBoundaryPorts } from '@/thermal/boundary/boundaryPorts';
-import { FIN_GEOMETRY_KEYS, finArrayOf, usesFinGeometry } from '@/thermal/boundary/calculations';
+import { FIN_GEOMETRY_KEYS, PLATE_GEOMETRY_KEYS, finArrayOf, usesFinGeometry } from '@/thermal/boundary/calculations';
+import { PLATE_HEIGHT_SOURCE_KEY } from '@/thermal/boundary/plateHeight';
 import { singleFinSurfacePort } from '@/thermal/boundary/finSpec';
 import type { BoundaryConditionProfile, ScenarioBoundaryConditionSet } from '@/thermal/boundary/types';
 
@@ -237,5 +238,44 @@ describe('the heat sink fins as a project fact', () => {
     const before = structuredClone(useBoundaryStore.getState().current()!.profiles);
     fins({ hsk_fin_height_mm: 50, hsk_fin_gap_mm: 10, hsk_fin_thickness_mm: 1.5 });
     expect(useBoundaryStore.getState().current()!.profiles).toEqual(before);
+  });
+});
+
+describe('a vertical plate takes the machine height from 01', () => {
+  const P = PLATE_GEOMETRY_KEYS;
+  const plate = (patch: Record<string, number | string | boolean | null>) => {
+    const profile = activeFinProfile();
+    useBoundaryStore.getState().upsertProfile({ ...profile, parameters: { ...profile.parameters, ...patch } });
+  };
+
+  it('follows 01’s heat sink base length, and keeps following it', async () => {
+    await openDemo();
+    useBoundaryStore.getState().loadFor(DEMO_PROJECT_ID, DEMO_SCENARIO_ID);
+    plate({ [P.enabled]: true, [P.orientation]: 'Vertical' });
+    expect(activeFinProfile().parameters[P.height]).toBe(300);
+    expect(activeFinProfile().parameters[PLATE_HEIGHT_SOURCE_KEY]).toBe('project');
+
+    fins({ hsk_base_L_mm: 339 });
+    expect(activeFinProfile().parameters[P.height]).toBe(339);
+  });
+
+  it('✂ keeps the engineer’s height through a change in 01, and ↺ goes back', async () => {
+    await openDemo();
+    useBoundaryStore.getState().loadFor(DEMO_PROJECT_ID, DEMO_SCENARIO_ID);
+    plate({ [P.enabled]: true, [P.orientation]: 'Vertical' });
+    plate({ [PLATE_HEIGHT_SOURCE_KEY]: 'manual', [P.height]: 200 });
+    fins({ hsk_base_L_mm: 350 });
+    expect(activeFinProfile().parameters[P.height]).toBe(200);
+
+    plate({ [PLATE_HEIGHT_SOURCE_KEY]: 'project' });
+    expect(activeFinProfile().parameters[P.height]).toBe(350);
+  });
+
+  it('never overwrites a height typed before the link', async () => {
+    await openDemo();
+    useBoundaryStore.getState().loadFor(DEMO_PROJECT_ID, DEMO_SCENARIO_ID);
+    plate({ [P.enabled]: true, [P.orientation]: 'Vertical', [P.height]: 120 });
+    expect(activeFinProfile().parameters[P.height]).toBe(120);
+    expect(activeFinProfile().parameters[PLATE_HEIGHT_SOURCE_KEY] ?? null).toBeNull();
   });
 });

@@ -11,6 +11,8 @@
  * table lists and the category tabs count) and units (Σ qty).
  */
 
+import type { Scenario } from '@/domain/project';
+import { powerBasisOf } from '@/domain/powerBasis';
 import { AlertTriangle, CircleCheck, CircleSlash, XCircle } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { ReadinessSummary } from '@/domain/componentReadiness';
@@ -58,11 +60,14 @@ function Chip({
 
 export function ComponentReadinessCards({
   summary,
+  scenario,
   recordCount,
   statusFilter,
   onStatusFilter,
 }: {
   summary: ReadinessSummary;
+  /** The active scenario: its 功耗 decides which power the total adds up. */
+  scenario?: Scenario | null;
   /** Component records, as against `summary.components`, which is units. */
   recordCount: number;
   statusFilter: StatusFilter;
@@ -70,6 +75,11 @@ export function ComponentReadinessCards({
 }) {
   const toggle = (status: Exclude<StatusFilter, 'ALL'>) =>
     onStatusFilter(statusFilter === status ? 'ALL' : status);
+  const rt = powerBasisOf(scenario) === 'rt';
+  const scale = scenario?.power_scale ?? 1;
+  const totalTitle = rt
+    ? `目前情境「${scenario?.name ?? ''}」的功耗是常溫 Pd：數量 × 常溫功耗的加總（沒填常溫功耗的元件用單顆功耗；停用的不計）。不是熱路徑上的熱流 Q。`
+    : '數量 × 單顆功耗的加總（停用的不計）；不是熱路徑上的熱流 Q。';
 
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
@@ -77,12 +87,19 @@ export function ComponentReadinessCards({
         <span className="font-semibold text-ink-900">{recordCount}</span> 種・
         <span className="font-semibold text-ink-900">{summary.components}</span> 顆・熱源{' '}
         <span className="font-semibold text-ink-900">{summary.heat_sources}</span>・
-        <span
-          className="font-semibold text-ink-900"
-          title="數量 × 單顆功耗的加總（停用的不計）；不是熱路徑上的熱流 Q。"
-        >
+        <span className="font-semibold text-ink-900" title={totalTitle}>
           {summary.total_power_W.toFixed(1)} W
         </span>
+        {rt && (
+          <span className="ml-1 text-[12px] font-semibold text-accent-700" title={totalTitle}>
+            常溫 Pd
+          </span>
+        )}
+        {scale !== 1 && Number.isFinite(scale) && (
+          <span className="ml-1 text-[12px] text-ink-500" title="情境的功耗倍率在求解時乘上，元件資料本身不變。">
+            × {scale.toFixed(2)} ＝ {(summary.total_power_W * scale).toFixed(1)} W 求解
+          </span>
+        )}
       </p>
       <div className="flex flex-wrap items-center gap-1.5">
         <Chip

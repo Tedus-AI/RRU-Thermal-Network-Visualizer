@@ -10,6 +10,8 @@ import type {
 } from '@/thermal/boundary/types';
 
 import { BoundaryInspector } from './BoundaryInspector';
+import { SurfaceAssumptionResult } from './BoundaryInspectorPanels';
+import type { SurfaceAssumptionCheck } from '@/thermal/boundary/assumptionCheck';
 
 // The fin panel links to 01, so it renders inside a router.
 const renderInRouter = (node: ReactElement) =>
@@ -102,7 +104,7 @@ describe('why a filled-in port still says Assumption', () => {
 
     // The reader's actual question — "everything is filled in, so what is the
     // warning about?" — is answered on the page, with the number it stands on.
-    expect(html).toContain('Surface temperature is a pre-solve guess');
+    expect(html).toContain('表面溫度是求解前的假設值');
     expect(html).toContain('80.0 °C');
   });
 
@@ -127,7 +129,7 @@ describe('why a filled-in port still says Assumption', () => {
     }
 
     expect(html).toContain('計算預覽');
-    expect(html).not.toContain('pre-solve guess');
+    expect(html).not.toContain('表面溫度是求解前的假設值');
   });
 });
 
@@ -464,5 +466,41 @@ describe('BoundaryInspector simplification', () => {
     expect(html).toContain('理由（選填）');
     expect(html).toContain('不會阻擋求解');
     expect(html).not.toContain('required=""');
+  });
+});
+
+describe('the surface temperature 07 solved', () => {
+  const check = (patch: Partial<SurfaceAssumptionCheck> = {}): SurfaceAssumptionCheck => ({
+    boundary_port_id: 'BP_FIN',
+    profile_id: 'BCP_RAD',
+    covers_every_assumption: true,
+    assumed_C: 80,
+    solved_C: 82.1,
+    delta_C: 2.1,
+    r_assumed_C_per_W: 0.6346,
+    r_solved_C_per_W: 0.627,
+    r_error_pct: 1.2,
+    verdict: 'verified',
+    ...patch,
+  });
+
+  it('says in Chinese what 07 found, in °C, and offers to fill it in even when the assumption holds', () => {
+    const html = renderToStaticMarkup(<SurfaceAssumptionResult check={check()} readOnly={false} onApply={() => {}} />);
+    expect(html).toContain('已對照 07：假設成立');
+    expect(html).toContain('假設 80.0 °C → 07 解出 82.1 °C（+2.1 °C）');
+    expect(html).toContain('把 82.1 °C 帶入「表面溫度假設」');
+    expect(html).not.toMatch(/Checked against|assumed|solved|SCR07| K\)/);
+  });
+
+  it('a surface that solved far from the assumption asks for another round', () => {
+    const html = renderToStaticMarkup(
+      <SurfaceAssumptionResult
+        check={check({ verdict: 'off', solved_C: 95, delta_C: 15, r_error_pct: 8 })}
+        readOnly={false}
+        onApply={() => {}}
+      />,
+    );
+    expect(html).toContain('表面解出 95.0 °C，不是假設的 80.0 °C');
+    expect(html).toContain('帶入後請回 07 重新求解');
   });
 });

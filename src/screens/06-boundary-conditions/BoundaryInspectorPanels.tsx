@@ -7,7 +7,7 @@
  * render what they are given and report edits back.
  */
 
-import { Thermometer, TriangleAlert } from 'lucide-react';
+import { Scissors, Thermometer, TriangleAlert } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 import { Badge, Button, NumberInput, Select } from '@/ui/primitives';
@@ -22,6 +22,7 @@ import type {
   BoundaryValidationMessage,
 } from '@/thermal/boundary/types';
 import { FIN_GEOMETRY_KEYS, PLATE_GEOMETRY_KEYS } from '@/thermal/boundary/calculations';
+import { PLATE_HEIGHT_SOURCE_KEY, plateHeightFollowsProject } from '@/thermal/boundary/plateHeight';
 import type { SurfaceAssumptionCheck } from '@/thermal/boundary/assumptionCheck';
 import {
   PLATE_ORIENTATIONS,
@@ -239,10 +240,10 @@ export function AssumptionNotes({
             className={`text-[10px] leading-relaxed ${verified ? 'text-ok-600' : 'text-warn-600'}`}
           >
             <span className="font-bold">
-              {copy.en}
-              {value ? ` (${value})` : ''}
+              {copy.title}
+              {value ? `（${value}）` : ''}
             </span>
-            <span className="block">{copy.zh}</span>
+            <span className="block">{copy.body}</span>
           </li>
         );
       })}
@@ -273,13 +274,15 @@ export function SurfaceAssumptionResult({
   if (check.verdict === 'unavailable') {
     return (
       <p className="mt-1.5 text-[10px] leading-relaxed text-ink-400">
-        No current solve to check this against. Run Screen 07 and return here.
-        <span className="block">尚無可對照的求解結果；請先於 SCR07 求解後再回到此處。</span>
+        還沒有可以對照的求解結果：到 07 求解後回到這裡，會寫出實際表面溫度，並可一鍵帶入「表面溫度假設」。
       </p>
     );
   }
 
   const verified = check.verdict === 'verified';
+  const delta =
+    check.delta_C != null ? `${check.delta_C > 0 ? '+' : ''}${formatNumber(check.delta_C, 1, '°C')}` : '—';
+  const canApply = !readOnly && check.solved_C != null;
   return (
     <div
       className={`mt-1.5 rounded border p-2 text-[10px] leading-relaxed ${
@@ -288,58 +291,62 @@ export function SurfaceAssumptionResult({
     >
       <p className="font-bold">
         {verified
-          ? `Checked against Screen 07: the assumption holds (${formatNumber(check.r_error_pct, 1, '%')} on the boundary).`
-          : `Checked against Screen 07: the surface solved at ${formatNumber(check.solved_C, 1, '°C')}, not ${formatNumber(check.assumed_C, 1, '°C')}.`}
+          ? `已對照 07：假設成立（邊界熱阻差 ${formatNumber(check.r_error_pct, 1, '%')}）。`
+          : `已對照 07：表面解出 ${formatNumber(check.solved_C, 1, '°C')}，不是假設的 ${formatNumber(check.assumed_C, 1, '°C')}。`}
       </p>
       <p className="mt-0.5">
-        {`assumed ${formatNumber(check.assumed_C, 1, '°C')} → solved ${formatNumber(check.solved_C, 1, '°C')} ` +
-          `(${check.delta_C != null && check.delta_C > 0 ? '+' : ''}${formatNumber(check.delta_C, 1, 'K')}); ` +
-          `boundary ${formatRth(check.r_assumed_C_per_W)} → ${formatRth(check.r_solved_C_per_W)}`}
+        {`假設 ${formatNumber(check.assumed_C, 1, '°C')} → 07 解出 ${formatNumber(check.solved_C, 1, '°C')}（${delta}）；` +
+          `邊界熱阻 ${formatRth(check.r_assumed_C_per_W)} → ${formatRth(check.r_solved_C_per_W)}`}
       </p>
       {!verified && (
-        <>
-          <p className="mt-0.5">
-            重新以求解出的表面溫度求值，邊界熱阻會改變 {formatNumber(check.r_error_pct, 1, '%')}。
-            套用後請重新求解：邊界改變後表面溫度會再動一次，需要再對照一輪。
-          </p>
-          <button
-            type="button"
-            disabled={readOnly || check.solved_C == null}
-            onClick={() => check.solved_C != null && onApply(check.solved_C)}
-            className="mt-1.5 rounded border border-accent-500/50 bg-surface px-2 py-1 text-[10px] font-bold text-accent-700 hover:border-accent-600 disabled:cursor-default disabled:opacity-40"
-          >
-            Use {formatNumber(check.solved_C, 1, '°C')} / 套用求解值
-          </button>
-        </>
+        <p className="mt-0.5">
+          以解出的表面溫度重新求值，邊界熱阻會改變 {formatNumber(check.r_error_pct, 1, '%')}。
+          帶入後請回 07 重新求解：邊界改了，表面溫度會再動一次，需要再對照一輪。
+        </p>
       )}
+      {/* Click-to-apply: the solved value goes into 表面溫度假設 only when asked. */}
+      <button
+        type="button"
+        disabled={!canApply}
+        // Rounded to what the button shows: a stated input, not a solver float.
+        onClick={() => check.solved_C != null && onApply(Math.round(check.solved_C * 10) / 10)}
+        className={`mt-1.5 rounded border bg-surface px-2 py-1 text-[10px] font-bold disabled:cursor-default disabled:opacity-40 ${
+          verified
+            ? 'border-ok-500/50 text-ok-600 hover:border-ok-600'
+            : 'border-accent-500/50 text-accent-700 hover:border-accent-600'
+        }`}
+      >
+        把 {formatNumber(check.solved_C, 1, '°C')} 帶入「表面溫度假設」
+      </button>
+      {verified && <span className="ml-1.5 text-[10px] text-ink-400">差距很小，不帶入也可以。</span>}
     </div>
   );
 }
 
 export const ASSUMPTION_COPY: Record<
   BoundaryAssumptionKind,
-  { en: string; zh: string; format: (value: number) => string }
+  { title: string; body: string; format: (value: number) => string }
 > = {
   surface_temperature_guess: {
-    en: 'Surface temperature is a pre-solve guess, not a stated value',
-    zh: '表面溫度為求解前的預設猜值（環境溫度 + 35 °C），非填入值。h_rad 依此線性化；SCR07 求解後可回填實際表面溫度再重算。',
+    title: '表面溫度是求解前的假設值',
+    body: '「表面溫度假設」留白時取環境溫度 + 35 °C。輻射係數 h_rad 依它線性化；07 求解後，下方會寫出實際表面溫度，並可一鍵帶入重算。',
     format: (value) => `${value.toFixed(1)} °C`,
   },
   plate_convection: {
     // Stands alone. This fires whether or not the surface temperature was
     // stated, so it must not refer to a line above it that may not be there.
-    en: 'h is computed from the plate correlation at an assumed surface temperature, not stated',
-    zh: 'h 由平板自然對流關聯式算出，並以此表面溫度求值。h_conv 與 h_rad 都隨它變動，SCR07 解出的實際表面溫度若與此不同，這裡的熱阻就會跟著改變。',
-    format: (value) => `assumed surface ${value.toFixed(1)} °C`,
+    title: 'h 由平板自然對流關聯式算出',
+    body: '以表面溫度假設求值；h_conv 與 h_rad 都隨它變動。07 解出的實際表面溫度不同時，這裡的熱阻也會跟著改變。',
+    format: (value) => `假設表面 ${value.toFixed(1)} °C`,
   },
   solar_estimate: {
-    en: 'Solar input is an estimate until the site is surveyed',
-    zh: '日照輸入在現場實測前皆為估計值。',
+    title: '日照輸入是估計值',
+    body: '現場實測之前，日照負載都是估計。',
     format: (value) => `${value.toFixed(2)} W`,
   },
   external_cfd_placeholder: {
-    en: 'External CFD placeholder — metadata only, nothing is computed',
-    zh: '外部 CFD 佔位符：僅記錄資訊，不參與計算（SCR03 尚未啟用）。',
+    title: '外部 CFD 佔位',
+    body: '只記錄資訊，不參與計算（03 尚未啟用）。',
     format: (value) => String(value),
   },
 };
@@ -715,6 +722,11 @@ export function PlateGeometryPanel({
     : 'Vertical';
   const horizontal = orientation !== 'Vertical';
   const guessed = profile.parameters.surfaceReferenceTemperatureGuess_C == null;
+  // A vertical face is as tall as the machine unless taken over (`plateHeight.ts`).
+  const navigate = useNavigate();
+  const draft = useProjectStore((s) => s.draft);
+  const machineHeight = draft?.materials.hsk_base_L_mm?.value ?? null;
+  const heightLinked = !horizontal && plateHeightFollowsProject(profile, machineHeight);
 
   return (
     <div className="mb-2 rounded-md border border-line bg-surface p-2.5">
@@ -742,7 +754,7 @@ export function PlateGeometryPanel({
       </div>
 
       <div className="grid grid-cols-2 gap-2">
-        <div>
+        <div className={horizontal ? undefined : 'col-span-2'}>
           <FieldLabel
             label={horizontal ? 'Side A' : 'Height'}
             zh={horizontal ? '邊長 A' : '高度'}
@@ -751,27 +763,74 @@ export function PlateGeometryPanel({
             tooltip={
               horizontal
                 ? '水平板的一個邊長；特徵長度為面積除以周長，所以兩邊都需要。'
-                : '浮力沿表面流動的距離，也就是這個面的垂直高度。寬度不影響 h：每一柱空氣各自上升。'
+                : '浮力沿表面流動的距離，也就是這個面的垂直高度。寬度不影響 h：每一柱空氣各自上升。預設取 01 的機台高度（散熱器底座長 L，吊掛時是上下方向）。'
             }
             required
           />
-          <NumberInput
-            id={`bc-plate-${PLATE_GEOMETRY_KEYS.height}`}
-            className="mt-1 h-8 !text-[12px]"
-            step="any"
-            value={
-              typeof profile.parameters[PLATE_GEOMETRY_KEYS.height] === 'number'
-                ? (profile.parameters[PLATE_GEOMETRY_KEYS.height] as number)
-                : ''
-            }
-            disabled={readOnly}
-            onChange={(event) =>
-              onPatch(
-                PLATE_GEOMETRY_KEYS.height,
-                event.target.value === '' ? null : Number(event.target.value),
-              )
-            }
-          />
+          {heightLinked ? (
+            <div
+              id={`bc-plate-${PLATE_GEOMETRY_KEYS.height}`}
+              className="mt-1 flex h-8 max-w-[14rem] items-center gap-1.5 rounded-md border border-line bg-surface px-2 text-[12px]"
+              title="取自 01 的機台高度（材料與製程預設 → 散熱器底座 長 L；吊掛時是上下方向）。這個面不是整機高時按 ✂ 自己填。"
+            >
+              <span className="tabular flex-1 text-ink-900">{machineHeight}</span>
+              <button
+                type="button"
+                className="shrink-0 text-[10.5px] font-semibold text-accent-700 hover:underline"
+                onClick={() => draft && navigate(projectPath(draft.project_id, 'info'))}
+              >
+                01 機台高度
+              </button>
+              {!readOnly && (
+                <button
+                  type="button"
+                  aria-label="解開：自己填這個面的高度"
+                  title="解開：這個面不是整機高時，自己填高度"
+                  className="shrink-0 text-ink-400 hover:text-accent-700"
+                  onClick={() => onPatch(PLATE_HEIGHT_SOURCE_KEY, 'manual')}
+                >
+                  <Scissors size={12} aria-hidden />
+                </button>
+              )}
+            </div>
+          ) : (
+            <NumberInput
+              id={`bc-plate-${PLATE_GEOMETRY_KEYS.height}`}
+              className={`mt-1 h-8 !text-[12px] ${horizontal ? '' : 'max-w-[14rem]'}`}
+              step="any"
+              value={
+                typeof profile.parameters[PLATE_GEOMETRY_KEYS.height] === 'number'
+                  ? (profile.parameters[PLATE_GEOMETRY_KEYS.height] as number)
+                  : ''
+              }
+              disabled={readOnly}
+              onChange={(event) =>
+                onPatch(
+                  PLATE_GEOMETRY_KEYS.height,
+                  event.target.value === '' ? null : Number(event.target.value),
+                )
+              }
+            />
+          )}
+          {!horizontal && !heightLinked && machineHeight != null && (
+            <p className="mt-1 text-[10px] leading-relaxed text-ink-400">
+              已解開・01 機台高度是 {machineHeight} mm
+              {!readOnly && (
+                <button
+                  type="button"
+                  className="ml-1.5 font-semibold text-accent-700 hover:underline"
+                  onClick={() => onPatch(PLATE_HEIGHT_SOURCE_KEY, 'project')}
+                >
+                  ↺ 改回 01
+                </button>
+              )}
+            </p>
+          )}
+          {!horizontal && machineHeight == null && (
+            <p className="mt-1 text-[10px] leading-relaxed text-ink-400">
+              01 還沒有散熱器底座長 L（機台高度）；填了以後這裡會自動帶入。
+            </p>
+          )}
         </div>
         {horizontal && (
           <div>
@@ -818,7 +877,7 @@ export function PlateGeometryPanel({
           <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
             {[
               ['特徵長度', `${result.characteristicLength_m.toFixed(4)} m`],
-              ['ΔT（假設）', `${result.deltaT_C.toFixed(1)} K`],
+              ['ΔT（假設）', `${result.deltaT_C.toFixed(1)} °C`],
               ['Ra', result.rayleigh.toExponential(2)],
               ['Nu', result.nusselt.toFixed(1)],
             ].map(([label, value]) => (
