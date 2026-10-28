@@ -9,6 +9,11 @@
  * Collapsed it keeps its header rather than becoming an anonymous strip, so the
  * row count stays readable and there is something obvious to click. The header
  * expands it too — a folded panel should not require finding a 10px seam.
+ *
+ * `emptyHint` folds it the same way while there is nothing in it, with the
+ * hint saying how to fill it. That is not the reader's collapse: it is not
+ * remembered, and the panel opens at the reader's own height and state as soon
+ * as there is something to show (08 §35 — the empty 可調參數 panel).
  */
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
@@ -43,6 +48,7 @@ export function ResizablePane({
   header,
   actions,
   labelZh,
+  emptyHint,
   children,
 }: {
   /** Which panel this is; the remembered size is kept per panel. */
@@ -58,9 +64,9 @@ export function ResizablePane({
    * takes the label and the seam, and this takes the controls.
    */
   actions?: ReactNode;
-  /** English name — no longer shown; kept for the existing call sites. */
-  labelEn: string;
   labelZh: string;
+  /** Set while the panel has nothing to show: it folds to its header with this line. */
+  emptyHint?: string;
   children: ReactNode;
 }) {
   const [state, setState] = useState<PanelSizeState>(() => readPanelSize(id, defaultHeight));
@@ -114,13 +120,16 @@ export function ResizablePane({
   }, []);
 
   const toggle = () => setState((current) => ({ ...current, collapsed: !current.collapsed }));
+  const empty = Boolean(emptyHint);
+  const collapsed = state.collapsed || empty;
 
   return (
     <section
       className="relative flex shrink-0 flex-col overflow-hidden rounded-lg border border-line bg-surface"
-      style={state.collapsed ? undefined : { height: state.size }}
+      style={collapsed ? undefined : { height: state.size }}
+      data-empty={empty || undefined}
     >
-      {!state.collapsed && (
+      {!collapsed && (
         <div
           role="separator"
           aria-orientation="horizontal"
@@ -142,36 +151,39 @@ export function ResizablePane({
               dragging ? 'hidden' : 'hidden group-hover:block'
             }`}
           >
-            Click to collapse / 點擊收合
-            <span className="block font-normal text-white/70">
-              Drag to resize / 拖曳調整高度
-            </span>
+            點一下收合
+            <span className="block font-normal text-white/70">拖曳調整高度</span>
           </span>
         </div>
       )}
 
       <div className="flex shrink-0 items-center gap-2 border-b border-line pr-3.5">
-        <button
-          type="button"
-          onClick={toggle}
-          aria-expanded={!state.collapsed}
-          title={
-            state.collapsed
-              ? `展開${labelZh}`
-              : `收合${labelZh}`
-          }
-          className="flex min-w-0 flex-1 items-center gap-2 py-2.5 pl-3.5 text-left"
-        >
-          {header}
-          <ChevronDown
-            size={14}
-            className={`ml-auto shrink-0 text-ink-400 ${state.collapsed ? '-rotate-90' : ''}`}
-          />
-        </button>
+        {empty ? (
+          <div className="flex min-w-0 flex-1 items-center gap-2 py-2.5 pl-3.5">
+            {header}
+            <span className="min-w-0 truncate text-[11px] text-ink-400" title={emptyHint}>
+              {emptyHint}
+            </span>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={toggle}
+            aria-expanded={!state.collapsed}
+            title={state.collapsed ? `展開${labelZh}` : `收合${labelZh}`}
+            className="flex min-w-0 flex-1 items-center gap-2 py-2.5 pl-3.5 text-left"
+          >
+            {header}
+            <ChevronDown
+              size={14}
+              className={`ml-auto shrink-0 text-ink-400 ${state.collapsed ? '-rotate-90' : ''}`}
+            />
+          </button>
+        )}
         {actions && <span className="flex shrink-0 items-center gap-2">{actions}</span>}
       </div>
 
-      {!state.collapsed && <div className="min-h-0 flex-1 overflow-auto">{children}</div>}
+      {!collapsed && <div className="min-h-0 flex-1 overflow-auto">{children}</div>}
     </section>
   );
 }

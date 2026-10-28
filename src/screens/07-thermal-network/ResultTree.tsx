@@ -182,8 +182,8 @@ function MarginCell({
  *
  * The margin was the only thing saying this, and `+0.8` in the same green as
  * `+40.5` is a number the reader has to do the arithmetic on. The line is the
- * one Screen 09 judges by, so a part cannot read NEAR LIMIT there and green
- * here.
+ * one 08's part list and the report judge by, so a part cannot read NEAR LIMIT
+ * there and green here.
  */
 function StatusCell({ status }: { status: MarginStatus }) {
   if (status === 'na') return <span className="text-[11px] text-ink-400">—</span>;

@@ -7,8 +7,8 @@
  * judged, and somewhere for the tile to open into so detail can hang off a
  * number without becoming a panel of its own.
  *
- * Screen 09 had it first (the power split expands inside its tile); Screen 10
- * uses it so the snapshot's provenance can sit behind a disclosure instead of
+ * The old 09 Results Overview had it first (the power split expanded inside
+ * its tile); 10 報告與匯出 uses it so the snapshot's provenance can sit behind a disclosure instead of
  * a full-width strip above the cards.
  */
 

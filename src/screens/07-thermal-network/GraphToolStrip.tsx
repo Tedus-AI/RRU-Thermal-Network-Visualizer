@@ -2,11 +2,11 @@
  * The right-hand tool strip of Screen 07's graph toolbar: layout, zoom,
  * component visibility, the two exports and fullscreen.
  *
- * Extracted so Screen 09's network window carries the same tools rather than a
+ * Extracted so a copy of the graph on another screen carries the same tools rather than a
  * second implementation of them. Everything here acts on the picture — how it
  * is laid out, how far in you are, what is hidden, and getting it out as a
  * file. What stays behind in `ResultModeToolbar` is what belongs to Screen 07
- * as a screen: the Results table button and its step number.
+ * as a screen: the full result table button and its step number.
  */
 
 import {

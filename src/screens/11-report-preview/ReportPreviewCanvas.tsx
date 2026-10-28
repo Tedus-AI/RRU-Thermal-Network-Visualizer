@@ -4,7 +4,7 @@
  * The preview is an HTML/CSS semantic report renderer, which is what §10
  * recommends and what §38 requires: no PDF is generated on this screen. The page
  * is a real A4/Letter box at the chosen orientation so what the reader sees is
- * proportionally what Screen 11 will lay out.
+ * proportionally what the export will lay out.
  */
 
 import { ChevronLeft, ChevronRight, Maximize2, Minimize2, Minus, Plus } from 'lucide-react';
@@ -171,7 +171,7 @@ export function ReportPageView({
   selectedId: SectionId;
   stale: boolean;
   /**
-   * 12 §38 — the Export Center renders THIS component to produce the PDF and the HTML
+   * 12 §38 — the export renders THIS component to produce the PDF and the HTML
    * report, rather than rebuilding a second report of its own. Print mode drops
    * the preview-only chrome (drop shadow, selection outline, stale watermark)
    * and the display transform, leaving the page content alone.

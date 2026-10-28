@@ -199,7 +199,7 @@ describe('result tree', () => {
     const rjc = build()[0]
       .nodes.flatMap((entry) => entry.edges)
       .find((entry) => entry.id === 'E_RJC')!;
-    expect(rjc.name).toBe('Conduction / 熱傳導');
+    expect(rjc.name).toBe('熱傳導');
   });
 });
 

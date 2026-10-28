@@ -22,7 +22,7 @@ import { solveScenario } from '../solver/solveScenario';
 
 import { runAnalysis, AnalysisCancelled, type AnalysisInput } from './bottleneckScore';
 import { selectCandidates } from './candidateSelector';
-import { partsNeedingAttention, partsWithRequested, type MarginRank } from './marginRanking';
+import { partsNeedingAttention, type MarginRank } from './marginRanking';
 import { NEAR_LIMIT_MARGIN_C } from './temperatureDataset';
 import { normalizeAgainstMax, normalizeMagnitude } from './normalization';
 import { analysisKey, isAnalysisCurrent } from './analysisCache';
@@ -802,32 +802,5 @@ describe('partsNeedingAttention', () => {
 
     expect(partsNeedingAttention(ranked).map((entry) => entry.name)).toEqual(['A']);
     expect(partsNeedingAttention([])).toEqual([]);
-  });
-});
-
-/** 07's list opens 08 on any row, including one with plenty of room. */
-describe('partsWithRequested', () => {
-  const part = (name: string, margin_C: number): MarginRank => ({
-    node_id: name,
-    name,
-    component_id: name,
-    temperature_C: 100 - margin_C,
-    limit_C: 100,
-    limit_type: 'Tj',
-    margin_C,
-    power_W: 1,
-  });
-  const ranked = [part('PM', 1.4), part('FPGA', 2.9), part('DDR', 6), part('PA', 40.6)];
-
-  it('adds the requested part in its place by margin', () => {
-    expect(partsWithRequested(ranked, 'DDR').map((entry) => entry.name)).toEqual(['PM', 'FPGA', 'DDR']);
-    expect(partsWithRequested(ranked, 'PA').map((entry) => entry.name)).toEqual(['PM', 'FPGA', 'PA']);
-  });
-
-  it('changes nothing for a part already listed, an unknown one, or none', () => {
-    const flagged = ['PM', 'FPGA'];
-    expect(partsWithRequested(ranked, 'FPGA').map((entry) => entry.name)).toEqual(flagged);
-    expect(partsWithRequested(ranked, 'NOPE').map((entry) => entry.name)).toEqual(flagged);
-    expect(partsWithRequested(ranked, null).map((entry) => entry.name)).toEqual(flagged);
   });
 });

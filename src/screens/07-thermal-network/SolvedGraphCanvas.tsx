@@ -543,11 +543,11 @@ export function buildElements(
       const margin = temperature != null ? node.limit_C - temperature : null;
       lines.push(
         margin != null
-          ? `limit ${node.limit_C.toFixed(0)} °C · margin ${margin.toFixed(1)}`
-          : `limit ${node.limit_C.toFixed(0)} °C`,
+          ? `限溫 ${node.limit_C.toFixed(0)} °C・餘裕 ${margin.toFixed(1)}`
+          : `限溫 ${node.limit_C.toFixed(0)} °C`,
       );
     }
-    if (fixed && !paintsNodeTemperature(mode)) lines.push('Boundary');
+    if (fixed && !paintsNodeTemperature(mode)) lines.push('邊界');
 
     const label = display.showLabels ? lines.join('\n') : '';
     const box = labelBox(label || node.name);
@@ -657,7 +657,7 @@ export function buildElements(
           width = 3;
           if (display.showLabels) label = `${formatRth(R)} °C/W`;
         } else if (display.showLabels) {
-          label = 'Rth N/A';
+          label = 'Rth 未解析';
         }
         break;
 
@@ -667,7 +667,7 @@ export function buildElements(
         color = boundaryDerived ? '#2563eb' : (RTH_SOURCE_COLORS[badge?.short ?? 'A'] ?? EDGE_NEUTRAL);
         width = 3;
         if (display.showLabels) {
-          label = R == null ? 'Unresolved' : boundaryDerived ? '邊界（05）' : (badge?.label ?? 'Unresolved');
+          label = R == null ? '未解析' : boundaryDerived ? '邊界（05）' : (badge?.label ?? '未解析');
         }
         break;
       }

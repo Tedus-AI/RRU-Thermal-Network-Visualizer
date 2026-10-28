@@ -1,9 +1,9 @@
 /**
- * Screen 08 — Bottleneck Analysis.
+ * Screen 08 — 瓶頸分析 (Bottleneck Analysis).
  *
  * The question, in the order an engineer actually asks it:
  *
- *   1. Which parts are closest to their own spec?       → the margin deck
+ *   1. Which parts are closest to their own spec?       → the part dropdown
  *   2. Show me that one's heat path.                    → Screen 07's graph, focused
  *   3. Which segments of it are worth arguing about?    → the three biggest drops
  *   4. If I got N % out of them, what do I get back?    → live, full re-solve
@@ -17,7 +17,10 @@
  *
  * What it still never does (08 §30): temperature histogram, node temperature
  * bar chart, physical distribution map, executive pass/fail summary, report
- * narrative, FloTHERM parser. Those are 09, 10 and 11.
+ * narrative, FloTHERM parser. Those are 07 求解與結果 and 10 報告與匯出.
+ *
+ * Chinese-first since 08 §35: titles, buttons and notes in Chinese, English
+ * only for the terms an engineer reads in either language (Tj, Tc, Rth, ΔT, Q).
  */
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
@@ -37,7 +40,6 @@ import {
 import { ScreenWorkspace } from '@/app/ScreenWorkspace';
 import { projectPath } from '@/app/navigation';
 import { Badge, Button, Select, Skeleton } from '@/ui/primitives';
-import { biTitle } from '@/ui/FieldLabel';
 import { KpiTile } from '@/ui/KpiTile';
 import { toast } from '@/ui/toast';
 import { focusHiddenNodes, focusLabels, graphPaths } from '@/ui/graphExplorerModel';
@@ -57,7 +59,7 @@ import { useAnalysisStore } from '@/data/analysisStore';
 import { DEFAULT_SOLVER_SETTINGS } from '@/thermal/types';
 import { solveNetwork } from '@/thermal/networkSolver';
 import { projectComponentLimits } from '@/thermal/graph/componentProjection';
-import { marginRanking, partsWithRequested } from '@/thermal/analysis/marginRanking';
+import { marginRanking, partsNeedingAttention } from '@/thermal/analysis/marginRanking';
 import {
   chainSegments,
   solutionWithWhatIf,
@@ -87,16 +89,14 @@ import {
 } from '@/screens/07-thermal-network/resultViewModel';
 
 import { LeverTable } from './LeverTable';
-import { MarginDeck } from './MarginDeck';
+import { PartPicker } from './PartPicker';
 import { REDUCTION_MAX, SegmentTuner } from './SegmentTuner';
 import { StudyTable } from './StudyTable';
-import { num } from './analysisViewModel';
+import { num, signed } from './analysisViewModel';
 
-/**
- * How many parts the deck offers.
- *
- * There is no matching cap on the segments: the tuner lists the component's
- * WHOLE chain, junction to ambient, however many links that is. A top-three cut
+/*
+ * There is no cap on the segments: the tuner lists the component's WHOLE
+ * chain, junction to ambient, however many links that is. A top-three cut
  * answered "where is the biggest drop" but hid the rest of the path, and the
  * rest of the path is what the reader is deciding against — a 0.4 °C segment
  * you can actually buy beats a 9 °C one you cannot.
@@ -113,7 +113,6 @@ const GRAPH_DISPLAY = {
 function Section({
   index,
   title,
-  zh,
   actions,
   className = '',
   bodyClassName = 'overflow-auto p-3',
@@ -121,7 +120,6 @@ function Section({
 }: {
   index: number;
   title: string;
-  zh: string;
   actions?: ReactNode;
   className?: string;
   bodyClassName?: string;
@@ -135,8 +133,8 @@ function Section({
         <span className="flex size-5 shrink-0 items-center justify-center rounded bg-accent-600 text-[11px] font-bold text-white tabular">
           {index}
         </span>
-        <h2 className="min-w-0 truncate text-[13px] font-bold text-ink-900">
-          {title} <span className="font-semibold text-ink-400">/ {zh}</span>
+        <h2 className="min-w-0 truncate text-[13px] font-bold text-ink-900" title={title}>
+          {title}
         </h2>
         {actions && <span className="ml-auto flex shrink-0 items-center gap-2">{actions}</span>}
       </header>
@@ -295,18 +293,17 @@ export function BottleneckAnalysisView() {
   }, [solveGraph, scenarioId, solverSettings, baselineTemperatures]);
 
   /**
-   * The part 07's list sent this screen to (`?part=<node id>`). It joins the
-   * deck even with plenty of margin, and is opened once — choosing another
-   * rank afterwards is not undone by the link.
+   * Every part with a limit, tightest first — the dropdown's list.
+   *
+   * The part 07's list sent this screen to (`?part=<node id>`) is in it
+   * whatever its margin, and is opened once: choosing another part afterwards
+   * is not undone by the link.
    */
   const [searchParams] = useSearchParams();
   const requestedPart = searchParams.get('part');
   const ranked = useMemo(
-    () =>
-      solveGraph && baselineTemperatures
-        ? partsWithRequested(marginRanking(solveGraph, baselineTemperatures, 0), requestedPart)
-        : [],
-    [solveGraph, baselineTemperatures, requestedPart],
+    () => (solveGraph && baselineTemperatures ? marginRanking(solveGraph, baselineTemperatures, 0) : []),
+    [solveGraph, baselineTemperatures],
   );
   // State rather than a ref: the scenario effect above resets the deck to its
   // first rank, and it runs again whenever React re-runs effects. A ref marked
@@ -444,18 +441,27 @@ export function BottleneckAnalysisView() {
   }, [segments, reductions]);
 
   /**
-   * The three least-margin parts, marked where they sit on the whole machine.
+   * The parts needing attention, marked where they sit on the whole machine —
+   * and the selected one, whatever its place.
    *
-   * The deck names them 1 / 2 / 3 and the focused view marks the segments of
-   * whichever one is selected. Widening to the whole machine used to lose both:
-   * 113 nodes, one of them selected, and nothing saying that the other two on
-   * the deck are on this picture as well. Same badge, same pulse, anchored to
-   * the part instead of to a segment.
+   * The dropdown numbers every part by margin and the focused view marks the
+   * segments of the selected one. Widening to the whole machine used to lose
+   * both: 113 nodes, one of them selected, and nothing saying that the other
+   * tight parts are on this picture as well. Same badge, same pulse, anchored
+   * to the part instead of to a segment, and the same number as the dropdown.
+   * Not every part: twenty badges on a healthy design would read as twenty
+   * problems.
    */
-  const rankedNodes = useMemo(
-    () => new Map(ranked.map((entry, index) => [entry.node_id, { rank: index + 1 }])),
-    [ranked],
-  );
+  const rankedNodes = useMemo(() => {
+    const marks = new Map<string, { rank: number }>();
+    const flagged = new Set(partsNeedingAttention(ranked).map((entry) => entry.node_id));
+    ranked.forEach((entry, index) => {
+      if (flagged.has(entry.node_id) || entry.node_id === target?.node_id) {
+        marks.set(entry.node_id, { rank: index + 1 });
+      }
+    });
+    return marks;
+  }, [ranked, target?.node_id]);
 
   /** The graph paints the what-if while one is live, and the baseline otherwise. */
   const graphSolution = useMemo(() => {
@@ -668,9 +674,7 @@ export function BottleneckAnalysisView() {
     // that is the panel they are left looking at.
     setBottomTab('levers');
     toast.success(
-      mode === 'add'
-        ? 'Study added — no resistance was changed / 已新增，未修改任何熱阻'
-        : 'Study updated — no resistance was changed / 已覆蓋，未修改任何熱阻',
+      mode === 'add' ? '已新增一筆調整分析（沒有修改任何熱阻）' : '已覆蓋這筆調整分析（沒有修改任何熱阻）',
     );
   };
 
@@ -697,10 +701,10 @@ export function BottleneckAnalysisView() {
       <div className="flex h-full items-center justify-center p-8">
         <div className="max-w-md rounded-lg border border-danger-500/30 bg-surface p-7 text-center">
           <XCircle size={22} className="mx-auto mb-3 text-danger-600" />
-          <h1 className="text-[15px] font-bold text-ink-900">Unable to load the analysis.</h1>
-          <p className="mt-1 text-[13px] text-ink-500">無法載入瓶頸分析。</p>
+          <h1 className="text-[15px] font-bold text-ink-900">無法載入瓶頸分析</h1>
+          <p className="mt-1 text-[13px] text-ink-500">請回到專案清單重新開啟專案。</p>
           <Button variant="primary" className="mt-4" onClick={() => navigate('/')}>
-            Return to Project Info
+            回到專案清單
           </Button>
         </div>
       </div>
@@ -731,15 +735,21 @@ export function BottleneckAnalysisView() {
           <div className="max-w-md rounded-lg border border-dashed border-line-strong bg-surface px-6 py-10 text-center">
             <p className="text-[14px] font-semibold text-ink-700">
               {!hasTopology
-                ? 'No thermal network found.'
+                ? '還沒有熱網路'
                 : !solution
-                  ? 'This scenario has no Screen 07 solution yet.'
+                  ? '這個情境在 07 還沒有求解結果'
                   : solutionStale
-                    ? 'The Screen 07 solution is stale. Re-solve before analysing it.'
-                    : 'The Screen 07 solve failed. Fix it before analysing.'}
+                    ? '07 的求解結果已經過期'
+                    : '07 求解失敗'}
             </p>
             <p className="mt-1 text-[12px] text-ink-400">
-              {!hasTopology ? '找不到熱網路，請先完成 05。' : '瓶頸分析需要 07 有效且未失效的解。'}
+              {!hasTopology
+                ? '請先到 05 熱網路與邊界建立熱網路。'
+                : !solution
+                  ? '瓶頸分析從 07 的溫度出發，請先到 07 按「求解」。'
+                  : solutionStale
+                    ? '模型在求解之後改過了，請回 07 重新求解再分析。'
+                    : '請回 07 看求解細節，修正後重新求解。'}
             </p>
             <Button
               variant="primary"
@@ -748,7 +758,7 @@ export function BottleneckAnalysisView() {
                 navigate(projectPath(projectId, hasTopology ? 'network' : 'thermal-path'))
               }
             >
-              {hasTopology ? 'Open 07 Thermal Network / 前往 07' : 'Open 05 / 前往 05'}
+              {hasTopology ? '前往 07 求解與結果' : '前往 05 熱網路與邊界'}
             </Button>
           </div>
         </div>
@@ -758,6 +768,14 @@ export function BottleneckAnalysisView() {
 
   const gain = projected && target ? projected.margin_C - target.margin_C : 0;
 
+  const lowerTitle = bottomTab === 'levers' ? '可調參數' : '已儲存的調整分析';
+  /**
+   * Nothing to show yet: no segment cut on the levers tab, no record on the
+   * saved one. The panel then folds to its header with a line saying how to
+   * fill it, instead of keeping 220 px of the graph's height for a sentence.
+   */
+  const lowerEmpty = bottomTab === 'levers' ? levers.length === 0 : studies.length === 0;
+
   // The lower panel's header, tabs, body and pop-out control, shared by the
   // docked pane and the floating window so the two cannot drift apart.
   const lowerHeader = (
@@ -765,26 +783,21 @@ export function BottleneckAnalysisView() {
       <span className="flex size-5 shrink-0 items-center justify-center rounded bg-accent-600 text-[11px] font-bold text-white tabular">
         3
       </span>
-      <h2 className="min-w-0 truncate text-[13px] font-bold text-ink-900">
-        {bottomTab === 'levers' ? 'What To Change' : 'Saved Studies'}{' '}
-        <span className="font-semibold text-ink-400">
-          / {bottomTab === 'levers' ? '可調整的參數' : '已儲存的調整分析'}
-        </span>
-      </h2>
+      <h2 className="min-w-0 truncate text-[13px] font-bold text-ink-900">{lowerTitle}</h2>
     </>
   );
 
   const lowerTabs = (
     <span className="flex shrink-0 overflow-hidden rounded-md border border-line-strong">
       {[
-        { id: 'levers' as const, label: 'What to change', zh: '可調參數', count: levers.length },
-        { id: 'studies' as const, label: 'Saved', zh: '已儲存', count: studies.length },
+        { id: 'levers' as const, label: '可調參數', hint: '調整過的區段要改哪些參數', count: levers.length },
+        { id: 'studies' as const, label: '已儲存', hint: '這個情境存過的調整分析', count: studies.length },
       ].map((entry) => (
         <button
           key={entry.id}
           type="button"
           aria-pressed={bottomTab === entry.id}
-          title={biTitle(entry.label, entry.zh)}
+          title={entry.hint}
           onClick={() => setBottomTab(entry.id)}
           className={`flex items-center gap-1 whitespace-nowrap px-2.5 py-1 text-[11px] leading-none font-semibold transition-colors ${
             bottomTab === entry.id
@@ -809,10 +822,8 @@ export function BottleneckAnalysisView() {
     <button
       type="button"
       aria-pressed={bottomFloating}
-      title={biTitle(
-        bottomFloating ? 'Dock it back into the column' : 'Open as a floating window',
-        bottomFloating ? '收回原本的區域' : '改為浮動視窗',
-      )}
+      aria-label={bottomFloating ? '收回原本的區域' : '改成浮動視窗'}
+      title={bottomFloating ? '收回原本的區域' : '改成浮動視窗（可以拖到熱網路圖上面）'}
       onClick={() => setBottomFloating((value) => !value)}
       className="flex size-7 shrink-0 items-center justify-center rounded-md border border-line-strong text-ink-500 hover:bg-surface-muted hover:text-ink-900"
     >
@@ -833,6 +844,14 @@ export function BottleneckAnalysisView() {
       />
     );
 
+  const marginTone = !target
+    ? 'text-ink-900'
+    : target.margin_C < 0
+      ? 'text-danger-600'
+      : target.margin_C < 10
+        ? 'text-warn-600'
+        : 'text-ok-600';
+
   return (
     <ScreenWorkspace
       title="Bottleneck Analysis"
@@ -840,55 +859,45 @@ export function BottleneckAnalysisView() {
       descriptionZh="從離規格最近的元件出發，在它的熱路徑上調整最值得改善的區段，即時看餘裕變化。"
       badge={
         <div className="flex flex-wrap items-center gap-2">
-          {readOnly && <Badge tone="accent">READ ONLY / 唯讀</Badge>}
-          <Badge tone={solverState === 'SOLVED' ? 'ok' : 'warn'}>Solver {solverState}</Badge>
+          {readOnly && <Badge tone="accent">唯讀</Badge>}
+          <Badge tone={solverState === 'SOLVED' ? 'ok' : 'warn'}>
+            {solverState === 'SOLVED' ? '已求解' : '求解狀態待確認'}
+          </Badge>
           {scenario && <Badge tone="neutral">{scenario.name}</Badge>}
         </div>
       }
       metrics={
-        <div className="grid grid-cols-2 gap-1.5 md:grid-cols-4">
-          <MarginDeck ranked={ranked} index={rankIndex} onSelect={selectRank} />
+        <div className="grid grid-cols-2 gap-1.5 md:grid-cols-[minmax(0,1.7fr)_repeat(3,minmax(0,1fr))]">
+          <PartPicker ranked={ranked} index={rankIndex} onSelect={selectRank} />
           <KpiTile
             icon={<span className="text-[10px] font-bold">°C</span>}
-            label="Margin Now"
-            zh="目前餘裕"
-            tooltip="Limit − Temperature，來自 07 的解。"
-            value={target ? num(target.margin_C, 1, '°C') : 'N/A'}
+            label="目前餘裕"
+            zh={target ? `${target.limit_type ?? '限溫'} 限溫 − 溫度` : '限溫 − 溫度'}
+            tooltip="限溫 − 判定溫度，取自 07 的求解結果。"
+            value={target ? num(target.margin_C, 1, '°C') : '—'}
             status={
               target
                 ? `${num(target.temperature_C, 1)} / ${target.limit_C} °C ${target.limit_type ?? ''}`
                 : undefined
             }
-            tone={
-              !target
-                ? 'text-ink-900'
-                : target.margin_C < 0
-                  ? 'text-danger-600'
-                  : target.margin_C < 10
-                    ? 'text-warn-600'
-                    : 'text-ok-600'
-            }
+            tone={marginTone}
           />
           <KpiTile
             icon={<ArrowRight size={13} />}
-            label="Margin If Adjusted"
-            zh="調整後餘裕"
-            tooltip="以目前的調整重新求解整張網路後，此元件剩下的餘裕。"
+            label="調整後餘裕"
+            zh="重新求解整張網路"
+            tooltip="用目前拉動的區段重新求解整張網路後，這顆元件剩下的餘裕。"
             value={projected ? num(projected.margin_C, 1, '°C') : '—'}
-            status={
-              projected
-                ? `${gain >= 0 ? '+' : ''}${gain.toFixed(1)} °C gained / 改善`
-                : 'move a segment / 調整區段後顯示'
-            }
+            status={projected ? `改善 ${signed(gain, 1, '°C')}` : '拉動右邊任一段後顯示'}
             tone={projected ? 'text-ok-600' : 'text-ink-400'}
           />
           <KpiTile
             icon={<span className="text-[10px] font-bold">#</span>}
-            label="Saved Studies"
-            zh="已儲存分析"
-            tooltip="此情境已儲存的假設調整紀錄；不會修改任何熱阻。"
+            label="已存調整分析"
+            zh="這個情境"
+            tooltip="這個情境存過的假設調整；不會修改任何熱阻。"
             value={String(studies.length)}
-            status="assumptions only / 僅為假設"
+            status="只是假設，不改模型"
           />
         </div>
       }
@@ -896,35 +905,30 @@ export function BottleneckAnalysisView() {
         <div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-line bg-surface px-6 py-3">
           <Button
             icon={<ArrowLeft size={15} />}
-            title="返回 07 求解與結果"
             onClick={() => navigate(projectPath(projectId, 'network'))}
           >
             返回 07 求解與結果
           </Button>
-          <span className="text-[11px] text-ink-400">
-            {ranked.length} part(s) ranked by margin · {segments.length} segment(s) on this
-            part's whole chain · adjustments are assumptions, never written to the model
+          <span className="min-w-0 text-[11px] text-ink-400">
+            {ranked.length} 顆元件依餘裕排序・這顆的熱阻鏈有 {segments.length} 段・調整只是假設，不會寫回模型
           </span>
           <Button
             variant="primary"
             className="ml-auto"
             icon={<ArrowRight size={15} />}
-            title="前往 10 整理報告"
             onClick={() => navigate(projectPath(projectId, 'report'))}
           >
-            前往 10 報告
+            前往 10 報告與匯出
           </Button>
         </div>
       }
     >
       {drift && (
         <p className="mb-3 rounded-md border border-warn-500/40 bg-warn-100 px-3 py-2 text-[11px] leading-relaxed font-semibold text-warn-600">
-          Screen 07's stored solution and a re-solve of its own inputs differ by{' '}
-          {drift.delta_C.toFixed(1)} °C at {drift.node_id}. Re-solve Screen 07 so both screens
-          show the same baseline.
+          07 存的求解結果和用同一組輸入重新求解，在 {drift.node_id} 差了 {drift.delta_C.toFixed(1)}{' '}
+          °C。
           <span className="block font-normal text-ink-500">
-            07 的既有解與「以其輸入重新求解」在 {drift.node_id} 相差 {drift.delta_C.toFixed(1)}{' '}
-            °C，請回 07 重新求解，兩畫面才會一致。
+            請回 07 重新求解，兩頁的溫度才會一致。
           </span>
         </p>
       )}
@@ -934,13 +938,8 @@ export function BottleneckAnalysisView() {
           <Section
             index={1}
             title={
-              wholeMachine
-                ? 'Thermal Network — whole machine'
-                : target
-                  ? `Heat Path — ${target.name}`
-                  : 'Heat Path'
+              wholeMachine ? '整機熱網路' : target ? `熱路徑：${target.name}` : '熱路徑'
             }
-            zh={wholeMachine ? '整機熱網路' : '此元件的熱路徑'}
             className={
               graphFullscreen
                 ? 'fixed inset-3 z-30 shadow-2xl'
@@ -967,14 +966,14 @@ export function BottleneckAnalysisView() {
               <>
                 <span className="flex h-7 shrink-0 overflow-hidden rounded-md border border-line-strong">
                   {[
-                    { id: false, label: 'This Part', zh: '此元件', icon: <Crosshair size={12} /> },
-                    { id: true, label: 'Whole Machine', zh: '整機', icon: <Network size={12} /> },
+                    { id: false, label: '這顆元件', hint: '只看這顆元件的熱路徑', icon: <Crosshair size={12} /> },
+                    { id: true, label: '整機', hint: '看整機熱網路，需要注意的元件標上編號', icon: <Network size={12} /> },
                   ].map((entry) => (
                     <button
                       key={String(entry.id)}
                       type="button"
                       aria-pressed={wholeMachine === entry.id}
-                      title={biTitle(entry.label, entry.zh)}
+                      title={entry.hint}
                       onClick={() => showWholeMachine(entry.id)}
                       className={`flex shrink-0 items-center gap-1 whitespace-nowrap px-2.5 text-[11px] leading-none font-semibold transition-colors ${
                         wholeMachine === entry.id
@@ -988,11 +987,13 @@ export function BottleneckAnalysisView() {
                   ))}
                 </span>
                 <Select
-                  className="h-7 !text-[11px]"
+                  className="!h-7 !w-auto !text-[11px]"
+                  aria-label="圖上顯示"
+                  title="圖上顯示的數值"
                   value={mode}
                   items={RESULT_VIEW_MODES.map((entry) => ({
                     value: entry.id,
-                    label: entry.label,
+                    label: entry.zh,
                   }))}
                   onChange={(event) => setMode(event.target.value as ResultMode)}
                 />
@@ -1003,23 +1004,20 @@ export function BottleneckAnalysisView() {
                 <button
                   type="button"
                   onClick={() => setResultsOpen(true)}
-                  aria-label="Results / 求解結果"
-                  title={biTitle('Open the full result table', '開啟完整求解結果')}
+                  aria-label="完整結果表"
+                  title={`開啟完整結果表（${tableRows.length} 個節點・${tableFlows.length} 條連線）`}
                   className="flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md bg-orange-600 px-2 text-[11px] font-bold text-white shadow-sm ring-1 ring-orange-700/40 transition-colors hover:bg-orange-500"
                 >
                   <Table2 size={13} />
-                  <span>Results</span>
+                  <span>完整結果表</span>
                   <span className="rounded bg-white/20 px-1 text-[10px] font-semibold tabular">
                     {tableRows.length} · {tableFlows.length}
                   </span>
                 </button>
                 <button
                   type="button"
-                  title={biTitle(
-                    graphFullscreen ? 'Leave fullscreen (Esc)' : 'Fullscreen',
-                    graphFullscreen ? '離開全螢幕（Esc）' : '全螢幕',
-                  )}
-                  aria-label={biTitle('Fullscreen', '全螢幕')}
+                  title={graphFullscreen ? '離開全螢幕（Esc）' : '全螢幕'}
+                  aria-label="全螢幕"
                   aria-pressed={graphFullscreen}
                   onClick={() => setGraphFullscreen((value) => !value)}
                   className="flex size-7 shrink-0 items-center justify-center rounded-md border border-line-strong text-ink-500 hover:bg-surface-muted"
@@ -1069,10 +1067,8 @@ export function BottleneckAnalysisView() {
               />
               {whatIf?.ok && (
                 <p className="pointer-events-none absolute inset-x-0 bottom-2 mx-auto w-fit rounded-md border border-orange-500/40 bg-orange-100 px-2.5 py-1 text-[11px] font-semibold text-orange-700 shadow-sm">
-                  Showing the adjusted network — nothing is written to the model
-                  <span className="ml-1 font-normal text-ink-500">
-                    / 顯示調整後結果，未寫回模型
-                  </span>
+                  顯示調整後的結果
+                  <span className="ml-1 font-normal text-ink-500">不會寫回模型</span>
                 </p>
               )}
             </div>
@@ -1100,27 +1096,30 @@ export function BottleneckAnalysisView() {
                 3
               </span>
               <span className="min-w-0 truncate text-[12px] text-ink-500">
-                {bottomTab === 'levers' ? 'What To Change' : 'Saved Studies'} is open as a window
-                <span className="ml-1 text-ink-400">
-                  / {bottomTab === 'levers' ? '可調整的參數' : '已儲存的調整分析'}目前為浮動視窗
-                </span>
+                {lowerTitle}目前是浮動視窗
               </span>
               <Button
                 className="ml-auto h-7 !text-[11px]"
                 icon={<PictureInPicture2 size={13} />}
-                title={biTitle('Dock it back into the column', '收回原本的區域')}
+                title="收回原本的區域"
                 onClick={() => setBottomFloating(false)}
               >
-                Dock / 收回
+                收回
               </Button>
             </section>
           ) : (
             <ResizablePane
               id="tnv.08.lowerPane"
               defaultHeight={220}
-              labelEn={bottomTab === 'levers' ? 'What To Change' : 'Saved Studies'}
-              labelZh={bottomTab === 'levers' ? '可調整的參數' : '已儲存的調整分析'}
+              labelZh={lowerTitle}
               header={lowerHeader}
+              emptyHint={
+                lowerEmpty
+                  ? bottomTab === 'levers'
+                    ? '在右邊的熱阻鏈拉動任一段，這裡會列出要改哪些參數'
+                    : '還沒有存過；調整區段後按「新增」'
+                  : undefined
+              }
               actions={
                 <>
                   {lowerTabs}
@@ -1147,12 +1146,14 @@ export function BottleneckAnalysisView() {
         >
           <Section
             index={2}
-            title="Resistance Chain"
-            zh="整條熱阻鏈路"
+            title="熱阻鏈路"
             className="h-full min-h-[26rem] xl:min-h-0"
             actions={
-              <span className="shrink-0 whitespace-nowrap text-[10px] text-ink-400">
-                {segments.length} seg · 0.1 %
+              <span
+                className="shrink-0 whitespace-nowrap text-[10px] text-ink-400"
+                title="接面到環境的每一段，壓降最大的排最前；拉桿每格 0.1 %"
+              >
+                {segments.length} 段・每格 0.1 %
               </span>
             }
           >
@@ -1193,8 +1194,8 @@ export function BottleneckAnalysisView() {
               />
             ) : (
               <p className="py-6 text-center text-[11px] text-ink-400">
-                No part in this network carries a temperature limit.
-                <span className="block">此網路沒有任何元件設定溫度上限。</span>
+                這個熱網路沒有任何元件設定限溫。
+                <span className="block">到 04 元件管理填限溫後，回 07 重新求解。</span>
               </p>
             )}
           </Section>
@@ -1210,8 +1211,8 @@ export function BottleneckAnalysisView() {
           storageKey="tnv.08.lowerWindow"
           defaultWidth={860}
           defaultHeight={520}
-          title={bottomTab === 'levers' ? 'What To Change' : 'Saved Studies'}
-          subtitle={bottomTab === 'levers' ? '可調整的參數' : '已儲存的調整分析'}
+          title={lowerTitle}
+          subtitle={bottomTab === 'levers' ? '調整過的區段要改哪些參數' : '這個情境存過的調整分析'}
           badge={lowerTabs}
           actions={popOutButton}
           bodyClassName="p-3"
@@ -1241,7 +1242,7 @@ export function BottleneckAnalysisView() {
             setInspecting(true);
             graphRef.current?.center(edgeId);
           }}
-          // 08 argues about a design; exporting the table is 07's and 12's job.
+          // 08 argues about a design; exporting the table is 07's and 10's job.
           onExportPdf={() => undefined}
           exporting={false}
           onClose={() => setResultsOpen(false)}
@@ -1265,7 +1266,7 @@ export function BottleneckAnalysisView() {
                 }`
               : (selectedNode?.id ?? '')
           }
-          badge={<Badge tone="neutral">{selectedEdge ? 'Edge / 連線' : 'Node / 節點'}</Badge>}
+          badge={<Badge tone="neutral">{selectedEdge ? '連線' : '節點'}</Badge>}
           onClose={() => {
             setInspecting(false);
             setSelectedNodeId(null);

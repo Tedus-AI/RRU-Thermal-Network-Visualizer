@@ -297,9 +297,9 @@ export interface NodeResultRow {
  *
  * `warn` is new: a part 0.8 °C under its limit passed, in the same green as one
  * 40 °C under it, and the table said nothing a reader could act on. The line is
- * `NEAR_LIMIT_MARGIN_C`, the single constant Screen 09's badge, its status
- * reason and its action summary already read, so a part cannot be NEAR LIMIT on
- * one screen and green on another.
+ * `NEAR_LIMIT_MARGIN_C`, the single constant the overall status, the action
+ * summary and 08's part list also read, so a part cannot be NEAR LIMIT on one
+ * screen and green on another.
  */
 export type MarginStatus = 'pass' | 'warn' | 'over' | 'na';
 
@@ -563,7 +563,7 @@ export function resultTree(
     (edgesByNode.get(anchor) ?? edgesByNode.set(anchor, []).get(anchor)!).push({
       kind: 'edge',
       id: edge.id,
-      name: EDGE_TREE_LABELS[edge.type] ?? edge.type,
+      name: EDGE_TYPE_ZH[edge.type] ?? edge.type,
       outgoing,
       counterpart_name: network.nodes[counterpart]?.name ?? counterpart,
       rth_C_per_W: result?.active_rth_C_per_W ?? activeRthOf(edge),
@@ -673,23 +673,25 @@ export function componentResultOrder(groups: readonly ResultTreeGroupRow[]): Res
  * Every value of `EdgeType`, so a row never falls back to the raw id.
  *
  * The first draft listed made-up keys ('interface', 'conduction') and the tree
- * printed `package_rjc` at the reader. These are the same names Screen 05 puts
- * on the graph, so an edge reads identically whichever screen you found it on.
+ * printed `package_rjc` at the reader. Chinese-first (07 §59, 08 §35), with
+ * the term kept where an engineer reads it in either language. 07's result
+ * tree and 08's resistance chain both use it, so a segment reads the same on
+ * either screen.
  */
-const EDGE_TREE_LABELS: Record<string, string> = {
-  package_rjc: 'Rjc / 接面至外殼',
-  package_rjb: 'Rjb / 接面至板',
-  package_rja: 'Rja / 接面至環境',
-  conduction: 'Conduction / 熱傳導',
-  tim: 'TIM / 介面材料',
-  solder: 'Solder / 焊料',
-  thermal_via: 'Thermal Via / 導熱孔',
-  contact: 'Contact / 接觸',
-  spreading: 'Spreading / 擴散',
-  heat_pipe: 'Heat Pipe / 熱管',
-  convection: 'Convection / 對流',
-  radiation: 'Radiation / 輻射',
-  custom: 'Link / 連結',
+export const EDGE_TYPE_ZH: Record<string, string> = {
+  package_rjc: 'Rjc 接面至外殼',
+  package_rjb: 'Rjb 接面至板',
+  package_rja: 'Rja 接面至環境',
+  conduction: '熱傳導',
+  tim: 'TIM 介面材料',
+  solder: '焊料',
+  thermal_via: '導熱孔',
+  contact: '接觸',
+  spreading: '擴散',
+  heat_pipe: '熱管',
+  convection: '對流',
+  radiation: '輻射',
+  custom: '連結',
 };
 
 /** The edge's own stored resistance, for the pre-solve view. */

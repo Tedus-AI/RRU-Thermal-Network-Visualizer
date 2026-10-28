@@ -451,6 +451,6 @@ describe('segmentLevers', () => {
   it('says so rather than inventing levers for an edge that has gone', () => {
     const result = segmentLevers(networkOf(), 'S1', 'MISSING', 'gone', 20);
     expect(result.levers).toHaveLength(0);
-    expect(result.message).toMatch(/no longer/);
+    expect(result.message).toMatch(/已經不在/);
   });
 });

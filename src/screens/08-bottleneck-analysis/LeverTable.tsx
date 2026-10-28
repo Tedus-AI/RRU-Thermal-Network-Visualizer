@@ -18,17 +18,19 @@
 import { ArrowDown, ArrowUp, SquarePen } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
-import { ColumnLabel, biTitle } from '@/ui/FieldLabel';
+import { ColumnLabel } from '@/ui/FieldLabel';
 import { focusHref } from '@/app/focusLink';
 import type { Lever, SegmentLevers } from '@/thermal/analysis/tunableParameters';
+import { EDGE_TYPE_ZH } from '@/screens/07-thermal-network/resultViewModel';
 
 import { num, rth } from './analysisViewModel';
 
-const SCREEN_NAME: Record<Lever['screen'], { label: string; zh: string }> = {
-  '04': { label: '04 Component Manager', zh: '元件管理' },
-  '05': { label: '05 Network & Boundary', zh: '熱網路' },
+/** The screen, then the part of it the field is on. */
+const SCREEN_NAME: Record<Lever['screen'], { label: string; part: string }> = {
+  '04': { label: '04 元件管理', part: '元件設定' },
+  '05': { label: '05 熱網路與邊界', part: '① 熱網路' },
   // The boundary half of Screen 05 (06 merged into it).
-  '06': { label: '05 Network & Boundary', zh: '散熱表面' },
+  '06': { label: '05 熱網路與邊界', part: '② 散熱表面' },
 };
 
 /** Enough digits to be actionable without pretending to a precision we lack. */
@@ -51,8 +53,7 @@ export function LeverTable({
   if (segments.length === 0) {
     return (
       <p className="text-[11px] text-ink-400">
-        Adjust a segment above to see the inputs behind it.
-        <span className="ml-1">先在上方調整某一段，這裡就會列出可以動的參數。</span>
+        在右邊的熱阻鏈拉動任一段，這裡會列出要改哪些參數。
       </p>
     );
   }
@@ -71,7 +72,9 @@ export function LeverTable({
             <span className="min-w-0 flex-1 truncate text-[11px] font-bold text-ink-900" title={segment.label}>
               {segment.label}
             </span>
-            <span className="shrink-0 text-[10px] text-ink-400">{segment.edge_type}</span>
+            <span className="shrink-0 text-[10px] text-ink-400">
+              {EDGE_TYPE_ZH[segment.edge_type] ?? segment.edge_type}
+            </span>
             <span className="shrink-0 text-[11px] font-bold tabular text-orange-700">
               −{segment.reduction_pct}%
             </span>
@@ -85,8 +88,7 @@ export function LeverTable({
           ) : (
             <div className="min-w-0 overflow-x-auto px-2.5 py-1.5">
               <p className="pb-1 text-[10px] text-ink-400">
-                Any ONE of these reaches it — they are alternatives, not a list of changes.
-                <span className="ml-1">以下任一項達成即可，不是全部都要改。</span>
+                以下任一項達成即可，不是全部都要改。
               </p>
               <table className="w-full min-w-[28rem] border-collapse text-[11px]">
                 <thead>
@@ -102,15 +104,12 @@ export function LeverTable({
                     </th>
                     <th
                       className="py-1 pr-2 text-right font-semibold"
-                      title={biTitle(
-                        "What this segment's cut buys the part; a row that cannot reach it shows what that input alone does",
-                        '此區段達成後元件可降的溫度；無法單獨達成的項目顯示其單獨可達的效果',
-                      )}
+                      title="這一段達到目標後元件降多少；單獨達不到的項目，寫它單獨能做到的效果"
                     >
                       <ColumnLabel label="Part cools by" zh="元件降溫" unit="°C" />
                     </th>
                     <th className="py-1 font-semibold">
-                      <ColumnLabel label="Edit in" zh="編輯位置" />
+                      <ColumnLabel label="Edit in" zh="到哪裡改" />
                     </th>
                   </tr>
                 </thead>
@@ -124,8 +123,9 @@ export function LeverTable({
                           ) : (
                             <ArrowDown size={11} className="shrink-0 text-ok-600" />
                           )}
-                          <span className="font-semibold text-ink-900">{lever.label}</span>
-                          <span className="text-ink-400">/ {lever.zh}</span>
+                          <span className="font-semibold text-ink-900" title={lever.label}>
+                            {lever.zh}
+                          </span>
                         </span>
                         {lever.note && (
                           <span className="mt-0.5 block text-[10px] text-ink-400">{lever.note}</span>
@@ -144,27 +144,22 @@ export function LeverTable({
                              get is the useful half of that answer. */
                           <span
                             className="text-warn-600"
-                            title={biTitle(
+                            title={
                               lever.limit.reason === 'optimum'
-                                ? 'Past this value the segment gets worse again, not better'
-                                : 'This input cannot go any higher',
-                              lever.limit.reason === 'optimum'
-                                ? '超過此值後熱阻反而回升'
-                                : '此參數已達物理上限',
-                            )}
+                                ? '超過這個值熱阻反而回升'
+                                : '這個參數已經到物理上限'
+                            }
                           >
-                            <span className="block font-semibold">
-                              not on its own / 單獨不足
-                            </span>
+                            <span className="block font-semibold">單獨達不到</span>
                             <span className="block text-[10px] text-ink-400">
-                              best {rth(lever.limit.best_rth_C_per_W)} @{' '}
+                              最好 {rth(lever.limit.best_rth_C_per_W)} °C/W，在{' '}
                               {value(lever.limit.at_value, lever.unit)}
-                              {lever.limit.reason === 'optimum' ? ' · 最佳點' : ' · 上限'}
+                              {lever.limit.reason === 'optimum' ? '（最佳點）' : '（上限）'}
                             </span>
                           </span>
                         ) : (
                           <span className="text-ink-400">
-                            {lever.direction === 'up' ? 'higher / 提高' : 'lower / 降低'}
+                            {lever.direction === 'up' ? '提高' : '降低'}
                           </span>
                         )}
                       </td>
@@ -173,17 +168,14 @@ export function LeverTable({
                         {lever.destination ? (
                           <Link
                             to={focusHref(projectId, lever.destination)}
-                            title={biTitle(
-                              `Open ${SCREEN_NAME[lever.screen].label} with this selected`,
-                              `前往${SCREEN_NAME[lever.screen].zh}並選取此項`,
-                            )}
+                            title={`前往 ${SCREEN_NAME[lever.screen].label}，選好這一項`}
                             className="inline-flex items-start gap-1 text-accent-700 hover:underline"
                           >
                             <SquarePen size={11} className="mt-0.5 shrink-0" />
                             <span>
                               {SCREEN_NAME[lever.screen].label}
                               <span className="block text-[10px] text-accent-700/70">
-                                {SCREEN_NAME[lever.screen].zh}
+                                {SCREEN_NAME[lever.screen].part}
                               </span>
                             </span>
                           </Link>
@@ -191,7 +183,7 @@ export function LeverTable({
                           <span className="text-ink-500">
                             {SCREEN_NAME[lever.screen].label}
                             <span className="block text-[10px] text-ink-400">
-                              {SCREEN_NAME[lever.screen].zh}
+                              {SCREEN_NAME[lever.screen].part}
                             </span>
                           </span>
                         )}

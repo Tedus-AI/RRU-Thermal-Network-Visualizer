@@ -1369,8 +1369,8 @@ PNG 出現任何 MD 沒定義的新功能，不得交給 Codex。
   （外殼其實 89.0 °C）。最熱節點放在 tooltip；完整結果表的元件列也改成 `judged_C`。
 - 點一列 → 右邊熱網路聚焦這顆的路徑（多顆的元件取限溫最緊的那一顆）；再點一次回到原本的檢視。
 - 展開（▸）→ 這顆的各節點（名稱、角色、溫度、各自的限溫與餘裕）；連線的溫差／熱流／熱阻在「完整結果表」（原本的結果視窗，可輸出 PDF）。
-- 列尾 ⌖ → 開 08 這一顆：`/bottleneck?part=<限溫節點 id>`。08 的清單（`partsWithRequested`）把它加進去，依餘裕排在該排的位置，
-  就算餘裕 > 5 °C 也會列出；開一次就好，之後選別的不會被拉回來。
+- 列尾 ⌖ → 開 08 這一顆：`/bottleneck?part=<限溫節點 id>`。08 的元件下拉列出所有有限溫的元件（08 §35），直接選好這一顆，
+  就算餘裕 > 5 °C 也一樣；開一次就好，之後選別的不會被拉回來。
 
 **報告快照（D3）**
 
@@ -1387,7 +1387,7 @@ PNG 出現任何 MD 沒定義的新功能，不得交給 Codex。
 **測試**
 
 - `resultTree.test.ts`：Tc 元件判定在外殼、`componentResultOrder` 的排序與排除。
-- `analysis.test.ts`：`partsWithRequested`。
+- `studyButtons.test.ts`：08 元件下拉 `partOptions`（依餘裕編號、需要注意分組）。
 - `report.test.ts`：`snapshotToFreeze`（沒有快照才自動建立、要按才換、BLOCKED 不建立）。
 - `resultsOverlay.test.tsx`、`resultTable.test.tsx`：完整結果表的按鈕只在全螢幕、中文欄名。
 - 瀏覽器（StarKcore-12L，1280／1536／1920）：9 種元件依餘裕排序（Power Module +1.4、XCZU67DR +2.9、2GB_DDR 89.0 / 95 Tc +6.0…）、

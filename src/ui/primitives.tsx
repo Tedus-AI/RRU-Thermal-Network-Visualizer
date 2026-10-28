@@ -6,7 +6,7 @@
  * no nested-card explosion.
  */
 
-import { useId, useState, type ReactNode } from 'react';
+import { Fragment, useId, useState, type ReactNode } from 'react';
 import { ChevronDown, ChevronUp, HelpCircle } from 'lucide-react';
 
 // --- Button ----------------------------------------------------------------
@@ -287,6 +287,14 @@ export function NumberInput({
   );
 }
 
+export interface SelectItem {
+  value: string;
+  label: string;
+  hint?: string;
+  /** Shown as an <optgroup> heading over this item and the ones that follow it. */
+  group?: string;
+}
+
 export function Select({
   options,
   items,
@@ -306,11 +314,25 @@ export function Select({
    * show the selected entry's hint in the panel too, since a native option
    * tooltip is not reachable by keyboard.
    */
-  items?: ReadonlyArray<{ value: string; label: string; hint?: string }>;
+  items?: ReadonlyArray<SelectItem>;
   invalid?: boolean;
 }) {
-  const entries: ReadonlyArray<{ value: string; label: string; hint?: string }> =
+  const entries: ReadonlyArray<SelectItem> =
     items ?? (options ?? []).map((option) => ({ value: option, label: option }));
+  // Consecutive items with the same `group` share one <optgroup>; items with
+  // none stay loose. A list without groups renders exactly as before.
+  const blocks: Array<{ group?: string; entries: SelectItem[] }> = [];
+  for (const entry of entries) {
+    const last = blocks[blocks.length - 1];
+    if (last && last.group === entry.group) last.entries.push(entry);
+    else blocks.push({ group: entry.group, entries: [entry] });
+  }
+  const optionsOf = (list: readonly SelectItem[]) =>
+    list.map((entry) => (
+      <option key={entry.value} value={entry.value} title={entry.hint}>
+        {entry.label}
+      </option>
+    ));
 
   return (
     <select
@@ -318,11 +340,15 @@ export function Select({
       aria-invalid={invalid || undefined}
       className={`${CONTROL_BASE} h-9 appearance-none bg-[url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 12 12"><path d="M2 4.5L6 8.5L10 4.5" stroke="%235c6981" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>')] bg-[right_0.75rem_center] bg-no-repeat pr-8 ${invalid ? 'border-danger-500' : 'border-line-strong'} ${className}`}
     >
-      {entries.map((entry) => (
-        <option key={entry.value} value={entry.value} title={entry.hint}>
-          {entry.label}
-        </option>
-      ))}
+      {blocks.map((block, index) =>
+        block.group ? (
+          <optgroup key={`${block.group}-${index}`} label={block.group}>
+            {optionsOf(block.entries)}
+          </optgroup>
+        ) : (
+          <Fragment key={`loose-${index}`}>{optionsOf(block.entries)}</Fragment>
+        ),
+      )}
     </select>
   );
 }

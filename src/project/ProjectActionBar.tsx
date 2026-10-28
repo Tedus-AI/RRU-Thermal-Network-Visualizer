@@ -31,7 +31,7 @@ export function ProjectActionBar({
   canSave: boolean;
   canContinue: boolean;
   archived: boolean;
-  /** Where Continue goes, as the sidebar names it ("09 結果總覽"); empty says just 繼續. */
+  /** Where Continue goes, as the sidebar names it ("07 求解與結果"); empty says just 繼續. */
   continueTo: string;
   onDuplicate: () => void;
   onArchive: () => void;

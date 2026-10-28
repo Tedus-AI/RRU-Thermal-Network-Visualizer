@@ -1,22 +1,23 @@
 /**
  * Edge inspector — 07 §33, §34, §35.
  *
- * Tabs: Overview / Solved Result / Rth Model / Source / Mapping.
+ * Tabs: 總覽 / 結果 / 熱阻 / 來源 / 對應. Chinese-first (07 §59, 08 §35); the
+ * English name of each row rides on its tooltip.
  *
- * The Rth Model tab lists every source slot side by side (07 §35). A slot with
- * no value reads "Not Available" — it is never filled in from another slot, and
- * the FloTHERM row stays empty while Screen 03 is deferred (07 §26, §28).
+ * The 熱阻 tab lists every source slot side by side (07 §35). A slot with no
+ * value reads 「沒有」 — it is never filled in from another slot, and the
+ * FloTHERM row stays empty while Screen 03 is deferred (07 §26, §28).
  */
 
 import { useState } from 'react';
 
 import { Badge } from '@/ui/primitives';
-import { biTitle } from '@/ui/FieldLabel';
 import type { ThermalEdge, ThermalNetwork } from '@/thermal/types';
 import type { ThermalSolution } from '@/thermal/solver/solverTypes';
 
 import {
   DIRECTION_LABELS,
+  EDGE_TYPE_ZH,
   RTH_SOURCE_BADGE,
   num,
   rth as formatRth,
@@ -26,14 +27,25 @@ import {
 import { T07 } from './tooltips';
 
 const TABS = [
-  { id: 'overview', label: 'Overview', full: 'Overview', zh: '總覽' },
-  { id: 'result', label: 'Result', full: 'Solved Result', zh: '求解結果' },
-  { id: 'model', label: 'Rth', full: 'Rth Model', zh: '熱阻模型' },
-  { id: 'source', label: 'Source', full: 'Source', zh: '資料來源' },
-  { id: 'mapping', label: 'Map', full: 'External Mapping', zh: '外部對應' },
+  { id: 'overview', label: '總覽', full: '連線基本資料' },
+  { id: 'result', label: '結果', full: '求解結果' },
+  { id: 'model', label: '熱阻', full: '熱阻模型與各來源的值' },
+  { id: 'source', label: '來源', full: '熱阻的資料來源' },
+  { id: 'mapping', label: '對應', full: '外部模擬物件對應' },
 ] as const;
 
+const NA = '沒有';
+
 type Tab = (typeof TABS)[number]['id'];
+
+const RESOLUTION_ZH: Record<string, string> = {
+  resolved: '已解析',
+  unresolved: '未解析',
+  estimated: '估算',
+  effective_path_only: '只有等效路徑',
+};
+
+const CONFIDENCE_ZH: Record<string, string> = { high: '高', medium: '中', low: '低' };
 
 function Row({
   label,
@@ -51,12 +63,9 @@ function Row({
   return (
     <div
       className="flex items-baseline justify-between gap-2 border-b border-line py-1.5 last:border-b-0"
-      title={tooltip ? `${label} / ${zh} — ${tooltip}` : `${label} / ${zh}`}
+      title={tooltip ? `${zh}（${label}）— ${tooltip}` : `${zh}（${label}）`}
     >
-      <span className="min-w-0 text-[11px] font-semibold text-ink-700">
-        {label}
-        <span className="ml-1 font-normal text-ink-400">/ {zh}</span>
-      </span>
+      <span className="min-w-0 text-[11px] font-semibold text-ink-700">{zh}</span>
       <span className={`shrink-0 text-[12px] font-bold tabular ${tone || 'text-ink-900'}`}>
         {value}
       </span>
@@ -103,7 +112,7 @@ export function EdgeResultInspector({
           type="button"
           onClick={() => onSelectNode(edge.from)}
           className="max-w-[7rem] truncate text-[12px] font-bold text-accent-600 hover:underline"
-          title={biTitle(`Inspect ${fromName}`, '檢視起點節點')}
+          title={`看起點節點 ${fromName}`}
         >
           {fromName}
         </button>
@@ -114,12 +123,12 @@ export function EdgeResultInspector({
           type="button"
           onClick={() => onSelectNode(edge.to)}
           className="max-w-[7rem] truncate text-[12px] font-bold text-accent-600 hover:underline"
-          title={biTitle(`Inspect ${toName}`, '檢視終點節點')}
+          title={`看終點節點 ${toName}`}
         >
           {toName}
         </button>
         {boundaryDerived && <Badge tone="accent">邊界（05）</Badge>}
-        {biot && <Badge tone="accent">Finite Bi</Badge>}
+        {biot && <Badge tone="accent">有限 Bi</Badge>}
       </div>
 
       <div className="flex shrink-0 flex-wrap gap-0.5 rounded-md border border-line-strong p-0.5">
@@ -127,7 +136,7 @@ export function EdgeResultInspector({
           <button
             key={entry.id}
             type="button"
-            title={biTitle(entry.full, entry.zh)}
+            title={entry.full}
             aria-pressed={tab === entry.id}
             onClick={() => setTab(entry.id)}
             className={`rounded px-1.5 py-1 text-[11px] font-semibold transition-colors ${
@@ -145,10 +154,14 @@ export function EdgeResultInspector({
         {tab === 'overview' && (
           <div>
             <Row label="Edge ID" zh="連線代號" value={edge.id} />
-            <Row label="Edge Type" zh="連線類型" value={edge.type} />
+            <Row label="Edge Type" zh="連線類型" value={EDGE_TYPE_ZH[edge.type] ?? edge.type} />
             <Row label="Method" zh="計算方式" value={edge.method} />
-            <Row label="Enabled" zh="啟用" value={edge.enabled ? 'Yes' : 'No'} />
-            <Row label="Resolution" zh="解析狀態" value={edge.resolution} />
+            <Row label="Enabled" zh="啟用" value={edge.enabled ? '是' : '否'} />
+            <Row
+              label="Resolution"
+              zh="解析狀態"
+              value={RESOLUTION_ZH[edge.resolution] ?? edge.resolution}
+            />
             {edge.resolution_note && (
               <p className="mt-2 text-[11px] leading-relaxed text-ink-400">{edge.resolution_note}</p>
             )}
@@ -164,35 +177,32 @@ export function EdgeResultInspector({
             <Row
               label="ΔT"
               zh="溫差"
-              value={result ? signed(result.delta_T_C, 2, '°C') : 'N/A'}
+              value={result ? signed(result.delta_T_C, 2, '°C') : '—'}
               tooltip={T07.field.deltaT}
             />
             <Row
               label="Q"
               zh="熱流"
-              value={result ? signed(result.heat_flow_W, 2, 'W') : 'N/A'}
+              value={result ? signed(result.heat_flow_W, 2, 'W') : '—'}
               tone={result && result.heat_flow_W < 0 ? 'text-accent-600' : ''}
               tooltip={T07.field.heatFlow}
             />
             <Row
               label="Actual Direction"
               zh="實際方向"
-              value={result ? DIRECTION_LABELS[result.actual_direction].label : 'N/A'}
+              value={result ? DIRECTION_LABELS[result.actual_direction].zh : '—'}
               tone={result?.actual_direction === 'reverse' ? 'text-accent-600' : ''}
               tooltip={T07.field.actualDirection}
             />
             <Row
               label="Active Rth"
-              zh="作用熱阻"
-              value={result ? `${formatRth(result.active_rth_C_per_W)} °C/W` : 'N/A'}
+              zh="求解用熱阻"
+              value={result ? `${formatRth(result.active_rth_C_per_W)} °C/W` : '—'}
             />
             {result?.actual_direction === 'reverse' && (
               <p className="mt-2 rounded border border-accent-500/40 bg-accent-100 px-2 py-1.5 text-[11px] text-accent-700">
-                Heat flows against the drawn direction. This is a valid solution,
-                not an error.
-                <span className="block text-ink-500">
-                  熱流方向與圖示相反，這是合法結果而非錯誤。
-                </span>
+                熱流方向和圖上的箭頭相反。
+                <span className="block text-ink-500">這是正常的求解結果，不是錯誤。</span>
               </p>
             )}
           </div>
@@ -200,40 +210,40 @@ export function EdgeResultInspector({
 
         {tab === 'model' && (
           <div>
-            <Row label="Edge Type" zh="連線類型" value={edge.type} />
+            <Row label="Edge Type" zh="連線類型" value={EDGE_TYPE_ZH[edge.type] ?? edge.type} />
             <Row label="Method" zh="計算方式" value={edge.method} />
             <Row
               label="Active Source"
-              zh="作用來源"
-              value={boundaryDerived ? '情境邊界（05）' : (badge?.label ?? edge.rth.active_source)}
+              zh="採用的來源"
+              value={boundaryDerived ? '情境邊界（05）' : (badge?.zh ?? edge.rth.active_source)}
               tooltip={T07.field.activeRthSource}
             />
             <Row
               label="Analytical Rth"
               zh="解析熱阻"
-              value={edge.rth.analytical == null ? 'Not Available' : `${formatRth(edge.rth.analytical)} °C/W`}
+              value={edge.rth.analytical == null ? NA : `${formatRth(edge.rth.analytical)} °C/W`}
               tone={edge.rth.analytical == null ? 'text-ink-400' : ''}
             />
             <Row
               label="Manual Rth"
               zh="手動熱阻"
-              value={edge.rth.manual == null ? 'Not Available' : `${formatRth(edge.rth.manual)} °C/W`}
+              value={edge.rth.manual == null ? NA : `${formatRth(edge.rth.manual)} °C/W`}
               tone={edge.rth.manual == null ? 'text-ink-400' : ''}
             />
             <Row
               label="Measurement Rth"
               zh="量測熱阻"
               value={
-                edge.rth.measurement == null ? 'Not Available' : `${formatRth(edge.rth.measurement)} °C/W`
+                edge.rth.measurement == null ? NA : `${formatRth(edge.rth.measurement)} °C/W`
               }
               tone={edge.rth.measurement == null ? 'text-ink-400' : ''}
             />
             <Row
               label="FloTHERM Rth"
               zh="FloTHERM 熱阻"
-              value="Not Available"
+              value={NA}
               tone="text-ink-400"
-              tooltip="03 尚未實作，此欄位保留，不會出現假資料。"
+              tooltip="03 尚未提供，這一欄先保留，不會出現假資料。"
             />
             {override?.R_C_per_W != null && (
               <Row
@@ -261,16 +271,10 @@ export function EdgeResultInspector({
                   label="Rth at Bi → ∞"
                   zh="Bi → ∞ 熱阻"
                   value={`${formatRth(biot.R_bi_infinite_C_per_W)} °C/W`}
-                  tooltip="畫面 05 顯示的值。Bi → ∞ 是本模型的下限，恆小於實際值。"
+                  tooltip="05 顯示的值。Bi → ∞ 是這個模型的下限，一定比實際值小。"
                 />
                 <p className="mt-2 text-[11px] leading-relaxed text-ink-400">
-                  Screen 05 has to build this edge at Bi → ∞ because h is scenario
-                  data, and that is the smallest spreading the model can produce.
-                  This solve measured the far-face h off the network itself and
-                  re-solved the series against it.
-                  <span className="block">
-                    05 因為沒有邊界條件，只能以 Bi → ∞ 建立此邊，那是本模型的最小值；本次求解已由網路本身反算遠端 h 並重新計算。
-                  </span>
+                  05 建這條連線時還沒有情境的邊界條件，只能用 Bi → ∞，那是這個模型最小的擴散熱阻；這次求解已經由熱網路本身反算遠端 h，再重新計算。
                 </p>
               </>
             )}
@@ -281,8 +285,8 @@ export function EdgeResultInspector({
                   zh="擴散範圍"
                   value={
                     result.spreading_domain.mode === 'HeatShare'
-                      ? 'Own share of the heat / 依熱量分配'
-                      : 'Stated area / 指定面積'
+                      ? '依熱量分配'
+                      : '指定面積'
                   }
                   tooltip="在 04 的元件設定中選擇。只擴散到部分底座，假設周圍底座不比平均溫度高。"
                 />
@@ -301,26 +305,30 @@ export function EdgeResultInspector({
                     zh="熱量佔比"
                     value={
                       result.spreading_domain.reverse
-                        ? 'Heat leaves the base here — whole base kept / 熱由此流出底座，維持整片基座'
-                        : `${((result.spreading_domain.heat_share ?? 0) * 100).toFixed(2)} % of the heat entering the base`
+                        ? '熱由這裡流出底座，維持整片基座'
+                        : `進入底座熱量的 ${((result.spreading_domain.heat_share ?? 0) * 100).toFixed(2)} %`
                     }
-                    tooltip="本邊求得的熱流 ÷ 進入底座的總熱流，皆來自本次求解，不是元件額定功耗。"
+                    tooltip="這條連線求得的熱流 ÷ 進入底座的總熱流，都來自這次求解，不是元件額定功耗。"
                   />
                 )}
               </>
             )}
-            <p className="mt-2 text-[11px] leading-relaxed text-ink-400">
-              Q is computed from this edge's own resistance. A segment resistance
-              is never derived from ΔT and a component's total power.
-              <span className="block">{T07.field.rule4}</span>
-            </p>
+            <p className="mt-2 text-[11px] leading-relaxed text-ink-400">{T07.field.rule4}</p>
           </div>
         )}
 
         {tab === 'source' && (
           <div>
-            <Row label="Active Source" zh="作用來源" value={edge.rth.active_source} />
-            <Row label="Confidence" zh="信心度" value={provenance?.confidence ?? edge.confidence ?? '—'} />
+            <Row
+              label="Active Source"
+              zh="採用的來源"
+              value={badge?.zh ?? edge.rth.active_source}
+            />
+            <Row
+              label="Confidence"
+              zh="信心度"
+              value={CONFIDENCE_ZH[provenance?.confidence ?? edge.confidence ?? ''] ?? '—'}
+            />
             <Row label="Reference" zh="依據" value={provenance?.reference ?? '—'} />
             <Row label="Recorded" zh="記錄時間" value={timeOf(provenance?.timestamp)} />
             <Row label="Origin" zh="產生方式" value={edge.origin?.kind ?? '—'} />
@@ -332,12 +340,10 @@ export function EdgeResultInspector({
             <Row
               label="Import Status"
               zh="匯入狀態"
-              value={edge.external_mappings ? 'Reserved' : 'Deferred'}
+              value={edge.external_mappings ? '已保留對應' : '尚未提供'}
             />
             <p className="mt-2 text-[11px] leading-relaxed text-ink-400">
-              Screen 03 is deferred. No FloTHERM file is parsed here and no
-              FloTHERM number is invented.
-              <span className="block">03 尚未實作，此處不解析檔案也不會產生假數值。</span>
+              03 匯入模擬結果尚未提供；這裡不解析 FloTHERM 檔案，也不會產生假數值。
             </p>
           </div>
         )}

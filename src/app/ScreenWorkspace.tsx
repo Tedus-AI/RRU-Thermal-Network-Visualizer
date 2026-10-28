@@ -36,9 +36,10 @@ export function ScreenWorkspace({
   /**
    * A panel beside the title, filling the band the description would occupy.
    *
-   * For a screen whose headline IS a verdict: Screen 09's thermal status has
-   * to be the first thing read, and putting it in the body pushed it under a
-   * row of cards that only make sense once you know it.
+   * For a screen whose headline IS a verdict — the old 09's thermal status,
+   * before it merged into 07: the verdict has to be the first thing read, and
+   * putting it in the body pushed it under a row of cards that only make sense
+   * once you know it.
    */
   headerAside?: ReactNode;
   /** Readiness KPI row. Sits between the title and the stepper (05 §36). */

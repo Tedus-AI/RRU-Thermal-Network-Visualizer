@@ -396,7 +396,7 @@ export function ReportPreviewView() {
    * The pictures the Thermal Network Summary carries, and what Screen 08 says
    * could be done about each part that needs attention.
    *
-   * Derived by the shared helper rather than here, because Screen 11's export
+   * Derived by the shared helper rather than here, because the export
    * renders these same sections and has to arrive at the same answer — when it
    * had none of its own the PDF printed "Not Available" over two sections the
    * preview had just drawn in full.
@@ -562,7 +562,7 @@ export function ReportPreviewView() {
     if (!config) return 1;
     const box = pageBoxMm(config.page_size, config.orientation);
     // 1 mm ≈ 3.7795 px at 96 dpi; the page is laid out in millimetres so the
-    // preview is proportionally what Screen 11 will render.
+    // preview is proportionally what the export will render.
     const pxPerMm = 3.7795275591;
     const pageWidth = box.width * pxPerMm;
     const pageHeight = box.height * pxPerMm;
@@ -601,9 +601,9 @@ export function ReportPreviewView() {
   if (!snapshot || !scenario || blocksPreview(evaluation.state)) {
     return (
       <ScreenWorkspace
-        title="Report Preview"
-        titleZh="報告預覽"
-        descriptionZh="把目前的求解結果組成可預覽的熱工程報告；本頁不重新分析，也不匯出檔案。"
+        title="Report & Export"
+        titleZh="報告與匯出"
+        descriptionZh="把求解結果組成熱工程報告，預覽後直接下載 PDF、HTML、圖表 PNG 或工程封裝 ZIP。"
         badge={<Badge tone="warn">還沒有結果</Badge>}
       >
         <NoSnapshot onSolve={() => go('network')} />
