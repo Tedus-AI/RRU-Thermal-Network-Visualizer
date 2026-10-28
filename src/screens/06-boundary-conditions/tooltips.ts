@@ -55,7 +55,7 @@ export const T06 = {
     viewFactor: '視角因子，代表表面與周圍環境之間的輻射交換比例。',
     hConv: '對流熱傳係數 h，單位 W/m²K。V1 由工程師手動輸入。',
     area:
-      '參與此邊界條件的有效表面積，單位 m²。封裝已建立「頂面＋四側面」暴露幾何時由 SCR04/05 自動同步；HSK Fin Surface 則請輸入已包含 fin efficiency 的有效翅片面積，不是未修正的總幾何面積。',
+      '參與此邊界條件的有效表面積，單位 m²。封裝已建立「頂面＋四側面」暴露幾何時由 04／05 自動同步；HSK Fin Surface 則請輸入已包含 fin efficiency 的有效翅片面積，不是未修正的總幾何面積。',
     fixedTemperature: '固定溫度邊界的溫度值，例如恆溫槽或受控冷板。',
     adiabaticReason: '絕熱邊界不需要數值；理由僅供稽核，可留白且不會阻擋求解。',
     boundaryType: '此邊界端口採用的邊界條件型別。',

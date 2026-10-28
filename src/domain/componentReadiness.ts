@@ -14,12 +14,13 @@ import {
   metalBaseParameters,
   mountSpec,
   normalizeModuleReferenceLocation,
-  powerWOf,
+  componentPowerFor,
   sourceAreaMm2,
   UNASSIGNED_ZONE,
   type Component,
 } from './component';
 import { isMeasuredInterface } from './materials';
+import type { PowerBasis } from './powerBasis';
 import { valueOf } from './sourcedValue';
 
 export type ComponentStatus = 'READY' | 'WARNING' | 'ERROR' | 'DISABLED';
@@ -451,7 +452,12 @@ export interface ReadinessSummary {
   disabled: number;
 }
 
-export function summarizeReadiness(components: Component[]): ReadinessSummary {
+/**
+ * `basis` is the active scenario's 功耗: the total is in the power that
+ * scenario solves with (a part without a room-temperature power counts its hot
+ * one, as the solve does).
+ */
+export function summarizeReadiness(components: Component[], basis: PowerBasis = 'hot'): ReadinessSummary {
   let ready = 0;
   let warnings = 0;
   let errors = 0;
@@ -478,7 +484,7 @@ export function summarizeReadiness(components: Component[]): ReadinessSummary {
     if (!component.enabled) continue;
     units += component.qty || 0;
     if (isHeatSource(component)) heatSourceUnits += component.qty || 0;
-    power += (component.qty || 0) * powerWOf(component);
+    power += (component.qty || 0) * componentPowerFor(component, basis);
   }
 
   return {

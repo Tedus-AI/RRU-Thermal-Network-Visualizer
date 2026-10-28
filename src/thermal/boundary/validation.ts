@@ -646,7 +646,7 @@ export function validateBoundarySet(input: BoundaryValidationInput): BoundaryVal
         'info',
         'SOLAR_PROFILES_INACTIVE',
         'Solar profiles are retained but inactive because Screen 01 solar load is 0 W/m².',
-        'SCR01 日照負載為 0 W/m²；太陽 profile 已保留但不參與計算。',
+        '01 情境的日照為 0 W/m²；日照條件已保留，但不參與計算。',
       ),
     );
   }

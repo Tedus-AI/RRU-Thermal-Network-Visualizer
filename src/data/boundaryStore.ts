@@ -22,6 +22,7 @@ import { useSolverStore } from './solverStore';
 import { deriveBoundaryPorts } from '@/thermal/boundary/boundaryPorts';
 import { buildAllPreviews, validateBoundarySet } from '@/thermal/boundary/validation';
 import { calculateSolarHeatLoad } from '@/thermal/boundary/calculations';
+import { applyProjectPlateHeight } from '@/thermal/boundary/plateHeight';
 import {
   FIN_PARAMETER_SOURCE,
   applyProjectFins,
@@ -81,9 +82,9 @@ interface BoundaryStoreState {
 
   revalidate: () => void;
   /**
-   * Copies the project's fins into the open scenario again after they changed
-   * (`finSpec.ts`). Does nothing — no dirty mark, no stale solve — when the
-   * profile already agrees.
+   * Copies the project's fins (`finSpec.ts`) and its machine height
+   * (`plateHeight.ts`) into the open scenario again after they changed. Does
+   * nothing — no dirty mark, no stale solve — when the profiles already agree.
    */
   resyncProjectFins: () => void;
   /**
@@ -113,6 +114,7 @@ function synchronizeInheritedProfileInputs(
   boundarySet: ScenarioBoundaryConditionSet,
   ports: BoundaryPort[],
   fins: ProjectFinSync | null = null,
+  machineHeight_mm: number | null = null,
 ): boolean {
   const portById = new Map(ports.map((port) => [port.id, port]));
   const surfaceByGroup = new Map(
@@ -207,10 +209,18 @@ function synchronizeInheritedProfileInputs(
       if (applyProjectFins(parameters, fins)) changed = true;
     }
 
+    // A vertical plate is as tall as the machine unless taken over (`plateHeight.ts`).
+    if (applyProjectPlateHeight(parameters, machineHeight_mm)) changed = true;
+
     if (changed) synchronized = true;
     return changed ? { ...profile, parameters } : profile;
   });
   return synchronized;
+}
+
+/** 01's machine height: the heat sink base length L, vertical when the RRU hangs. */
+function projectMachineHeight(): number | null {
+  return useProjectStore.getState().draft?.materials.hsk_base_L_mm?.value ?? null;
 }
 
 /** The project's fins and the one fin surface they go to; null when there is no single fin surface. */
@@ -339,6 +349,7 @@ export const useBoundaryStore = create<BoundaryStoreState>((set, get) => ({
       sets[key],
       ports,
       projectFinSync(ports),
+      projectMachineHeight(),
     );
 
     set({
@@ -372,7 +383,7 @@ export const useBoundaryStore = create<BoundaryStoreState>((set, get) => ({
       surface_properties: [...sets[activeKey].surface_properties],
     };
     recipe(next);
-    synchronizeInheritedProfileInputs(next, get().ports, projectFinSync(get().ports));
+    synchronizeInheritedProfileInputs(next, get().ports, projectFinSync(get().ports), projectMachineHeight());
     next.updated_at = new Date().toISOString();
 
     set({ sets: { ...sets, [activeKey]: next }, dirty: true });
@@ -622,10 +633,9 @@ export const useBoundaryStore = create<BoundaryStoreState>((set, get) => ({
   resyncProjectFins: () => {
     if (seedingProjectFins) return;
     const { sets, activeKey, ports } = get();
-    const fins = projectFinSync(ports);
-    if (!activeKey || !sets[activeKey] || !fins) return;
+    if (!activeKey || !sets[activeKey]) return;
     const probe = { ...sets[activeKey], profiles: [...sets[activeKey].profiles] };
-    if (!synchronizeInheritedProfileInputs(probe, ports, fins)) return;
+    if (!synchronizeInheritedProfileInputs(probe, ports, projectFinSync(ports), projectMachineHeight())) return;
     get().mutate(() => {});
   },
 

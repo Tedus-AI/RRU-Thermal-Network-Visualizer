@@ -1667,3 +1667,24 @@ Scenario-specific boundary parameters
 - 移除：`BuilderStepper`、`BuilderSidebar`（→ `AdvancedEditor`）、`BuilderActionBar`、06 的 `BoundaryConditionsView`、`BoundaryStepper`、
   `BoundaryGraphToolbar`、`BoundarySummaryCard`、`BoundaryValidationOverlay`、`BoundaryValidationPanel`。06 資料夾留下表面檢視器與欄位元件。
 - 測試：`checksModel.test.ts`、`focusLink.test.ts`、`BoundaryInspector.test.tsx`（文字改成中文）。
+
+## 65.6 散熱表面的平板幾何與對照 07
+
+**哪些元件會出現在「② 散熱表面」**：鰭片表面（散熱器）一定有；元件要有自己的散熱表面，必須在 04 → 散熱路徑分頁 →
+主散熱路徑選「金屬散熱面」，並勾「另有暴露表面對流／輻射散熱」（`exposed_surface_enabled`）。05 依 04 重新產生後，
+這顆元件的金屬底座節點多一個「〈名稱〉 Exposed Surface」出口（面積＝封裝頂面＋四側，或自訂暴露面積）。
+從 AI-Thermal 匯入的元件預設不勾，例如腔體濾波器要自己勾。
+
+**垂直平板的高度預設取 01 的機台高度**（`thermal/boundary/plateHeight.ts`）：
+- 機台高度＝01 材料與製程預設 → 散熱器底座「長 L」。RRU 吊掛時 L 是上下方向（5G-RRU 的 L_pcb＋Top＋Bottom）。
+- 勾「由平板幾何計算 h」、方位＝垂直時，高度顯示成白底參照文字＋「01 機台高度」＋ ✂；01 改了 L，每個情境的高度跟著改（boundary store 同步，同鰭片）。
+- ✂ → 自己填（存 `plateHeightSource: 'manual'`），底下一行「已解開・01 機台高度是 X mm ↺ 改回 01」。
+- 連動之前就填過、而且和 01 不同的高度，視為自己填的，不會被蓋掉；空白或剛好等於 01 的，自動連上。
+- 水平板（邊長 A／B）不連動。高度取大了，層流 h ∝ (ΔT／H)^¼ 會偏低，結果偏熱（保守）。
+
+**計算預覽與對照 07 的文字一律中文**（原本中英各一行）。07 求解後，對照框寫出「假設 X °C → 07 解出 Y °C（±Z °C）；邊界熱阻 A → B」，
+並一律有「把 Y °C 帶入『表面溫度假設』」鈕（四捨五入到 0.1 °C）：假設成立時是可選的（「差距很小，不帶入也可以」），
+差距大時要帶入後回 07 再求解一次。「表面溫度假設」留白時，placeholder 寫出預設值（環境 + 35 °C）。
+
+- 測試：`plateHeight.test.ts`、`boundaryProjectFins.test.ts`「a vertical plate takes the machine height from 01」、
+  `BoundaryInspector.test.tsx`「the surface temperature 07 solved」。

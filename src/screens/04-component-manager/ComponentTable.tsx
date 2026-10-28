@@ -29,16 +29,18 @@ import {
   HEAT_PATH_TYPES,
   COMPONENT_CATEGORIES,
   LIMIT_TYPES,
-  componentTotalPowerW,
+  componentPowerFor,
   heatPathPatch,
   isBodySourced,
   packageLabel,
+  powerRtWOf,
   type HeatPathType,
   type Component,
   type ComponentCategory,
   type LimitType,
 } from '@/domain/component';
 import { withValue } from '@/domain/sourcedValue';
+import type { PowerBasis } from '@/domain/powerBasis';
 import { DIRECT_CONTACT_TIM_ID, defaultMaterials } from '@/domain/materials';
 import { useProjectStore } from '@/data/projectStore';
 import { statusOf, type ComponentStatus } from '@/domain/componentReadiness';
@@ -121,6 +123,9 @@ const COLUMNS: ReadonlyArray<{
   { id: 'tim', label: 'TIM', zh: 'TIM', tooltip: 'TIM', width: 104 },
 ];
 
+const RT_COLUMN_TIP =
+  '目前情境的功耗是「常溫 Pd」（01 情境表）：這欄是 AI-Thermal 的 Pd@25°C。空白＝沒有常溫功耗，這個情境暫用單顆功耗（灰字）。改回高溫情境就顯示單顆功耗。';
+
 const COLUMN_DEFAULTS = Object.fromEntries(
   COLUMNS.map((column) => [column.id, column.width]),
 );
@@ -174,6 +179,7 @@ function RowAction({
 
 export function ComponentTable({
   components,
+  powerBasis = 'hot',
   selectedId,
   onSelect,
   onPatch,
@@ -183,6 +189,11 @@ export function ComponentTable({
   readOnly,
 }: {
   components: Component[];
+  /**
+   * The active scenario's 功耗 (01). Room temperature: the power column is the
+   * 常溫功耗 it solves with, and editing it writes that field.
+   */
+  powerBasis?: PowerBasis;
   selectedId: string | null;
   onSelect: (id: string) => void;
   onPatch: (id: string, patch: Partial<Component>, fields: string[]) => void;
@@ -202,6 +213,7 @@ export function ComponentTable({
   ) => onPatch(component.id, { thermal_spec: { ...component.thermal_spec, ...spec } }, fields);
 
   const { widths, startResize } = useColumnWidths('04.components', COLUMN_DEFAULTS);
+  const rt = powerBasis === 'rt';
 
   return (
     <div className="overflow-x-auto rounded-lg border border-line">
@@ -227,10 +239,16 @@ export function ComponentTable({
               >
                 <div className="flex justify-center">
                   <ColumnLabel
-                    label={column.label}
+                    label={rt && column.id === 'power' ? 'Power RT' : column.label}
                     unit={column.unit}
-                    zh={column.zh}
-                    tooltip={column.tooltip ? tip(column.tooltip) : undefined}
+                    zh={rt && column.id === 'power' ? '常溫功耗' : column.zh}
+                    tooltip={
+                      rt && (column.id === 'power' || column.id === 'total_power')
+                        ? RT_COLUMN_TIP
+                        : column.tooltip
+                          ? tip(column.tooltip)
+                          : undefined
+                    }
                   />
                 </div>
                 <ColumnResizer
@@ -256,6 +274,7 @@ export function ComponentTable({
             const meta = STATUS_META[status];
             const Icon = meta.icon;
             const spec = component.thermal_spec;
+            const rtMissing = rt && powerRtWOf(component) == null && (component.power_W.value ?? 0) !== 0;
             // Rjc has no meaning when the dissipation is referenced to the exit
             // face itself rather than to a junction behind it — on any heat path.
             const surfaceReferenced = isBodySourced(spec);
@@ -385,38 +404,80 @@ export function ComponentTable({
                     />
                   )}
                 </td>
-                <td className="relative px-2 py-1.5">
-                  <AiCellUnlocked {...aiCell} fields={['power']} />
-                  {locked('power') ? (
-                    <AiCellRef component={component} field="power" text={component.power_W.value ?? '—'} />
-                  ) : (
-                    <input
-                      type="number"
-                      step="0.01"
-                      aria-label={`${component.name} 單顆功耗`}
-                      onClick={(event) => event.stopPropagation()}
-                      className={NUMBER_CELL}
-                      value={component.power_W.value ?? ''}
-                      placeholder="—"
-                      disabled={readOnly}
-                      onChange={(event) =>
-                        onPatch(
-                          component.id,
-                          {
-                            power_W: withValue(
-                              component.power_W,
-                              event.target.value === '' ? null : Number(event.target.value),
-                            ),
-                          },
-                          ['power_W'],
-                        )
-                      }
-                    />
-                  )}
-                </td>
+                {rt ? (
+                  <td className="relative px-2 py-1.5">
+                    <AiCellUnlocked {...aiCell} fields={['power_rt']} />
+                    {locked('power_rt') ? (
+                      <AiCellRef component={component} field="power_rt" text={component.power_rt_W?.value ?? '—'} />
+                    ) : (
+                      <input
+                        type="number"
+                        step="0.01"
+                        aria-label={`${component.name} 常溫功耗`}
+                        title={
+                          rtMissing
+                            ? `沒有常溫功耗：常溫情境暫用單顆功耗 ${component.power_W.value ?? '—'} W。`
+                            : undefined
+                        }
+                        onClick={(event) => event.stopPropagation()}
+                        className={NUMBER_CELL}
+                        value={component.power_rt_W?.value ?? ''}
+                        // The hot power the solve falls back to, shown grey.
+                        placeholder={component.power_W.value != null ? String(component.power_W.value) : '—'}
+                        disabled={readOnly}
+                        onChange={(event) =>
+                          onPatch(
+                            component.id,
+                            {
+                              // Empty = not stated: the key goes, never a 0.
+                              power_rt_W:
+                                event.target.value === ''
+                                  ? undefined
+                                  : withValue(component.power_rt_W ?? null, Number(event.target.value)),
+                            },
+                            ['power_rt_W'],
+                          )
+                        }
+                      />
+                    )}
+                  </td>
+                ) : (
+                  <td className="relative px-2 py-1.5">
+                    <AiCellUnlocked {...aiCell} fields={['power']} />
+                    {locked('power') ? (
+                      <AiCellRef component={component} field="power" text={component.power_W.value ?? '—'} />
+                    ) : (
+                      <input
+                        type="number"
+                        step="0.01"
+                        aria-label={`${component.name} 單顆功耗`}
+                        onClick={(event) => event.stopPropagation()}
+                        className={NUMBER_CELL}
+                        value={component.power_W.value ?? ''}
+                        placeholder="—"
+                        disabled={readOnly}
+                        onChange={(event) =>
+                          onPatch(
+                            component.id,
+                            {
+                              power_W: withValue(
+                                component.power_W,
+                                event.target.value === '' ? null : Number(event.target.value),
+                              ),
+                            },
+                            ['power_W'],
+                          )
+                        }
+                      />
+                    )}
+                  </td>
+                )}
                 {/* Qty × Power — a dissipation summary, never edge heat flow Q. */}
-                <td className="tabular bg-accent-50/60 px-2 py-1.5 font-semibold">
-                  {componentTotalPowerW(component).toFixed(2)}
+                <td
+                  className={`tabular bg-accent-50/60 px-2 py-1.5 font-semibold ${rtMissing ? 'text-ink-400' : ''}`}
+                  title={rtMissing ? '沒有常溫功耗，暫以單顆功耗計' : undefined}
+                >
+                  {((component.qty || 0) * componentPowerFor(component, powerBasis)).toFixed(2)}
                 </td>
                 {/* Limit type and limit read as one value — "Tj 150" — so they
                     share a cell; each half is still its own editor. */}

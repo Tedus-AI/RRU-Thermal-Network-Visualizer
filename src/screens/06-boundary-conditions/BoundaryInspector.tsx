@@ -37,6 +37,7 @@ import type { Confidence } from '@/thermal/types';
 import {
   FIN_GEOMETRY_KEYS,
   PLATE_GEOMETRY_KEYS,
+  DEFAULT_SURFACE_GUESS_OFFSET_C,
   finArrayOf,
   plateConvectionOf,
   usesFinGeometry,
@@ -469,6 +470,13 @@ export function BoundaryInspector({
                         className="mt-1 h-8 !text-[12px]"
                         step="any"
                         max={parameter.max}
+                        placeholder={
+                          parameter.key === 'surfaceReferenceTemperatureGuess_C'
+                            ? ambientTemperature_C != null
+                              ? `留白＝環境 + ${DEFAULT_SURFACE_GUESS_OFFSET_C}（${(ambientTemperature_C + DEFAULT_SURFACE_GUESS_OFFSET_C).toFixed(1)} °C）`
+                              : `留白＝環境溫度 + ${DEFAULT_SURFACE_GUESS_OFFSET_C} °C`
+                            : undefined
+                        }
                         value={typeof value === 'number' ? value : ''}
                         disabled={readOnly}
                         onChange={(event) =>
