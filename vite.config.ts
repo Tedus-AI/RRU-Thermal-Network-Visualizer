@@ -2,6 +2,7 @@ import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import path from 'node:path';
+import { configDefaults } from 'vitest/config';
 
 /**
  * Identifies the build that produced a bundle, so persisted `tnv.*` data can be
@@ -78,6 +79,10 @@ export default defineConfig(({ command }) => {
     },
     server: {
       port: 5173,
+    },
+    // `.claude/` holds installed agent skills, whose own test suites are not ours.
+    test: {
+      exclude: [...configDefaults.exclude, '.claude/**'],
     },
   };
 });
