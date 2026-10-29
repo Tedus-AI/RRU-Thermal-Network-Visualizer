@@ -20,7 +20,7 @@ import {
 import { defaultMaterials } from '@/domain/materials';
 import { sourced } from '@/domain/sourcedValue';
 
-import { draw2D, draw3D, solderVoids, svgIds } from './heatPathDrawing';
+import { draw2D, draw3D, sectionVoids, solderVoids, svgIds } from './heatPathDrawing';
 import { heatPathView } from './heatPathModel';
 
 function part(heatPath: HeatPathType, mount: MountType, filled: boolean): Component {
@@ -139,5 +139,23 @@ describe('solder voids in the 3D stack', () => {
   it('draws none for a full joint or a voiding nobody entered', () => {
     expect(solderVoids(60, 30, 1)).toEqual([]);
     expect(solderVoids(60, 30, null)).toEqual([]);
+  });
+});
+
+describe('solder voids in the 2D section', () => {
+  it('are the 3D voids the centre cut passes through, inside the joint', () => {
+    const gaps = sectionVoids(60, 30, 0.75);
+    expect(gaps.length).toBeGreaterThan(0);
+    const cut = solderVoids(60, 30, 0.75).filter(([, y, r]) => Math.abs(y) < r);
+    expect(gaps).toHaveLength(cut.length);
+    for (const [x0, x1] of gaps) {
+      expect(x0).toBeLessThan(x1);
+      expect(x0).toBeGreaterThanOrEqual(-30 - 1e-9);
+      expect(x1).toBeLessThanOrEqual(30 + 1e-9);
+    }
+  });
+
+  it('cuts nothing through a full joint', () => {
+    expect(sectionVoids(60, 30, 1)).toEqual([]);
   });
 });
