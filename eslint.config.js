@@ -11,7 +11,8 @@ import globals from 'globals';
 import tseslint from 'typescript-eslint';
 
 export default defineConfig([
-  globalIgnores(['dist', 'coverage', 'node_modules']),
+  // `.claude/` holds installed agent skills (their own kits and tests), not app code.
+  globalIgnores(['dist', 'coverage', 'node_modules', '.claude']),
   {
     files: ['**/*.{ts,tsx}'],
     extends: [js.configs.recommended, tseslint.configs.recommended],
