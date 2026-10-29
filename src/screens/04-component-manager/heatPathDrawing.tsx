@@ -17,6 +17,7 @@
 import { Fragment, type ReactNode } from 'react';
 
 import { packageLabel, SPREADING_DOMAIN_LABELS, type HeatPathType } from '@/domain/component';
+import { solidKit, type Pt } from './isoSolid';
 import {
   formatArea as fA,
   formatMm as fMm,
@@ -522,10 +523,25 @@ export function draw2D(view: HeatPathView, ids: SvgIds): Drawing {
   const dieW = Math.max(Math.min(pkgW * 0.34, 70), 12);
   const missPkg = !pos(L) || !pos(W);
 
+  // As the 3D view builds them: a flanged RF part is a flange (toward the base) under an inset lid
+  // with the die on the flange; a BGA is a substrate on the board side under a smaller body.
+  const flanged = view.packageType === 'RF Power Flanged Package';
+  const substrate = view.packageType === 'BGA' || view.packageType === 'Lidded BGA';
   const drawPackage = (yTop: number) => {
     if (view.junction) {
-      add('pkg', R(pkgX, yTop, pkgW, pkgH, 'var(--hp-pkg)', { rx: 3 }));
-      const dy = yTop + pkgH - 7 - 11;
+      let dy = yTop + pkgH - 7 - 11;
+      if (flanged || substrate) {
+        const thick = pkgH * (flanged ? 0.34 : 0.3);
+        const up = !flanged && path === 'TopSurface';
+        const inset = (pos(L) ? (Math.min(L, pos(W) ? W : L) / 2) * (flanged ? 0.14 : 0.18) / L : 0.07) * pkgW;
+        const fullY = up ? yTop : yTop + pkgH - thick;
+        add('pkg', R(pkgX, fullY, pkgW, thick, 'var(--hp-pkg)', { rx: 2 }));
+        add('pkg', R(pkgX + inset, up ? yTop + thick : yTop, pkgW - 2 * inset, pkgH - thick, 'var(--hp-pkg)', { rx: 3 }));
+        // The die sits on the flange or substrate, inside the body.
+        if (!up) dy = fullY - 10;
+      } else {
+        add('pkg', R(pkgX, yTop, pkgW, pkgH, 'var(--hp-pkg)', { rx: 3 }));
+      }
       add('die', R(cx - dieW / 2, dy, dieW, 9, 'var(--hp-die)', { rx: 1.5 }));
       at.die = { x: cx, y: dy + 4.5 };
       labs.push({
@@ -618,6 +634,24 @@ export function draw2D(view: HeatPathView, ids: SvgIds): Drawing {
     at.face = { y: y - 3 };
     labs.push({ layer: 'face', y: y - 2, xr: pkgX + pkgW, t: '銅塊接合面', s: '＝封裝底面' });
     add('solder', R(pkgX, y, pkgW, 11, 'var(--hp-solder)'));
+    if (pos(L) && pos(W)) {
+      add(
+        'solder',
+        sectionVoids(L, W, view.solder.voiding).map(([x0, x1], i) => (
+          <ellipse
+            key={i}
+            cx={r1(pkgX + ((x0 + x1) / 2 / L + 0.5) * pkgW)}
+            cy={r1(y + 5.5)}
+            rx={r1(Math.max(((x1 - x0) / 2 / L) * pkgW, 1))}
+            ry="3.2"
+            fill="var(--hp-viz-bg)"
+            stroke="#0f1b30"
+            strokeOpacity={0.3}
+            strokeWidth={0.6}
+          />
+        )),
+      );
+    }
     labs.push({
       layer: 'solder',
       y: y + 5.5,
@@ -1131,6 +1165,19 @@ export function solderVoids(L: number, W: number, voiding: number | null): Array
   });
 }
 
+/**
+ * The same voids as the section sees them: the 2D view cuts along L through the middle of the
+ * joint, so each void the cut passes through is a gap `[x0, x1]` (about the centre, in the units
+ * of `L`) — the bubbles in the band sit where the 3D view draws them.
+ */
+export function sectionVoids(L: number, W: number, voiding: number | null): Array<[number, number]> {
+  return solderVoids(L, W, voiding).flatMap(([x, y, r]): Array<[number, number]> => {
+    if (Math.abs(y) >= r) return [];
+    const half = Math.sqrt(r * r - y * y);
+    return [[x - half, x + half]];
+  });
+}
+
 interface Slab {
   layer: HeatLayer;
   kind: 'box' | 'fins' | 'ring';
@@ -1150,26 +1197,6 @@ interface Slab {
   die?: { L: number; W: number };
   z0: number;
   z1: number;
-}
-
-type Pt = [number, number];
-
-/** Convex hull of screen points (monotone chain): a prism's silhouette. */
-function hull(points: Pt[]): Pt[] {
-  const sorted = [...points].sort((a, b) => a[0] - b[0] || a[1] - b[1]);
-  if (sorted.length < 3) return sorted;
-  const cross = (o: Pt, a: Pt, b: Pt) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
-  const lower: Pt[] = [];
-  for (const p of sorted) {
-    while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) lower.pop();
-    lower.push(p);
-  }
-  const upper: Pt[] = [];
-  for (const p of [...sorted].reverse()) {
-    while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) upper.pop();
-    upper.push(p);
-  }
-  return [...lower.slice(0, -1), ...upper.slice(0, -1)];
 }
 
 export function draw3D(view: HeatPathView, ids: SvgIds, az: number): Drawing {
@@ -1326,94 +1353,7 @@ export function draw3D(view: HeatPathView, ids: SvgIds, az: number): Drawing {
   if (view.junction) pk.die = { L: Math.max(pk.L * 0.34, 8), W: Math.max(pk.W * 0.34, 8) };
 
   const ptsAttr = (pts: Pt[]) => pts.map((p) => `${r1(p[0])},${r1(p[1])}`).join(' ');
-  const pathD = (pts: Pt[], close = true) => pts.map((p, i) => `${i ? 'L' : 'M'}${r1(p[0])} ${r1(p[1])}`).join('') + (close ? 'Z' : '');
-
-  // Solids drawn the way the anatomy kit draws them, in each layer's own colour: every side facet
-  // takes one of four tones by how it turns toward a light at the viewer's upper left (so the
-  // shading holds while the stack is dragged round), the top is a little lighter, a crease and a
-  // bevel run along the visible top edge, and the solid has ONE silhouette — the `.sh` outline the
-  // hover and highlight styles restyle — instead of an outline per face.
-  const toward: Pt = [sinA, cosA];
-  const SIDE_DARK = [0.34, 0.25, 0.17, 0.1];
-  const rounded = (x0: number, x1: number, y0: number, y1: number, r: number): Pt[] => {
-    const rr = Math.min(r, (x1 - x0) / 2, (y1 - y0) / 2);
-    if (!(rr > 0.05)) return [[x0, y0], [x1, y0], [x1, y1], [x0, y1]];
-    const corners: Array<[number, number, number]> = [
-      [x1 - rr, y0 + rr, -Math.PI / 2],
-      [x1 - rr, y1 - rr, 0],
-      [x0 + rr, y1 - rr, Math.PI / 2],
-      [x0 + rr, y0 + rr, Math.PI],
-    ];
-    return corners.flatMap(([cx, cy, a0]) =>
-      [0, 1, 2, 3, 4].map((i): Pt => [cx + rr * Math.cos(a0 + (i * Math.PI) / 8), cy + rr * Math.sin(a0 + (i * Math.PI) / 8)]),
-    );
-  };
-  const circle = (cx: number, cy: number, r: number, n = 18): Pt[] =>
-    Array.from({ length: n }, (_, i): Pt => [cx + r * Math.cos((i * 2 * Math.PI) / n), cy + r * Math.sin((i * 2 * Math.PI) / n)]);
-  /** Polylines along the ring edges flagged visible, at height `zz`. */
-  const runs = (ring: Pt[], visible: boolean[], zz: number) => {
-    const n = ring.length;
-    const start = visible.findIndex((v, i) => v && !visible[(i + n - 1) % n]);
-    if (start < 0) return '';
-    let d = '';
-    let run: Pt[] = [];
-    for (let step = 0; step <= n; step++) {
-      const i = (start + step) % n;
-      if (visible[i] && step < n) {
-        if (!run.length) run.push(P(ring[i][0], ring[i][1], zz));
-        run.push(P(ring[(i + 1) % n][0], ring[(i + 1) % n][1], zz));
-      } else if (run.length) {
-        d += pathD(run, false);
-        run = [];
-      }
-    }
-    return d;
-  };
-  const prism = (ring: Pt[], z0: number, z1: number, fill: string, o: { faded?: boolean; key?: string; inner?: Pt[] } = {}) => {
-    const n = ring.length;
-    const visible: boolean[] = [];
-    const tones: string[][] = [[], [], [], []];
-    for (let i = 0; i < n; i++) {
-      const a = ring[i];
-      const b = ring[(i + 1) % n];
-      const len = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
-      const nx = (b[1] - a[1]) / len;
-      const ny = -(b[0] - a[0]) / len;
-      visible[i] = nx * toward[0] + ny * toward[1] > 1e-3;
-      if (!visible[i]) continue;
-      const lit = -(nx * cosA - ny * sinA);
-      tones[clamp(Math.floor(((lit + 1) / 2) * 4), 0, 3)].push(
-        pathD([P(a[0], a[1], z0), P(b[0], b[1], z0), P(b[0], b[1], z1), P(a[0], a[1], z1)]),
-      );
-    }
-    const silhouette = pathD(hull([...ring.map((p) => P(p[0], p[1], z0)), ...ring.map((p) => P(p[0], p[1], z1))]));
-    const crease = runs(ring, visible, z1);
-    const bevel = o.inner && o.inner.length === n ? runs(o.inner, visible, z1) : '';
-    const body = (
-      <>
-        <path d={silhouette} fill={fill} />
-        {tones.map((list, k) => (list.length ? <path key={k} d={list.join('')} fill="#000" opacity={SIDE_DARK[k]} /> : null))}
-        <path d={pathD(ring.map((p) => P(p[0], p[1], z1)))} fill="#fff" opacity={0.08} />
-        {crease && <path d={crease} fill="none" stroke="#0f1b30" strokeOpacity={0.3} strokeWidth={0.7} />}
-        {bevel && <path d={bevel} fill="none" stroke="#fff" strokeOpacity={0.8} strokeWidth={0.9} strokeLinecap="round" />}
-        <path className="sh" d={silhouette} fill="none" />
-      </>
-    );
-    return o.faded ? (
-      <g key={o.key} opacity={0.5}>
-        {body}
-      </g>
-    ) : (
-      <Fragment key={o.key}>{body}</Fragment>
-    );
-  };
-  const box = (x0: number, x1: number, y0: number, y1: number, z0: number, z1: number, fill: string, faded = false, key?: string, r = 0) => {
-    const b = Math.min(1.4, (x1 - x0) / 6, (y1 - y0) / 6, (z1 - z0) / 2);
-    const inner = b > 0.3 ? rounded(x0 + b, x1 - b, y0 + b, y1 - b, r > 0.05 ? Math.max(r - b, 0.06) : 0) : undefined;
-    return prism(rounded(x0, x1, y0, y1, r), z0, z1, fill, { faded, key, inner });
-  };
-  /** The corner radius a layer of this size gets. */
-  const radiusOf = (L0: number, W0: number) => clamp(Math.min(L0, W0) * 0.05, 0.8, 5);
+  const { pathD, rounded, circle, facing, runs, prism, box, radiusOf } = solidKit(P, sinA, cosA);
   /** A soft shadow of a `2hx` × `2hy` footprint on the surface at height `zz` below it. */
   const halo = (hx: number, hy: number, zz: number, strength = 0.16) => (
     <path d={pathD(rounded(-hx, hx, -hy, hy, radiusOf(2 * hx, 2 * hy)).map((p) => P(p[0], p[1], zz)))} fill="#0f1b30" opacity={strength} filter={url(ids.soft)} pointerEvents="none" />
@@ -1460,17 +1400,23 @@ export function draw3D(view: HeatPathView, ids: SvgIds, az: number): Drawing {
     } else if (sl.layer === 'pkg' && view.junction && (flanged || substrate)) {
       // What the package type says about its build: a flanged RF part is a metal flange under a
       // ceramic lid with its leads out of the long sides; a BGA is a substrate under a smaller body.
+      // The flange is the face heat leaves by, so it is always the side toward the base; a BGA's
+      // substrate is the side on the board, which is up when the part is cooled through its top.
       const fill = sl.color ?? '';
-      const step = sl.z0 + (sl.z1 - sl.z0) * (flanged ? 0.34 : 0.3);
+      const thick = (sl.z1 - sl.z0) * (flanged ? 0.34 : 0.3);
+      const up = !flanged && path === 'TopSurface';
+      const step = up ? sl.z1 - thick : sl.z0 + thick;
       const inset = Math.min(hx, hy) * (flanged ? 0.14 : 0.18);
+      const r = radiusOf(sl.L, sl.W);
       const lead = (side: number, key: string) => {
         const y0 = side > 0 ? hy : -hy - hy * 0.62;
         return box(-hx * 0.42, hx * 0.42, y0, y0 + hy * 0.62, step - 1.6, step, fill, false, key, 0.6);
       };
+      const full = (z0: number, z1: number) => box(-hx, hx, -hy, hy, z0, z1, fill, false, 'fl', r);
+      const body = (z0: number, z1: number) => box(-hx + inset, hx - inset, -hy + inset, hy - inset, z0, z1, fill, false, 'lid', r);
       const parts: ReactNode[] = [];
       if (flanged) parts.push(lead(-nearY, 'lf'));
-      parts.push(box(-hx, hx, -hy, hy, sl.z0, step, fill, false, 'fl', radiusOf(sl.L, sl.W)));
-      parts.push(box(-hx + inset, hx - inset, -hy + inset, hy - inset, step, sl.z1, fill, false, 'lid', radiusOf(sl.L, sl.W)));
+      parts.push(...(up ? [body(sl.z0, step), full(step, sl.z1)] : [full(sl.z0, step), body(step, sl.z1)]));
       if (flanged) parts.push(lead(nearY, 'ln'));
       bag.add(sl.layer, parts);
       if (sl.miss) bag.add(sl.layer, missTop(-hx, hx, -hy, hy, sl.z1));
@@ -1563,10 +1509,7 @@ export function draw3D(view: HeatPathView, ids: SvgIds, az: number): Drawing {
       const iW = sl.inlay.W / 2;
       const face = rounded(-iL, iL, -iW, iW, radiusOf(sl.inlay.L, sl.inlay.W)).map((p) => P(p[0], p[1], sl.z1 + 0.3));
       const lip = rounded(-iL + 1.4, iL - 1.4, -iW + 1.4, iW - 1.4, Math.max(radiusOf(sl.inlay.L, sl.inlay.W) - 1.4, 0.06));
-      const lipVisible = lip.map((p, i) => {
-        const q = lip[(i + 1) % lip.length];
-        return (q[1] - p[1]) * toward[0] - (q[0] - p[0]) * toward[1] > 1e-3;
-      });
+      const lipVisible = facing(lip);
       bag.add(
         sl.inlay.layer,
         <>
