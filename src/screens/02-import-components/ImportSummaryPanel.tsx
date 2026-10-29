@@ -95,7 +95,7 @@ export function ReviewStatsLine() {
       label: '警告',
       value: summary.warning_rows,
       tone: summary.warning_rows > 0 ? 'text-warn-600' : 'text-ink-400',
-      title: warnings ? `${warnings}（不會擋下匯入，可在 04 補齊）` : undefined,
+      title: warnings ? `${warnings}（不會擋下匯入，可在 03 補齊）` : undefined,
     },
     {
       status: 'ERROR',

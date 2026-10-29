@@ -192,7 +192,7 @@ describe('the heat sink fins as a project fact', () => {
     expect(materials.hsk_fin_height_mm?.value).toBe(70);
     expect(materials.hsk_fin_thickness_mm?.value).toBe(2);
     expect(materials.hsk_fin_draft_deg?.value).toBe(1.5);
-    expect(materials.hsk_fin_height_mm?.reference).toContain('06');
+    expect(materials.hsk_fin_height_mm?.reference).toContain('邊界條件');
     // Stated already: the project's value wins, and the profile follows it.
     expect(materials.hsk_fin_gap_mm?.value).toBe(11.6);
     expect(activeFinProfile().parameters[K.gap]).toBe(11.6);

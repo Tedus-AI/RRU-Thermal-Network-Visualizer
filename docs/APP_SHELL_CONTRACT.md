@@ -107,20 +107,47 @@ and squeezed narrow fields until they broke.)
   Rjc / θJC, PA, FR1 / FR2, RRU / AAU, Die-casting, Embedded, FloTHERM,
   SharePoint, and units. They are written into the Chinese string
   (`散熱器底座`, `Die-casting 鰭片`), not appended by a helper.
-- Screens refer to each other by number and sidebar name — `04 元件管理`,
-  `05 熱網路與邊界` — never `Screen 05`.
+- Screens refer to each other by sidebar number and sidebar name — `03 元件管理`,
+  `04 熱網路與邊界` — never `Screen 04`. The number is the sidebar's (`ScreenDef.no`),
+  not the specification document's (`ScreenDef.code`): see "Two numbers" below.
 - Say a thing once, where it applies: a constraint beside its field, a missing
   value in amber where it is missing. No standing paragraphs that read the same
   every visit; longer explanations go in a tooltip.
-- The sidebar lists only screens that exist. A deferred screen (03 FloTHERM
-  Import) is hidden until it is built; the other numbers do not move. 06
-  Boundary Conditions merged into 05 (熱網路與邊界): its number stays empty,
-  `/boundary` redirects to 05 with its query string, and code that still says
-  `'06'` (a solver issue's `fix_in`, an 08 lever's `screen`) means "the surface
-  half of 05" and is shown as 05. 09 Results Overview merged into 07 (求解與結果,
-  07 §59) the same way: 09 stays empty and `/results` redirects to 07. 11
-  Export Center merged into 10 (報告與匯出, 12 §61): 11 stays empty and
-  `/export` opens 10 with its 匯出設定 drawer (`?panel=export`).
+- The sidebar lists only screens that exist, numbered 01–07 without gaps. A
+  deferred screen (FloTHERM Import) is hidden until it is built and takes the
+  next free number when it ships. Screens that merged into another left no
+  number of their own: Boundary Conditions is the surface half of 04 熱網路與邊界
+  (`/boundary` redirects there with its query string); Results Overview is part
+  of 05 求解與結果 (07 §59, `/results` redirects there); Report Preview and
+  Export Center are 07 報告與匯出 (12 §61, `/export` opens it with its 匯出設定
+  drawer, `?panel=export`).
+
+### Two numbers
+
+A screen has two numbers and they are not the same thing (`navigation.ts`):
+
+| Sidebar `no` — what a reader sees | `code` — the id | Specification documents | Screen |
+| --- | --- | --- | --- |
+| 01 | 01 | 01/ | 專案資訊 |
+| 02 | 02 | 02/ | 匯入硬體元件 |
+| 03 | 04 | 04/ | 元件管理 |
+| 04 | 05 | 05/, 06/（散熱表面） | 熱網路與邊界 |
+| 05 | 07 | 07/, 10/（結果總覽） | 求解與結果 |
+| 06 | 08 | 08/ | 瓶頸分析 |
+| 07 | 10 | 11/（報告預覽）, 12/（匯出中心） | 報告與匯出 |
+| — | 03 | 03/ | FloTHERM 匯入（延後，不在側欄） |
+
+- **Anything a reader sees uses `no`**: sidebar, page title, every "到 04 …" hint,
+  tooltips, toasts, validation messages, report source names, the export
+  manifest. When code only has an id (`fix_in`, a lever's `screen`, a progress
+  row), `displayNo(code)` gives the number to print; ids of merged-away screens
+  answer with the screen they became part of.
+- **`code` stays the id**: `fix_in`, `LeverScreen`, `source_screen`, the
+  localStorage keys (`tnv.08.…`, `07.results`), and the spec folders with every
+  `07 §59` citation in comments and docs. Changing them would orphan saved data
+  for no reader-visible gain.
+- So a comment that says "Screen 07" or "07 §59" means the specification
+  document 07 — today's 05 求解與結果. Read it through the table above.
 
 The shared helpers still take both names, because most call sites were written
 bilingual. They now show the Chinese and fall back to the English only when no

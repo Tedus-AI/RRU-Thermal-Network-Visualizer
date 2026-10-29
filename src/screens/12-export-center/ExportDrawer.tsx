@@ -143,7 +143,7 @@ export function ExportDrawer({
     >
       <header className="flex shrink-0 items-center gap-2 border-b border-line bg-surface px-4 py-3">
         <h2 className="text-[15px] font-bold text-ink-900">匯出設定</h2>
-        <span className="text-[11px] text-ink-400">原本 11 匯出中心的全部功能・Esc 關閉</span>
+        <span className="text-[11px] text-ink-400">原本「匯出中心」的全部功能・Esc 關閉</span>
         <button
           type="button"
           onClick={onClose}

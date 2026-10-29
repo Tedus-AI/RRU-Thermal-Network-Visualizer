@@ -569,13 +569,13 @@ export function ThermalNetworkView() {
           <div className="max-w-md rounded-lg border border-dashed border-line-strong bg-surface px-6 py-10 text-center">
             <Network size={24} className="mx-auto mb-3 text-ink-400" />
             <p className="text-[14px] font-semibold text-ink-700">還沒有熱網路</p>
-            <p className="mt-1 text-[12px] text-ink-400">到 05 依 04 的散熱路徑產生熱網路，再回來求解。</p>
+            <p className="mt-1 text-[12px] text-ink-400">到 04 依 03 的散熱路徑產生熱網路，再回來求解。</p>
             <Button
               variant="primary"
               className="mt-4"
               onClick={() => navigate(projectPath(projectId, 'thermal-path'))}
             >
-              前往 05 熱網路與邊界
+              前往 04 熱網路與邊界
             </Button>
           </div>
         </div>
@@ -683,7 +683,7 @@ export function ThermalNetworkView() {
             title={T07.action.backTo06}
             onClick={() => navigate(projectPath(projectId, 'thermal-path'))}
           >
-            返回 05
+            返回 04
           </Button>
 
           {blocking > 0 && (
@@ -708,8 +708,8 @@ export function ThermalNetworkView() {
                 continueBlocked
                   ? continueWhy
                   : tightest
-                    ? `到 08 看最緊的元件 ${tightest.name} 的熱阻鏈`
-                    : '到 08 瓶頸分析'
+                    ? `到 06 看最緊的元件 ${tightest.name} 的熱阻鏈`
+                    : '到 06 瓶頸分析'
               }
               onClick={() => openBottleneck(tightest?.judged_node_id ?? null)}
             >
@@ -722,7 +722,7 @@ export function ThermalNetworkView() {
               title={continueBlocked ? continueWhy : T07.action.continue}
               onClick={() => navigate(projectPath(projectId, report?.path ?? 'report'))}
             >
-              前往 10 {report?.label ?? '報告'}
+              前往 07 {report?.label ?? '報告'}
             </Button>
           </div>
         </div>
@@ -744,13 +744,13 @@ export function ThermalNetworkView() {
         <div className="flex items-start gap-2 rounded-lg border border-danger-500/40 bg-danger-100 px-3.5 py-2.5">
           <XCircle size={16} className="mt-0.5 shrink-0 text-danger-600" />
           <p className="text-[12px] leading-relaxed font-semibold text-danger-600">
-            散熱表面條件還沒完成，請先到 05 完成。
+            散熱表面條件還沒完成，請先到 04 完成。
           </p>
           <Button
             className="ml-auto h-7 shrink-0 !text-[12px]"
             onClick={() => navigate(projectPath(projectId, 'thermal-path'))}
           >
-            前往 05
+            前往 04
           </Button>
         </div>
       )}
@@ -794,9 +794,9 @@ export function ThermalNetworkView() {
               <h2 className="text-[13px] font-bold text-ink-900">熱網路</h2>
               <span
                 className="text-[11px] text-ink-400"
-                title="熱網路與邊界條件都來自 05，這一頁不修改任何一項。"
+                title="熱網路與邊界條件都來自 04，這一頁不修改任何一項。"
               >
-                來自 05・唯讀
+                來自 04・唯讀
               </span>
               {stale && <Badge tone="warn">已失效</Badge>}
             </div>

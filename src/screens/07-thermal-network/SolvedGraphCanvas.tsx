@@ -667,7 +667,7 @@ export function buildElements(
         color = boundaryDerived ? '#2563eb' : (RTH_SOURCE_COLORS[badge?.short ?? 'A'] ?? EDGE_NEUTRAL);
         width = 3;
         if (display.showLabels) {
-          label = R == null ? '未解析' : boundaryDerived ? '邊界（05）' : (badge?.label ?? '未解析');
+          label = R == null ? '未解析' : boundaryDerived ? '邊界（04）' : (badge?.label ?? '未解析');
         }
         break;
       }
@@ -1446,8 +1446,8 @@ export function legendFor(
         { color: RTH_SOURCE_COLORS.A, label: 'A · Analytical', zh: '解析計算' },
         { color: RTH_SOURCE_COLORS.U, label: 'U · Manual', zh: '手動輸入' },
         { color: RTH_SOURCE_COLORS.M, label: 'M · Measurement', zh: '量測' },
-        { color: RTH_SOURCE_COLORS.F, label: 'F · FloTHERM (reserved)', zh: 'FloTHERM（03 尚未實作）' },
-        { color: '#2563eb', label: 'Boundary derived (05)', zh: '由 05 邊界條件推導' },
+        { color: RTH_SOURCE_COLORS.F, label: 'F · FloTHERM (reserved)', zh: 'FloTHERM（匯入尚未實作）' },
+        { color: '#2563eb', label: 'Boundary derived (04)', zh: '由 04 邊界條件推導' },
       ];
 
     case 'node_type':

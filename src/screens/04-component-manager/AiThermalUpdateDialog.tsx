@@ -236,7 +236,7 @@ export function AiThermalUpdateDialog({
             <p className="font-semibold">第一次連結</p>
             <p className="mt-0.5 text-ink-600">
               這 {plan.firstLinks} 顆是舊版從 AI-Thermal 匯入的，當時沒有記下 AI-Thermal 的值，所以數值不同的欄位分不出是
-              AI-Thermal 改了、還是在 04 改過：預設不勾，請逐欄確認。勾的用 AI-Thermal 的值並鎖定；沒勾的保留本工具的值、不鎖定。
+              AI-Thermal 改了、還是在 03 改過：預設不勾，請逐欄確認。勾的用 AI-Thermal 的值並鎖定；沒勾的保留本工具的值、不鎖定。
               與 AI-Thermal 相同的欄位直接鎖定{plan.link.length > 0 ? `（其中 ${plan.link.length} 顆完全相同，套用後直接連結）` : ''}。
             </p>
           </div>

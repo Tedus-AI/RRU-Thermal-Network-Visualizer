@@ -374,7 +374,7 @@ export function ComponentManagerView() {
             <button
               type="button"
               onClick={goToScreen05}
-              title="04 改了會影響熱路徑的欄位（數量、TIM、熱路徑、幾何、啟用、新增或刪除元件）。到 05 按「依偏好產生」重建，或檢查後按「儲存並繼續」，這個提醒就會消失。"
+              title="03 改了會影響熱路徑的欄位（數量、TIM、熱路徑、幾何、啟用、新增或刪除元件）。到 04 按「依偏好產生」重建，或檢查後按「儲存並繼續」，這個提醒就會消失。"
               className="flex items-center gap-1 rounded-full border border-warn-500/40 bg-warn-100/60 px-2.5 py-0.5 text-[11px] font-semibold text-warn-600 hover:border-warn-500"
             >
               熱網路需要更新
@@ -400,7 +400,7 @@ export function ComponentManagerView() {
               disabled={blockingErrors > 0}
               onClick={handleSaveAndContinue}
             >
-              繼續：05 熱路徑建立
+              繼續：04 熱路徑建立
             </Button>
           </div>
         </div>
@@ -749,7 +749,7 @@ export function ComponentManagerView() {
       {deleteTarget && (
         <Modal
           title="刪除元件？"
-          description={`「${deleteTarget.name}」會從本專案移除，05 熱網路裡它的節點、連線與邊界設定也會一起移除。`}
+          description={`「${deleteTarget.name}」會從本專案移除，04 熱網路裡它的節點、連線與邊界設定也會一起移除。`}
           onClose={() => setDeleteTarget(null)}
           footer={
             <>

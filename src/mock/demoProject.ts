@@ -116,7 +116,7 @@ export function demoScenario(projectId = DEMO_PROJECT_ID): Scenario {
     wind_mps: 0,
     solar_W_m2: 0,
     power_scale: 1,
-    notes: 'Synthetic baseline used by the 01→12 analytical golden flow.',
+    notes: 'Synthetic baseline used by the 01→07 analytical golden flow.',
     is_default: true,
   };
 }

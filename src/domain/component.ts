@@ -1019,8 +1019,8 @@ export const SPREADING_DOMAIN_HINTS: Record<SpreadingDomainMode, { en: string; z
     zh: '擴散到整片 HSK 基座，等於假設只有這顆在加熱底座。適合位在熱源群聚區的元件；對遠離熱源群的元件偏保守。',
   },
   HeatShare: {
-    en: "Spreads into the share of the base matching this part's share of the heat entering it. Solved in Screen 07 from the solved heat flows; Screen 05 shows the whole-base value until then. Optimistic for a part inside the hot cluster.",
-    zh: '擴散到「這顆佔進入底座熱量的比例」對應的那一塊底座。面積由 07 依求解熱流決定，05 在求解前顯示整片基座的值。對熱源群聚區內的元件偏樂觀。',
+    en: "Spreads into the share of the base matching this part's share of the heat entering it. Solved in Screen 05 from the solved heat flows; Screen 04 shows the whole-base value until then. Optimistic for a part inside the hot cluster.",
+    zh: '擴散到「這顆佔進入底座熱量的比例」對應的那一塊底座。面積由 05 依求解熱流決定，04 在求解前顯示整片基座的值。對熱源群聚區內的元件偏樂觀。',
   },
   Manual: {
     en: 'Spreads into the area you state, per device — the region around this part on the real layout. Clamped between the contact patch and the whole base.',

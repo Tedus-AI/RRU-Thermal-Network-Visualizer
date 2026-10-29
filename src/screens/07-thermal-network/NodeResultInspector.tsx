@@ -282,7 +282,7 @@ export function NodeResultInspector({
               tooltip={T07.field.margin}
             />
             <p className="mt-2 text-[11px] leading-relaxed text-ink-400">
-              這裡只看這一個節點的餘裕；要看是哪一段熱阻吃掉餘裕、改哪裡最有效，到 08 瓶頸分析。
+              這裡只看這一個節點的餘裕；要看是哪一段熱阻吃掉餘裕、改哪裡最有效，到 06 瓶頸分析。
             </p>
           </div>
         )}
@@ -308,7 +308,7 @@ export function NodeResultInspector({
               value={node.external_mappings ? '已保留對應' : '尚未提供'}
             />
             <p className="mt-2 text-[11px] leading-relaxed text-ink-400">
-              03 匯入模擬結果尚未提供；這裡只顯示對應資訊，不會匯入或解析任何檔案。
+              FloTHERM 匯入尚未提供；這裡只顯示對應資訊，不會匯入或解析任何檔案。
             </p>
           </div>
         )}

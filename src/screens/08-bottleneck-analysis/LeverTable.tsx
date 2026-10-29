@@ -27,10 +27,10 @@ import { num, rth } from './analysisViewModel';
 
 /** The screen, then the part of it the field is on. */
 const SCREEN_NAME: Record<Lever['screen'], { label: string; part: string }> = {
-  '04': { label: '04 元件管理', part: '元件設定' },
-  '05': { label: '05 熱網路與邊界', part: '① 熱網路' },
+  '04': { label: '03 元件管理', part: '元件設定' },
+  '05': { label: '04 熱網路與邊界', part: '① 熱網路' },
   // The boundary half of Screen 05 (06 merged into it).
-  '06': { label: '05 熱網路與邊界', part: '② 散熱表面' },
+  '06': { label: '04 熱網路與邊界', part: '② 散熱表面' },
 };
 
 /** Enough digits to be actionable without pretending to a precision we lack. */

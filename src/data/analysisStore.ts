@@ -188,13 +188,13 @@ export const useAnalysisStore = create<AnalysisStoreState>((set, get) => ({
   run: async (projectId) => {
     const context = gather();
     if (!context) {
-      set({ lastError: 'No Screen 07 solution is available for this scenario.' });
+      set({ lastError: 'No Screen 05 solution is available for this scenario.' });
       return null;
     }
     if (context.stale || context.solution.status === 'FAILED') {
       set({
         lastError:
-          'The Screen 07 solution is stale or failed. Re-solve the network before analysing it.',
+          'The Screen 05 solution is stale or failed. Re-solve the network before analysing it.',
       });
       return null;
     }

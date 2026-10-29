@@ -67,7 +67,7 @@ describe('Edge Inspector scenario display', () => {
     );
 
     expect(html).toContain('Scenario Resolved');
-    expect(html).toContain('Screen 06 · SCN_55C · 0.0244 °C/W');
+    expect(html).toContain('Screen 04 surface · SCN_55C · 0.0244 °C/W');
     expect(html).toContain('12.00 W/m²·K');
     expect(html).toContain('0.850');
     expect(html).toContain('2.000000 m²');
@@ -295,13 +295,13 @@ describe('Edge Inspector spreading domain', () => {
     const html = render(edge({ plate_area_mm2: 8000, base_area_mm2: 92208, spreading_domain: 'Manual' }));
     expect(html).toContain('Stated area / 指定面積');
     expect(html).toContain('8,000 mm² (8.7 % of the base)');
-    expect(html).toContain('Set in Screen 04 for the component.');
+    expect(html).toContain('Set in Screen 03 for the component.');
   });
 
-  it('says a heat share is sized in Screen 07 and shows the whole base until then', () => {
+  it('says a heat share is sized in Screen 05 and shows the whole base until then', () => {
     const html = render(edge({ base_area_mm2: 92208, spreading_domain: 'HeatShare' }));
     expect(html).toContain('Own share of the heat / 依熱量分配');
-    expect(html).toContain('it is sized in Screen 07');
+    expect(html).toContain('it is sized in Screen 05');
     expect(html).toContain('92,208 mm²');
   });
 });

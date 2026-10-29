@@ -520,7 +520,7 @@ describe('analytical edge resistance (05 §21)', () => {
   it('keeps boundary-derived edges unresolved until Screen 06 (AC-05-34)', () => {
     const result = computeRth('convection_hA', { h_W_m2K: 10, area_mm2: 5000 });
     expect(result.value).toBeNull();
-    expect(result.note).toContain('05 散熱表面');
+    expect(result.note).toContain('04 散熱表面');
   });
 
   it('seeds package Rjc straight from the component (AC-05-28)', () => {
@@ -689,7 +689,7 @@ describe('shared structure (05 §13, §14, §15)', () => {
     const boundaryEdge = structure.edges.find((edge) => edge.to === ambient.id)!;
     expect(activeRth(boundaryEdge.rth)).toBeNull();
     expect(boundaryEdge.resolution).toBe('unresolved');
-    expect(boundaryEdge.resolution_note).toContain('05 散熱表面');
+    expect(boundaryEdge.resolution_note).toContain('04 散熱表面');
 
     // No h, no wind, no solar anywhere in the generated structure. Provenance
     // timestamps are dropped first: an ISO time can contain "55" as a minute or

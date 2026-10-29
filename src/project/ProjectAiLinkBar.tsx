@@ -64,7 +64,7 @@ export function ProjectAiLinkBar({
       ) : (
         <>
           <span className="text-ink-400">
-            未連結{ai.suggested ? `・04 的元件來自 AI-Thermal 專案「${ai.suggested}」` : ''}
+            未連結{ai.suggested ? `・03 的元件來自 AI-Thermal 專案「${ai.suggested}」` : ''}
           </span>
           <span className="ml-auto">
             <Button
@@ -106,7 +106,7 @@ export function ProjectAiLinkBar({
           }
         >
           <p className="text-[13px] leading-relaxed text-ink-700">
-            01 的數值都保留，之後由本工具維護，「從 AI-Thermal 更新」不再更新它們。04 的元件各自的連結不受影響。
+            01 的數值都保留，之後由本工具維護，「從 AI-Thermal 更新」不再更新它們。03 的元件各自的連結不受影響。
             要再連結，按「連結 AI-Thermal 專案」。
           </p>
         </Modal>

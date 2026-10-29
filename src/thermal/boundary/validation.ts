@@ -101,8 +101,8 @@ export function validateBoundarySet(input: BoundaryValidationInput): BoundaryVal
         'error',
         'NO_TOPOLOGY',
         'Boundary Conditions require a saved thermal graph topology.',
-        '邊界條件需要 05 已儲存的熱網路拓樸。',
-        { suggested_action: 'Return to 05 Thermal Path Builder.' },
+        '邊界條件需要 04 已儲存的熱網路拓樸。',
+        { suggested_action: 'Return to 04 Thermal Path Builder.' },
       ),
     );
   }
@@ -143,8 +143,8 @@ export function validateBoundarySet(input: BoundaryValidationInput): BoundaryVal
         message(
           'warning',
           'STALE_TOPOLOGY',
-          `The thermal graph changed since this boundary set was saved (${drift}), and ${orphaned.length} boundary port(s) it describes no longer exist: ${orphaned.join(', ')}. Review boundary assignments before continuing to Screen 07.`,
-          `拓樸在此邊界條件儲存後已變更（${drift}），且其中 ${orphaned.length} 個邊界端口已不存在：${orphaned.join('、')}。請重新檢查指派後再進入 07。`,
+          `The thermal graph changed since this boundary set was saved (${drift}), and ${orphaned.length} boundary port(s) it describes no longer exist: ${orphaned.join(', ')}. Review boundary assignments before continuing to Screen 05.`,
+          `拓樸在此邊界條件儲存後已變更（${drift}），且其中 ${orphaned.length} 個邊界端口已不存在：${orphaned.join('、')}。請重新檢查指派後再進入 05。`,
           { suggested_action: 'Reassign or remove the orphaned boundary conditions, then save the boundary set.' },
         ),
       );
@@ -483,8 +483,8 @@ export function validateBoundarySet(input: BoundaryValidationInput): BoundaryVal
             message(
               'warning',
               `PROFILE_RAD_GUESS_${id}`,
-              `"${profile.name}": radiation preview uses an assumed surface temperature. The real one is solved in Screen 07.`,
-              `「${profile.name}」的輻射預覽採用假設的表面溫度，實際值由 07 求解。`,
+              `"${profile.name}": radiation preview uses an assumed surface temperature. The real one is solved in Screen 05.`,
+              `「${profile.name}」的輻射預覽採用假設的表面溫度，實際值由 05 求解。`,
               { profile_id: id },
             ),
           );
@@ -581,8 +581,8 @@ export function validateBoundarySet(input: BoundaryValidationInput): BoundaryVal
         message(
           'error',
           `PROFILE_FLOTHERM_STATUS_${id}`,
-          `"${profile.name}" claims a FloTHERM source, but Screen 03 is deferred. Mark it as metadata only.`,
-          `「${profile.name}」宣稱來源為 FloTHERM，但 Screen 03 尚未實作，請標示為僅中繼資料。`,
+          `"${profile.name}" claims a FloTHERM source, but FloTHERM import is deferred. Mark it as metadata only.`,
+          `「${profile.name}」宣稱來源為 FloTHERM，但 FloTHERM 匯入尚未開放，請標示為僅中繼資料。`,
           { profile_id: id },
         ),
       );

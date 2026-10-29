@@ -41,18 +41,19 @@ export function PlaceholderScreen({ code }: { code: string }) {
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-[18px] font-bold text-ink-900">
-                {screen.code} {screen.labelEn}
+                {screen.no ? `${screen.no} ` : ''}
+                {screen.labelEn}
                 <span className="ml-2 font-semibold text-ink-400">/ {screen.label}</span>
               </h1>
               <Badge tone="neutral">Deferred</Badge>
             </div>
             <p className="mt-2 text-[13px] leading-relaxed text-ink-600">
               FloTHERM import is intentionally deferred until a real export schema is validated.
-              The analytical Golden Flow continues through Screens 04-12 without CFD data.
+              The analytical Golden Flow (01–07) runs without CFD data.
             </p>
             <p className="mt-1 text-[12px] leading-relaxed text-ink-400">
               FloTHERM 匯入將在真實匯出格式完成驗證後實作；目前的分析 Golden Flow 不依賴 CFD
-              資料，仍可完整執行 04-12。
+              資料，01–07 仍可完整執行。
             </p>
           </div>
         </div>
@@ -63,7 +64,7 @@ export function PlaceholderScreen({ code }: { code: string }) {
             Reserved integration contracts / 已保留整合契約
           </div>
           <ul className="mt-3 space-y-2 text-[12px] text-ink-600">
-            <li>• Route and data hooks remain available for future Screen 03 integration.</li>
+            <li>• Route and data hooks remain available for future FloTHERM import integration.</li>
             <li>• External object/surface mapping fields remain metadata-only.</li>
             <li>• Analytical, FloTHERM and measurement result slots remain separate.</li>
             <li>• No parser, guessed column mapping or fabricated CFD result is included.</li>
@@ -73,7 +74,7 @@ export function PlaceholderScreen({ code }: { code: string }) {
         {projectId && (
           <div className="mt-6 flex justify-end">
             <Button variant="primary" onClick={() => navigate(projectPath(projectId, 'components'))}>
-              Continue Analytical Flow to 04
+              Continue Analytical Flow to 03
             </Button>
           </div>
         )}

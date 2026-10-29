@@ -86,7 +86,7 @@ function ApplySplitButton({
         disabled={disabled}
         onClick={() => onApply(true)}
       >
-        套用 {count} 顆並前往 04
+        套用 {count} 顆並前往 03
       </Button>
       <Button
         variant="primary"
@@ -239,7 +239,7 @@ export function ImportComponentsView() {
               trailingIcon={<ArrowRight size={15} />}
               onClick={() => navigate(projectPath(projectId, 'components'))}
             >
-              前往 04 元件管理
+              前往 03 元件管理
             </Button>
           </>
         ) : step === 'mapping' && table ? (
@@ -305,7 +305,7 @@ export function ImportComponentsView() {
           {applyResult.requires_network_review && (
             <p className="mt-1.5 flex items-start gap-1.5 text-[12.5px] text-warn-600">
               <AlertTriangle size={13} className="mt-0.5 shrink-0" aria-hidden />
-              新元件還沒接上熱網路，求解前請到 05 熱路徑建立更新網路。
+              新元件還沒接上熱網路，求解前請到 04 熱路徑建立更新網路。
             </p>
           )}
         </div>

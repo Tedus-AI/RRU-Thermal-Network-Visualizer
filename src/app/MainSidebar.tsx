@@ -93,7 +93,7 @@ export function MainSidebar({
                       <button
                         type="button"
                         disabled={!to}
-                        title={collapsed ? `${screen.code} ${screen.label}` : undefined}
+                        title={collapsed ? `${screen.no} ${screen.label}` : undefined}
                         aria-current={active ? 'page' : undefined}
                         onClick={() => to && navigate(to)}
                         className={`flex w-full items-center gap-2.5 rounded-md text-left text-[13px] transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
@@ -110,7 +110,7 @@ export function MainSidebar({
                             <span
                               className={`tabular mr-1.5 ${active ? 'text-white/70' : 'text-white/40'}`}
                             >
-                              {screen.code}
+                              {screen.no}
                             </span>
                             {screen.label}
                           </span>

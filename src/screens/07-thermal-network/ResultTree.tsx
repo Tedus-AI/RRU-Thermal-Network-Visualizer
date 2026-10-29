@@ -260,9 +260,9 @@ function EdgeRow({
           {edge.rth_origin === 'boundary_scenario' && (
             <span
               className="shrink-0 rounded bg-accent-100 px-1 py-0.5 text-[9px] leading-none font-bold text-accent-700"
-              title="熱阻取自 05 這個情境的散熱表面條件"
+              title="熱阻取自 04 這個情境的散熱表面條件"
             >
-              05
+              04
             </span>
           )}
           {edge.rth_origin === 'spreading_biot' && (

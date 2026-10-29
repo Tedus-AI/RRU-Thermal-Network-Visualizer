@@ -390,7 +390,7 @@ export function buildMountChain(input: {
             ...qmaxParameter(mount),
           },
           missingNote:
-            'Heat pipe resistance is a vendor number and cannot be derived from geometry. State it in Screen 04, for ONE pipe — the count beside it puts them in parallel.',
+            'Heat pipe resistance is a vendor number and cannot be derived from geometry. State it in Screen 03, for ONE pipe — the count beside it puts them in parallel.',
         }),
       ],
       entryNodeId: portNodeId,
@@ -468,8 +468,8 @@ export function buildMountChain(input: {
               ...(area != null ? { area_mm2: area } : {}),
             },
         missingNote: isBoss
-          ? 'Boss height and footprint come from Screen 04; the metal k from Screen 01.'
-          : 'Small base thickness and footprint come from Screen 04; the metal k from Screen 01.',
+          ? 'Boss height and footprint come from Screen 03; the metal k from Screen 01.'
+          : 'Small base thickness and footprint come from Screen 03; the metal k from Screen 01.',
       }),
     );
     cursor = block.id;
@@ -499,7 +499,7 @@ export function buildMountChain(input: {
           ...qmaxParameter(mount),
         },
         missingNote:
-          'Vapour chamber resistance is a vendor number, quoted at a stated power and source size. It cannot be derived from geometry — state it in Screen 04.',
+          'Vapour chamber resistance is a vendor number, quoted at a stated power and source size. It cannot be derived from geometry — state it in Screen 03.',
       }),
     );
     cursor = chamber.id;
@@ -578,7 +578,7 @@ export function buildMountChain(input: {
             ...qmaxParameter(mount),
           },
           missingNote:
-            'Heat pipe resistance is a vendor number and cannot be derived from geometry. State it in Screen 04.',
+            'Heat pipe resistance is a vendor number and cannot be derived from geometry. State it in Screen 03.',
         }),
       );
     }
@@ -611,7 +611,7 @@ function jointSpec(
         ...(area != null ? { area_mm2: area } : {}),
       },
       missingNote:
-        'The joint under the mount needs its bond line and footprint from Screen 04, and the material k from Screen 01.',
+        'The joint under the mount needs its bond line and footprint from Screen 03, and the material k from Screen 01.',
     };
   }
   return {

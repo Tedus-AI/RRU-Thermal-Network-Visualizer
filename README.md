@@ -11,21 +11,25 @@ Data Provenance / Physics Correctness 原則為準。
 
 ## 開發狀態
 
-| Screen | 功能 | 狀態 |
-| --- | --- | --- |
-| — | Phase 0 Foundation（App Shell、Routing、Thermal Graph 資料模型、Solver、Validation、Shared Stores、Persistence） | ✅ |
-| 01 | Project Info | ✅ |
-| 02 | Import Components | ✅ |
-| 03 | FloTHERM Import | ⏸ 刻意延後（見下） |
-| 04 | Component Manager | ✅ |
-| 05 | 熱網路與邊界（Thermal Path Builder＋Boundary Conditions 合併） | ✅ |
-| 06 | Boundary Conditions | ↪ 併入 05（`/boundary` 自動導到 05） |
-| 07 | 求解與結果（Thermal Network＋Results Overview 合併） | ✅ |
-| 08 | 瓶頸分析（Bottleneck Analysis；元件依餘裕排序的下拉，08 §35） | ✅ |
-| 09 | Temperature Distribution | ✕ 已移除（`/temperature` 導到 07） |
-| 10 | Results Overview | ↪ 併入 07（`/results` 自動導到 07） |
-| 11 | 報告與匯出（Report Preview＋Export Center 合併，側欄的 10） | ✅ |
-| 12 | Export Center | ↪ 併入報告與匯出（`/export` 開 10 的「匯出設定」） |
+畫面有兩個編號：**側欄編號**是使用者看到的（01–07，沒有斷號）；**規格書編號**是規格書資料夾與
+程式註解裡 `07 §59` 這類引用用的。程式內部的 id（`fix_in`、`source_screen`、儲存鍵）沿用改版前的號碼，不會變
+（`src/app/navigation.ts` 的 `no` 與 `code`，對照表見 `docs/APP_SHELL_CONTRACT.md`「Two numbers」）。
+
+| 側欄編號 | 規格書編號 | 功能 | 狀態 |
+| --- | --- | --- | --- |
+| — | — | Phase 0 Foundation（App Shell、Routing、Thermal Graph 資料模型、Solver、Validation、Shared Stores、Persistence） | ✅ |
+| 01 | 01 | 專案資訊（Project Info） | ✅ |
+| 02 | 02 | 匯入硬體元件（Import Components） | ✅ |
+| — | 03 | FloTHERM 匯入（FloTHERM Import） | ⏸ 刻意延後（見下），不在側欄 |
+| 03 | 04 | 元件管理（Component Manager） | ✅ |
+| 04 | 05 | 熱網路與邊界（Thermal Path Builder＋Boundary Conditions 合併） | ✅ |
+| （04） | 06 | Boundary Conditions | ↪ 併入 04（`/boundary` 自動導到 04） |
+| 05 | 07 | 求解與結果（Thermal Network＋Results Overview 合併） | ✅ |
+| 06 | 08 | 瓶頸分析（Bottleneck Analysis；元件依餘裕排序的下拉，08 §35） | ✅ |
+| — | 09 | Temperature Distribution | ✕ 已移除（`/temperature` 導到 05） |
+| （05） | 10 | Results Overview | ↪ 併入 05（`/results` 自動導到 05） |
+| 07 | 11 | 報告與匯出（Report Preview＋Export Center 合併） | ✅ |
+| （07） | 12 | Export Center | ↪ 併入報告與匯出（`/export` 開它的「匯出設定」） |
 
 ## 技術堆疊
 

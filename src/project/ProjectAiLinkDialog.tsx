@@ -149,7 +149,7 @@ export function ProjectAiLinkDialog({
                   ...(ai.target ? [] : [{ value: '', label: '— 請選擇 —' }]),
                   ...ai.projects.map((p) => ({
                     value: p.id,
-                    label: `${p.name}${p.name !== p.id ? `（${p.id}）` : ''}${p.id === ai.suggested ? '・04 的元件來自這裡' : ''}`,
+                    label: `${p.name}${p.name !== p.id ? `（${p.id}）` : ''}${p.id === ai.suggested ? '・03 的元件來自這裡' : ''}`,
                   })),
                 ]}
               />
@@ -271,7 +271,7 @@ export function ProjectAiLinkDialog({
             <span className="leading-relaxed">
               <span className="font-semibold text-ink-900">另外新增情境「常溫 25 °C」</span>
               <span className="block text-[12px] text-ink-600">
-                環境 25 °C、功耗用「常溫 Pd」：AI-Thermal 有 {ai.roomTemp.parts} 顆元件填了 Pd@25°C（帶進 04 的「常溫功耗」）。
+                環境 25 °C、功耗用「常溫 Pd」：AI-Thermal 有 {ai.roomTemp.parts} 顆元件填了 Pd@25°C（帶進 03 的「常溫功耗」）。
                 目前的情境不變；新增後可在 01 的情境表改名或調整，之後的更新不會再動它。
               </span>
             </span>

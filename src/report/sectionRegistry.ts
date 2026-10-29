@@ -74,7 +74,7 @@ export const SECTION_DEFINITIONS: SectionDefinition[] = [
     zh: '封面',
     recommended: true,
     source_screen: '10',
-    source_zh: '10 報告設定',
+    source_zh: '07 報告設定',
     defaultContent: {},
     // A cover always owns its page.
     base_height: 1,
@@ -88,7 +88,7 @@ export const SECTION_DEFINITIONS: SectionDefinition[] = [
     zh: '情境摘要',
     recommended: true,
     source_screen: '01',
-    source_zh: '05 熱網路與邊界 / 01 情境',
+    source_zh: '04 熱網路與邊界 / 01 情境',
     defaultContent: {
       show_stage: true,
       show_scenario: true,
@@ -106,7 +106,7 @@ export const SECTION_DEFINITIONS: SectionDefinition[] = [
     zh: '整體熱狀態',
     recommended: true,
     source_screen: '07',
-    source_zh: '07 求解與結果',
+    source_zh: '05 求解與結果',
     defaultContent: {},
     base_height: 0.3,
   },
@@ -117,7 +117,7 @@ export const SECTION_DEFINITIONS: SectionDefinition[] = [
     splittable: true,
     recommended: false,
     source_screen: '07',
-    source_zh: '07 求解與結果',
+    source_zh: '05 求解與結果',
     defaultContent: {
       // 0 is "All". It used to be 5, which meant a report of a nine-part
       // machine dropped four of them with nothing on the page to say so —
@@ -140,7 +140,7 @@ export const SECTION_DEFINITIONS: SectionDefinition[] = [
     splittable: true,
     recommended: false,
     source_screen: '07',
-    source_zh: '07 求解與結果',
+    source_zh: '05 求解與結果',
     defaultContent: {},
     // A figure plus its caption is about a third of a page; two to a page is
     // what makes them readable. Without this the section claimed half a page
@@ -159,7 +159,7 @@ export const SECTION_DEFINITIONS: SectionDefinition[] = [
     splittable: true,
     recommended: true,
     source_screen: '08',
-    source_zh: '08 瓶頸分析 / 07 求解與結果',
+    source_zh: '06 瓶頸分析 / 05 求解與結果',
     defaultContent: {},
     base_height: 0.06,
     row_height: 0.34,
@@ -176,7 +176,7 @@ export const SECTION_DEFINITIONS: SectionDefinition[] = [
     splittable: true,
     recommended: false,
     source_screen: '07',
-    source_zh: '07 求解與結果',
+    source_zh: '05 求解與結果',
     defaultContent: {},
     base_height: 0.06,
     row_height: 0.05,

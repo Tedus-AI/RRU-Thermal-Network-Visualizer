@@ -18,7 +18,7 @@
 import { ArrowRight, CircleCheck, CircleMinus, ListChecks, TriangleAlert } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { PanelCard } from '@/ui/primitives';
-import { projectPath } from '@/app/navigation';
+import { displayNo, projectPath } from '@/app/navigation';
 import { lastSolveLabel, useSolverStore } from '@/data/solverStore';
 import { nextStepFor, useProjectHealth, useProjectOverview } from './projectHealth';
 
@@ -150,7 +150,7 @@ export function ProjectProgressPanel() {
                 <button
                   type="button"
                   onClick={() => navigate(projectPath(projectId!, row.targetPath!))}
-                  title={`前往 ${row.code}`}
+                  title={`前往 ${displayNo(row.code)}`}
                   className="-mx-1.5 flex w-[calc(100%+0.75rem)] items-center gap-2.5 rounded px-1.5 py-[7px] text-left hover:bg-surface-muted"
                 >
                   {content}

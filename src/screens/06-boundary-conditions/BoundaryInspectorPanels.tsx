@@ -274,7 +274,7 @@ export function SurfaceAssumptionResult({
   if (check.verdict === 'unavailable') {
     return (
       <p className="mt-1.5 text-[10px] leading-relaxed text-ink-400">
-        還沒有可以對照的求解結果：到 07 求解後回到這裡，會寫出實際表面溫度，並可一鍵帶入「表面溫度假設」。
+        還沒有可以對照的求解結果：到 05 求解後回到這裡，會寫出實際表面溫度，並可一鍵帶入「表面溫度假設」。
       </p>
     );
   }
@@ -291,17 +291,17 @@ export function SurfaceAssumptionResult({
     >
       <p className="font-bold">
         {verified
-          ? `已對照 07：假設成立（邊界熱阻差 ${formatNumber(check.r_error_pct, 1, '%')}）。`
-          : `已對照 07：表面解出 ${formatNumber(check.solved_C, 1, '°C')}，不是假設的 ${formatNumber(check.assumed_C, 1, '°C')}。`}
+          ? `已對照 05：假設成立（邊界熱阻差 ${formatNumber(check.r_error_pct, 1, '%')}）。`
+          : `已對照 05：表面解出 ${formatNumber(check.solved_C, 1, '°C')}，不是假設的 ${formatNumber(check.assumed_C, 1, '°C')}。`}
       </p>
       <p className="mt-0.5">
-        {`假設 ${formatNumber(check.assumed_C, 1, '°C')} → 07 解出 ${formatNumber(check.solved_C, 1, '°C')}（${delta}）；` +
+        {`假設 ${formatNumber(check.assumed_C, 1, '°C')} → 05 解出 ${formatNumber(check.solved_C, 1, '°C')}（${delta}）；` +
           `邊界熱阻 ${formatRth(check.r_assumed_C_per_W)} → ${formatRth(check.r_solved_C_per_W)}`}
       </p>
       {!verified && (
         <p className="mt-0.5">
           以解出的表面溫度重新求值，邊界熱阻會改變 {formatNumber(check.r_error_pct, 1, '%')}。
-          帶入後請回 07 重新求解：邊界改了，表面溫度會再動一次，需要再對照一輪。
+          帶入後請回 05 重新求解：邊界改了，表面溫度會再動一次，需要再對照一輪。
         </p>
       )}
       {/* Click-to-apply: the solved value goes into 表面溫度假設 only when asked. */}
@@ -329,14 +329,14 @@ export const ASSUMPTION_COPY: Record<
 > = {
   surface_temperature_guess: {
     title: '表面溫度是求解前的假設值',
-    body: '「表面溫度假設」留白時取環境溫度 + 35 °C。輻射係數 h_rad 依它線性化；07 求解後，下方會寫出實際表面溫度，並可一鍵帶入重算。',
+    body: '「表面溫度假設」留白時取環境溫度 + 35 °C。輻射係數 h_rad 依它線性化；05 求解後，下方會寫出實際表面溫度，並可一鍵帶入重算。',
     format: (value) => `${value.toFixed(1)} °C`,
   },
   plate_convection: {
     // Stands alone. This fires whether or not the surface temperature was
     // stated, so it must not refer to a line above it that may not be there.
     title: 'h 由平板自然對流關聯式算出',
-    body: '以表面溫度假設求值；h_conv 與 h_rad 都隨它變動。07 解出的實際表面溫度不同時，這裡的熱阻也會跟著改變。',
+    body: '以表面溫度假設求值；h_conv 與 h_rad 都隨它變動。05 解出的實際表面溫度不同時，這裡的熱阻也會跟著改變。',
     format: (value) => `假設表面 ${value.toFixed(1)} °C`,
   },
   solar_estimate: {
@@ -346,7 +346,7 @@ export const ASSUMPTION_COPY: Record<
   },
   external_cfd_placeholder: {
     title: '外部 CFD 佔位',
-    body: '只記錄資訊，不參與計算（03 尚未啟用）。',
+    body: '只記錄資訊，不參與計算（FloTHERM 匯入尚未啟用）。',
     format: (value) => String(value),
   },
 };
@@ -408,14 +408,14 @@ export function AmbientReferenceSummary({
         <p className={`mt-3 rounded border p-2 text-[10px] leading-relaxed ${ready ? 'border-ok-500/40 bg-ok-100 text-ok-600' : 'border-danger-500/40 bg-danger-100 text-danger-600'}`}>
           {ready ? (
             <Bi
-              en="Ready. Screen 07 has an absolute temperature reference."
-              zh="已就緒，Screen 07 已具備絕對溫度參考。"
+              en="Ready. Screen 05 has an absolute temperature reference."
+              zh="已就緒，Screen 05 已具備絕對溫度參考。"
               inline
             />
           ) : (
             <Bi
-              en="Ambient temperature is required. Without it, Screen 07 has no absolute temperature reference and solving is blocked."
-              zh="必須設定環境溫度；缺少時 07 沒有絕對溫度參考，因此會阻擋求解。"
+              en="Ambient temperature is required. Without it, Screen 05 has no absolute temperature reference and solving is blocked."
+              zh="必須設定環境溫度；缺少時 05 沒有絕對溫度參考，因此會阻擋求解。"
               inline
             />
           )}
@@ -897,7 +897,7 @@ export function PlateGeometryPanel({
         {result != null && guessed && (
           <p className="mt-1.5 text-[10px] leading-relaxed text-ink-400">
             ΔT 來自「表面溫度假設」（留白時以環境溫度 + 35 °C 預估）。h 隨 ΔT 約以四次方根變化，
-            所以這個假設偏個十度對 h 的影響在 5% 以內；真實表面溫度由 07 求解。
+            所以這個假設偏個十度對 h 的影響在 5% 以內；真實表面溫度由 05 求解。
           </p>
         )}
       </div>

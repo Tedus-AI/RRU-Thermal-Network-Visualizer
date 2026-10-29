@@ -232,7 +232,7 @@ const segOf = (view: HeatPathView, id: SegmentId) =>
 function rLab(segment: ChainSegment | undefined): { r: string; rc: '' | 'miss' | 'later' } {
   if (!segment) return { r: '', rc: '' };
   if (segment.missing.length > 0) return { r: `缺 ${segment.missing[0]}`, rc: 'miss' };
-  if (segment.later) return { r: '05 計算', rc: 'later' };
+  if (segment.later) return { r: '04 計算', rc: 'later' };
   return { r: `${fR(segment.R)} °C/W${segment.parallel ? ' ∥' : ''}`, rc: '' };
 }
 
@@ -761,7 +761,7 @@ export function draw2D(view: HeatPathView, ids: SvgIds): Drawing {
         y: at.pkgTop - 14,
         xr: pkgX + pkgW * 0.8 + 4,
         t: '暴露表面',
-        s: '對流＋輻射（05 設定）',
+        s: '對流＋輻射（04 設定）',
       });
     }
     timW = pkgW;
@@ -924,7 +924,7 @@ export function draw2D(view: HeatPathView, ids: SvgIds): Drawing {
       ? `整片底座 ${fMm(view.base.L)} × ${fMm(view.base.W)} mm`
       : domain.mode === 'Manual'
         ? `√A ≈ ${pos(domain.area_mm2) ? fMm(Math.sqrt(domain.area_mm2)) : '—'} mm（每顆 ${fA(domain.area_mm2)} mm²）`
-        : '面積由 07 求解後決定',
+        : '面積由 05 求解後決定',
     [
       [cx - domW / 2, y + baseH],
       [cx + domW / 2, y + baseH],
@@ -974,7 +974,7 @@ export function draw2D(view: HeatPathView, ids: SvgIds): Drawing {
     xr: bx + baseW,
     t: '散熱器底座',
     s: `${fMm(view.base.L)}×${fMm(view.base.W)}×${fMm(view.base.t)} mm・${SPREADING_DOMAIN_LABELS[domain.mode].zh}`,
-    r: '05 計算',
+    r: '04 計算',
     rc: 'later',
   });
   y += baseH;
@@ -1017,8 +1017,8 @@ export function draw2D(view: HeatPathView, ids: SvgIds): Drawing {
     y: y + finH * 0.45,
     xr: bx + baseW,
     t: '鰭片',
-    s: '對流到環境（05 設定）',
-    r: '07 計算',
+    s: '對流到環境（04 設定）',
+    r: '05 計算',
     rc: 'later',
   });
   y += finH;
@@ -1576,11 +1576,11 @@ function layerTitle3D(sl: Slab, view: HeatPathView): Omit<LabelItem, 'layer' | '
       return {
         t: '散熱器底座',
         s: `${SPREADING_DOMAIN_LABELS[view.spreading.mode].zh}・橘色＝擴散範圍`,
-        r: '05 計算',
+        r: '04 計算',
         rc: 'later',
       };
     case 'fins':
-      return { t: '鰭片', s: '05 設定', r: '07 計算', rc: 'later' };
+      return { t: '鰭片', s: '04 設定', r: '05 計算', rc: 'later' };
     default:
       return null;
   }

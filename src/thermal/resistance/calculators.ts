@@ -161,9 +161,9 @@ export function directRth(params: EdgeParameters): RthComputation {
 
 export const SPREADING_UNDER_ESTIMATE_NOTE =
   'Assumption: Lee/Song/Au/Moran disc spreading, exact series, with Bi → ∞ (a ' +
-  'perfectly cooled far face). Bi needs h, which is a 05 散熱表面 boundary ' +
+  'perfectly cooled far face). Bi needs h, which is a 04 散熱表面 boundary ' +
   'condition, and Bi → ∞ gives the smallest spreading the model can produce — so ' +
-  'this UNDER-estimates. Screen 07 re-solves this edge at the finite Bi the ' +
+  'this UNDER-estimates. Screen 05 re-solves this edge at the finite Bi the ' +
   "scenario's own boundary implies and reports both numbers; the value here is " +
   'the floor. The series itself is exact for the stated geometry; the ' +
   'equal-area circular substitution for a rectangular base costs under ~10%.';
@@ -222,7 +222,7 @@ export function boundaryDerivedRth(): RthComputation {
     value: null,
     resolution: 'unresolved',
     missing: ['boundary_conditions'],
-    note: 'Resolved in 05 散熱表面 once boundary conditions are defined.',
+    note: 'Resolved in 04 散熱表面 once boundary conditions are defined.',
   };
 }
 
@@ -339,7 +339,7 @@ export function computeRth(method: EdgeMethod, params: EdgeParameters): RthCompu
     case 'radiation_hA':
       return boundaryDerivedRth();
     case 'imported':
-      return unresolved([], 'Imported values arrive with Screen 03.');
+      return unresolved([], 'Imported values arrive with FloTHERM import.');
     default:
       return unresolved(['method']);
   }

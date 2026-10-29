@@ -7,21 +7,21 @@ export const MANAGER_TOOLTIPS_ZH: Record<string, string> = {
   Rjc: '接面到外殼熱阻；若使用「模組散熱面／底板」模型則不適用，也不會建立 Rjc 熱阻邊。',
   'Limit Type': '指定溫度上限的參考位置：Tj 接面、Tc 外殼、Tb 底板或 Ts 原廠指定表面。',
   'Reference Location': '選擇原廠指定散熱面上的量測位置：左側、中央或右側。',
-  'Thermal Profile': '此元件是否已建入 05 的熱網路。',
+  'Thermal Profile': '此元件是否已建入 04 的熱網路。',
   'Preferred Base Zone':
-    '此元件的熱要交給哪一塊共用散熱結構。05 據此建議把元件的散熱出口接到哪個基座節點——接到不同區域＝走不同的散熱器＝到環境的路徑不同，會影響溫度。此處只是建議，不會自行建立節點。',
+    '此元件的熱要交給哪一塊共用散熱結構。04 據此建議把元件的散熱出口接到哪個基座節點——接到不同區域＝走不同的散熱器＝到環境的路徑不同，會影響溫度。此處只是建議，不會自行建立節點。',
   'Qty Modeling':
-    '數量大於 1 時，05 要把它們畫成幾條熱路徑。Aggregate＝一條，該節點承擔全部功耗（4 顆 45W 就是一個 180W 節點）；Individual＝每顆一條各 45W；Grouped＝分成幾組。Aggregate 最省節點但會低估單顆熱點溫度，Individual 才看得出單顆峰值。',
+    '數量大於 1 時，04 要把它們畫成幾條熱路徑。Aggregate＝一條，該節點承擔全部功耗（4 顆 45W 就是一個 180W 節點）；Individual＝每顆一條各 45W；Grouped＝分成幾組。Aggregate 最省節點但會低估單顆熱點溫度，Individual 才看得出單顆峰值。',
   'External Mapping':
-    '預留給 FloTHERM 等外部模擬物件的 mapping；03 目前延後，本頁不解析 FloTHERM 格式。',
+    '預留給 FloTHERM 等外部模擬物件的 mapping；FloTHERM 匯入目前延後，本頁不解析 FloTHERM 格式。',
   'Total Power': '數量 × 單顆功耗的加總；不是熱路徑上的熱流 Q。',
   'Power RT':
-    '環境 25 °C 時的單顆功耗（AI-Thermal 的 Pd@25°C）。只有 01 的情境「功耗」選「常溫 Pd」時才用到；沒填的元件在常溫情境暫用上面的單顆功耗，07 會列出是哪些。',
+    '環境 25 °C 時的單顆功耗（AI-Thermal 的 Pd@25°C）。只有 01 的情境「功耗」選「常溫 Pd」時才用到；沒填的元件在常溫情境暫用上面的單顆功耗，05 會列出是哪些。',
   'Project Default': '此元件繼承 Project 共用材料或 thermal parameter。',
   'Component Override': '此元件改用自己的 thermal parameter。',
   'Architecture Template Preference':
-    '只保存建模偏好；熱網路的節點與路徑由 05 建立。',
-  Qty: '元件數量；不代表 05 一定建立相同數量的節點。',
+    '只保存建模偏好；熱網路的節點與路徑由 04 建立。',
+  Qty: '元件數量；不代表 04 一定建立相同數量的節點。',
   Power: '單顆元件轉為熱的耗散功率 Pdiss，單位 W；電源模組請勿填額定輸出功率。',
   Limit: '元件允許最高溫度，單位 °C。',
   Package: '封裝型式，例如 QFN、BGA、Bare Die、Module。',

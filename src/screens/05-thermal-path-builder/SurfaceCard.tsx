@@ -84,7 +84,7 @@ export function SurfaceCard({
     >
       {surfaces.length === 0 || !set ? (
         <p className="text-[11.5px] leading-relaxed text-ink-500">
-          熱網路還沒有散熱表面。先在 ① 依 04 產生熱網路，散熱器的鰭片表面就會出現在這裡。
+          熱網路還沒有散熱表面。先在 ① 依 03 產生熱網路，散熱器的鰭片表面就會出現在這裡。
         </p>
       ) : (
         <div className="flex flex-col gap-2.5">

@@ -92,7 +92,7 @@ function MiniSubgraph({ template }: { template: ThermalTemplate }) {
             >
               {target.label}
             </span>
-            <span className="text-ink-300">/ 05 散熱表面</span>
+            <span className="text-ink-300">/ 04 散熱表面</span>
           </div>
         );
       })}

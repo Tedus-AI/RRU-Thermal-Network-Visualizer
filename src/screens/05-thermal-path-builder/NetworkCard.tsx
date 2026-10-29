@@ -48,7 +48,7 @@ export function NetworkCard({
   const status = isEmpty
     ? '尚未產生'
     : requiresReview
-      ? '04 有改過'
+      ? '03 有改過'
       : `${kpis.componentsModeled} / ${kpis.componentsTotal} 種元件`;
 
   return (
@@ -56,7 +56,7 @@ export function NetworkCard({
       id="card-network"
       index={1}
       title="熱網路"
-      subtitle="依 04 的散熱路徑產生"
+      subtitle="依 03 的散熱路徑產生"
       status={status}
       tone={tone}
       open={open}
@@ -65,7 +65,7 @@ export function NetworkCard({
       <div className="flex flex-col gap-2.5">
         {requiresReview && !isEmpty && (
           <p className="rounded-md border border-warn-500/40 bg-warn-100/70 px-2.5 py-1.5 text-[11px] leading-relaxed text-warn-600" data-review-note>
-            04 改過會影響熱網路的欄位（數量、TIM、散熱路徑、幾何、啟用、新增或刪除元件）。按「依 04 重新產生」更新熱網路。
+            03 改過會影響熱網路的欄位（數量、TIM、散熱路徑、幾何、啟用、新增或刪除元件）。按「依 03 重新產生」更新熱網路。
           </p>
         )}
         {staleEdges.length > 0 && !readOnly && (
@@ -82,7 +82,7 @@ export function NetworkCard({
           >
             <RefreshCw size={13} className="mt-0.5 shrink-0" aria-hidden />
             <span>
-              {staleComponents.length} 種元件的 {staleEdges.length} 個熱阻已過期：01／04 的數值改過，圖上還是舊的熱阻（07
+              {staleComponents.length} 種元件的 {staleEdges.length} 個熱阻已過期：01／03 的數值改過，圖上還是舊的熱阻（05
               求解已經用新的值）。點這裡重新產生。
             </span>
           </button>
@@ -90,7 +90,7 @@ export function NetworkCard({
 
         {isEmpty ? (
           <p className="text-[11.5px] leading-relaxed text-ink-500">
-            還沒有熱網路。按「依 04 產生」，每顆元件會依 04 設定的散熱路徑建好節點與熱阻，並接到散熱器底座。
+            還沒有熱網路。按「依 03 產生」，每顆元件會依 03 設定的散熱路徑建好節點與熱阻，並接到散熱器底座。
           </p>
         ) : (
           <div className="grid grid-cols-5 gap-1.5" data-network-counts>
@@ -112,10 +112,10 @@ export function NetworkCard({
             icon={<Sparkles size={14} aria-hidden />}
             className="h-8"
             disabled={readOnly || enabledComponents.length === 0}
-            title={enabledComponents.length === 0 ? '04 還沒有啟用的元件' : undefined}
+            title={enabledComponents.length === 0 ? '03 還沒有啟用的元件' : undefined}
             onClick={() => setShowGenerate(true)}
           >
-            {isEmpty ? '依 04 產生' : '依 04 重新產生'}
+            {isEmpty ? '依 03 產生' : '依 03 重新產生'}
           </Button>
           <Button
             className="h-8"

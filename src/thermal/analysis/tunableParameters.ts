@@ -330,7 +330,7 @@ const METHOD_LEVERS: Record<EdgeMethod, Spec[]> = {
       direction: 'up',
       exponent: null,
       screen: '06',
-      note: 'h 和散熱面積都在 05 散熱表面設定，不在這條連線上。',
+      note: 'h 和散熱面積都在 04 散熱表面設定，不在這條連線上。',
     },
   ],
   radiation_hA: [
@@ -785,7 +785,7 @@ export function segmentLevers(
         target: null,
         screen: '06',
         destination: { screen: '06', node_id: edge.to },
-        note: '也決定對流面積和 Bi，要到 05 散熱表面改，不只是這條連線。',
+        note: '也決定對流面積和 Bi，要到 04 散熱表面改，不只是這條連線。',
       };
     }
 

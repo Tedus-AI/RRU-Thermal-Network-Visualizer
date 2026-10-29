@@ -606,7 +606,7 @@ export function MaterialDefaultsForm({
           </div>
           {!hskConfigured && (
             <p className="mt-2 text-[12px] text-warn-600">
-              ⚠ 厚度、k、長 × 寬未填齊 → 05 無法算出到散熱器底座的擴散熱阻。
+              ⚠ 厚度、k、長 × 寬未填齊 → 04 無法算出到散熱器底座的擴散熱阻。
             </p>
           )}
         </fieldset>

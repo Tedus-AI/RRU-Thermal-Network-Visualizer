@@ -292,12 +292,12 @@ export function HeatPathChain({
           const label = missing
             ? `缺 ${segment.missing[0]}`
             : segment.later
-              ? `${segment.name} 05`
+              ? `${segment.name} 04`
               : `${segment.name}${segment.parallel ? ' ∥' : ''}`;
           const tip = missing
             ? `${segment.name}：缺 ${segment.missing.join('、')}`
             : segment.later
-              ? `${segment.name}：${segment.note ?? '由 05 計算'}`
+              ? `${segment.name}：${segment.note ?? '由 04 計算'}`
               : `${segment.name}${segment.parallel ? '（並聯支路）' : ''}：${formatR(segment.R)} °C/W${segment.note ? `（${segment.note}）` : ''}`;
           return (
             <button
@@ -341,8 +341,8 @@ export function HeatPathChain({
           </>
         )}
         不含：{later.join('、')}
-        {parallel.length > 0 && `；${parallel.join('、')}是並聯支路，與底座擴散一起由 05 求解`}
-        、鰭片對流（05／07）。
+        {parallel.length > 0 && `；${parallel.join('、')}是並聯支路，與底座擴散一起由 04 求解`}
+        、鰭片對流（04／05）。
       </p>
     </section>
   );

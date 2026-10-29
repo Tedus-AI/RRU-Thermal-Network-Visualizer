@@ -275,8 +275,8 @@ export function BuilderModals({ builder, network, projectId }: BuilderModalsProp
 
       {warningConfirm != null && (
         <Modal
-          title="還有警告，仍要前往 07？"
-          description={`還有 ${warningConfirm} 個警告（見 ④ 檢查）。07 會照目前的設定求解，警告所說的假設也會照用。`}
+          title="還有警告，仍要前往 05？"
+          description={`還有 ${warningConfirm} 個警告（見 ④ 檢查）。05 會照目前的設定求解，警告所說的假設也會照用。`}
           onClose={() => setWarningConfirm(null)}
           footer={
             <>
@@ -288,7 +288,7 @@ export function BuilderModals({ builder, network, projectId }: BuilderModalsProp
                   navigate(projectPath(projectId, 'network'));
                 }}
               >
-                前往 07 求解
+                前往 05 求解
               </Button>
             </>
           }

@@ -9,7 +9,7 @@
 
 export const T11 = {
   snapshotStatus:
-    '報告快照狀態：確認本報告引用的 07 求解結果是否仍與目前情境、求解、08 分析及限溫一致。',
+    '報告快照狀態：確認本報告引用的 05 求解結果是否仍與目前情境、求解、06 分析及限溫一致。',
   reportReadiness:
     '報告準備狀態：判斷目前報告內容是否可預覽、是否可準備匯出，以及是否仍存在資料或章節警告。',
   sectionOrder: '報告章節顯示順序；只影響報告版面，不會修改 thermal analysis data。',
@@ -17,14 +17,14 @@ export const T11 = {
   keepTableTogether:
     '避免此章節被分割到兩頁：放不下時整段移到下一頁。長表格與圖表章節（關鍵元件、熱網路摘要、瓶頸元件熱網分析）本來就會自動接續分頁，因此不受此設定影響，會從目前頁面剩餘空間開始排。',
   snapshotSource: '此報告章節所引用的報告快照與來源分析版本。',
-  sourceScreen: '此章節數據最初來自哪一頁，例如 07 求解與結果或 08 瓶頸分析。',
+  sourceScreen: '此章節數據最初來自哪一頁，例如 05 求解與結果或 06 瓶頸分析。',
   languageMode: '設定報告內容使用英文或中英雙語；不影響應用程式 UI 的語言規則。',
   exportPayload:
     '包含報告配置、snapshot ID、section order、page setting 等匯出必要 metadata，不包含實際檔案 bytes。',
   analyticalOnly:
     '目前結果完全來自 analytical thermal network model，尚未由 FloTHERM 或 measurement 校正。',
   externalCfdValidation:
-    '外部 CFD 驗證狀態；03 尚未完成時可顯示 Deferred，但不應自動判定報告失效。',
+    '外部 CFD 驗證狀態；FloTHERM 匯入尚未完成時可顯示 Deferred，但不應自動判定報告失效。',
 
   // --- supporting explanations for the other compact fields on this screen ---
   overallStatus:
@@ -42,7 +42,7 @@ export const T11 = {
   zoom: '預覽縮放層級；Fit Width 讓頁寬貼齊工作區，Fit Page 則完整顯示整頁。',
   criticalRowCount:
     '報告中列出的關鍵元件數量；排序與數值皆沿用報告快照，不重新計算。預設為「All」列出全部；若選 Top 5 / Top 10，表格下方會註明共有幾個元件被省略。',
-  bottleneckTopN: 'Bottleneck 章節列出的候選數；資料來自 Screen 08，不重新排名。',
+  bottleneckTopN: 'Bottleneck 章節列出的候選數；資料來自 Screen 06，不重新排名。',
   includeHistogram:
     '嵌入既有的直方圖快照；本頁不會重新分箱，也不會重新計算百分位。',
 } as const;

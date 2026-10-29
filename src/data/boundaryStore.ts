@@ -271,7 +271,7 @@ function seedProjectFinsFrom(boundarySet: ScenarioBoundaryConditionSet, ports: B
       Object.fromEntries(
         fields.map(([field, value]) => [
           field,
-          sourced(value, 'Manual', { reference: '舊 06 邊界條件（鰭片改為專案共用前填的值）' }),
+          sourced(value, 'Manual', { reference: '舊版「邊界條件」頁（鰭片改為專案共用前填的值）' }),
         ]),
       ) as Partial<MaterialDefaults>,
       );
@@ -507,7 +507,7 @@ export const useBoundaryStore = create<BoundaryStoreState>((set, get) => ({
           source: 'manual',
           confidence: 'medium',
           provenance: {
-            source_label: 'Screen 05 boundary profile scaffold',
+            source_label: 'Screen 04 boundary profile scaffold',
             reference: 'Create Boundary Profiles',
           },
           external_mappings: { import_status: 'deferred' },

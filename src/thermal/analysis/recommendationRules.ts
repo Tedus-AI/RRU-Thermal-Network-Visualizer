@@ -92,7 +92,7 @@ const BY_TYPE: Partial<Record<ThermalEdge['type'], Rule>> = {
     zh: '對流至環境',
     points: [
       'Review effective fin area, fin spacing and exposure to the airflow.',
-      'Review the convection coefficient assumption in 05 散熱表面 before redesigning hardware.',
+      'Review the convection coefficient assumption in 04 散熱表面 before redesigning hardware.',
       'Review whether the surface is shadowed by the enclosure or by an adjacent unit.',
     ],
   },
@@ -121,7 +121,7 @@ export function recommendFor(candidate: Candidate, outcome: SensitivityOutcome):
 
   if (candidate.boundary_derived) {
     points.unshift(
-      'This resistance is derived from the Screen 05 boundary conditions (散熱表面), so confirm h, area and emissivity before treating it as a hardware problem.',
+      'This resistance is derived from the Screen 04 boundary conditions (散熱表面), so confirm h, area and emissivity before treating it as a hardware problem.',
     );
   }
 

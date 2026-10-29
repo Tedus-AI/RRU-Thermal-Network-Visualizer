@@ -70,7 +70,7 @@ export function NetworkValidationPanel({
         <div className="min-h-0 overflow-y-auto border-t border-line px-2 py-1.5">
           {issues.length === 0 ? (
             <p className="py-3 text-center text-[11px] text-ok-600">
-              No issues found. Ready for Screen 06. / 未發現問題，可進入邊界條件設定。
+              No issues found. Ready for the surface setup. / 未發現問題，可繼續設定散熱表面。
             </p>
           ) : (
             <ul className="flex flex-col gap-1">

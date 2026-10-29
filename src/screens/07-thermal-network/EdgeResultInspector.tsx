@@ -127,7 +127,7 @@ export function EdgeResultInspector({
         >
           {toName}
         </button>
-        {boundaryDerived && <Badge tone="accent">邊界（05）</Badge>}
+        {boundaryDerived && <Badge tone="accent">邊界（04）</Badge>}
         {biot && <Badge tone="accent">有限 Bi</Badge>}
       </div>
 
@@ -215,7 +215,7 @@ export function EdgeResultInspector({
             <Row
               label="Active Source"
               zh="採用的來源"
-              value={boundaryDerived ? '情境邊界（05）' : (badge?.zh ?? edge.rth.active_source)}
+              value={boundaryDerived ? '情境邊界（04）' : (badge?.zh ?? edge.rth.active_source)}
               tooltip={T07.field.activeRthSource}
             />
             <Row
@@ -243,14 +243,14 @@ export function EdgeResultInspector({
               zh="FloTHERM 熱阻"
               value={NA}
               tone="text-ink-400"
-              tooltip="03 尚未提供，這一欄先保留，不會出現假資料。"
+              tooltip="FloTHERM 匯入尚未提供，這一欄先保留，不會出現假資料。"
             />
             {override?.R_C_per_W != null && (
               <Row
                 label="Scenario Rth"
                 zh="情境熱阻"
                 value={`${formatRth(override.R_C_per_W)} °C/W`}
-                tooltip="由 05 依此情境的邊界條件推導，僅作用於本次求解。"
+                tooltip="由 04 依此情境的邊界條件推導，僅作用於本次求解。"
               />
             )}
             {biot && (
@@ -271,10 +271,10 @@ export function EdgeResultInspector({
                   label="Rth at Bi → ∞"
                   zh="Bi → ∞ 熱阻"
                   value={`${formatRth(biot.R_bi_infinite_C_per_W)} °C/W`}
-                  tooltip="05 顯示的值。Bi → ∞ 是這個模型的下限，一定比實際值小。"
+                  tooltip="04 顯示的值。Bi → ∞ 是這個模型的下限，一定比實際值小。"
                 />
                 <p className="mt-2 text-[11px] leading-relaxed text-ink-400">
-                  05 建這條連線時還沒有情境的邊界條件，只能用 Bi → ∞，那是這個模型最小的擴散熱阻；這次求解已經由熱網路本身反算遠端 h，再重新計算。
+                  04 建這條連線時還沒有情境的邊界條件，只能用 Bi → ∞，那是這個模型最小的擴散熱阻；這次求解已經由熱網路本身反算遠端 h，再重新計算。
                 </p>
               </>
             )}
@@ -288,7 +288,7 @@ export function EdgeResultInspector({
                       ? '依熱量分配'
                       : '指定面積'
                   }
-                  tooltip="在 04 的元件設定中選擇。只擴散到部分底座，假設周圍底座不比平均溫度高。"
+                  tooltip="在 03 的元件設定中選擇。只擴散到部分底座，假設周圍底座不比平均溫度高。"
                 />
                 <Row
                   label="Domain area"
@@ -343,7 +343,7 @@ export function EdgeResultInspector({
               value={edge.external_mappings ? '已保留對應' : '尚未提供'}
             />
             <p className="mt-2 text-[11px] leading-relaxed text-ink-400">
-              03 匯入模擬結果尚未提供；這裡不解析 FloTHERM 檔案，也不會產生假數值。
+              FloTHERM 匯入尚未提供；這裡不解析 FloTHERM 檔案，也不會產生假數值。
             </p>
           </div>
         )}

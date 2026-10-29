@@ -20,6 +20,7 @@ import type {
   SectionId,
   SnapshotSummary,
 } from '@/report/reportTypes';
+import { displayNo } from '@/app/navigation';
 import { sectionDefinition } from '@/report/sectionRegistry';
 import { DEFAULT_LOGO_TEXT } from '@/report/defaultTemplate';
 
@@ -520,7 +521,7 @@ export function ReportSectionInspector({
             </Row>
             <Row label="Source Screen" zh="來源畫面" explanation={T11.sourceScreen}>
               <span className="text-[11px] font-semibold text-ink-900">
-                {definition.source_screen}
+                {displayNo(definition.source_screen)}
               </span>
             </Row>
             <Row label="Last Updated" zh="最後更新">

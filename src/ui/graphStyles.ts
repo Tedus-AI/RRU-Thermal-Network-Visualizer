@@ -171,8 +171,8 @@ export const LEGEND: LegendEntry[] = [
     color: HSK_BUS_COLOR,
   },
   {
-    label: '≥ Bi → ∞ floor; 07 re-solves it higher',
-    zh: '≥ 為 Bi→∞ 下限，07 以實際邊界重算後只會更大',
+    label: '≥ Bi → ∞ floor; 05 re-solves it higher',
+    zh: '≥ 為 Bi→∞ 下限，05 以實際邊界重算後只會更大',
     kind: 'state',
     style: HSK_BUS_COLOR,
   },

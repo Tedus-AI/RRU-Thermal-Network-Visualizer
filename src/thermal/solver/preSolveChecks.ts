@@ -192,8 +192,8 @@ export function runPreSolveChecks(input: SolveInput): PreSolveReport {
           'error',
           'boundary_rth_unresolved',
           'boundary',
-          `Boundary edge "${assignment.edge_id}" has no resolved resistance for this scenario. Complete h, area or emissivity in 05 散熱表面.`,
-          `邊界連線 "${assignment.edge_id}" 在此情境沒有可用熱阻，請在 05 的散熱表面補齊 h、面積或放射率。`,
+          `Boundary edge "${assignment.edge_id}" has no resolved resistance for this scenario. Complete h, area or emissivity in 04 散熱表面.`,
+          `邊界連線 "${assignment.edge_id}" 在此情境沒有可用熱阻，請在 04 的散熱表面補齊 h、面積或放射率。`,
           {
             edge_id: assignment.edge_id,
             boundary_port_id: assignment.boundary_port_id,
@@ -275,10 +275,10 @@ export function runPreSolveChecks(input: SolveInput): PreSolveReport {
           packageRjc ? 'package_rjc_zero' : 'active_rth_non_positive',
           'pre_solve',
           packageRjc
-            ? `Edge "${edge.id}" is a package Rjc of 0, which has infinite conductance and cannot be solved. If the part is one isothermal body, set its Heat Source Reference to surface/body in Screen 04, then rebuild its subgraph in Screen 05.`
+            ? `Edge "${edge.id}" is a package Rjc of 0, which has infinite conductance and cannot be solved. If the part is one isothermal body, set its Heat Source Reference to surface/body in Screen 03, then rebuild its subgraph in Screen 04.`
             : `Edge "${edge.id}" has a resistance of ${R}. An active edge must have Rth > 0.`,
           packageRjc
-            ? `連線 "${edge.id}" 的封裝熱阻為 0，導熱率為無限大而無法求解。若此零件為等溫本體，請於 04 將「熱源基準」改為表面／本體型，再於 05 重建其子圖。`
+            ? `連線 "${edge.id}" 的封裝熱阻為 0，導熱率為無限大而無法求解。若此零件為等溫本體，請於 03 將「熱源基準」改為表面／本體型，再於 04 重建其子圖。`
             : `連線 "${edge.id}" 的熱阻為 ${R}，作用中的連線熱阻必須大於 0。`,
           { edge_id: edge.id, fix_in: packageRjc ? '04' : '05' },
         ),
@@ -399,8 +399,8 @@ export function runPreSolveChecks(input: SolveInput): PreSolveReport {
         'info',
         'external_mapping_absent',
         'result_integrity',
-        'No external simulation mapping is present. FloTHERM comparison stays unavailable until Screen 03 is implemented.',
-        '尚無外部模擬對應。FloTHERM 比對需待 03 實作後才可使用。',
+        'No external simulation mapping is present. FloTHERM comparison stays unavailable until FloTHERM import is implemented.',
+        '尚無外部模擬對應。FloTHERM 比對需待 FloTHERM 匯入開放後才可使用。',
       ),
     );
   }
