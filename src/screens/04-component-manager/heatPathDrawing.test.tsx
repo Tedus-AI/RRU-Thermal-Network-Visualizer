@@ -20,7 +20,7 @@ import {
 import { defaultMaterials } from '@/domain/materials';
 import { sourced } from '@/domain/sourcedValue';
 
-import { draw2D, draw3D, svgIds } from './heatPathDrawing';
+import { draw2D, draw3D, solderVoids, svgIds } from './heatPathDrawing';
 import { heatPathView } from './heatPathModel';
 
 function part(heatPath: HeatPathType, mount: MountType, filled: boolean): Component {
@@ -123,4 +123,21 @@ describe('heat path drawing', () => {
       }
     }
   }
+});
+
+describe('solder voids in the 3D stack', () => {
+  it('cover exactly the part of the joint that is not solder, inside the joint', () => {
+    const voids = solderVoids(60, 30, 0.75);
+    const area = voids.reduce((sum, [, , r]) => sum + Math.PI * r * r, 0);
+    expect(area).toBeCloseTo(0.25 * 60 * 30, 6);
+    for (const [x, y, r] of voids) {
+      expect(Math.abs(x) + r).toBeLessThanOrEqual(30 + 1e-9);
+      expect(Math.abs(y) + r).toBeLessThanOrEqual(15 + 1e-9);
+    }
+  });
+
+  it('draws none for a full joint or a voiding nobody entered', () => {
+    expect(solderVoids(60, 30, 1)).toEqual([]);
+    expect(solderVoids(60, 30, null)).toEqual([]);
+  });
 });
