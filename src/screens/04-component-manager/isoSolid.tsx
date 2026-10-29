@@ -1,5 +1,6 @@
 /**
- * Screen 04 isometric solids: the renderer the 3D stack and the path/mount tile icons share.
+ * Screen 04 isometric solids: the renderer the 3D stack, the path/mount tile icons and the heat
+ * sink figure on 06's fin panel share.
  *
  * Drawn the way the anatomy kit draws a solid, in each layer's own colour: every side facet takes
  * one of four tones by how it turns toward a light at the viewer's left (so the shading holds while
