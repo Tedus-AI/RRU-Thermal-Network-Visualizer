@@ -103,6 +103,8 @@ export interface SvgIds {
   heatGrad: string;
   heatSpot: string;
   hotBody: string;
+  /** 3D: the blur under a layer that floats above the one beneath it. */
+  soft: string;
 }
 
 export function svgIds(prefix: string): SvgIds {
@@ -117,6 +119,7 @@ export function svgIds(prefix: string): SvgIds {
     heatGrad: `${p}heatGrad`,
     heatSpot: `${p}heatSpot`,
     hotBody: `${p}hotBody`,
+    soft: `${p}soft`,
   };
 }
 
@@ -162,6 +165,9 @@ export function SvgDefs({ ids }: { ids: SvgIds }) {
         <stop offset=".55" style={{ stopColor: 'var(--hp-die)', stopOpacity: 0.35 }} />
         <stop offset="1" style={{ stopColor: 'var(--hp-pkg)', stopOpacity: 1 }} />
       </radialGradient>
+      <filter id={ids.soft} x="-25%" y="-25%" width="150%" height="150%">
+        <feGaussianBlur stdDeviation="4" />
+      </filter>
       <marker
         id={ids.arr}
         viewBox="0 0 10 10"
@@ -1094,6 +1100,37 @@ export function draw2D(view: HeatPathView, ids: SvgIds): Drawing {
 // 3D exploded stack
 // ---------------------------------------------------------------------------
 
+/** Where the voids sit on a joint, as fractions of its length and width, and their relative sizes. */
+const VOID_SPOTS: Array<[number, number, number]> = [
+  [-0.37, -0.25, 1.0],
+  [-0.23, 0.19, 1.3],
+  [-0.08, -0.12, 1.5],
+  [0.09, 0.24, 1.1],
+  [0.22, -0.2, 1.4],
+  [0.38, 0.12, 1.2],
+  [-0.41, 0.27, 0.8],
+  [0.02, 0.33, 0.7],
+  [0.33, 0.35, 0.7],
+  [-0.16, -0.35, 0.8],
+  [0.15, -0.02, 0.9],
+  [0.42, -0.32, 0.6],
+];
+
+/**
+ * The voids drawn on a solder joint of `L` × `W`: circles `[x, y, r]` about its centre whose total
+ * area is the part that is not solder. `voiding` is the fraction that IS solder (see the solder
+ * calculator), so 0.75 draws a quarter of the face as void and 1 draws none.
+ */
+export function solderVoids(L: number, W: number, voiding: number | null): Array<[number, number, number]> {
+  if (!ok(voiding) || voiding >= 1 || voiding <= 0 || !pos(L) || !pos(W)) return [];
+  const weight = VOID_SPOTS.reduce((sum, [, , r]) => sum + r * r, 0);
+  const k = Math.sqrt(((1 - voiding) * L * W) / (Math.PI * weight));
+  return VOID_SPOTS.map(([u, v, r]) => {
+    const rr = Math.min(r * k, L / 2, W / 2);
+    return [clamp(u * L, -L / 2 + rr, L / 2 - rr), clamp(v * W, -W / 2 + rr, W / 2 - rr), rr];
+  });
+}
+
 interface Slab {
   layer: HeatLayer;
   kind: 'box' | 'fins' | 'ring';
@@ -1116,6 +1153,24 @@ interface Slab {
 }
 
 type Pt = [number, number];
+
+/** Convex hull of screen points (monotone chain): a prism's silhouette. */
+function hull(points: Pt[]): Pt[] {
+  const sorted = [...points].sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  if (sorted.length < 3) return sorted;
+  const cross = (o: Pt, a: Pt, b: Pt) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  const lower: Pt[] = [];
+  for (const p of sorted) {
+    while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) lower.pop();
+    lower.push(p);
+  }
+  const upper: Pt[] = [];
+  for (const p of [...sorted].reverse()) {
+    while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) upper.pop();
+    upper.push(p);
+  }
+  return [...lower.slice(0, -1), ...upper.slice(0, -1)];
+}
 
 export function draw3D(view: HeatPathView, ids: SvgIds, az: number): Drawing {
   const bag = layerBag();
@@ -1271,21 +1326,98 @@ export function draw3D(view: HeatPathView, ids: SvgIds, az: number): Drawing {
   if (view.junction) pk.die = { L: Math.max(pk.L * 0.34, 8), W: Math.max(pk.W * 0.34, 8) };
 
   const ptsAttr = (pts: Pt[]) => pts.map((p) => `${r1(p[0])},${r1(p[1])}`).join(' ');
-  const shade = (pts: Pt[], fill: string, dark: number, faded = false, key?: string) => (
-    <Fragment key={key}>
-      <polygon className="sh" points={ptsAttr(pts)} fill={fill} opacity={faded ? 0.5 : undefined} />
-      {dark > 0 && <polygon points={ptsAttr(pts)} fill="#000" opacity={dark} pointerEvents="none" />}
-    </Fragment>
-  );
-  const box = (x0: number, x1: number, y0: number, y1: number, z0: number, z1: number, fill: string, faded = false, key?: string) => {
-    const faces: ReactNode[] = [];
-    if (sinA < 0) faces.push(shade([P(x0, y0, z0), P(x0, y1, z0), P(x0, y1, z1), P(x0, y0, z1)], fill, 0.3, faded, 'a'));
-    if (sinA > 0) faces.push(shade([P(x1, y0, z0), P(x1, y1, z0), P(x1, y1, z1), P(x1, y0, z1)], fill, 0.3, faded, 'b'));
-    if (cosA < 0) faces.push(shade([P(x0, y0, z0), P(x1, y0, z0), P(x1, y0, z1), P(x0, y0, z1)], fill, 0.16, faded, 'c'));
-    if (cosA > 0) faces.push(shade([P(x0, y1, z0), P(x1, y1, z0), P(x1, y1, z1), P(x0, y1, z1)], fill, 0.16, faded, 'd'));
-    faces.push(shade([P(x0, y0, z1), P(x1, y0, z1), P(x1, y1, z1), P(x0, y1, z1)], fill, 0, faded, 'e'));
-    return <Fragment key={key}>{faces}</Fragment>;
+  const pathD = (pts: Pt[], close = true) => pts.map((p, i) => `${i ? 'L' : 'M'}${r1(p[0])} ${r1(p[1])}`).join('') + (close ? 'Z' : '');
+
+  // Solids drawn the way the anatomy kit draws them, in each layer's own colour: every side facet
+  // takes one of four tones by how it turns toward a light at the viewer's upper left (so the
+  // shading holds while the stack is dragged round), the top is a little lighter, a crease and a
+  // bevel run along the visible top edge, and the solid has ONE silhouette — the `.sh` outline the
+  // hover and highlight styles restyle — instead of an outline per face.
+  const toward: Pt = [sinA, cosA];
+  const SIDE_DARK = [0.34, 0.25, 0.17, 0.1];
+  const rounded = (x0: number, x1: number, y0: number, y1: number, r: number): Pt[] => {
+    const rr = Math.min(r, (x1 - x0) / 2, (y1 - y0) / 2);
+    if (!(rr > 0.05)) return [[x0, y0], [x1, y0], [x1, y1], [x0, y1]];
+    const corners: Array<[number, number, number]> = [
+      [x1 - rr, y0 + rr, -Math.PI / 2],
+      [x1 - rr, y1 - rr, 0],
+      [x0 + rr, y1 - rr, Math.PI / 2],
+      [x0 + rr, y0 + rr, Math.PI],
+    ];
+    return corners.flatMap(([cx, cy, a0]) =>
+      [0, 1, 2, 3, 4].map((i): Pt => [cx + rr * Math.cos(a0 + (i * Math.PI) / 8), cy + rr * Math.sin(a0 + (i * Math.PI) / 8)]),
+    );
   };
+  const circle = (cx: number, cy: number, r: number, n = 18): Pt[] =>
+    Array.from({ length: n }, (_, i): Pt => [cx + r * Math.cos((i * 2 * Math.PI) / n), cy + r * Math.sin((i * 2 * Math.PI) / n)]);
+  /** Polylines along the ring edges flagged visible, at height `zz`. */
+  const runs = (ring: Pt[], visible: boolean[], zz: number) => {
+    const n = ring.length;
+    const start = visible.findIndex((v, i) => v && !visible[(i + n - 1) % n]);
+    if (start < 0) return '';
+    let d = '';
+    let run: Pt[] = [];
+    for (let step = 0; step <= n; step++) {
+      const i = (start + step) % n;
+      if (visible[i] && step < n) {
+        if (!run.length) run.push(P(ring[i][0], ring[i][1], zz));
+        run.push(P(ring[(i + 1) % n][0], ring[(i + 1) % n][1], zz));
+      } else if (run.length) {
+        d += pathD(run, false);
+        run = [];
+      }
+    }
+    return d;
+  };
+  const prism = (ring: Pt[], z0: number, z1: number, fill: string, o: { faded?: boolean; key?: string; inner?: Pt[] } = {}) => {
+    const n = ring.length;
+    const visible: boolean[] = [];
+    const tones: string[][] = [[], [], [], []];
+    for (let i = 0; i < n; i++) {
+      const a = ring[i];
+      const b = ring[(i + 1) % n];
+      const len = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+      const nx = (b[1] - a[1]) / len;
+      const ny = -(b[0] - a[0]) / len;
+      visible[i] = nx * toward[0] + ny * toward[1] > 1e-3;
+      if (!visible[i]) continue;
+      const lit = -(nx * cosA - ny * sinA);
+      tones[clamp(Math.floor(((lit + 1) / 2) * 4), 0, 3)].push(
+        pathD([P(a[0], a[1], z0), P(b[0], b[1], z0), P(b[0], b[1], z1), P(a[0], a[1], z1)]),
+      );
+    }
+    const silhouette = pathD(hull([...ring.map((p) => P(p[0], p[1], z0)), ...ring.map((p) => P(p[0], p[1], z1))]));
+    const crease = runs(ring, visible, z1);
+    const bevel = o.inner && o.inner.length === n ? runs(o.inner, visible, z1) : '';
+    const body = (
+      <>
+        <path d={silhouette} fill={fill} />
+        {tones.map((list, k) => (list.length ? <path key={k} d={list.join('')} fill="#000" opacity={SIDE_DARK[k]} /> : null))}
+        <path d={pathD(ring.map((p) => P(p[0], p[1], z1)))} fill="#fff" opacity={0.08} />
+        {crease && <path d={crease} fill="none" stroke="#0f1b30" strokeOpacity={0.3} strokeWidth={0.7} />}
+        {bevel && <path d={bevel} fill="none" stroke="#fff" strokeOpacity={0.8} strokeWidth={0.9} strokeLinecap="round" />}
+        <path className="sh" d={silhouette} fill="none" />
+      </>
+    );
+    return o.faded ? (
+      <g key={o.key} opacity={0.5}>
+        {body}
+      </g>
+    ) : (
+      <Fragment key={o.key}>{body}</Fragment>
+    );
+  };
+  const box = (x0: number, x1: number, y0: number, y1: number, z0: number, z1: number, fill: string, faded = false, key?: string, r = 0) => {
+    const b = Math.min(1.4, (x1 - x0) / 6, (y1 - y0) / 6, (z1 - z0) / 2);
+    const inner = b > 0.3 ? rounded(x0 + b, x1 - b, y0 + b, y1 - b, r > 0.05 ? Math.max(r - b, 0.06) : 0) : undefined;
+    return prism(rounded(x0, x1, y0, y1, r), z0, z1, fill, { faded, key, inner });
+  };
+  /** The corner radius a layer of this size gets. */
+  const radiusOf = (L0: number, W0: number) => clamp(Math.min(L0, W0) * 0.05, 0.8, 5);
+  /** A soft shadow of a `2hx` × `2hy` footprint on the surface at height `zz` below it. */
+  const halo = (hx: number, hy: number, zz: number, strength = 0.16) => (
+    <path d={pathD(rounded(-hx, hx, -hy, hy, radiusOf(2 * hx, 2 * hy)).map((p) => P(p[0], p[1], zz)))} fill="#0f1b30" opacity={strength} filter={url(ids.soft)} pointerEvents="none" />
+  );
   const top = (x0: number, x1: number, y0: number, y1: number, zz: number, fill: string, extra: Record<string, string | number> = {}, key?: string) => (
     <polygon key={key} className="sh" points={ptsAttr([P(x0, y0, zz), P(x1, y0, zz), P(x1, y1, zz), P(x0, y1, zz)])} fill={fill} {...extra} />
   );
@@ -1297,16 +1429,24 @@ export function draw3D(view: HeatPathView, ids: SvgIds, az: number): Drawing {
   const anchors: { die?: Pt; pkg?: Pt; baseTop?: Pt } = {};
   const domain = view.spreading;
 
-  for (const sl of slabs) {
+  const flanged = view.packageType === 'RF Power Flanged Package';
+  const substrate = view.packageType === 'BGA' || view.packageType === 'Lidded BGA';
+  const nearY = cosA > 0 ? 1 : -1;
+
+  for (const [index, sl] of slabs.entries()) {
     const hx = sl.L / 2;
     const hy = sl.W / 2;
+    // A layer floating over the one below casts a soft shadow on it.
+    const below = slabs[index - 1];
+    if (below && !below.noGap && sl.kind !== 'fins') bag.add(sl.layer, halo(Math.min(hx, below.L / 2), Math.min(hy, below.W / 2), below.z1));
     if (sl.kind === 'fins') {
       const nf = 9;
       const ft = 3;
       const order = [...Array(nf).keys()]
         .map((i) => -hy + ((i + 0.5) * (2 * hy)) / nf)
         .sort((a, b) => a * cosA - b * cosA);
-      bag.add('fins', order.map((fy, i) => box(-hx, hx, fy - ft / 2, fy + ft / 2, sl.z0, sl.z1, 'var(--hp-fin)', false, `f${i}`)));
+      bag.add('fins', halo(hx, hy, sl.z0, 0.22));
+      bag.add('fins', order.map((fy, i) => box(-hx, hx, fy - ft / 2, fy + ft / 2, sl.z0, sl.z1, 'var(--hp-fin)', false, `f${i}`, 0.6)));
     } else if (sl.kind === 'ring') {
       const lw = sl.lw ?? 3;
       const parts: Array<[number, number, number, number]> = [
@@ -1317,10 +1457,54 @@ export function draw3D(view: HeatPathView, ids: SvgIds, az: number): Drawing {
       ];
       parts.sort((a, b) => P((a[0] + a[1]) / 2, (a[2] + a[3]) / 2, 0)[1] - P((b[0] + b[1]) / 2, (b[2] + b[3]) / 2, 0)[1]);
       bag.add(sl.layer, parts.map((p, i) => box(p[0], p[1], p[2], p[3], sl.z0, sl.z1, sl.color ?? '', false, `r${i}`)));
+    } else if (sl.layer === 'pkg' && view.junction && (flanged || substrate)) {
+      // What the package type says about its build: a flanged RF part is a metal flange under a
+      // ceramic lid with its leads out of the long sides; a BGA is a substrate under a smaller body.
+      const fill = sl.color ?? '';
+      const step = sl.z0 + (sl.z1 - sl.z0) * (flanged ? 0.34 : 0.3);
+      const inset = Math.min(hx, hy) * (flanged ? 0.14 : 0.18);
+      const lead = (side: number, key: string) => {
+        const y0 = side > 0 ? hy : -hy - hy * 0.62;
+        return box(-hx * 0.42, hx * 0.42, y0, y0 + hy * 0.62, step - 1.6, step, fill, false, key, 0.6);
+      };
+      const parts: ReactNode[] = [];
+      if (flanged) parts.push(lead(-nearY, 'lf'));
+      parts.push(box(-hx, hx, -hy, hy, sl.z0, step, fill, false, 'fl', radiusOf(sl.L, sl.W)));
+      parts.push(box(-hx + inset, hx - inset, -hy + inset, hy - inset, step, sl.z1, fill, false, 'lid', radiusOf(sl.L, sl.W)));
+      if (flanged) parts.push(lead(nearY, 'ln'));
+      bag.add(sl.layer, parts);
+      if (sl.miss) bag.add(sl.layer, missTop(-hx, hx, -hy, hy, sl.z1));
     } else {
-      bag.add(sl.layer, box(-hx, hx, -hy, hy, sl.z0, sl.z1, sl.color ?? '', sl.faded));
+      bag.add(sl.layer, box(-hx, hx, -hy, hy, sl.z0, sl.z1, sl.color ?? '', sl.faded, undefined, radiusOf(sl.L, sl.W)));
       if (sl.hot) bag.add(sl.layer, top(-hx * 0.6, hx * 0.6, -hy * 0.6, hy * 0.6, sl.z1, 'var(--hp-heat)', { opacity: 0.45 }));
       if (sl.miss) bag.add(sl.layer, missTop(-hx, hx, -hy, hy, sl.z1));
+      // The voids that make up the part of the joint that is not solder.
+      if (sl.layer === 'solder') {
+        const voids = solderVoids(sl.L, sl.W, view.solder.voiding);
+        if (voids.length) {
+          bag.add(
+            'solder',
+            <path
+              d={voids.map(([vx, vy, vr]) => pathD(circle(vx, vy, vr).map((p) => P(p[0], p[1], sl.z1)))).join('')}
+              fill="#0f1b30"
+              fillOpacity={0.2}
+              stroke="#0f1b30"
+              strokeOpacity={0.3}
+              strokeWidth={0.5}
+            />,
+          );
+        }
+      }
+      // A bolted block shows the screws that hold it down.
+      if (sl.layer === 'mount' && m.attachment === 'Bolted') {
+        const sr = clamp(Math.min(sl.L, sl.W) * 0.07, 2, 5);
+        const at = [-1, 1].flatMap((sx) => [-1, 1].map((sy): Pt => [sx * (hx - sr * 1.8), sy * (hy - sr * 1.8)]));
+        at.sort((a, b) => a[0] * sinA + a[1] * cosA - (b[0] * sinA + b[1] * cosA));
+        bag.add(
+          'mount',
+          at.map(([cx, cy], i) => prism(circle(cx, cy, sr), sl.z1, sl.z1 + 2, sl.color ?? '', { key: `s${i}`, inner: circle(cx, cy, sr * 0.62) })),
+        );
+      }
     }
 
     if (sl.layer === 'base') {
@@ -1363,18 +1547,35 @@ export function draw3D(view: HeatPathView, ids: SvgIds, az: number): Drawing {
         });
       }
       if (sl.clipped) {
-        const p1 = P(-hx, hy, sl.z0);
-        const p2 = P(hx, hy, sl.z0);
+        // Under the corner nearest the viewer, whichever way the stack has been turned.
+        const near = [P(-hx, -hy, sl.z0), P(hx, -hy, sl.z0), P(hx, hy, sl.z0), P(-hx, hy, sl.z0)].reduce((a, b) => (b[1] > a[1] ? b : a));
         bag.add(
           'base',
-          <text className="svg-txt" x={r1((p1[0] + p2[0]) / 2)} y={r1(Math.max(p1[1], p2[1]) + 52)} textAnchor="middle">
+          <text className="svg-txt" x={r1(near[0])} y={r1(near[1] + 52)} textAnchor="middle">
             底座只畫局部（整片 {fMm(view.base.L)} × {fMm(view.base.W)} mm）
           </text>,
         );
       }
     }
     if (sl.inlay) {
-      bag.add(sl.inlay.layer, top(-sl.inlay.L / 2, sl.inlay.L / 2, -sl.inlay.W / 2, sl.inlay.W / 2, sl.z1 + 0.3, sl.inlay.color));
+      // The coin sits flush in the board: its face, the press-fit seam round it and a bevel.
+      const iL = sl.inlay.L / 2;
+      const iW = sl.inlay.W / 2;
+      const face = rounded(-iL, iL, -iW, iW, radiusOf(sl.inlay.L, sl.inlay.W)).map((p) => P(p[0], p[1], sl.z1 + 0.3));
+      const lip = rounded(-iL + 1.4, iL - 1.4, -iW + 1.4, iW - 1.4, Math.max(radiusOf(sl.inlay.L, sl.inlay.W) - 1.4, 0.06));
+      const lipVisible = lip.map((p, i) => {
+        const q = lip[(i + 1) % lip.length];
+        return (q[1] - p[1]) * toward[0] - (q[0] - p[0]) * toward[1] > 1e-3;
+      });
+      bag.add(
+        sl.inlay.layer,
+        <>
+          <path className="sh" d={pathD(face)} fill={sl.inlay.color} />
+          <path d={pathD(face)} fill="#fff" opacity={0.07} />
+          <path d={runs(lip, lipVisible.map((v) => !v), sl.z1 + 0.3)} fill="none" stroke="#0f1b30" strokeOpacity={0.22} strokeWidth={0.7} />
+          <path d={runs(lip, lipVisible, sl.z1 + 0.3)} fill="none" stroke="#fff" strokeOpacity={0.7} strokeWidth={0.9} strokeLinecap="round" />
+        </>,
+      );
       labs.push({
         layer: 'coin',
         p: P(sl.inlay.L / 2, 0, sl.z1),
@@ -1426,7 +1627,8 @@ export function draw3D(view: HeatPathView, ids: SvgIds, az: number): Drawing {
       bag.add(
         'die',
         <>
-          {box(-sl.die.L / 2, sl.die.L / 2, -sl.die.W / 2, sl.die.W / 2, zz, zz + 5, 'var(--hp-die)')}
+          {halo(sl.die.L / 2, sl.die.W / 2, sl.z1, 0.14)}
+          {box(-sl.die.L / 2, sl.die.L / 2, -sl.die.W / 2, sl.die.W / 2, zz, zz + 5, 'var(--hp-die)', false, undefined, 1.2)}
           <path
             d={`M${P(0, 0, zz).map(r1).join(' ')} L${P(0, 0, sl.z1).map(r1).join(' ')}`}
             stroke="var(--hp-die)"
