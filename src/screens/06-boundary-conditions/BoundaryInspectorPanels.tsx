@@ -7,6 +7,7 @@
  * render what they are given and report edits back.
  */
 
+import { useState, type ReactNode } from 'react';
 import { Scissors, Thermometer, TriangleAlert } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
@@ -50,6 +51,7 @@ import { T06 } from './tooltips';
 import { PORT_STATUS_LABELS, formatNumber, formatRth, type PortStatus } from './boundaryViewModel';
 import { FIN_GEOMETRY_FIELDS } from './boundaryInspectorFields';
 import { ProjectFinField, RruDesignCompare } from './ProjectFinFields';
+import { FIN_FIELD_DIM, HeatSinkFigure, type HeatSinkDim } from './HeatSinkFigure';
 
 export function Row({
   label,
@@ -482,6 +484,45 @@ export function FinGeometryPanel({
   const baseK = draft?.materials.hsk_base_k_W_mK?.value ?? null;
   const toInfo = () => draft && navigate(projectPath(draft.project_id, 'info'));
 
+  // The figure draws what the result was computed from: the profile's numbers.
+  // Pointing wins over the field being typed in, and leaving hands back to it.
+  const [hovered, setHovered] = useState<HeatSinkDim | null>(null);
+  const [focused, setFocused] = useState<HeatSinkDim | null>(null);
+  const highlight = hovered ?? focused;
+  const numberAt = (key: string) => {
+    const value = profile.parameters[key];
+    return typeof value === 'number' && Number.isFinite(value) ? value : null;
+  };
+  const geometry = {
+    baseL_mm: numberAt(FIN_GEOMETRY_KEYS.baseLength),
+    baseW_mm: numberAt(FIN_GEOMETRY_KEYS.baseWidth),
+    baseT_mm: draft?.materials.hsk_base_thickness_mm?.value ?? null,
+    finHeight_mm: numberAt(FIN_GEOMETRY_KEYS.height),
+    gap_mm: numberAt(FIN_GEOMETRY_KEYS.gap),
+    thickness_mm: numberAt(FIN_GEOMETRY_KEYS.thickness),
+    draft_deg:
+      technology === 'DieCasting'
+        ? (numberAt(FIN_GEOMETRY_KEYS.draftAngle) ?? FIN_TECHNOLOGY_DEFAULT_DRAFT_DEG.DieCasting)
+        : 0,
+  };
+  /** A field's cell, lighting up its dimension on the figure while pointed at or typed in. */
+  const cell = (key: string, node: ReactNode) => {
+    const dim = FIN_FIELD_DIM[key];
+    if (!dim) return <div key={key}>{node}</div>;
+    return (
+      <div
+        key={key}
+        className={highlight === dim ? 'rounded-md outline-2 outline-offset-2 outline-accent-500/50' : undefined}
+        onMouseEnter={() => setHovered(dim)}
+        onMouseLeave={() => setHovered(null)}
+        onFocus={() => setFocused(dim)}
+        onBlur={() => setFocused(null)}
+      >
+        {node}
+      </div>
+    );
+  };
+
   return (
     <div className="mb-2 rounded-md border border-line bg-surface p-2.5" data-fin-panel>
       {projectFins ? (
@@ -496,6 +537,18 @@ export function FinGeometryPanel({
           </p>
         )
       )}
+
+      <div className="hp-root hp-sink mb-2 overflow-hidden rounded-md border border-line" data-heat-sink-figure>
+        <p className="border-b border-line bg-surface-muted px-2 py-1 text-[10.5px] font-bold text-ink-600">
+          散熱器示意<span className="ml-1 font-normal text-ink-400">（依下方數字繪製）</span>
+        </p>
+        <HeatSinkFigure
+          geometry={geometry}
+          result={result}
+          highlight={highlight}
+          onHighlight={setHovered}
+        />
+      </div>
 
       <div className="mb-2">
         <FieldLabel
@@ -570,9 +623,9 @@ export function FinGeometryPanel({
                     ? `${FIN_TECHNOLOGY_DEFAULT_DRAFT_DEG.DieCasting}（預設）`
                     : undefined;
           if (projectFins) {
-            return (
+            return cell(
+              field.key,
               <ProjectFinField
-                key={field.key}
                 field={field}
                 profile={profile}
                 placeholder={placeholder}
@@ -581,11 +634,12 @@ export function FinGeometryPanel({
                 onClearProfile={(key) =>
                   draft && useBoundaryStore.getState().clearProjectFin(draft.project_id, [key])
                 }
-              />
+              />,
             );
           }
-          return (
-            <div key={field.key}>
+          return cell(
+            field.key,
+            <>
               <FieldLabel
                 label={field.label}
                 zh={field.zh}
@@ -605,7 +659,7 @@ export function FinGeometryPanel({
                   onPatch(field.key, event.target.value === '' ? null : Number(event.target.value))
                 }
               />
-            </div>
+            </>,
           );
         })}
       </div>

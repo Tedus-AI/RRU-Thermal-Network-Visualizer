@@ -3,7 +3,8 @@
  *
  * One colour per layer, shared by the drawing, the card chips beside the form
  * and the chain bar, so a colour means the same thing in all three. Scoped to
- * `.hp-root` (the inspector), because nothing else in the app draws a stack.
+ * `.hp-root`: the inspector, and the heat sink figure on 06's fin panel, which
+ * draws the stack's last two layers in the same colours.
  */
 
 .hp-root {
@@ -291,6 +292,112 @@
 .hp-seg.is-hot {
   outline: 2px solid var(--color-accent-600);
   outline-offset: -2px;
+}
+
+/* ---- 06's heat sink figure (HeatSinkFigure.tsx) ---- */
+.hp-sink svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  background-color: var(--hp-viz-bg);
+  background-image: radial-gradient(var(--hp-viz-dot) 1px, transparent 1.2px);
+  background-size: 14px 14px;
+}
+.hp-sink .dm line {
+  stroke: var(--color-ink-400);
+  stroke-width: 1;
+}
+.hp-sink .dm .ext {
+  stroke-dasharray: 2 2;
+  stroke-width: 0.8;
+}
+.hp-sink .dm rect {
+  fill: var(--color-surface);
+  stroke: var(--color-line-strong);
+  stroke-width: 1;
+}
+.hp-sink .dm text {
+  fill: var(--color-ink-600);
+  font-size: 10.5px;
+  font-weight: 600;
+}
+.hp-sink .dm.hl line {
+  stroke: var(--color-accent-600);
+  stroke-width: 1.3;
+}
+.hp-sink .dm.hl rect {
+  stroke: var(--color-accent-600);
+}
+.hp-sink .dm.hl text {
+  fill: var(--color-accent-700);
+  font-weight: 700;
+}
+.hp-sink .dm rect.miss {
+  stroke: var(--color-danger-600);
+}
+.hp-sink .dm text.miss {
+  fill: var(--color-danger-600);
+  font-weight: 700;
+}
+.hp-sink .arr {
+  fill: var(--color-ink-400);
+}
+.hp-sink .arr.hl {
+  fill: var(--color-accent-600);
+}
+.hp-sink .inset {
+  fill: var(--color-surface);
+  stroke: var(--color-line-strong);
+}
+.hp-sink .inset-ttl {
+  fill: var(--color-ink-700);
+  font-size: 10.5px;
+  font-weight: 700;
+}
+.hp-sink .tip {
+  fill: var(--color-orange-700);
+  font-size: 9.5px;
+  font-weight: 700;
+}
+.hp-sink .sec-fin {
+  fill: var(--hp-fin);
+  stroke: rgba(15, 27, 48, 0.45);
+  stroke-width: 0.8;
+  stroke-linejoin: round;
+}
+.hp-sink .sec-root {
+  stroke: rgba(15, 27, 48, 0.3);
+  fill: none;
+}
+.hp-sink .cut-mark circle {
+  fill: var(--color-surface);
+  stroke: var(--color-ink-700);
+}
+.hp-sink .cut-mark path {
+  stroke: var(--color-ink-400);
+  fill: none;
+  stroke-dasharray: 3 2;
+}
+.hp-sink .cut-mark text {
+  fill: var(--color-ink-700);
+  font-size: 9px;
+  font-weight: 700;
+}
+.hp-sink .air {
+  stroke: var(--hp-air);
+  stroke-width: 1.8;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.hp-sink .note {
+  fill: var(--color-ink-400);
+  font-size: 10px;
+}
+.hp-sink .miss-txt {
+  fill: var(--color-danger-600);
+  font-size: 11px;
+  font-weight: 700;
 }
 
 @media (prefers-reduced-motion: reduce) {
